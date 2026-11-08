@@ -340,3 +340,8 @@ Remove the fallback branch; D-007 alone remains.
 
 ### D-009 Addendum 2026-11-08 — rein-plugins mirror and measurement tasks
 - Mirrored as rein-plugins D-016; their D-013 (c) / D-014 suspensions lifted. M3 = their E-8 (settings + `known_marketplaces.json`); M1/M2/M4 = their E-9. All report-only `[FIXTURE_Q5_M<n>] <claude version> <result>`. M1 runs on the `directory` source until the first `stable` tag, then `github`. M2 skips cleanly until the operator sets the CI secret. Same-day notice on M1 HEAD ≠ origin/stable or E-8 `[FIXTURE_REF_MISSING]`.
+
+### D-009 Addendum 2026-11-08 — first CI data (rein-plugins PR #3, job `registration`, ubuntu-latest, Claude Code 2.1.319, no credential, `directory` source)
+- `[FIXTURE_Q4_OBSERVED] before any start: registered=false` · `after one unauthenticated start: registered=true` — registration-by-start reproduced on a clean runner. Confirms the D-009 fallback (hand-written entry with `ref` when `claude` is absent) is honoured at the next start.
+- `rein-seo@rein-plugins from settings alone (sync-install forced): not-installed; loaded-at-init=true` — with a `directory` source Claude Code loads the plugin in place from the marketplace copy without an `installed_plugins.json` record. Relevance to rein-app: our read-back (D-007) verifies `settings.json` (`extraKnownMarketplaces` entry, `enabledPlugins` `true` written by `claude plugin install`), never `installed_plugins.json`, so this does not affect exit 7. Phase 2 status must not treat "no install record" as "not loaded" — use `claude plugin list` or the init event.
+- M1 (github source, HEAD vs origin/stable) and M4 now running on their E-4 branch; M2 awaits the operator's CI secret. Nothing reopens D-007/D-009.
