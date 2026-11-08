@@ -337,3 +337,6 @@ All report-only lines `[FIXTURE_Q5_M<n>] <version> <result>`; a M1 trunk-trackin
 Remove the fallback branch; D-007 alone remains.
 
 ---
+
+### D-009 Addendum 2026-11-08 — rein-plugins mirror and measurement tasks
+- Mirrored as rein-plugins D-016; their D-013 (c) / D-014 suspensions lifted. M3 = their E-8 (settings + `known_marketplaces.json`); M1/M2/M4 = their E-9. All report-only `[FIXTURE_Q5_M<n>] <claude version> <result>`. M1 runs on the `directory` source until the first `stable` tag, then `github`. M2 skips cleanly until the operator sets the CI secret. Same-day notice on M1 HEAD ≠ origin/stable or E-8 `[FIXTURE_REF_MISSING]`.
