@@ -53,18 +53,18 @@
     {
       "id": "E-3",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Implement rein-release fetch + verify behind Http/Fs traits: SignatureVerifier trait with a Rejecting default backend (pending rein P-50), manifest schema check, per-file sha256 with unlisted/missing detection, tar path-traversal rejection, and a local fixture release server covering good tarball, bad signature, tampered file, missing manifest, unlisted file, traversal entry — fail closed on every bad input with nothing written outside staging, per .ai/blueprints/distribution.md §Components 1-2, §Security, §Test Plan. Tier 3: security_engineer review before commit.",
       "created_at": "2026-11-08T18:47:43.535Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-08T19:31:29.950Z",
+      "summary": "rein-release fetch+verify (8ca9a4c): minisign baked key, schema-1, version binding, 16-case fixture table, local-server fetch tests; SEC_PASS after fixing matcher DoS + downgrade.",
       "depends_on": [
         "E-2"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-08T18:55:45.610Z"
+      "updated_at": "2026-11-08T19:31:29.950Z"
     },
     {
       "id": "E-4",
@@ -85,7 +85,7 @@
     {
       "id": "E-5",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 3,
       "description": "Implement the LayoutWriter (unpack verified tarball into $HOME/.rein.staging-<ver>, check the stable layout bin/ hooks/ mcp/ shared/ scripts/ config/ secrets/ run/ VERSION, carry over operator-owned files accounts.json gate-override.json config/* secrets/* run/*, atomic rename with previous tree kept as .rein.prev-<ver> N=2, lock file) and the Runner that executes `rein install` then `rein doctor` from the installed tree with CLAUDECODE unset and output passed through verbatim; add the layout-equality test against install-rein.sh at the same tag, per .ai/blueprints/distribution.md §Components 3-5, §Security trust boundaries 2 and 4, §Test Plan. Tier 3: security_engineer review before commit.",
       "created_at": "2026-11-08T18:47:55.938Z",
@@ -94,11 +94,9 @@
       "depends_on": [
         "E-3"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-3"
-      ],
-      "updated_at": "2026-11-08T18:47:55.939Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-08T19:31:29.953Z"
     },
     {
       "id": "E-6",
@@ -183,6 +181,42 @@
       "timestamp": "2026-11-08T19:31:00.920Z",
       "summary": "[TIER_3] E-3 ARCH_PASS + SEC_PASS (re-review) + TESTS_PASS (re-check)",
       "sha": "efdc4f9fec02d747a9766c44e5fb28ed4b448fec",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-4",
+      "timestamp": "2026-11-08T19:39:04.227Z",
+      "summary": "cargo test -p rein-profiles -p rein-app: 21/21 pass (1+4 app, 4 unit, 11 apply_and_undo, 1 property x2000 seeds, 1 compile_fail doctest); file:// pin covered via stub Shell (Claude 2.1.319 rejects file://); P2: no CLI-level exit-7 test, no gated real-claude test",
+      "sha": "e16240c79eb3a4d4b38d3dd8d75ef116ed60c769",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-4",
+      "timestamp": "2026-11-08T19:39:22.518Z",
+      "summary": "No sovereignty violations (no .ai/ files staged); D-002/005/007/008 core honoured. P1s: attribution never written; plugin failures exit 1 not 7; undocumented --allow-symlinked-settings (D-008 says refuse); marketplace file:// and real-CLI tests missing; dead helpers plugin_entries/is_valid_plugin_name.",
+      "sha": "e16240c79eb3a4d4b38d3dd8d75ef116ed60c769",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "security_engineer",
+      "task_id": "E-4",
+      "timestamp": "2026-11-08T19:43:31.646Z",
+      "summary": "[TIER_3] E-4 3rd pass: undo allowed-keys-only (P0), backup once+atomic, no --hooks-from, claude-write guard (exit 7), symlink escape refused, D-009 fallback verified",
+      "sha": "654bc38f0d32b1472d67361755710c1c891609e7",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "orchestrator-mcp",
+      "task_id": "E-4",
+      "timestamp": "2026-11-08T19:43:32.740Z",
+      "summary": "[TIER_3] E-4 ARCH_PASS + TESTS_PASS + SEC_PASS (after 2 fix rounds)",
+      "sha": "654bc38f0d32b1472d67361755710c1c891609e7",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
