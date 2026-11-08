@@ -151,7 +151,9 @@ Change `license`/`repository` in `[workspace.package]` and the formula; relicens
 
 ---
 
-## D-005 — Phase 1 crate dependencies (dependency_gate, Engineer-recorded)
+## D-006 — Phase 1 crate dependencies (dependency_gate, Engineer-recorded)
+
+> Committed as "D-005" in ff5335e; renumbered D-006 because the Architect's plugin-install ruling also took D-005.
 
 **Date**: 2026-11-08
 **Task**: E-3 (rein-release), E-4/E-5/E-6 (clap)
@@ -237,3 +239,7 @@ rein-plugins' registration fixture found `claude plugin list` empty after mergin
 Revert to hand-writing `enabledPlugins` (one function) — only if Claude Code documents user-scope auto-install.
 
 ---
+
+### D-005 Addendum 2026-11-08 — evidence from rein-plugins (their D-013 mirrors D-005)
+- **Confirmed**: in an isolated `CLAUDE_CONFIG_DIR`, `claude plugin marketplace add` + `claude plugin install <p>@rein-plugins` wrote exactly the D-002 shape into that profile's settings.json (key `rein-plugins`; `"<p>@rein-plugins": true`). Our hand-written marketplace entry is byte-compatible with what Claude Code writes, and `true` is Claude Code's own output.
+- **Still open**: whether a hand-written user-scope `extraKnownMarketplaces` entry is honoured on a settings-only start (and installs nothing). rein-plugins collects it in CI (`[FIXTURE_Q4_OBSERVED]` lines) once the operator sets an API secret there; no credentials are copied locally. Until the lines arrive, the `claude plugin marketplace add Vimurai/rein-plugins#stable` fallback stays in E-4's design and E-4 may ship with the hand-written path as primary.
