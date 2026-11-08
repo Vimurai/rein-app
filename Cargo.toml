@@ -1,0 +1,29 @@
+[workspace]
+resolver = "3"
+members = ["crates/rein-app", "crates/rein-release", "crates/rein-profiles"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# cargo-dist (E-2 declares targets only; release workflow + installers are E-6).
+[workspace.metadata.dist]
+cargo-dist-version = "0.34.0"
+targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-unknown-linux-gnu",
+  "x86_64-pc-windows-msvc",
+]
+
+[profile.dist]
+inherits = "release"
+lto = "thin"
