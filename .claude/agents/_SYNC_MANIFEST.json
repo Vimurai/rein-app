@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "written_at": "2026-11-08T18:36:07.650Z",
+  "entries": {
+    "chaos_monkey.md": "29fe146d39bef08d72d9c2479d48a1390e987b537a793d502e1a9adda1618fca",
+    "critic_arch.md": "95f87635ccd7659d42f82281494c7af611e027ade4d3a3fc7788449240780192",
+    "critic_clean_code.md": "dda52f02bde3045fb292fa7559556b024faadfd2f3d54527fe6230b5bff7e9b7",
+    "critic_security.md": "4549455d8e73d29345a8741073145be3aeab8c9cd0b6969c56275ffe53511254",
+    "critic_tests.md": "1c116b53dca6e9f04060237d89021cc44701761e8e6438c7271a8a72950873dd",
+    "db_architect.md": "a49771930b5c22e22bc0f9b87f61989344ddc7b8f576de367cdfab083b8af102",
+    "dependency_manager.md": "f913b60b104a19fd7f49dc98dd8311c4bc9518514993598959c81ee02df02d6d",
+    "devops_engineer.md": "2054e2de72bfbbc60465160eb90b9913058f701371a9a146d3bed986b3c93df9",
+    "docs-architect.md": "bddd78db66193cb660d13ad34b0ce72cbc5ac93625aa206959cd6ca27a0b2f82",
+    "knowledge_architect.md": "2959fc06c5097ae2c414ffb890cb8a5f3c4322aec8f9c0c3c4386033be6555df",
+    "memory_curator.md": "17dc76076099093aa47638bd555cc1bbd9241402f826b78ab1a5cada3a1860a8",
+    "meta_analyst.md": "c43439a47b25770af9864c6c5f216787b313beaf74fd6ff38c6b68b8bcd1de35",
+    "performance_engineer.md": "417afa32065cbb2baf120e07e4f4f617ee7c0f2d996e3e342ed9f104d29fbc39",
+    "security_engineer.md": "27aec7764577ddc5a4488b0d789489f55be62d23499f90df462ea9a5c7a01bc1",
+    "seo_content_generator.md": "ea1682f9dfc8850dbf8f3adf45ce91e5b242c15b10d2308611dbbe7e13a75610",
+    "seo_engineer.md": "fe177311b87c0d7082d33893f810e5eb8497c5b1538533fc8cd6dd168604736d",
+    "seo_manager.md": "0c19b97506af2d084ab8a68c59182124113407e10e7bd83a0bd75e1b3400fae7",
+    "sre_responder.md": "64607350c5032d16ba53f716d6790805fba7c1e7e31d43fff93176aac6350eab",
+    "test_engineer.md": "3b933df9c35460d7fc5500c77f79ec33bc1cc9f274302ed4b0e0be4402bd56c3",
+    "ux_reviewer.md": "271b2ffd98a266221f4bfeee1c2baafa87aad94a825a924d70c2580c7101d234",
+    "vibe_sentinel.md": "7c3ee3396b895d9501ad9b64399c8d58844bad6dccc56bb5ad8f256cd848a4e2"
+  }
+}

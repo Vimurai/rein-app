@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "written_at": "2026-11-08T18:36:07.763Z",
+  "entries": {
+    "agent-authoring.md": "d858173055b569b9da7a8a488fcb64cd4057416383927e4db64553b968ad26c4",
+    "ai-bookkeeping.md": "3a019072f41bffabc0feb4b5b405e4c883c2cc5912daea72071758ed6eb7755b",
+    "engineering-standards.md": "3d305f95e39a3e16d373776f5e720ebf0da22b122a2f12579b0becac2dd545c1",
+    "hooks-contract.md": "77b58817f0386baf40adf896883ab6b63ab30333500035fb19d5cc3683e81daa",
+    "mcp-servers.md": "a5a38f348987de62bc101f052bff9ccc62ae0060ec31d1727e799c042880817b",
+    "test-harness.md": "8599ed1f11f3ddad014086fc2eb98fca31199c197a24bdeada0159aadb7c1824"
+  }
+}

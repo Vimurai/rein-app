@@ -1,0 +1,5 @@
+# Rust build output
+/target/
+
+# Per-operator Claude Code settings (never shared)
+.claude/settings.local.json

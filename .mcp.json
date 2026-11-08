@@ -1,0 +1,117 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem@2026.1.14",
+        "."
+      ],
+      "description": "Scoped filesystem access \u2014 enforces CAPABILITIES.md path restrictions. Restricts to project root by default."
+    },
+    "memory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory@2026.1.26"
+      ],
+      "description": "Knowledge-graph memory store. Queryable alternative/supplement to DIGEST.md for semantic lookups."
+    },
+    "vibe-check-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/vibe-check-mcp/index.js"
+      ]
+    },
+    "task-synchronizer-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/task-synchronizer-mcp/index.js"
+      ]
+    },
+    "safe-exec-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/safe-exec-mcp/index.js"
+      ]
+    },
+    "blueprint-aligner-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/blueprint-aligner-mcp/index.js"
+      ]
+    },
+    "context-guardian-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/context-guardian-mcp/index.js"
+      ]
+    },
+    "risk-analyzer-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/risk-analyzer-mcp/index.js"
+      ]
+    },
+    "archive-manager-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/archive-manager-mcp/index.js"
+      ]
+    },
+    "orchestrator-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/orchestrator-mcp/index.js"
+      ]
+    },
+    "memory-manager-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/memory-manager-mcp/index.js"
+      ]
+    },
+    "verification-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/verification-mcp/index.js"
+      ]
+    },
+    "patch-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/patch-mcp/index.js"
+      ]
+    },
+    "token-budget-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/token-budget-mcp/index.js"
+      ]
+    },
+    "propose-patch-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/propose-patch-mcp/index.js"
+      ]
+    },
+    "approval-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/approval-mcp/index.js"
+      ]
+    },
+    "advisor-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/advisor-mcp/index.js"
+      ]
+    },
+    "cache-manager-mcp": {
+      "command": "node",
+      "args": [
+        "${HOME}/.rein/mcp/cache-manager-mcp/index.js"
+      ]
+    }
+  }
+}

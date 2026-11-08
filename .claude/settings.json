@@ -1,0 +1,170 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN": "1",
+    "REIN_WORKSPACE": "/home/emir/Dev/rein",
+    "REIN_CALLER_ROLE": "engineer"
+  },
+  "permissions": {
+    "allow": [
+      "mcp__vibe-check-mcp__run_vibe_audit",
+      "mcp__vibe-check-mcp__run_chaos_test",
+      "mcp__vibe-check-mcp__get_performance_metrics",
+      "mcp__task-synchronizer-mcp__get_state",
+      "mcp__task-synchronizer-mcp__add_task",
+      "mcp__task-synchronizer-mcp__update_task_status",
+      "mcp__task-synchronizer-mcp__add_stamp",
+      "mcp__task-synchronizer-mcp__set_project_focus",
+      "mcp__task-synchronizer-mcp__verify_markdown_sync",
+      "mcp__task-synchronizer-mcp__get_ci_status",
+      "mcp__task-synchronizer-mcp__archive_done_tasks",
+      "mcp__task-synchronizer-mcp__claim_task",
+      "mcp__task-synchronizer-mcp__release_task",
+      "mcp__task-synchronizer-mcp__validate_payload",
+      "mcp__task-synchronizer-mcp__mark_deltas_read",
+      "mcp__safe-exec-mcp__analyze_command",
+      "mcp__blueprint-aligner-mcp__align_diff",
+      "mcp__blueprint-aligner-mcp__validate_blueprint_section",
+      "mcp__blueprint-aligner-mcp__generate_implementation_delta",
+      "mcp__context-guardian-mcp__check_workspace",
+      "mcp__risk-analyzer-mcp__classify_risk",
+      "mcp__risk-analyzer-mcp__get_tier_actions",
+      "mcp__archive-manager-mcp__check_context_health",
+      "mcp__archive-manager-mcp__execute_archive",
+      "mcp__orchestrator-mcp__run_handover",
+      "mcp__orchestrator-mcp__run_review",
+      "mcp__orchestrator-mcp__run_dispatch",
+      "mcp__memory-manager-mcp__export_signature",
+      "mcp__memory-manager-mcp__query_signatures",
+      "mcp__verification-mcp__verify_compliance",
+      "mcp__patch-mcp__patch_file",
+      "mcp__patch-mcp__get_file_md5",
+      "mcp__token-budget-mcp__report_cost",
+      "mcp__token-budget-mcp__get_token_budget",
+      "mcp__token-budget-mcp__get_usage_report",
+      "mcp__token-budget-mcp__set_budget",
+      "mcp__token-budget-mcp__reset_session",
+      "mcp__propose-patch-mcp__propose_patch",
+      "mcp__propose-patch-mcp__confirm_patch",
+      "mcp__propose-patch-mcp__reject_patch",
+      "mcp__propose-patch-mcp__list_pending_patches",
+      "mcp__propose-patch-mcp__preview_patch",
+      "mcp__approval-mcp__request_approval",
+      "mcp__advisor-mcp__ask_architect",
+      "mcp__cache-manager-mcp__build_cache",
+      "mcp__cache-manager-mcp__get_cached_context",
+      "mcp__cache-manager-mcp__invalidate_cache",
+      "mcp__cache-manager-mcp__get_cache_status",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr status *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh issue view *)",
+      "Bash(gh issue list *)",
+      "Bash(gh auth status)"
+    ],
+    "ask": [
+      "Bash(gh * --jq*)",
+      "Bash(gh * -q*)",
+      "Bash(gh * --template*)",
+      "Bash(gh * -t*)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash",
+            "args": [
+              "-p",
+              "/home/emir/.rein/hooks/stop-hook.sh"
+            ],
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash",
+            "args": [
+              "-p",
+              "/home/emir/.rein/hooks/pre-tool-use.sh"
+            ],
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash",
+            "args": [
+              "-p",
+              "/home/emir/.rein/hooks/session-start.sh"
+            ],
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash",
+            "args": [
+              "-p",
+              "/home/emir/.rein/hooks/post-tool-log.sh"
+            ],
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash",
+            "args": [
+              "-p",
+              "/home/emir/.rein/hooks/post-tool-use.sh"
+            ],
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/bash",
+            "args": [
+              "-p",
+              "/home/emir/.rein/hooks/permission-denied.sh"
+            ],
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

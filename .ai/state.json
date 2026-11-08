@@ -1,0 +1,132 @@
+{
+  "version": "1.0",
+  "project": {
+    "current_tier": 3,
+    "release_verdict": null,
+    "focus": "Phase 1 distribution bootstrap (E-2..E-6): Cargo workspace, fail-closed release verifier, layout writer, profile manager, packaging + WSL launcher — per .ai/blueprints/distribution.md",
+    "rein_version": "0.4.0",
+    "provisioned_at": "2026-11-08T18:36:23.529Z"
+  },
+  "tasks": [
+    {
+      "id": "P-1",
+      "owner": "Architect (claude·fable)",
+      "status": "DONE",
+      "tier": null,
+      "description": "Define initial blueprint in architect.md",
+      "created_at": "2026-11-08T18:36:23.383Z",
+      "completed_at": "2026-11-08T18:50:44.631Z",
+      "summary": "Blueprint v1 written: .ai/architect.md (index + system contract from rein D-150) and .ai/blueprints/distribution.md (Phase 1); E-2..E-6 registered; D-001/D-002 recorded; open P-50 qu …[full in LOG.md]",
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-08T18:50:44.631Z"
+    },
+    {
+      "id": "E-1",
+      "owner": "Engineer (Claude)",
+      "status": "DONE",
+      "tier": null,
+      "description": "Implement first feature (wait for P-1)",
+      "created_at": "2026-11-08T18:36:23.383Z",
+      "completed_at": "2026-11-08T18:47:31.295Z",
+      "summary": "rein init placeholder, superseded — Phase 1 bootstrap registered as E-2..E-6 per .ai/architect.md §7 (plan E-1..E-5 shifted by one).",
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-08T18:47:31.297Z"
+    },
+    {
+      "id": "E-2",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Create the Cargo workspace (crates rein-app bin, rein-release lib, rein-profiles lib), git init if absent, cargo-dist config for mac/linux/windows, and a GitHub Actions CI matrix building and testing all three targets, per .ai/blueprints/distribution.md §Components and §E-## Task Breakdown E-2. Acceptance: cargo test --workspace green on all three targets in CI.",
+      "created_at": "2026-11-08T18:47:36.662Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-08T18:47:36.663Z"
+    },
+    {
+      "id": "E-3",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 3,
+      "description": "Implement rein-release fetch + verify behind Http/Fs traits: SignatureVerifier trait with a Rejecting default backend (pending rein P-50), manifest schema check, per-file sha256 with unlisted/missing detection, tar path-traversal rejection, and a local fixture release server covering good tarball, bad signature, tampered file, missing manifest, unlisted file, traversal entry — fail closed on every bad input with nothing written outside staging, per .ai/blueprints/distribution.md §Components 1-2, §Security, §Test Plan. Tier 3: security_engineer review before commit.",
+      "created_at": "2026-11-08T18:47:43.535Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-2"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-2"
+      ],
+      "updated_at": "2026-11-08T18:47:43.536Z"
+    },
+    {
+      "id": "E-4",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 3,
+      "description": "Implement rein-profiles: enumerate Claude profiles (default config dir, ~/.claude-personal, every accounts.*.config_dir in $HOME/.rein/accounts.json), plan and apply a merge of ONLY the closed AllowedKey enum (hooks sourced from rein install output, enabledPlugins, extraKnownMarketplaces, attribution) into each settings.json via temp file + rename with a .rein-bak backup and --undo; property test proving every pre-existing key is preserved; wire `rein-app profiles list|apply`, per .ai/blueprints/distribution.md §Components 6, §Security trust boundary 3, §Test Plan. Tier 3: security_engineer review before commit.",
+      "created_at": "2026-11-08T18:47:46.898Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-2"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-2"
+      ],
+      "updated_at": "2026-11-08T18:47:46.898Z"
+    },
+    {
+      "id": "E-5",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 3,
+      "description": "Implement the LayoutWriter (unpack verified tarball into $HOME/.rein.staging-<ver>, check the stable layout bin/ hooks/ mcp/ shared/ scripts/ config/ secrets/ run/ VERSION, carry over operator-owned files accounts.json gate-override.json config/* secrets/* run/*, atomic rename with previous tree kept as .rein.prev-<ver> N=2, lock file) and the Runner that executes `rein install` then `rein doctor` from the installed tree with CLAUDECODE unset and output passed through verbatim; add the layout-equality test against install-rein.sh at the same tag, per .ai/blueprints/distribution.md §Components 3-5, §Security trust boundaries 2 and 4, §Test Plan. Tier 3: security_engineer review before commit.",
+      "created_at": "2026-11-08T18:47:55.938Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-3"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-3"
+      ],
+      "updated_at": "2026-11-08T18:47:55.939Z"
+    },
+    {
+      "id": "E-6",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Ship the Phase 1 distribution: Homebrew formula (tap), cargo-dist release workflow producing mac/linux binaries plus .deb/AppImage and a Windows installer; wire `rein-app update` (newest rein tag, release notes, confirm or --yes) and `rein-app rollback` (swap .rein.prev-*, re-run rein doctor) onto E-5; implement the Windows WslLauncher (wsl --status, install Ubuntu if absent, run Linux rein-app inside WSL, open Windows Terminal into the tmux session) behind a Shell trait with stubbed unit tests for no-WSL, no-distro, ready, per .ai/blueprints/distribution.md §Components 7-8, §API, §Rollback Plan, §Test Plan.",
+      "created_at": "2026-11-08T18:48:02.390Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-4",
+        "E-5"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-4",
+        "E-5"
+      ],
+      "updated_at": "2026-11-08T18:48:02.390Z"
+    }
+  ],
+  "stamps": [],
+  "deltas": [],
+  "digest_stale": false,
+  "digest_stale_reason": null
+}
