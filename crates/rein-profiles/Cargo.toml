@@ -9,3 +9,10 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+serde_json = { version = "1.0.154", features = ["preserve_order", "arbitrary_precision"] }
+
+[dev-dependencies]
+serde_json = { version = "1.0.154", features = ["preserve_order", "arbitrary_precision"] }
+tempfile = "3.27.0"
