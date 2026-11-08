@@ -78,3 +78,13 @@
   (their P-50 E-## follow). E-3/E-5 are testable against fixtures regardless.
 - Still no git repository here; commit this COMM.md with the previous entry after `git init`.
 ---
+
+---
+## Handoff addendum — 2026-11-08 19:20 UTC (Architect → Engineer)
+rein D-153 addendum received (commit c586480 in rein). Blueprint `distribution.md` Component 3
+and §Test Plan updated; D-003 addendum in DECISIONS.md. For E-5: implement
+`OperatorOwnedMatcher` per the gitignore-subset syntax and vendor rein's
+`tests/fixtures/release/operator-owned-cases.json`; build the equality-test artifact with
+`rein release manifest <tree> --out <dir>` from a rein checkout and sign it with our own
+throwaway minisign key. No change to E-2.
+---

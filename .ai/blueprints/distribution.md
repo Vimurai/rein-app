@@ -36,11 +36,15 @@ completely or leaves the previous tree untouched. Around it sit two side tools: 
    config`) the staged tree REPLACES the installed one; a file in a mirrored dir that the
    tarball does not ship is deleted (`bin/` pruned explicitly). Paths listed in
    `layout.operator_owned` are never written, deleted or read by the app — read the list
-   **from the manifest**, never hard-code it. Today it is: `accounts.json`, the gate's
+   **from the manifest**, never hard-code it. Schema-1 list today: `accounts.json`, the gate's
    override file, `secrets/`, `run/`, `memory/`, `incidents.ndjson`, `telemetry.sqlite`,
-   `INSIGHTS.md`, `memory-palace.md`, `mcp/**/node_modules/`, `mcp/**/package-lock.json`,
-   and exactly two files under the otherwise-mirrored `config/`: `config/rein-workspace.txt`,
-   `config/install-stamp.json`. Mechanics: build the next tree in `$HOME/.rein.staging-<ver>`
+   `INSIGHTS.md`, `memory-palace.md`, `config/rein-workspace.txt`, `config/install-stamp.json`,
+   `mcp/*/node_modules/`, `mcp/*/package-lock.json`. **Pattern syntax** (rein D-153 addendum,
+   binding): gitignore-style subset — literal path; trailing `/` = the directory and everything
+   under it; `*` within one segment; `**` across segments; NO `!` negation, NO character
+   classes, NO leading `/`. The matcher is a small pure function (`OperatorOwnedMatcher`)
+   tested against rein's conformance fixture `tests/fixtures/release/operator-owned-cases.json`
+   (`{path, expected}` rows) copied into our fixtures. Mechanics: build the next tree in `$HOME/.rein.staging-<ver>`
    (copy of operator-owned from the live tree + mirrored dirs from the tarball), then atomic
    rename with the previous tree kept as `$HOME/.rein.prev-<oldver>` (N=2); `VERSION` is
    written last, tmp-and-rename. Never edits any file after the swap.
@@ -154,9 +158,14 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   `config/rein-workspace.txt`, a fake `mcp/x/node_modules/`) and a stale `bin/old-tool`;
   after install the operator-owned files are byte-identical, `bin/old-tool` is gone, and
   `config/` otherwise matches the tarball.
-- Layout equality: run `install-rein.sh` from a checked-out `rein` at tag T into temp HOME A,
-  run `rein-app install --version T` (fixture tarball built from the same tree) into temp
-  HOME B; `diff -r` of A and B is empty except `VERSION` timestamp fields if any.
+- Layout equality: from a `rein` checkout at tag T, run `install-rein.sh` into temp HOME A;
+  build the artifact with rein's own generator `rein release manifest <tree> --out <dir>`
+  (unsigned — signing is the separate `rein release sign` step), sign it with OUR throwaway
+  test minisign key (never rein's `tests/fixtures/release/` pair, which no app bakes in), run
+  `rein-app install --version T` from the fixture server into temp HOME B; `diff -r` of A and
+  B is empty except `VERSION` timestamp fields if any.
+- Operator-owned matcher conformance: every row of rein's `operator-owned-cases.json` yields
+  `expected`; the fixture is vendored and refreshed when rein bumps the manifest schema.
 - Profile merge: property test — for random pre-existing JSON, after `apply` every original
   key/value is intact and only allowed keys changed; attempting a forbidden key fails to compile.
 - WSL launcher: unit tests against a stubbed `Shell` covering no-WSL, WSL-no-distro, ready.
