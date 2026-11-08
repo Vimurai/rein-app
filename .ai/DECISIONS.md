@@ -144,3 +144,7 @@ The Engineer left `license`/`repository` out of the workspace because neither wa
 Change `license`/`repository` in `[workspace.package]` and the formula; relicensing before first public release has no downstream users.
 
 ---
+
+### D-004 Addendum 2026-11-08 — repository settled; license still pending operator confirmation
+- Operator created public `github.com/Vimurai/rein-app` and master was pushed; hosted CI run 42512783295 green on ubuntu/macos/windows → E-2 acceptance met. The repository URL is no longer an assumption.
+- Applied in f99a1b6: `license`/`repository` in `[workspace.package]`, verbatim Apache-2.0 `LICENSE`, `NOTICE` "Copyright 2026 Vimurai". The license choice remains Architect intent until the operator confirms.
