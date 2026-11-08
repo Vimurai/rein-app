@@ -43,5 +43,5 @@ Release runs only on version tags (E-6).
 
 **Verification**
 - Local (Linux x86_64): fmt, clippy and test run before commit.
-- The GitHub remote does not exist yet, so the three-OS matrix cannot be proven green
-  until the repo is pushed. E-2 acceptance is therefore **pending first push**.
+- Hosted: remote `Vimurai/rein-app` (public) created 2026-11-08; first push run
+  42512783295 green on ubuntu-latest, macos-latest, windows-latest. **E-2 acceptance met.**
