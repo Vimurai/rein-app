@@ -37,15 +37,23 @@ rein (logic, v0.4.0) ──signed release──▶ rein-app (Rust shell)
   a notice to this repo; we then revise this file, never the other way round.
 
 ## 3. What `rein` guarantees us (contract §2 — we build on, never re-derive)
-1. **Release artifact** per tag `vX.Y.Z`: `rein-X.Y.Z.tar.gz` + detached signature
-   (minisign **or** sigstore — pending `rein` P-50) + `manifest.json` {version, min Node,
-   file list with sha256 per file, install layout}. Tarball == what `install-rein.sh` lays out.
-2. **Stable Rein home layout** (`$HOME/.rein`): `bin/ hooks/ mcp/ shared/ scripts/ config/
-   secrets/ run/ accounts.json gate-override.json` (+ `VERSION`). Layout change == major version.
+1. **Release artifact** per tag `vX.Y.Z` (rein D-153): `rein-X.Y.Z.tar.gz` +
+   `rein-X.Y.Z.tar.gz.minisig` (**minisign**; public key baked into the app at build time;
+   `key_id` in the manifest so an old app fails with one line naming the app it needs) +
+   `manifest.json` schema 1 (also inside the tarball): `{schema, version, min_node, key_id,
+   layout: {mirrored[], operator_owned[]}, files: [{path, sha256, size, mode}]}`.
+   Tarball == what `install-rein.sh` lays out. Full shape: `distribution.md` §Data Model.
+2. **Stable Rein home layout** (`$HOME/.rein`): mirrored dirs `bin/ hooks/ mcp/ shared/ claude/
+   contracts/ templates/ copilot/ scripts/ config/`; operator-owned per manifest
+   `layout.operator_owned` (`accounts.json`, gate override, `secrets/`, `run/`, `memory/`,
+   `incidents.ndjson`, `telemetry.sqlite`, `INSIGHTS.md`, `memory-palace.md`,
+   `mcp/**/node_modules`, `mcp/**/package-lock.json`, `config/rein-workspace.txt`,
+   `config/install-stamp.json`) + `VERSION`. Layout change == major version.
 3. **Settings we may own per profile** (`<config_dir>/settings.json`): `hooks` (via
    `rein install`, byte-identical), `enabledPlugins`, `extraKnownMarketplaces`, `attribution`.
    **Never** `autoMode`, `permissions`, `defaultMode` (hard-deny, `rein` D-132).
-4. **Machine-readable health**: `rein doctor --json` (pending P-50), `rein state health --short` (exists).
+4. **Machine-readable health**: `rein doctor --json` (P-50 adds it; shape
+   `{version, status: ok|warn|fail, checks: [{id, status, line, fix|null}]}`), `rein state health --short` (exists).
 5. **Panes**: `rein pane <role>` is the only role binding. We call it; we never mint a role token.
 6. **Stable headless entry points**: `rein install|sync|init|doctor|start|pane|account|gate on|status`.
    Flags added, never removed, inside a major.
@@ -94,15 +102,17 @@ a placeholder E-1 (closed as superseded). Mapping:
 Tier 3 tasks require `security_engineer` review before commit (ENGINEER.md mid-task trigger).
 Execution order: E-2 → (E-3 ∥ E-4) → E-5 → E-6.
 
-## 8. Open Questions — owed by `rein` (P-50), NOT decided here
-1. Signature scheme: minisign vs sigstore. Until decided, `rein-release` exposes a
-   `SignatureVerifier` seam with no production backend; the fixture server tests the
-   manifest/sha256 path and the fail-closed behaviour of a missing/invalid signature.
-2. `rein doctor --json` full mode vs app parses text. Until decided: display text verbatim.
-3. Where the `accounts.json` schema is documented. Observed shape today (informational, not
-   a contract): `{ "accounts": { "<name>": { "config_dir": "<abs path>", "added": "YYYY-MM-DD" } } }`.
-   The profile manager treats any other key as opaque and preserves it.
-4. Manifest format details (file-list encoding, layout field) — P-50.
+## 8. Contract Rulings received from `rein` (P-50 → rein D-153, mirrored as rein-app D-003)
+All five open questions are closed; `distribution.md` carries the detail. Summary:
+1. Signature: **minisign**, public key baked in at build; rotation == app release; `key_id` check first.
+2. Manifest: **schema 1** as in §3.1; reject unknown schema, out-of-layout path, unlisted tarball file.
+3. `rein doctor --json`: shape in §3.4; until it ships, pass text through verbatim, parse nothing.
+4. `accounts.json`: only `accounts.<name>.config_dir` (absolute) is contract; `default` is not
+   listed; everything else opaque, preserved byte-for-byte. Docs land as `rein/docs/accounts.md` + JSON schema.
+5. Upgrade semantics: `config/` is **mirrored**, not preserved (two files kept); operator-owned
+   list is read from the manifest's `layout.operator_owned`, never hard-coded. Reference stays `install-rein.sh`.
+Still pending from `rein` (not blocking): the P-50 E-## that publish the release workflow,
+manifest generator, `doctor --json`, and accounts docs; rein-plugins' first tag on `stable`.
 
 ## 9. Error Handling & Edge Cases (system level)
 - Verification failure of any kind → nothing is written to `$HOME/.rein`; exit non-zero with

@@ -45,3 +45,36 @@
 - No git repository yet → this COMM entry could not be committed (D-104); commit it as the
   first bookkeeping commit after `git init` in E-2.
 ---
+
+---
+## Handoff — 2026-11-08 19:10 UTC
+**From**: Architect → Engineer
+**Trigger**: rein D-153 received — all five P-50 contract items ruled; blueprint revised (D-003)
+
+### What changed
+- `.ai/blueprints/distribution.md` Components 2–3, §Data Model, §Security, §Test Plan, E-3/E-5
+  breakdown — now binding on: minisign + public key baked in at build (`key_id` check first,
+  "newer rein-app required" line on mismatch); manifest.json schema 1 incl. `mode` and
+  `layout.{mirrored, operator_owned}`; upgrade semantics (`config/` MIRRORED except
+  `rein-workspace.txt` + `install-stamp.json`; operator-owned list read from the manifest;
+  `bin/` pruned; `VERSION` last). `rein doctor --json` shape recorded for phase 2.
+- `.ai/architect.md` §3.1, §3.2, §3.4, §8 updated. `.ai/DECISIONS.md` D-003 appended.
+
+### Decisions made
+- **D-003** mirrors rein D-153. Where the E-3/E-5 task text in state.sqlite differs from the
+  blueprint (it predates the ruling), the blueprint + D-003 govern.
+
+### Blueprint divergence
+- NONE in code (nothing implemented). One Architect assumption corrected: `config/` is mirrored, not preserved.
+
+### Next action needed (Engineer)
+- Continue E-2 unchanged. When E-3 opens: production backend is minisign (vet the crate via
+  `skill: dependency_gate`), tests use a generated TEST key pair, `Rejecting` stays as a
+  build-flag kill switch. When E-5 opens: read `layout.operator_owned` from the manifest; add
+  the upgrade-semantics test from §Test Plan.
+
+### Open risks
+- rein has not yet shipped the release workflow, manifest generator or `doctor --json`
+  (their P-50 E-## follow). E-3/E-5 are testable against fixtures regardless.
+- Still no git repository here; commit this COMM.md with the previous entry after `git init`.
+---

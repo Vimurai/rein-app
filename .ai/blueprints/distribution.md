@@ -20,18 +20,30 @@ completely or leaves the previous tree untouched. Around it sit two side tools: 
 1. **`rein-release::Fetcher`** — resolves tag → asset URLs on the `rein` GitHub release
    (`rein-X.Y.Z.tar.gz`, detached signature, `manifest.json`); downloads to a per-run
    staging dir; enforces size cap and timeout; never follows redirects off the release host.
-2. **`rein-release::Verifier`** — (a) `SignatureVerifier` trait with a `Rejecting` default
-   backend (every signature invalid) until `rein` P-50 chooses minisign vs sigstore;
-   (b) manifest parse + schema check; (c) sha256 of every file in the tarball against the
-   manifest, and rejection of any file not listed or any listed file missing. Any failure →
-   `VerifyError` naming the check; nothing leaves staging.
-3. **`rein-release::LayoutWriter`** — unpacks the verified tarball into
-   `$HOME/.rein.staging-<version>`, checks the tree matches the stable layout
-   (`bin/ hooks/ mcp/ shared/ scripts/ config/ secrets/ run/`, `VERSION`), then atomic
-   rename to `$HOME/.rein` with the previous tree kept as `$HOME/.rein.prev-<oldversion>`
-   (N=2). Preserves operator-owned files that live in the home dir but not in the tarball
-   (`accounts.json`, `gate-override.json`, `config/*`, `secrets/*`, `run/*`) by carrying
-   them across. Never edits any file after unpack.
+2. **`rein-release::Verifier`** (rein D-153 r1–r2) — order is fixed: (a) parse the
+   beside-tarball `manifest.json`, reject `schema != 1`; (b) compare `key_id` with the
+   build-time baked minisign public key — mismatch fails with ONE line naming the newer
+   rein-app version required (never a bare signature error); (c) **minisign** verify
+   `rein-X.Y.Z.tar.gz.minisig` over the tarball with the baked key; (d) extract to staging,
+   require the in-tarball `manifest.json` to be byte-identical to the beside one; (e) sha256
+   + size of every listed file; reject a listed file missing, a tarball file not listed, a
+   path with `..`/absolute/backslash, or a path outside `layout.mirrored ∪ operator_owned`;
+   (f) apply `mode` from the manifest (`bin/rein`, `hooks/*.sh` are `0755`). The
+   `SignatureVerifier` trait stays (the test suite injects a fixture key pair); the production
+   backend is minisign and the `Rejecting` backend remains selectable by build flag as the kill switch.
+3. **`rein-release::LayoutWriter`** (rein D-153 r5) — mirrors `install-rein.sh`: for every
+   dir in `layout.mirrored` (`bin hooks mcp shared claude contracts templates copilot scripts
+   config`) the staged tree REPLACES the installed one; a file in a mirrored dir that the
+   tarball does not ship is deleted (`bin/` pruned explicitly). Paths listed in
+   `layout.operator_owned` are never written, deleted or read by the app — read the list
+   **from the manifest**, never hard-code it. Today it is: `accounts.json`, the gate's
+   override file, `secrets/`, `run/`, `memory/`, `incidents.ndjson`, `telemetry.sqlite`,
+   `INSIGHTS.md`, `memory-palace.md`, `mcp/**/node_modules/`, `mcp/**/package-lock.json`,
+   and exactly two files under the otherwise-mirrored `config/`: `config/rein-workspace.txt`,
+   `config/install-stamp.json`. Mechanics: build the next tree in `$HOME/.rein.staging-<ver>`
+   (copy of operator-owned from the live tree + mirrored dirs from the tarball), then atomic
+   rename with the previous tree kept as `$HOME/.rein.prev-<oldver>` (N=2); `VERSION` is
+   written last, tmp-and-rename. Never edits any file after the swap.
 4. **`rein-app::Runner`** — invokes `rein install` then `rein doctor` from
    `$HOME/.rein/bin` with a clean env (`CLAUDECODE` unset, PATH prefixed with
    `$HOME/.rein/bin`); streams output to the terminal verbatim; exit code propagates.
@@ -60,10 +72,14 @@ completely or leaves the previous tree untouched. Around it sit two side tools: 
 
 ## Data Model
 ```
-Manifest { version: SemVer, min_node: u32, layout: Vec<DirName>,
-           files: Vec<{ path: RelPath, sha256: Hex64, size: u64 }> }     // shape pending P-50
-ReleaseAssets { tarball: Path, signature: Path, manifest: Path, tag: String }
-VerifyReport { signature: Pass|Fail(reason), manifest: Pass|Fail, files: Vec<{path, Pass|Mismatch|Missing|Unlisted}> }
+// manifest.json schema 1 — rein D-153 r2 (binding). Paths relative to the Rein home, '/', no '..'.
+Manifest { schema: 1, version: SemVer, min_node: SemVer /* "22.5.0" */, key_id: String /* minisign key id */,
+           layout: { mirrored: Vec<DirName>, operator_owned: Vec<RelPath|Glob> },
+           files: Vec<{ path: RelPath, sha256: Hex64, size: u64, mode: OctalStr /* "0755" | "0644" */ }> }
+ReleaseAssets { tarball: Path, signature: Path /* .minisig */, manifest: Path, tag: String }
+VerifyReport { schema: Pass|Fail, key_id: Pass|NeedsApp(version), signature: Pass|Fail(reason),
+               manifest_match: Pass|Fail, files: Vec<{path, Pass|Mismatch|Missing|Unlisted|OutsideLayout}> }
+DoctorJson { version: SemVer, status: ok|warn|fail, checks: Vec<{ id: SnakeCase, status, line: String, fix: Option<String> }> }  // rein D-153 r3; phase 2 renders it
 InstalledTree { root: $HOME/.rein, version: SemVer (from VERSION), prev: Option<{root, version}> }
 Profile { name: String, config_dir: AbsPath, settings_path: AbsPath, exists: bool }
 AllowedKey = Hooks | EnabledPlugins | ExtraKnownMarketplaces | Attribution   // closed enum
@@ -88,10 +104,12 @@ Library seams for phase 2: `rein_release::{fetch, verify, install}`, `rein_profi
 each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them without a second code path.
 
 ## Security
-- **Trust boundary 1 — network**: all downloaded bytes are untrusted until signature AND
-  every sha256 pass. HTTPS only, pinned release host, size cap (default 200 MB), no
-  redirects off-host. `Rejecting` signature backend means the pipeline cannot install from
-  a real release until P-50 lands — intentional fail-closed default.
+- **Trust boundary 1 — network**: all downloaded bytes are untrusted until the minisign
+  signature AND every sha256 pass. HTTPS only, pinned release host, size cap (default 200 MB),
+  no redirects off-host. **Trust root = the minisign public key compiled into the binary**
+  (rein D-153 r1); the app never fetches a key. A `key_id` mismatch is a "newer rein-app
+  required" error, surfaced before any signature check. The `Rejecting` backend is a
+  build-flag kill switch, not the default.
 - **Trust boundary 2 — `$HOME/.rein`**: written once by LayoutWriter via staging + atomic
   rename. Tarball entries are checked for path traversal (`..`, absolute paths, symlinks
   escaping the root) before extraction. Operator files are carried over, never regenerated.
@@ -127,8 +145,15 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   all installs if a verifier bug is found.
 
 ## Test Plan (acceptance for Engineer)
-- Fixture release server with the six cases above; each bad case asserts no write under a
-  temp `$HOME`.
+- Fixture release server signed with a TEST minisign key pair (never the production key),
+  injected through `SignatureVerifier`; cases: good; bad `.minisig`; tampered file; missing
+  manifest; manifest `schema: 2`; `key_id` mismatch (asserts the "newer rein-app" line);
+  in-tarball manifest ≠ beside manifest; unlisted tarball file; `..` traversal entry; path
+  outside `layout`; wrong `mode`. Each bad case asserts no write under a temp `$HOME`.
+- Upgrade semantics: seed a temp `$HOME/.rein` with operator-owned files (incl.
+  `config/rein-workspace.txt`, a fake `mcp/x/node_modules/`) and a stale `bin/old-tool`;
+  after install the operator-owned files are byte-identical, `bin/old-tool` is gone, and
+  `config/` otherwise matches the tarball.
 - Layout equality: run `install-rein.sh` from a checked-out `rein` at tag T into temp HOME A,
   run `rein-app install --version T` (fixture tarball built from the same tree) into temp
   HOME B; `diff -r` of A and B is empty except `VERSION` timestamp fields if any.
@@ -141,13 +166,17 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   cargo-dist config for mac/linux/windows; CI matrix (GitHub Actions) building + testing all
   three targets. Acceptance: `cargo test --workspace` green on all three in CI.
 - **E-3** (T3) `rein-release` fetch + verify behind `Http`/`Fs` traits; `SignatureVerifier`
-  trait with `Rejecting` default; manifest + sha256 + traversal checks; fixture server with
-  the six cases; fail closed on every bad input. Depends on E-2.
+  trait with **minisign production backend** and baked public key, `Rejecting` as build-flag
+  kill switch; manifest schema 1 + `key_id` + sha256/size/mode + traversal/layout checks;
+  fixture server with the cases in §Test Plan; fail closed on every bad input. Depends on E-2.
+  (Task text in state.sqlite predates rein D-153 — this blueprint + D-003 govern.)
 - **E-4** (T3) `rein-profiles` enumerate/plan/apply with closed `AllowedKey` enum, backup +
   undo, property test for key preservation; `profiles list|apply`. Depends on E-2.
-- **E-5** (T3) LayoutWriter (staging, layout check, operator-file carry-over, atomic swap,
-  N=2 prev) + Runner (`rein install`, `rein doctor` from the tree); layout-equality test
-  against `install-rein.sh`. Depends on E-3.
+- **E-5** (T3) LayoutWriter (mirrored dirs replaced + pruned, operator-owned read from
+  `layout.operator_owned`, `config/` mirrored with two kept files, atomic swap, N=2 prev,
+  `VERSION` last) + Runner (`rein install`, `rein doctor` from the tree); layout-equality test
+  against `install-rein.sh` and the upgrade-semantics test. Depends on E-3.
+  (Task text in state.sqlite predates rein D-153 — this blueprint + D-003 govern.)
 - **E-6** (T2) Homebrew formula (tap) + cargo-dist release workflow + `.deb`/AppImage;
   Windows WSL launcher behind `Shell` trait with stubbed tests; `update`/`rollback`
   commands wired to E-5. Depends on E-4, E-5.
