@@ -243,3 +243,60 @@ Revert to hand-writing `enabledPlugins` (one function) — only if Claude Code d
 ### D-005 Addendum 2026-11-08 — evidence from rein-plugins (their D-013 mirrors D-005)
 - **Confirmed**: in an isolated `CLAUDE_CONFIG_DIR`, `claude plugin marketplace add` + `claude plugin install <p>@rein-plugins` wrote exactly the D-002 shape into that profile's settings.json (key `rein-plugins`; `"<p>@rein-plugins": true`). Our hand-written marketplace entry is byte-compatible with what Claude Code writes, and `true` is Claude Code's own output.
 - **Still open**: whether a hand-written user-scope `extraKnownMarketplaces` entry is honoured on a settings-only start (and installs nothing). rein-plugins collects it in CI (`[FIXTURE_Q4_OBSERVED]` lines) once the operator sets an API secret there; no credentials are copied locally. Until the lines arrive, the `claude plugin marketplace add Vimurai/rein-plugins#stable` fallback stays in E-4's design and E-4 may ship with the hand-written path as primary.
+
+## D-007 — Marketplace registration goes through `claude plugin marketplace add Vimurai/rein-plugins#stable`; the hand-written entry is retired (supersedes D-005 r1, D-002 "the app writes")
+
+**Date**: 2026-11-08
+**Task**: E-4
+**Decision**: `profiles apply` registers the marketplace per profile with
+`CLAUDE_CONFIG_DIR=<config_dir> claude plugin marketplace add Vimurai/rein-plugins#stable --scope user` through the `Shell` trait, then re-reads `settings.json` and **verifies** `extraKnownMarketplaces.rein-plugins.source == { source: "github", repo: "Vimurai/rein-plugins", ref: "stable" }`. A missing or different `ref` is a hard failure (exit 7, message names the observed entry) — the app never silently accepts trunk-tracking and never patches the entry by hand. The D-002 JSON remains the **expected shape** (it is what Claude Code writes); only the author of the write changes.
+
+### Why needed
+Engineer probe on Claude Code 2.1.319 (throwaway `CLAUDE_CONFIG_DIR`, local `directory` marketplace named `rein-plugins`): a hand-written user-scope `extraKnownMarketplaces` entry is absent from `claude plugin marketplace list`, `marketplace update` fails "not found", `plugin install` fails "not found in marketplace"; after `claude plugin marketplace add … --scope user` everything works and both `settings.json` and `plugins/known_marketplaces.json` are written. The CLI registry is `known_marketplaces.json`; settings alone do not populate it at user scope.
+
+### Alternatives considered
+1. **Hand-write settings AND `known_marketplaces.json`** — rejected: that file is Claude Code internal state with no documented schema; writing it is exactly the "reimplement the tool" failure the contract forbids for `rein`, applied to Claude Code.
+2. **Hand-write the entry and hope a later Claude Code honours it** — rejected: fails today, and D-005 alt 4 was reserved for this case.
+3. **`claude plugin marketplace add Vimurai/rein-plugins#stable --scope user` + read-back verification** — chosen. The `#ref` form is documented (plugins/install "Add a marketplace": "`owner/repo`. Add `#ref` to pin a branch or tag"); `--help` not listing a flag is consistent because the ref rides in the source string.
+
+### Constraints driving this decision
+- Contract §2.3 (we own the key) is satisfied by owning the *outcome* and verifying it; §2 forbids us only from reimplementing `rein`, and the same spirit applies to Claude Code internals.
+- Fixed argv behind `Shell`; the source string is a build-time constant, never user input.
+- `claude` absent → `profiles apply` still performs `attribution` and `hooks` (via `rein install`), skips marketplace + plugins, exits 4.
+
+### Impact
+- Unlocks: E-4 works for real on 2.1.319. rein-plugins' fixture assertions (a)/(b)/(c) stand unchanged — the resulting JSON is identical.
+- Open verification: whether `#stable` is honoured as `ref` on `owner/repo` sources on 2.1.319 — provable only against a live remote or a git URL fixture. E-4 tests use a local `file://` git fixture with a `stable` branch: `claude plugin marketplace add file:///…/fixture.git#stable` and assert `ref` in the written entry. If the pin is NOT honoured, exit 7 fires and this decision is reopened before E-6 ships.
+- Risk if wrong: none for users — the failure is loud and nothing is enabled.
+
+### Rollback
+One argv constant; `profiles apply --undo` (D-008) removes the allowed keys we introduced.
+
+---
+
+## D-008 — `profiles apply --undo` restores the four allowed keys by value from a once-written pre-Rein backup; it never restores the whole file
+
+**Date**: 2026-11-08
+**Task**: E-4 (security_engineer P0 finding)
+**Decision**: The backup `settings.json.rein-bak` is written **once**, the first time rein-app touches a profile (the pre-Rein state), and never overwritten. `--undo` restores only the values of `hooks`, `enabledPlugins`, `extraKnownMarketplaces`, `attribution` from that backup (removing a key the backup lacked) and leaves every other key as it currently is. `--hooks-from <file>` is removed. A `config_dir` or `settings.json` that is a symlink escaping `config_dir` is refused. This supersedes the "byte-identical restore" wording in `distribution.md` §Rollback Plan and §Security trust boundary 3.
+
+### Why needed
+security_engineer found a P0: a whole-file restore could re-grant `permissions`, `defaultMode` or `autoMode` values that the operator had since tightened — the app would be writing hard-denied keys by the back door (rein D-132). A per-apply backup would also let a second `apply` capture a Rein-modified state as "original".
+
+### Alternatives considered
+1. **Whole-file restore** — rejected (the P0).
+2. **No undo at all** — rejected: operators need a way out, and the Phase 2 settings UI promises one.
+3. **Allowed-keys-only restore from a once-written backup** — chosen.
+
+### Constraints driving this decision
+- rein D-132 hard-deny: the app must be unable to write `autoMode`, `permissions`, `defaultMode` on any code path, including undo.
+- Closed `AllowedKey` enum already exists; undo reuses the same writer.
+
+### Impact
+- Blueprint divergence recorded: undo is "allowed keys by value", not byte-identical. Unlocks E-4 completion.
+- Risk if wrong: an operator who edited `attribution` by hand after apply loses that edit on undo — acceptable and documented in `--undo` output.
+
+### Rollback
+n/a — this closes a security finding; reverting would reopen it.
+
+---

@@ -59,16 +59,17 @@ completely or leaves the previous tree untouched. Around it sit two side tools: 
    `~/.claude-personal` if present, and every `accounts.<name>.config_dir` in
    `$HOME/.rein/accounts.json`. For each `<config_dir>/settings.json`: read → parse →
    merge ONLY `hooks` (sourced by calling `rein install`, never hand-authored),
-   `extraKnownMarketplaces` (adds the `rein-plugins` marketplace entry — exact JSON and pin
-   policy fixed in `.ai/DECISIONS.md` D-002: `github` source, `repo: "Vimurai/rein-plugins"`
-   (confirmed), `ref: "stable"`; remote not live yet — tests use a fixture), `attribution`
-   → validate JSON → write via temp file + rename. **`enabledPlugins` is owned but never
-   authored by hand (D-005)**: at user scope an entry does not install anything, so
-   `--enable` runs `CLAUDE_CONFIG_DIR=<config_dir> claude plugin install <plugin>@rein-plugins
-   --scope user` per profile through the `Shell` trait (fixed argv; plugin names from the
-   closed list `rein-seo rein-ux rein-ops rein-data`), then re-reads the file and verifies the
-   `true` entry Claude Code wrote. `--disable` → `claude plugin disable … --scope user`.
-   `claude` absent → marketplace still registered, exit 4. Every pre-existing key
+   `extraKnownMarketplaces` and `enabledPlugins` — **both owned, neither authored by hand**
+   (D-007, D-005): on Claude Code 2.1.319 a hand-written user-scope marketplace entry is not
+   registered, so per profile with `CLAUDE_CONFIG_DIR=<config_dir>` the app runs
+   `claude plugin marketplace add Vimurai/rein-plugins#stable --scope user`, then on
+   `--enable` `claude plugin install <plugin>@rein-plugins --scope user` (closed list
+   `rein-seo rein-ux rein-ops rein-data`), `--disable` → `claude plugin disable … --scope user`.
+   After each call the app re-reads `settings.json` and VERIFIES the expected D-002 JSON
+   (`source.repo == "Vimurai/rein-plugins"`, `source.ref == "stable"`, `"<p>@rein-plugins": true`);
+   a missing/different `ref` is exit 7, never patched. All argv are constants behind `Shell`.
+   `attribution` is written directly → validate JSON → temp file + rename. `claude` absent →
+   `attribution` + `hooks` still applied, marketplace/plugins skipped, exit 4. Every pre-existing key
    is preserved byte-for-byte in value. Writing `autoMode`, `permissions` or `defaultMode`
    is a compile-time impossibility (the key set is a closed enum).
 7. **`rein-app::Updater`** — `rein-app update`: list newest `rein` tag, fetch its
@@ -124,8 +125,10 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   escaping the root) before extraction. Operator files are carried over, never regenerated.
 - **Trust boundary 3 — profiles**: closed `AllowedKey` enum; `hooks` content comes only from
   `rein install`'s own output (we re-read the file it wrote; we never author hook entries).
-  Hard-deny on `autoMode`/`permissions`/`defaultMode` (`rein` D-132). Temp file + rename;
-  original kept as `settings.json.rein-bak` for one generation.
+  Hard-deny on `autoMode`/`permissions`/`defaultMode` (`rein` D-132) on EVERY path including
+  undo. Temp file + rename; `settings.json.rein-bak` is written ONCE (pre-Rein state) and
+  never overwritten; `--undo` restores only the four allowed keys by value from it (D-008).
+  `config_dir`/`settings.json` symlinks escaping `config_dir` are refused.
 - **Trust boundary 4 — process**: only contract §2.6 `rein` entry points are executed, with
   args from a fixed list; no user-supplied strings reach a shell. Role tokens are never minted
   (`rein pane` owns that).
@@ -146,8 +149,9 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - **Install/update**: previous tree preserved as `$HOME/.rein.prev-<ver>`; `rein-app rollback`
   swaps back and re-runs `rein doctor`. If the atomic rename itself fails midway, the staging
   dir is left for inspection and `$HOME/.rein` is untouched (rename is the only mutation).
-- **Profiles**: `settings.json.rein-bak` restored by `profiles apply --undo`; the backup is
-  byte-identical to the pre-apply file.
+- **Profiles**: `profiles apply --undo` restores the four allowed keys by value from the
+  once-written pre-Rein `settings.json.rein-bak` (removing keys the backup lacked); all other
+  keys keep their current values — never a whole-file restore (D-008, security P0).
 - **Package**: `brew uninstall rein` / cargo-dist uninstaller removes the binary only; the
   Rein home dir is operator data and is never removed by the app.
 - **Feature kill**: the `Rejecting` signature backend can be re-selected by build flag to halt
@@ -173,6 +177,12 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   `expected`; the fixture is vendored and refreshed when rein bumps the manifest schema.
 - Profile merge: property test — for random pre-existing JSON, after `apply` every original
   key/value is intact and only allowed keys changed; attempting a forbidden key fails to compile.
+- Marketplace pin: a local `file://` git fixture with a `stable` branch;
+  `claude plugin marketplace add file:///…/fixture.git#stable --scope user` must yield
+  `source.ref == "stable"` in the written entry, else exit 7 (D-007). Stubbed `Shell` tests
+  assert the exact argv per profile; one real-CLI test is gated on `claude` being present.
+- Undo: after `apply` then operator edits to `permissions`, `--undo` leaves `permissions`
+  untouched and reverts only the four allowed keys (D-008).
 - WSL launcher: unit tests against a stubbed `Shell` covering no-WSL, WSL-no-distro, ready.
 
 ## E-## Task Breakdown (registered IDs)

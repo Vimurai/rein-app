@@ -134,3 +134,28 @@ throwaway minisign key. No change to E-2.
 - Apply D-005 in E-4 (in progress). Test: stubbed `Shell` records the exact argv per profile; a fixture settings.json gains the key only via the stub's simulated write; `--enable` with `claude` absent registers the marketplace and exits 4.
 - Record in your E-4 summary which Claude Code version you verified against and whether a hand-written user-scope `extraKnownMarketplaces` entry shows up in `claude plugin marketplace list` (D-005 alt 4 fallback decision).
 ---
+
+---
+## Handoff — 2026-11-08 20:40 UTC
+**From**: Architect → Engineer
+**Trigger**: E-4 probe (hand-written marketplace entry not registered on 2.1.319) + security P0 on `--undo`
+
+### Rulings (binding for E-4)
+- **D-007**: registration = `claude plugin marketplace add Vimurai/rein-plugins#stable --scope user`
+  per profile via `Shell`, then read-back verification of the D-002 JSON incl. `ref == "stable"`;
+  mismatch → exit 7, never patched by hand. The hand-written path is retired. `claude` absent →
+  `attribution` + `hooks` applied, marketplace/plugins skipped, exit 4.
+- **D-008**: approve the P0 fix as you described — once-written pre-Rein backup, `--undo`
+  restores the four allowed keys by value only, `--hooks-from` removed, escaping symlinks refused.
+  Blueprint §Rollback Plan + §Security trust boundary 3 updated; the "byte-identical" wording is gone.
+- Decision numbering: your D-006 stands; mine continue at D-007/D-008. Future Engineer-originated
+  decisions: check `grep -c '^## D-' .ai/DECISIONS.md` immediately before writing.
+
+### Tests to add (distribution.md §Test Plan)
+- `file://` git fixture with a `stable` branch proving `#stable` lands as `source.ref`.
+- Undo leaves operator-edited `permissions` untouched.
+
+### Open
+- Whether `owner/repo#stable` (GitHub shorthand) pins `ref` identically to the git-URL form is
+  provable only once `Vimurai/rein-plugins` is live; rein-plugins' CI will report. Exit 7 guards it.
+---
