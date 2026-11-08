@@ -148,3 +148,58 @@ Change `license`/`repository` in `[workspace.package]` and the formula; relicens
 ### D-004 Addendum 2026-11-08 — repository settled; license still pending operator confirmation
 - Operator created public `github.com/Vimurai/rein-app` and master was pushed; hosted CI run 42512783295 green on ubuntu/macos/windows → E-2 acceptance met. The repository URL is no longer an assumption.
 - Applied in f99a1b6: `license`/`repository` in `[workspace.package]`, verbatim Apache-2.0 `LICENSE`, `NOTICE` "Copyright 2026 Vimurai". The license choice remains Architect intent until the operator confirms.
+
+---
+
+## D-005 — Phase 1 crate dependencies (dependency_gate, Engineer-recorded)
+
+**Date**: 2026-11-08
+**Task**: E-3 (rein-release), E-4/E-5/E-6 (clap)
+**Decision**: ADOPT the set below. Basis: the crate list is the one `.ai/blueprints/distribution.md`
+§Execution Constraints already names (plus `minisign-verify`, implied by D-003/rein D-153 r1);
+the operator directed "do all, don't ask" on 2026-11-08. Recorded by the Engineer; Architect may revise.
+
+| Crate | Version | License | Use | Kind |
+|---|---|---|---|---|
+| serde (+derive) | 1.0.229 | MIT/Apache-2.0 | manifest + settings structs | runtime |
+| serde_json | 1.0.154 | MIT/Apache-2.0 | manifest.json, settings.json | runtime |
+| semver | 1.0.28 | MIT/Apache-2.0 | `version`, `min_node` | runtime |
+| sha2 | 0.11.1 | MIT/Apache-2.0 | per-file sha256 (streamed) | runtime |
+| tar | 0.4.46 | MIT/Apache-2.0 | tarball read (entries checked before any write) | runtime |
+| flate2 | 1.1.11 | MIT/Apache-2.0 | gzip (pure-Rust miniz_oxide backend) | runtime |
+| minisign-verify | 0.3.0 | MIT | signature verify only, zero deps (jedisct1, minisign author) | runtime |
+| reqwest (blocking, rustls, no default features) | 0.13.5 | MIT/Apache-2.0 | HTTPS release download | runtime |
+| clap (derive) | 4.6.7 | MIT/Apache-2.0 | CLI parsing (E-4 onward) | runtime |
+| tempfile | 3.27.0 | MIT/Apache-2.0 | test temp HOMEs | dev |
+| minisign | 0.10.0 | MIT | sign fixture releases with a throwaway TEST key | dev |
+
+### Why needed
+Each maps to one pipeline step in distribution.md Components 1–2 and 6; none duplicates another.
+
+### Alternatives considered
+1. **Implement ourselves** — rejected for crypto (sha256, ed25519/minisign), gzip and HTTP/TLS;
+   hand-rolled versions are the larger risk. Accepted for small things: hex encoding, the
+   operator-owned glob matcher, error types (no `thiserror`/`hex`/`glob` crates).
+2. **`ureq` instead of `reqwest`** — lighter (no tokio), but the blueprint names reqwest;
+   swapping is a one-module change behind the `Http` trait if binary size matters later.
+3. **`minisign` (full) at runtime** — rejected: verify-only crate is smaller, no key-handling surface.
+
+### Size / weight
+reqwest blocking + rustls dominates (tokio, hyper, rustls, ring/aws-lc). Everything else is small.
+All licenses are compatible with Apache-2.0 (D-004).
+
+### Security track record
+Mainstream, maintained crates; current versions have no RustSec advisory known to the Engineer at
+recording time (cargo-audit not installed locally — a `cargo audit` CI step is proposed for E-6).
+`tar` has had path-traversal advisories historically: we never call `unpack`; every entry path,
+type and size is validated by our code before a byte is written (E-3).
+
+### Maintenance
+All released within the last year; serde/reqwest/clap/tar/flate2 are rust-lang-adjacent staples.
+
+### MSRV impact
+sha2 0.11 needs Rust 1.88 → workspace `rust-version` raised 1.85 → 1.88. CI builds on stable.
+
+### Rollback
+Each crate sits behind one module (`Http`, verifier, matcher, CLI); remove the dependency and that
+module. `Cargo.lock` is committed and CI runs `--locked`.
