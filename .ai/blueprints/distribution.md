@@ -59,11 +59,16 @@ completely or leaves the previous tree untouched. Around it sit two side tools: 
    `~/.claude-personal` if present, and every `accounts.<name>.config_dir` in
    `$HOME/.rein/accounts.json`. For each `<config_dir>/settings.json`: read → parse →
    merge ONLY `hooks` (sourced by calling `rein install`, never hand-authored),
-   `enabledPlugins`, `extraKnownMarketplaces` (adds the `rein-plugins` marketplace entry —
-   exact JSON and pin policy fixed in `.ai/DECISIONS.md` D-002: `github` source,
-   `repo: "Vimurai/rein-plugins"` (confirmed), `ref: "stable"`, plugins enabled only on
-   `--enable`; remote not live yet — tests use a fixture), `attribution` → validate JSON →
-   write via temp file + rename. Every pre-existing key
+   `extraKnownMarketplaces` (adds the `rein-plugins` marketplace entry — exact JSON and pin
+   policy fixed in `.ai/DECISIONS.md` D-002: `github` source, `repo: "Vimurai/rein-plugins"`
+   (confirmed), `ref: "stable"`; remote not live yet — tests use a fixture), `attribution`
+   → validate JSON → write via temp file + rename. **`enabledPlugins` is owned but never
+   authored by hand (D-005)**: at user scope an entry does not install anything, so
+   `--enable` runs `CLAUDE_CONFIG_DIR=<config_dir> claude plugin install <plugin>@rein-plugins
+   --scope user` per profile through the `Shell` trait (fixed argv; plugin names from the
+   closed list `rein-seo rein-ux rein-ops rein-data`), then re-reads the file and verifies the
+   `true` entry Claude Code wrote. `--disable` → `claude plugin disable … --scope user`.
+   `claude` absent → marketplace still registered, exit 4. Every pre-existing key
    is preserved byte-for-byte in value. Writing `autoMode`, `permissions` or `defaultMode`
    is a compile-time impossibility (the key set is a closed enum).
 7. **`rein-app::Updater`** — `rein-app update`: list newest `rein` tag, fetch its
@@ -102,7 +107,7 @@ CLI (`rein-app`):
 | `rollback` | — | swapped version, doctor output | 0 · 12 no previous tree |
 | `doctor` | — | passthrough of `rein doctor` (and `--json` once P-50 lands) | rein's exit code |
 | `profiles list` | — | table of Profile | 0 |
-| `profiles apply [--profile NAME] [--marketplace URL]` | — | per-profile diff of allowed keys, then write | 0 · 5 parse error · 6 forbidden key attempted (bug) |
+| `profiles apply [--profile NAME] [--enable LIST\|all] [--disable LIST] [--undo]` | — | per-profile diff of allowed keys, then write; `--enable/--disable` shell out to `claude plugin …` (D-005) | 0 · 4 `claude` missing · 5 parse error · 6 forbidden key attempted (bug) · 7 `claude plugin` failed |
 | `launch` (Windows) | project dir | opens terminal into tmux | 0 · 20 WSL absent and install declined |
 Library seams for phase 2: `rein_release::{fetch, verify, install}`, `rein_profiles::{enumerate, plan, apply}`,
 each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them without a second code path.

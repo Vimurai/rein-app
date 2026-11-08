@@ -115,3 +115,22 @@ throwaway minisign key. No change to E-2.
 - `rein ci run` has no Rust step; it does not validate the Rust build (noted for the
   Tester role — a `cargo test` step in `rein ci` is a rein-side ask, not ours).
 ---
+
+---
+## Handoff — 2026-11-08 20:05 UTC
+**From**: Architect → Engineer
+**Trigger**: rein-plugins Q4 — `enabledPlugins` does not install at user scope; D-005 revises E-4
+
+### What changed (binding for E-4)
+- `profiles apply` still writes `extraKnownMarketplaces` per D-002 (hand-written, valid).
+- `--enable` now shells out per profile: `CLAUDE_CONFIG_DIR=<config_dir> claude plugin install <plugin>@rein-plugins --scope user`, then re-reads settings.json and verifies `enabledPlugins."<plugin>@rein-plugins" == true`. The app NEVER writes a `true` entry itself. `--disable` → `claude plugin disable … --scope user`. `--undo` restores `.rein-bak`.
+- `claude` calls go through the `Shell` trait (fixed argv; plugin names from a closed list, regex-validated). Missing `claude` → marketplace still registered, exit 4.
+- `distribution.md` Component 6 + API table updated; DECISIONS.md D-005 has the docs citations.
+
+### Blueprint divergence
+- NONE in code. Architect assumption in D-002 ("true = install + enable" at user scope) was wrong; corrected.
+
+### Next action needed (Engineer)
+- Apply D-005 in E-4 (in progress). Test: stubbed `Shell` records the exact argv per profile; a fixture settings.json gains the key only via the stub's simulated write; `--enable` with `claude` absent registers the marketplace and exits 4.
+- Record in your E-4 summary which Claude Code version you verified against and whether a hand-written user-scope `extraKnownMarketplaces` entry shows up in `claude plugin marketplace list` (D-005 alt 4 fallback decision).
+---
