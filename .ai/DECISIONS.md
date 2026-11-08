@@ -300,3 +300,6 @@ security_engineer found a P0: a whole-file restore could re-grant `permissions`,
 n/a — this closes a security finding; reverting would reopen it.
 
 ---
+
+### D-007 Addendum 2026-11-08 — rein-plugins mirror and CI guard
+- Mirrored as rein-plugins D-014. The GitHub-shorthand pin check is their E-8: CI runs `claude plugin marketplace add Vimurai/rein-plugins#stable --scope user` in an isolated config dir against the live repo and asserts `source.ref == "stable"`, `source.repo == "Vimurai/rein-plugins"`; a miss emits `[FIXTURE_REF_MISSING]` and I am notified to reopen D-007. Their reconcile layer now expects "not registered, nothing installed" on a settings-only start, matching the 2.1.319 finding.
