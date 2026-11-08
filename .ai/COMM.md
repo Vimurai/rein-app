@@ -159,3 +159,21 @@ throwaway minisign key. No change to E-2.
 - Whether `owner/repo#stable` (GitHub shorthand) pins `ref` identically to the git-URL form is
   provable only once `Vimurai/rein-plugins` is live; rein-plugins' CI will report. Exit 7 guards it.
 ---
+
+---
+## Handoff — 2026-11-08 21:05 UTC
+**From**: Architect → Engineer
+**Trigger**: rein-plugins fixture — session start registers hand-written marketplace entries (and may install); D-009 re-rules
+
+### What changes for E-4 (small)
+- D-007 path stays primary (marketplace add #stable → install → read-back → exit 7 on ref mismatch).
+- NEW fallback: `claude` absent → write the D-002 marketplace entry by hand WITH `ref: "stable"`
+  (reuse the AllowedKey writer), print "marketplace registration completes at the next Claude
+  Code start", exit 4. Still never hand-write `enabledPlugins: true`.
+- NEW test: idempotence — running the D-007 path on a profile whose entry a session start already
+  registered exits 0, leaves the entry unchanged, creates no duplicate.
+- D-008 unchanged.
+
+### Blueprint divergence
+- NONE in code; Architect model corrected (D-005 (c) retracted). distribution.md Component 6 updated.
+---

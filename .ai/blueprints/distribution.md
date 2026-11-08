@@ -69,7 +69,10 @@ completely or leaves the previous tree untouched. Around it sit two side tools: 
    (`source.repo == "Vimurai/rein-plugins"`, `source.ref == "stable"`, `"<p>@rein-plugins": true`);
    a missing/different `ref` is exit 7, never patched. All argv are constants behind `Shell`.
    `attribution` is written directly → validate JSON → temp file + rename. `claude` absent →
-   `attribution` + `hooks` still applied, marketplace/plugins skipped, exit 4. Every pre-existing key
+   `attribution` + `hooks` applied, the D-002 marketplace entry is hand-written WITH
+   `ref: "stable"` as a fallback (Claude Code reconciles it at its next session start —
+   D-009), plugins skipped, exit 4. The D-007 path must be idempotent over an entry the
+   reconciler already registered. Every pre-existing key
    is preserved byte-for-byte in value. Writing `autoMode`, `permissions` or `defaultMode`
    is a compile-time impossibility (the key set is a closed enum).
 7. **`rein-app::Updater`** — `rein-app update`: list newest `rein` tag, fetch its

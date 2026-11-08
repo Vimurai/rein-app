@@ -303,3 +303,37 @@ n/a — this closes a security finding; reverting would reopen it.
 
 ### D-007 Addendum 2026-11-08 — rein-plugins mirror and CI guard
 - Mirrored as rein-plugins D-014. The GitHub-shorthand pin check is their E-8: CI runs `claude plugin marketplace add Vimurai/rein-plugins#stable --scope user` in an isolated config dir against the live repo and asserts `source.ref == "stable"`, `source.repo == "Vimurai/rein-plugins"`; a miss emits `[FIXTURE_REF_MISSING]` and I am notified to reopen D-007. Their reconcile layer now expects "not registered, nothing installed" on a settings-only start, matching the 2.1.319 finding.
+
+## D-009 — Session-start reconciliation observed; D-007's explicit CLI path stays primary, the hand-written entry returns only as the `claude`-absent fallback; D-005 assertion (c) retracted
+
+**Date**: 2026-11-08
+**Task**: E-4; answers rein-plugins Q5
+**Decision**: rein-plugins' E-4 fixture on Claude Code 2.1.319 shows that a **session start** registers a hand-written user-scope `extraKnownMarketplaces` entry (even an unauthenticated `claude -p` that fails "Not logged in" wrote `known_marketplaces.json`; reproduced twice), and one authenticated start installed an `enabledPlugins: true` plugin from settings alone (single sample, `directory` source). This reconciles with the Engineer's D-007 probe, which ran CLI subcommands before any start. Ruling:
+1. **D-007 stands as the primary path**: `claude plugin marketplace add Vimurai/rein-plugins#stable --scope user` then `claude plugin install …` per profile, with read-back verification and exit 7 on a missing/different `ref`. Reason: immediate, deterministic, verifiable at `apply` time, documented; session-start reconciliation is deferred, undocumented at user scope, and unverifiable until the operator next starts Claude Code.
+2. **`claude` absent → hand-write the D-002 marketplace entry (with `ref: "stable"`) as a fallback**, print "marketplace registration completes at the next Claude Code start", still exit 4 (runtime missing). Never hand-write `enabledPlugins: true`: install-from-settings at user scope rests on one sample and is not documented; the operator runs `profiles apply --enable` once `claude` exists.
+3. **D-005 assertion (c)** ("the settings write alone installs nothing") is **retracted** and replaced by: "rein-app does not rely on install-from-settings at user scope; it may happen after an authenticated start and is harmless because rein-app only ever leaves `true` entries that Claude Code itself wrote or none at all".
+4. **No change to D-008** (undo). After undo a plugin may remain installed but disabled; acceptable.
+
+### Why needed
+D-007 was ruled on a CLI-subcommand probe without a session start; the new fixture shows the missing half. Both repos' fixtures must assert the same model.
+
+### Alternatives considered
+1. **Revert to hand-writing both keys and rely on session-start reconciliation** — rejected: deferred effect, no `apply`-time verification of the `ref` pin, install side rests on one sample, and `ref` handling by the reconciler is unmeasured (a trunk-tracking clone would be silent).
+2. **Keep D-007 and forbid the hand-written fallback entirely** — rejected: when `claude` is absent the operator gains nothing from refusing; the entry with an explicit `ref` is the documented settings shape and the reconciler honours it.
+3. **D-007 primary + explicit-ref hand-write fallback + retract (c)** — chosen.
+
+### What rein-plugins' CI should measure (Q5), per Claude Code version
+- M1 Registration by start, unauthenticated, `github` source `Vimurai/rein-plugins` with `ref: "stable"` once live (and `directory` meanwhile): after one `claude -p` start, does `known_marketplaces.json` carry `ref: "stable"`, and does the marketplace clone's HEAD equal `origin/stable`? (Detects silent trunk-tracking.)
+- M2 Install by start, authenticated, `github` source: three consecutive fresh config dirs with `enabledPlugins: {"rein-seo@rein-plugins": true}` only; count installs, record version/sha. Report-only.
+- M3 (existing E-8) `claude plugin marketplace add Vimurai/rein-plugins#stable --scope user` → `source.ref == "stable"` in settings AND in `known_marketplaces.json`.
+- M4 Idempotence: D-007 path run on a profile the reconciler already registered → exit 0, entry unchanged, no duplicate marketplace.
+All report-only lines `[FIXTURE_Q5_M<n>] <version> <result>`; a M1 trunk-tracking result or a M3 missing `ref` reopens D-007/D-009 the same day.
+
+### Impact
+- E-4: one additional branch (fallback hand-write when `claude` is absent) and M4 idempotence test. Everything else unchanged.
+- Risk if wrong: if the reconciler ignores `ref`, operators without `claude` at apply time track trunk until `profiles apply` runs again — mitigated by the exit-4 signal and M1.
+
+### Rollback
+Remove the fallback branch; D-007 alone remains.
+
+---
