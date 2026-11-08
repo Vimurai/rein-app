@@ -3,3 +3,9 @@
 
 # Per-operator Claude Code settings (never shared)
 .claude/settings.local.json
+
+# Secrets / local-only (rein ci secrets check)
+.env
+.env.*
+node_modules
+.ai/ci.local.json
