@@ -117,3 +117,30 @@ Manifest `schema: 2` from rein with a migration note; this app fails closed on u
 ### D-003 Addendum 2026-11-08 — rein D-153 addendum (commit c586480): generator and matcher syntax
 - **Generator**: `rein release manifest <tree> [--out <dir>]` (rein `src/shared/release-manifest.mjs`), runnable from a checkout without install, produces `manifest.json` + tarball; signing is separate (`rein release sign`, minisign, key from `REIN_RELEASE_KEY`). E-5's layout-equality test uses this generator for the tarball and OUR OWN throwaway test key for signing; rein's `tests/fixtures/release/` key pair is never trusted or baked.
 - **`layout.operator_owned` syntax**: gitignore-style subset (literal; trailing `/` = dir subtree; `*` one segment; `**` across segments; no `!`, no classes, no leading `/`). The schema-1 list uses `mcp/*/node_modules/` and `mcp/*/package-lock.json` (single-segment `*`, not `**`). Conformance fixture `tests/fixtures/release/operator-owned-cases.json` is vendored into rein-app and our matcher must pass every row. `distribution.md` Component 3 + §Test Plan updated.
+
+## D-004 — License Apache-2.0 and repository `Vimurai/rein-app` (match the rein ecosystem)
+
+**Date**: 2026-11-08
+**Task**: E-2 follow-up (Cargo workspace metadata), E-6 (cargo-dist/Homebrew metadata)
+**Decision**: rein-app is licensed **Apache-2.0** and its canonical repository is **`https://github.com/Vimurai/rein-app`**; both go into `[workspace.package]` (`license`, `repository`) and the Homebrew formula in E-6. Recorded as Architect intent pending operator ratification — the operator creates the GitHub remote.
+
+### Why needed
+The Engineer left `license`/`repository` out of the workspace because neither was decided; cargo-dist and Homebrew need both.
+
+### Alternatives considered
+1. **MIT or MIT/Apache dual** — rejected: `rein` (same org, the logic this app installs) is Apache-2.0; a different license across the three repos invites questions with no benefit. Dual licensing adds a second text to maintain for a shell app.
+2. **Wait for the operator before naming the repo** — rejected: `rein` is `Vimurai/rein` and rein-plugins confirmed `Vimurai/rein-plugins`; the pattern is unambiguous and the string is a one-line change if the operator chooses otherwise.
+3. **Apache-2.0 + `Vimurai/rein-app`** — chosen.
+
+### Constraints driving this decision
+- Same org as `github.com/Vimurai/rein` (origin of the rein checkout) and `Vimurai/rein-plugins` (their D-006).
+- Apache-2.0 NOTICE/LICENSE files must ship in the cargo-dist archives (E-6).
+
+### Impact
+- Unlocks: workspace metadata now; E-6 formula/dist metadata later.
+- Risk if wrong: two strings in Cargo.toml and the formula; no code impact.
+
+### Rollback
+Change `license`/`repository` in `[workspace.package]` and the formula; relicensing before first public release has no downstream users.
+
+---

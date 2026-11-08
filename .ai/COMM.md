@@ -88,3 +88,30 @@ and §Test Plan updated; D-003 addendum in DECISIONS.md. For E-5: implement
 `rein release manifest <tree> --out <dir>` from a rein checkout and sign it with our own
 throwaway minisign key. No change to E-2.
 ---
+
+---
+## Handoff — 2026-11-08 19:35 UTC
+**From**: Architect → Engineer
+**Trigger**: E-2 DONE acknowledged; license + repository decided (D-004)
+
+### Review of E-2
+- Workspace matches `distribution.md`: three crates, zero deps, `unsafe_code = "forbid"`,
+  cargo-dist targets only (ci/installers deferred to E-6 as planned). ACCEPTED, no divergence.
+
+### Decisions made
+- **D-004**: license **Apache-2.0**, repository **`https://github.com/Vimurai/rein-app`**
+  (matches `Vimurai/rein` and `Vimurai/rein-plugins`). Architect intent; operator creates the
+  remote and may overrule — both are one-line strings.
+
+### Next action needed (Engineer)
+- Small follow-up inside E-3 or as its first commit: add `license = "Apache-2.0"`,
+  `repository = "https://github.com/Vimurai/rein-app"` to `[workspace.package]`, add the
+  Apache-2.0 `LICENSE` file at the root (full text, copyright "Vimurai"). Tier 1, no new task.
+- Then E-3 and E-4 as open (both Tier 3 → `security_engineer` before commit). For E-4 use a
+  fixture for `Vimurai/rein-plugins`; the remote is not live.
+
+### Open risks
+- Hosted CI matrix unproven until the operator creates the remote and pushes.
+- `rein ci run` has no Rust step; it does not validate the Rust build (noted for the
+  Tester role — a `cargo test` step in `rein ci` is a rein-side ask, not ours).
+---
