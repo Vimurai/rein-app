@@ -164,18 +164,18 @@
     {
       "id": "E-10",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Add the owner guard to `rein-app install`, `update` and `rollback` (unix): right after the install lock is created, read the run's uid from the lock file's own metadata (no unsafe, no new dependency) and refuse — naming the path, writing nothing, releasing the lock — when it differs from the owner of $HOME, of $HOME/.rein when it exists, or (rollback) of the snapshot root or its layout.json; keep the comparison a pure function over uids. Also print one line when a populated home with no semver VERSION is updated without a snapshot (rollback unavailable for that update). Per .ai/blueprints/distribution.md §Components 3 steps a and c, §Security trust boundary 2 (D-013). Acceptance: §Test Plan \"Owner guard\" (pure-function unit cases; one CLI test per command with the mismatch injected, no root needed; no lock left behind) and \"No-snapshot notice\" green in cargo test --workspace on all three CI targets (the guard compiles to a no-op on Windows). Tier 3: security_engineer review before commit.",
       "created_at": "2026-11-09T15:32:47.957Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-09T15:44:55.753Z",
+      "summary": "Owner guard (uid from lock handle, $HOME via symlink, fail closed) + no-snapshot notice (5b8bc6b); ARCH/TESTS/SEC pass; hosted CI green x3",
       "depends_on": [
         "E-7"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-09T15:32:47.958Z"
+      "updated_at": "2026-11-09T15:44:55.753Z"
     }
   ],
   "stamps": [
@@ -384,6 +384,42 @@
       "timestamp": "2026-11-09T15:09:40.303Z",
       "summary": "[TIER_2] Blueprint aligned",
       "sha": "1ac3f78df1fd61e4651eb5868ffadaf82ff7cf8b",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-10",
+      "timestamp": "2026-11-09T15:36:50.744Z",
+      "summary": "No sovereignty violations (no .ai/ files touched); owner guard (lock-file uid, pure check_owners, injectable RunUid, snapshot root + layout.json checked in rollback) and no-snapshot notice match distribution.md §3a/§3c, §Security 2 and D-013; install/update/rollback tests cover Test Plan; disclosed choices are within blueprint.",
+      "sha": "9be3c6da6dc38cdda62f739a416a642c4cefa859",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-10",
+      "timestamp": "2026-11-09T15:37:05.388Z",
+      "summary": "[TESTS_PASS] cargo test --workspace all green (0 failed). Owner guard unit cases + CLI refusals for install/update/rollback and the no-snapshot notice are covered. P1: CLI tests do not assert the offending path is named in the error (only the pure check_owners test does).",
+      "sha": "9be3c6da6dc38cdda62f739a416a642c4cefa859",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "security_engineer",
+      "task_id": "E-10",
+      "timestamp": "2026-11-09T15:41:13.516Z",
+      "summary": "[TIER_3] E-10 re-review: P1-1 run uid from the lock handle (fstat), P1-2 $HOME judged through its symlink; P2 fstat failure now fails closed; P2-1/3/4 (guard-skippable public fns, shared root-owned --home) → Architect",
+      "sha": "9be3c6da6dc38cdda62f739a416a642c4cefa859",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": "E-10",
+      "timestamp": "2026-11-09T15:41:14.570Z",
+      "summary": "[TIER_3] E-10 ARCH_PASS + TESTS_PASS + SEC_PASS (after 1 fix round)",
+      "sha": "9be3c6da6dc38cdda62f739a416a642c4cefa859",
       "author": "emirkovacevic@protonmail.com"
     }
   ],

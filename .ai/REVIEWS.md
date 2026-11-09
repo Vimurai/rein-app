@@ -23,3 +23,7 @@
 [CRITIC_STAMP] 2026-11-09 | dba58a7 emirkovacevic@protonmail.com | [TIER_3] E-7 ARCH_PASS + TESTS_PASS + SEC_PASS (after 1 fix round)
 [ALIGN_PASS] 2026-11-09 | 1ac3f78 emirkovacevic@protonmail.com | [TIER_2] Blueprint aligned — E-8 install default latest (distribution.md C7, §API); ORPHANED_WORK warn = update_cmd.rs under C7
 [CRITIC_STAMP] 2026-11-09 | 1ac3f78 emirkovacevic@protonmail.com | [TIER_2] Blueprint aligned
+[ARCH_PASS] 2026-11-09 | 9be3c6d emirkovacevic@protonmail.com | No sovereignty violations (no .ai/ files touched); owner guard (lock-file uid, pure check_owners, injectable RunUid, snapshot root + layout.json checked in rollback) and no-snapshot notice match distribution.md §3a/§3c, §Security 2 and D-013; install/update/rollback tests cover Test Plan; disclosed choices are within blueprint.
+[TESTS_PASS] 2026-11-09 | 9be3c6d emirkovacevic@protonmail.com | [TESTS_PASS] cargo test --workspace all green (0 failed). Owner guard unit cases + CLI refusals for install/update/rollback and the no-snapshot notice are covered. P1: CLI tests do not assert the offending path is named in the error (only the pure check_owners test does).
+[SEC_PASS] 2026-11-09 | 9be3c6d emirkovacevic@protonmail.com | [TIER_3] E-10 re-review: P1-1 run uid from the lock handle (fstat), P1-2 $HOME judged through its symlink; P2 fstat failure now fails closed; P2-1/3/4 (guard-skippable public fns, shared root-owned --home) → Architect
+[CRITIC_STAMP] 2026-11-09 | 9be3c6d emirkovacevic@protonmail.com | [TIER_3] E-10 ARCH_PASS + TESTS_PASS + SEC_PASS (after 1 fix round)
