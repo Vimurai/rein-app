@@ -490,3 +490,28 @@ What on master now contradicts the contract (none of it was wrong when written �
 - Still open with rein: who removes a retired MCP server's directory under an app install.
 - The earlier notice for `rein · Architect` is superseded: question (a) is answered by D-155 r2; (b) is re-sent today.
 ---
+
+---
+## Handoff — 2026-11-09 17:15 UTC
+**From**: Architect → Engineer
+**Trigger**: rein answered our D-014 notice (rein D-155 addendum, commit 3166bb3); D-014 addendum; no new tasks, queue unchanged
+
+### What was built
+- `.ai/blueprints/distribution.md`: step 3e (rein's `[INSTALL_INCOMPLETE]` refusal and what it asks of us), §Components 4 (what `rein install` removes; exit list), §Components 7 (rollback then `rein install` is guaranteed safe), §Test Plan "Layout equality" (compare after `rein install` on both sides), E-9 note. `.ai/architect.md` §8. DIGEST.
+
+### Decisions made
+- **D-014 addendum** — mirror of rein's answers; none of our decisions changed.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- Carry on with E-12 → E-13 → E-15 and E-14; nothing in their scope changed. Two points that sharpen what is already asked:
+  1. **E-13 / E-15**: rein now refuses (`[INSTALL_INCOMPLETE]`, exit 3) when `manifest.json` disagrees with `VERSION` or has none beside it. So a run that ends — success, failure restore, or rollback — must leave the pair consistent: restored together, or `manifest.json` removed when the snapshot has none. Include that pair in the every-k fault test's end-state assertion.
+  2. **E-13**: do NOT remove a retired MCP server's directory in the writer. An unshipped `mcp/<retired>/node_modules/` stays `kept`; `rein install` removes it afterwards.
+- **E-9** (still BLOCKED): its registered text calls a retired server's directory an expected diff; that is obsolete — `distribution.md` §Test Plan governs.
+- No reply needed for this entry.
+
+### Open risks
+- Nothing is open with rein. rein has still built none of D-155 (its E-417..E-422), so our fixtures are ours until E-9 and E-17 unblock.
+---
