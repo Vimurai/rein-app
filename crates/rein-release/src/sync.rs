@@ -2,9 +2,11 @@
 //! a, b, d; D-011). Shared by install (source = verified release) and by rollback and
 //! failure restore (source = a snapshot).
 //!
-//! Scope rule: only paths under a `layout.mirrored` directory are ever opened. Inside them,
-//! paths matching `layout.operator_owned` are never opened: an owned directory is not
-//! descended into, an owned file is neither read, written nor pruned.
+//! Scope rule: only paths under a `layout.mirrored` directory (plus `manifest.json` and
+//! `VERSION`, handled by the callers) are ever opened. Inside them, `layout.operator_owned`
+//! protects from deletion only: a shipped path is always written, even when a pattern
+//! matches it; an owned path the release does not ship is never opened, and prune never
+//! descends into an owned directory (rein D-155 r2).
 
 use std::cell::Cell;
 use std::fs::{self, File};
@@ -18,7 +20,7 @@ use crate::matcher::OperatorOwnedMatcher;
 /// file list and the live mirrored dirs.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SyncPlan {
-    /// Source paths to write (operator-owned paths removed).
+    /// Source paths to write — every one, owned or not (a shipped path wins).
     pub ship: Vec<String>,
     /// Live files/symlinks under mirrored dirs that are neither shipped nor owned.
     pub prune: Vec<String>,
@@ -42,13 +44,10 @@ pub(crate) fn owned(m: &OperatorOwnedMatcher, path: &str) -> bool {
     false
 }
 
-/// Step b (pure).
+/// Step b (pure). Every source path is shipped — a shipped path wins over an
+/// `operator_owned` pattern, which protects from deletion only (rein D-155 r2).
 pub fn plan(source: &[&str], live_entries: &[String], m: &OperatorOwnedMatcher) -> SyncPlan {
-    let ship: Vec<String> = source
-        .iter()
-        .filter(|p| !owned(m, p))
-        .map(|p| p.to_string())
-        .collect();
+    let ship: Vec<String> = source.iter().map(|p| p.to_string()).collect();
     let shipped: std::collections::HashSet<&str> = ship.iter().map(String::as_str).collect();
     let prune = live_entries
         .iter()
@@ -117,6 +116,14 @@ pub(crate) fn preflight(
     mirrored: &[String],
     ship: &[&str],
 ) -> Result<(), LayoutError> {
+    // manifest.json and VERSION are replaced by rename: a directory there would fail only
+    // after the sync, so refuse it now (E-13 review P2-1). A symlink is replaced, not followed.
+    for top in ["manifest.json", "VERSION"] {
+        let p = live.join(top);
+        if fs::symlink_metadata(&p).is_ok_and(|m| m.is_dir()) {
+            return Err(LayoutError::Conflict(p));
+        }
+    }
     for root in mirrored {
         let p = live.join(root);
         match fs::symlink_metadata(&p) {
@@ -307,7 +314,35 @@ fn same_file(from: &Path, target: &Path, mode: u32) -> io::Result<bool> {
     Ok(fs::read(from)? == fs::read(target)?)
 }
 
-/// Step e: `VERSION` last, temp-and-rename. The only path outside the mirror ever written.
+/// Step e: the in-tarball `manifest.json`, byte for byte, to `<live>/manifest.json`
+/// (temp-and-rename), after `hooks` and before `VERSION` (rein D-155 r1/r4).
+pub(crate) fn write_manifest(live: &Path, bytes: &[u8], faults: &Faults) -> io::Result<()> {
+    faults.tick()?;
+    let tmp = live.join(".manifest.json.rein-tmp");
+    fresh(&tmp)?;
+    let result = (|| {
+        let mut f = File::create_new(&tmp)?;
+        io::Write::write_all(&mut f, bytes)?;
+        f.sync_all()?;
+        drop(f);
+        fs::rename(&tmp, live.join("manifest.json"))
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
+}
+
+/// Remove `<live>/manifest.json` (a restore to a tree that had none). Never follows a link.
+pub(crate) fn remove_manifest(live: &Path) -> io::Result<()> {
+    match fs::remove_file(live.join("manifest.json")) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
+        _ => Ok(()),
+    }
+}
+
+/// Step e: `VERSION` last, temp-and-rename. With `manifest.json`, the only paths outside
+/// the mirror ever written.
 pub(crate) fn write_version(live: &Path, version: &str, faults: &Faults) -> io::Result<()> {
     faults.tick()?;
     let tmp = live.join(".VERSION.rein-tmp");
@@ -363,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_ships_unowned_files_and_prunes_unshipped_unowned_ones() {
+    fn a_shipped_path_wins_and_only_unshipped_unowned_files_are_pruned() {
         let live = [
             "bin/rein".to_string(),
             "bin/old-tool".into(),
@@ -380,8 +415,17 @@ mod tests {
             &live,
             &matcher(),
         );
-        assert_eq!(p.ship, ["bin/rein", "hooks/h.sh"]);
-        assert_eq!(p.prune, ["bin/old-tool"]);
+        assert_eq!(
+            p.ship,
+            [
+                "bin/rein",
+                "config/rein-workspace.txt",
+                "mcp/x/node_modules/b.js",
+                "hooks/h.sh"
+            ],
+            "every shipped path is written, owned or not (rein D-155 r2)"
+        );
+        assert_eq!(p.prune, ["bin/old-tool"], "owned a.js is kept");
     }
 
     #[test]

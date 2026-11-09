@@ -95,6 +95,12 @@ pub fn good_files() -> Vec<Listed> {
         f("hooks/pre-tool-use.sh", b"#!/bin/sh\nexit 0\n", "0755"),
         f("shared/locate.sh", b"rein_locate() { :; }\n", "0644"),
         f("config/defaults.json", b"{\"a\":1}\n", "0644"),
+        // Shipped AND matched by `mcp/*/package-lock.json`: a shipped path wins (D-155 r2).
+        f(
+            "mcp/orchestrator-mcp/package-lock.json",
+            b"{\"lock\":\"new\"}\n",
+            "0644",
+        ),
     ]
 }
 
@@ -122,7 +128,7 @@ pub fn manifest_json(key_id: &str, files: &[Listed]) -> String {
     format!(
         r#"{{"schema":1,"version":"{VERSION}","min_node":"22.5.0","key_id":"{key_id}",
 "layout":{{"mirrored":["bin","hooks","mcp","shared","claude","contracts","templates","copilot","scripts","config"],
-"operator_owned":["accounts.json","secrets/","run/","config/rein-workspace.txt","mcp/*/node_modules/"]}},
+"operator_owned":["accounts.json","secrets/","run/","config/rein-workspace.txt","mcp/*/node_modules/","mcp/*/package-lock.json","shared/toolchain.sh"]}},
 "files":[{}]}}"#,
         rows.join(",")
     )

@@ -52,6 +52,15 @@ fn seed_live(rein: &Path) {
     write(&rein.join("bin/old-tool"), b"#!/bin/sh\n");
     write(&rein.join("bin/rein"), b"old rein");
     write(&rein.join("hooks/pre-tool-use.sh"), b"old hook");
+    // rein D-155: the home's manifest.json, a lock file at a path the new release ships,
+    // an unshipped one, and an owned file in a mirrored dir.
+    write(&rein.join("manifest.json"), b"{\"version\":\"0.4.0\"}");
+    write(
+        &rein.join("mcp/orchestrator-mcp/package-lock.json"),
+        b"{\"lock\":\"old\"}",
+    );
+    write(&rein.join("mcp/x/package-lock.json"), b"{\"lock\":\"x\"}");
+    write(&rein.join("shared/toolchain.sh"), b"node=/usr/bin/node\n");
 }
 
 struct Home {
@@ -167,8 +176,8 @@ fn upgrade_syncs_mirrored_dirs_and_keeps_operator_files() {
     );
     assert_eq!(fs::read_to_string(rein.join("VERSION")).unwrap(), "0.5.0\n");
     assert!(
-        !rein.join("manifest.json").exists(),
-        "install-rein.sh writes no manifest"
+        rein.join("manifest.json").is_file(),
+        "the release manifest is in the home (rein D-155 r1/r4)"
     );
     #[cfg(unix)]
     {
@@ -201,13 +210,27 @@ fn snapshot_holds_only_the_old_payload() {
             "hooks/",
             "hooks/pre-tool-use.sh",
             "mcp/",
+            "mcp/orchestrator-mcp/",
+            "mcp/orchestrator-mcp/package-lock.json",
             "mcp/x/",
             "mcp/x/old.mjs"
         ],
-        "no operator-owned path, nothing from outside the mirror"
+        "no unshipped operator-owned path, nothing from outside the mirror; the live file \
+         at a shipped path is included so it can be restored"
     );
     assert_eq!(fs::read_to_string(snap.join("VERSION")).unwrap(), "0.4.0\n");
     assert!(snap.join("layout.json").is_file());
+    let layout: serde_json::Value =
+        serde_json::from_slice(&fs::read(snap.join("layout.json")).unwrap()).unwrap();
+    assert_eq!(
+        layout["shipped_owned"],
+        serde_json::json!(["mcp/orchestrator-mcp/package-lock.json"])
+    );
+    assert_eq!(
+        fs::read(snap.join("manifest.json")).unwrap(),
+        b"{\"version\":\"0.4.0\"}",
+        "the home's manifest goes with its payload"
+    );
     #[cfg(unix)]
     assert_eq!(mode_of(&fs::metadata(&snap).unwrap()), 0o700);
 }
@@ -284,8 +307,10 @@ fn a_failure_at_every_step_restores_the_old_payload() {
                 assert_eq!(
                     digest(&h.rein()),
                     before,
-                    "step {k}: tree differs after restore"
+                    "step {k}: tree differs after restore (incl. manifest.json, lock file)"
                 );
+                // The earlier manifest/VERSION pair is back intact and agrees.
+                assert_version_pair(&h.rein(), "0.4.0");
             }
             Err(e) => panic!("step {k}: {e}"),
         }
@@ -297,13 +322,25 @@ fn a_failure_at_every_step_restores_the_old_payload() {
 
 #[test]
 fn a_failed_fresh_install_has_no_version_and_a_rerun_completes_it() {
+    // At every step, including the VERSION write after manifest.json: neither is left behind
+    // (rein refuses a manifest.json without a matching VERSION).
+    for k in 1.. {
+        let h = Home::new();
+        let faults = Faults::fail_at(k);
+        if faulty(&h, &faults).is_ok() {
+            assert!(k > faults.steps(), "the fault at step {k} never fired");
+            break;
+        }
+        assert!(!h.rein().join("VERSION").exists(), "step {k}");
+        assert!(!h.rein().join("manifest.json").exists(), "step {k}");
+        assert!(k < 100, "runaway");
+    }
     let h = Home::new();
     let err = faulty(&h, &Faults::fail_at(2)).unwrap_err();
     assert!(
         matches!(err, LayoutError::Sync { snapshot: None, .. }),
         "{err}"
     );
-    assert!(!h.rein().join("VERSION").exists());
     install_tree(&h.paths, &h.release(&good_files())).unwrap();
     assert_eq!(
         fs::read_to_string(h.rein().join("VERSION")).unwrap(),
@@ -321,24 +358,83 @@ fn fresh_install_has_only_release_files_and_version() {
         .map(|e| e.unwrap().file_name().into_string().unwrap())
         .collect();
     names.sort();
-    assert_eq!(names, ["VERSION", "bin", "config", "hooks", "shared"]);
+    assert_eq!(
+        names,
+        [
+            "VERSION",
+            "bin",
+            "config",
+            "hooks",
+            "manifest.json",
+            "mcp",
+            "shared"
+        ]
+    );
 }
 
 #[test]
-fn a_release_file_at_an_operator_owned_path_is_never_written() {
-    let h = Home::new();
-    write(&h.rein().join("config/rein-workspace.txt"), b"mine\n");
-    let mut files = good_files();
-    files.push(Listed {
-        path: "config/rein-workspace.txt",
-        bytes: b"from the tarball\n".to_vec(),
-        mode: "0644",
-    });
-    let out = install_tree(&h.paths, &h.release(&files)).unwrap();
-    assert_eq!(out.skipped_operator_owned, ["config/rein-workspace.txt"]);
+fn a_shipped_path_wins_over_an_operator_owned_pattern() {
+    let h = Home::seeded();
+    let rein = h.rein();
+    install_tree(&h.paths, &h.release(&good_files())).unwrap();
     assert_eq!(
-        fs::read(h.rein().join("config/rein-workspace.txt")).unwrap(),
-        b"mine\n"
+        fs::read(rein.join("mcp/orchestrator-mcp/package-lock.json")).unwrap(),
+        b"{\"lock\":\"new\"}\n",
+        "shipped and matched by mcp/*/package-lock.json: written"
+    );
+    assert_eq!(
+        fs::read(rein.join("mcp/x/package-lock.json")).unwrap(),
+        b"{\"lock\":\"x\"}"
+    );
+    assert_eq!(
+        fs::read(rein.join("shared/toolchain.sh")).unwrap(),
+        b"node=/usr/bin/node\n"
+    );
+    // The earlier lock file comes back with a rollback.
+    let (_, _lock) = rollback_tree(&h.paths).unwrap();
+    assert_eq!(
+        fs::read(rein.join("mcp/orchestrator-mcp/package-lock.json")).unwrap(),
+        b"{\"lock\":\"old\"}"
+    );
+}
+
+#[test]
+fn the_release_manifest_is_written_into_the_home_and_agrees_with_version() {
+    let h = Home::seeded();
+    let release = h.release(&good_files());
+    install_tree(&h.paths, &release).unwrap();
+    assert_eq!(
+        fs::read(h.rein().join("manifest.json")).unwrap(),
+        fs::read(release.tree.join("manifest.json")).unwrap(),
+        "byte for byte the in-tarball manifest"
+    );
+    assert_version_pair(&h.rein(), "0.5.0");
+    let (_, _lock) = rollback_tree(&h.paths).unwrap();
+    assert_eq!(
+        fs::read(h.rein().join("manifest.json")).unwrap(),
+        b"{\"version\":\"0.4.0\"}",
+        "rollback puts the earlier manifest back"
+    );
+}
+
+#[test]
+fn rollback_to_a_tree_without_a_manifest_removes_the_live_one() {
+    let h = Home::seeded();
+    fs::remove_file(h.rein().join("manifest.json")).unwrap(); // a clone install has none
+    install_tree(&h.paths, &h.release(&good_files())).unwrap();
+    assert!(h.rein().join("manifest.json").exists());
+    let (_, _lock) = rollback_tree(&h.paths).unwrap();
+    assert!(!h.rein().join("manifest.json").exists());
+}
+
+/// `manifest.json`'s version equals `VERSION` (rein refuses a disagreeing pair).
+fn assert_version_pair(rein: &Path, version: &str) {
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(rein.join("manifest.json")).unwrap()).unwrap();
+    assert_eq!(manifest["version"], version);
+    assert_eq!(
+        fs::read_to_string(rein.join("VERSION")).unwrap(),
+        format!("{version}\n")
     );
 }
 
@@ -447,6 +543,7 @@ fn symlinks_and_conflicts_are_refused_before_any_write() {
     type Setup = fn(&Path, &Path);
     let setups: [(&str, Setup); 3] = [
         ("symlinked mirrored dir", |rein, other| {
+            fs::remove_dir_all(rein.join("shared")).unwrap();
             symlink(other, rein.join("shared")).unwrap();
         }),
         ("symlink above a target", |rein, other| {
@@ -700,4 +797,38 @@ fn a_populated_home_without_a_version_updates_with_the_no_snapshot_notice() {
             .unwrap()
             .unsnapshotted
     );
+}
+
+#[test]
+fn a_snapshot_holding_an_unshipped_owned_path_is_refused() {
+    // Only owned paths the snapshot recorded as shipped may be restored over an owned path.
+    let h = Home::seeded();
+    install_tree(&h.paths, &h.release(&good_files())).unwrap();
+    write(
+        &h.paths.prev("0.4.0").join("tree/config/rein-workspace.txt"),
+        b"planted",
+    );
+    let err = rollback_tree(&h.paths).unwrap_err();
+    assert!(
+        matches!(err, RollbackError::Layout(LayoutError::Snapshot(ref m)) if m.contains("operator-owned")),
+        "{err}"
+    );
+    assert_eq!(
+        fs::read(h.rein().join("config/rein-workspace.txt")).unwrap(),
+        b"/home/op/rein\n"
+    );
+}
+
+#[test]
+fn a_directory_at_manifest_json_or_version_is_refused_before_any_write() {
+    for top in ["manifest.json", "VERSION"] {
+        let h = Home::seeded();
+        let p = h.rein().join(top);
+        let _ = fs::remove_file(&p);
+        fs::create_dir(&p).unwrap();
+        let before = digest(&h.rein());
+        let err = install_tree(&h.paths, &h.release(&good_files())).unwrap_err();
+        assert!(matches!(err, LayoutError::Conflict(_)), "{top}: {err}");
+        assert_eq!(digest(&h.rein()), before, "{top}: nothing written");
+    }
 }

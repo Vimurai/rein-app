@@ -101,11 +101,6 @@ pub fn outcome_lines(outcome: &InstallOutcome, rein: &Path) -> Vec<String> {
                 .to_string(),
         );
     }
-    for p in &outcome.skipped_operator_owned {
-        lines.push(format!(
-            "rein-app: kept your {p} (operator-owned; the release copy was not written)"
-        ));
-    }
     lines
 }
 
@@ -371,7 +366,6 @@ mod tests {
             version: Version::new(0, 5, 0),
             previous: None,
             pruned: vec![],
-            skipped_operator_owned: vec![],
             unsnapshotted: true,
         };
         let lines = outcome_lines(&outcome, Path::new("/h/.rein"));

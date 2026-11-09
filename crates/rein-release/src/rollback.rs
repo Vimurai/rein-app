@@ -112,8 +112,16 @@ fn rollback_locked(
         Some(v) if live_exists => {
             let scan = sync::scan(&live, &snap.layout.mirrored, &snap.matcher).map_err(io_err)?;
             Some(
-                snapshot::take(paths, &live, &v, &scan.entries, &snap.layout)
-                    .map_err(|e| LayoutError::Snapshot(e.to_string()))?,
+                snapshot::take(
+                    paths,
+                    &live,
+                    &v,
+                    &scan.entries,
+                    &source,
+                    &snap.layout,
+                    &snap.matcher,
+                )
+                .map_err(|e| LayoutError::Snapshot(e.to_string()))?,
             )
         }
         _ => None,
@@ -130,6 +138,10 @@ fn rollback_locked(
         let restored = current
             .as_ref()
             .is_some_and(|s| crate::layout::sync_from_snapshot(&live, s).is_ok());
+        if current.is_none() {
+            // As install: no manifest.json beside an absent or invalid VERSION (review P2-3).
+            let _ = sync::remove_manifest(&live);
+        }
         return Err(RollbackError::Layout(LayoutError::Sync {
             reason: e.to_string(),
             snapshot: current,

@@ -107,8 +107,6 @@ pub struct InstallOutcome {
     pub previous: Option<PathBuf>,
     /// Snapshots removed to keep [`snapshot::KEEP_SNAPSHOTS`](crate::KEEP_SNAPSHOTS).
     pub pruned: Vec<PathBuf>,
-    /// Listed files that match `operator_owned` and were therefore not written.
-    pub skipped_operator_owned: Vec<String>,
     /// A populated home without a semver `VERSION` was updated with no snapshot, so this
     /// update cannot be rolled back (D-013 notice).
     pub unsnapshotted: bool,
@@ -459,18 +457,13 @@ pub fn install_tree_with_faults(
         sync::Scan::default()
     };
     let plan = sync::plan(&source, &scan.entries, matcher);
-    let skipped_operator_owned = source
-        .iter()
-        .filter(|p| !plan.ship.iter().any(|s| s == *p))
-        .map(|p| p.to_string())
-        .collect();
 
     // c. snapshot (only when an installed version exists)
     let unsnapshotted =
         live_exists && !scan.entries.is_empty() && installed_version(&live).is_none();
     let previous = match installed_version(&live) {
         Some(old) => Some(
-            snapshot::take(paths, &live, &old, &scan.entries, layout)
+            snapshot::take(paths, &live, &old, &scan.entries, &source, layout, matcher)
                 .map_err(|e| LayoutError::Snapshot(e.to_string()))?,
         ),
         None => None,
@@ -479,7 +472,7 @@ pub fn install_tree_with_faults(
         fs::create_dir(&live).map_err(|e| LayoutError::Io(e.to_string()))?;
     }
 
-    // d. sync, e. VERSION
+    // d. sync (hooks last), e. manifest.json, then VERSION
     let modes: std::collections::HashMap<&str, u32> = manifest
         .files
         .iter()
@@ -496,15 +489,24 @@ pub fn install_tree_with_faults(
             },
         })
         .collect();
+    let manifest_bytes = fs::read(release.tree.join("manifest.json"))
+        .map_err(|e| LayoutError::Io(format!("verified manifest.json: {e}")))?;
     let synced = sync::apply(&live, &layout.mirrored, &items, &plan, &scan.dirs, faults)
+        .and_then(|()| sync::write_manifest(&live, &manifest_bytes, faults))
         .and_then(|()| sync::write_version(&live, &manifest.version.to_string(), faults));
 
-    // f. restore on failure
+    // f. restore on failure; `manifest.json` and `VERSION` must agree whenever a run ends
+    // (rein refuses a disagreeing pair with [INSTALL_INCOMPLETE]).
     if let Err(e) = synced {
         let restored = !faults.skip_restore
             && previous
                 .as_ref()
                 .is_some_and(|s| sync_from_snapshot(&live, s).is_ok());
+        if previous.is_none() && !faults.skip_restore {
+            // Nothing to restore: no manifest.json may stay beside an absent or invalid
+            // VERSION (rein refuses that pair), whether this run wrote it or not.
+            let _ = sync::remove_manifest(&live);
+        }
         return Err(LayoutError::Sync {
             reason: e.to_string(),
             snapshot: previous,
@@ -515,7 +517,6 @@ pub fn install_tree_with_faults(
         version: manifest.version.clone(),
         previous,
         pruned: snapshot::prune(paths),
-        skipped_operator_owned,
         unsnapshotted,
     })
 }
@@ -531,8 +532,8 @@ pub(crate) fn home_exists(live: &Path) -> Result<bool, LayoutError> {
     }
 }
 
-/// Sync the snapshot at `root` into `live` (failure restore and rollback). `VERSION` is
-/// not touched.
+/// Sync the snapshot at `root` into `live` (failure restore and rollback), then put its
+/// `manifest.json` back (or remove the live one when it had none). `VERSION` is not touched.
 pub(crate) fn sync_from_snapshot(
     live: &Path,
     root: &Path,
@@ -560,6 +561,10 @@ pub(crate) fn sync_loaded(
         &scan.dirs,
         faults,
     )
+    .and_then(|()| match &snap.manifest {
+        Some(bytes) => sync::write_manifest(live, bytes, faults),
+        None => sync::remove_manifest(live),
+    })
     .map_err(io_err)
 }
 

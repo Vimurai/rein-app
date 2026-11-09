@@ -1,34 +1,167 @@
 {
-  "_source": "rein-app interim table, rein D-153 addendum r2. Replace the cases with rein's tests/fixtures/release/operator-owned-cases.json once rein publishes it (refresh on every manifest schema bump). 'gate-override.json' stands in for the gate's override file, whose name rein's manifest supplies.",
+  "_source": "rein-app interim table in rein's three-column shape (rein D-155: path, shipped, expected kept / replaced / deleted). Replace with rein's tests/fixtures/release/operator-owned-cases.json once rein E-422 publishes it (E-17); refresh on every manifest schema bump. 'gate-override.json' stands in for the gate's override file, whose name rein's manifest supplies.",
   "operator_owned": [
-    "accounts.json", "gate-override.json", "secrets/", "run/", "memory/", "incidents.ndjson",
-    "telemetry.sqlite", "INSIGHTS.md", "memory-palace.md", "config/rein-workspace.txt",
-    "config/install-stamp.json", "mcp/*/node_modules/", "mcp/*/package-lock.json"
+    "accounts.json",
+    "gate-override.json",
+    "secrets/",
+    "run/",
+    "memory/",
+    "incidents.ndjson",
+    "telemetry.sqlite",
+    "INSIGHTS.md",
+    "memory-palace.md",
+    "config/rein-workspace.txt",
+    "config/install-stamp.json",
+    "shared/toolchain.sh",
+    "mcp/*/node_modules/",
+    "mcp/*/package-lock.json"
   ],
   "cases": [
-    { "path": "accounts.json", "expected": true },
-    { "path": "gate-override.json", "expected": true },
-    { "path": "secrets/api", "expected": true },
-    { "path": "secrets/a/b", "expected": true },
-    { "path": "run/pid", "expected": true },
-    { "path": "memory/x.json", "expected": true },
-    { "path": "incidents.ndjson", "expected": true },
-    { "path": "telemetry.sqlite", "expected": true },
-    { "path": "INSIGHTS.md", "expected": true },
-    { "path": "memory-palace.md", "expected": true },
-    { "path": "config/rein-workspace.txt", "expected": true },
-    { "path": "config/install-stamp.json", "expected": true },
-    { "path": "mcp/foo/node_modules/a/index.js", "expected": true },
-    { "path": "mcp/foo/package-lock.json", "expected": true },
-    { "path": "config/other.json", "expected": false },
-    { "path": "config/rein-workspace.txt.bak", "expected": false },
-    { "path": "mcp/foo/index.js", "expected": false },
-    { "path": "mcp/package-lock.json", "expected": false },
-    { "path": "mcp/a/b/package-lock.json", "expected": false },
-    { "path": "mcp/foo/node_modules_x/a", "expected": false },
-    { "path": "bin/rein", "expected": false },
-    { "path": "hooks/accounts.json", "expected": false },
-    { "path": "secretsx/a", "expected": false },
-    { "path": "insights.md", "expected": false }
+    {
+      "path": "accounts.json",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "gate-override.json",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "secrets/api",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "secrets/a/b",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "run/pid",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "memory/x.json",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "incidents.ndjson",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "telemetry.sqlite",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "INSIGHTS.md",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "memory-palace.md",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "config/rein-workspace.txt",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "config/install-stamp.json",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "mcp/foo/node_modules/a/index.js",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "mcp/foo/package-lock.json",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "config/other.json",
+      "shipped": false,
+      "expected": "deleted"
+    },
+    {
+      "path": "config/rein-workspace.txt.bak",
+      "shipped": false,
+      "expected": "deleted"
+    },
+    {
+      "path": "mcp/foo/index.js",
+      "shipped": false,
+      "expected": "deleted"
+    },
+    {
+      "path": "mcp/package-lock.json",
+      "shipped": false,
+      "expected": "deleted"
+    },
+    {
+      "path": "mcp/a/b/package-lock.json",
+      "shipped": false,
+      "expected": "deleted"
+    },
+    {
+      "path": "mcp/foo/node_modules_x/a",
+      "shipped": false,
+      "expected": "deleted"
+    },
+    {
+      "path": "bin/rein",
+      "shipped": false,
+      "expected": "deleted"
+    },
+    {
+      "path": "hooks/accounts.json",
+      "shipped": false,
+      "expected": "deleted"
+    },
+    {
+      "path": "secretsx/a",
+      "shipped": false,
+      "expected": "deleted"
+    },
+    {
+      "path": "insights.md",
+      "shipped": false,
+      "expected": "deleted"
+    },
+    {
+      "path": "mcp/orchestrator-mcp/package-lock.json",
+      "shipped": true,
+      "expected": "replaced",
+      "_why": "precedence: shipped and matched by mcp/*/package-lock.json, so a shipped path wins (rein D-155 r2)"
+    },
+    {
+      "path": "mcp/orchestrator-mcp/index.js",
+      "shipped": true,
+      "expected": "replaced"
+    },
+    {
+      "path": "shared/toolchain.sh",
+      "shipped": false,
+      "expected": "kept"
+    },
+    {
+      "path": "shared/locate.sh",
+      "shipped": true,
+      "expected": "replaced"
+    },
+    {
+      "path": "bin/old-tool",
+      "shipped": false,
+      "expected": "deleted"
+    }
   ]
 }

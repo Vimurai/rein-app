@@ -8,6 +8,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use semver::Version;
+use serde::Deserialize;
 
 use crate::layout::{InstallPaths, LayoutError, free_prev_slot};
 use crate::manifest::{Layout, RawLayout, validate_layout};
@@ -27,8 +28,20 @@ pub(crate) fn take(
     live: &Path,
     version: &Version,
     entries: &[String],
+    ship: &[&str],
     layout: &Layout,
+    matcher: &OperatorOwnedMatcher,
 ) -> io::Result<PathBuf> {
+    // The non-owned payload, plus the live file at every shipped path — a shipped path a
+    // pattern also matches (mcp/x/package-lock.json) must be restorable (rein D-155 r2).
+    let mut all: Vec<String> = entries.to_vec();
+    for rel in ship {
+        let present = fs::symlink_metadata(live.join(rel)).is_ok_and(|m| !m.is_dir());
+        if present && !all.iter().any(|e| e == rel) {
+            all.push(rel.to_string());
+        }
+    }
+    let shipped_owned: Vec<&String> = all.iter().filter(|e| owned(matcher, e)).collect();
     let tmp = paths.home().join(TMP_NAME);
     match fs::symlink_metadata(&tmp) {
         Ok(m) if m.is_dir() => fs::remove_dir_all(&tmp)?, // ours by name, under the lock
@@ -45,7 +58,7 @@ pub(crate) fn take(
         let tree = tmp.join("tree");
         fs::create_dir(&tree)?;
         // A temp file left by a killed run is not payload; the sync prunes it.
-        for rel in entries.iter().filter(|r| !r.ends_with(".rein-tmp")) {
+        for rel in all.iter().filter(|r| !r.ends_with(".rein-tmp")) {
             let from = live.join(rel);
             let to = tree.join(rel);
             let meta = fs::symlink_metadata(&from)?;
@@ -59,9 +72,14 @@ pub(crate) fn take(
             } // sockets/FIFOs under a mirrored dir are not release payload
         }
         fs::write(tmp.join("VERSION"), format!("{version}\n"))?;
+        // The home's manifest.json goes with the payload it describes (never followed).
+        if fs::symlink_metadata(live.join("manifest.json")).is_ok_and(|m| m.is_file()) {
+            fs::copy(live.join("manifest.json"), tmp.join("manifest.json"))?;
+        }
         let json = serde_json::json!({
             "mirrored": layout.mirrored,
             "operator_owned": layout.operator_owned,
+            "shipped_owned": shipped_owned,
         });
         fs::write(tmp.join("layout.json"), serde_json::to_vec_pretty(&json)?)?;
         let slot = free_prev_slot(paths, &version.to_string());
@@ -87,6 +105,17 @@ pub(crate) fn prune(paths: &InstallPaths) -> Vec<PathBuf> {
     removed
 }
 
+/// `layout.json` of a snapshot: the layout used, plus the owned-matching paths it holds
+/// because they were shipped (only those may be restored over an owned path).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SnapshotLayout {
+    mirrored: Vec<String>,
+    operator_owned: Vec<String>,
+    #[serde(default)]
+    shipped_owned: Vec<String>,
+}
+
 /// A snapshot read back and validated.
 #[derive(Debug)]
 pub(crate) struct Loaded {
@@ -95,6 +124,8 @@ pub(crate) struct Loaded {
     pub layout: Layout,
     pub matcher: OperatorOwnedMatcher,
     pub items: Vec<ShipItem>,
+    /// The home's `manifest.json` at snapshot time (`None`: the tree had none).
+    pub manifest: Option<Vec<u8>>,
 }
 
 impl Loaded {
@@ -121,11 +152,17 @@ pub(crate) fn load(root: &Path) -> Result<Loaded, LayoutError> {
     let raw_version =
         fs::read_to_string(root.join("VERSION")).map_err(|e| bad(format!("VERSION: {e}")))?;
     let version = Version::parse(raw_version.trim()).map_err(|e| bad(format!("VERSION: {e}")))?;
-    let raw: RawLayout = serde_json::from_slice(
+    let snap_layout: SnapshotLayout = serde_json::from_slice(
         &fs::read(root.join("layout.json")).map_err(|e| bad(format!("layout.json: {e}")))?,
     )
     .map_err(|e| bad(format!("layout.json: {e}")))?;
-    let layout = validate_layout(raw).map_err(|e| bad(format!("layout.json: {e}")))?;
+    let shipped_owned = snap_layout.shipped_owned;
+    let layout = validate_layout(RawLayout {
+        mirrored: snap_layout.mirrored,
+        operator_owned: snap_layout.operator_owned,
+    })
+    .map_err(|e| bad(format!("layout.json: {e}")))?;
+
     let matcher = OperatorOwnedMatcher::new(&layout.operator_owned)
         .map_err(|e| bad(format!("layout.json: {e}")))?;
 
@@ -141,14 +178,22 @@ pub(crate) fn load(root: &Path) -> Result<Loaded, LayoutError> {
         if !is_dir || !layout.mirrored.contains(&name) {
             return Err(bad(format!("tree/{name} is not a mirrored directory")));
         }
-        collect(&tree, &name, &matcher, &mut items).map_err(bad)?;
+        collect(&tree, &name, &matcher, &shipped_owned, &mut items).map_err(bad)?;
     }
+    let manifest = match fs::symlink_metadata(root.join("manifest.json")) {
+        Ok(m) if m.is_file() => {
+            Some(fs::read(root.join("manifest.json")).map_err(|e| bad(e.to_string()))?)
+        }
+        Ok(_) => return Err(bad("manifest.json is not a real file".into())),
+        Err(_) => None,
+    };
     Ok(Loaded {
         root: root.to_path_buf(),
         version,
         layout,
         matcher,
         items,
+        manifest,
     })
 }
 
@@ -156,6 +201,7 @@ fn collect(
     tree: &Path,
     rel: &str,
     m: &OperatorOwnedMatcher,
+    shipped_owned: &[String],
     out: &mut Vec<ShipItem>,
 ) -> Result<(), String> {
     for entry in fs::read_dir(tree.join(rel)).map_err(|e| e.to_string())? {
@@ -169,13 +215,23 @@ fn collect(
             continue; // never payload (see `take`)
         }
         check_rel_path(&child)?;
-        if owned(m, &child) {
-            return Err(format!("tree/{child} is operator-owned"));
-        }
         let path = tree.join(&child);
         let meta = fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+        // An owned path may be restored only if the snapshot says it held it because it was
+        // shipped (rein D-155 r2); an owned directory only to reach such a path.
+        if owned(m, &child) {
+            let allowed = if meta.is_dir() {
+                let prefix = format!("{child}/");
+                shipped_owned.iter().any(|p| p.starts_with(&prefix))
+            } else {
+                shipped_owned.contains(&child)
+            };
+            if !allowed {
+                return Err(format!("tree/{child} is operator-owned"));
+            }
+        }
         if meta.is_dir() {
-            collect(tree, &child, m, out)?;
+            collect(tree, &child, m, shipped_owned, out)?;
         } else if meta.file_type().is_symlink() {
             let to = fs::read_link(&path).map_err(|e| e.to_string())?;
             out.push(ShipItem {
