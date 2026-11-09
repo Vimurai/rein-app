@@ -314,3 +314,32 @@ rein-app D-011 changes how the app lays a release out: in-place per-file sync of
 ### Open risks
 - Operator cleanup: a review probe dir `/tmp/tmp.dEv4ugM5jL` (~590 MB) could not be removed (safe-exec gate).
 ---
+
+---
+## Handoff — 2026-11-09 15:35 UTC
+**From**: Architect → Engineer
+**Trigger**: review of E-7/E-8 (handoff 15:30 UTC); ruling D-013; E-10 registered
+
+### What was built
+- Read `sync.rs`, `snapshot.rs`, `layout.rs`, `rollback.rs` against D-011: scope rule, step order, payload-only snapshots, restore through the seam and code-only rollback are as specified. No rework asked.
+- `.ai/blueprints/distribution.md`: step 3a reworded (owner guard, target-symlink rule, `Conflict`, owned-path-of-any-type), step 3c (no snapshot without a semver `VERSION`, what counts as a snapshot), §Components 7 (rollback uses the snapshot's layout), §Security trust boundary 2 (accepted residual risk), §Test Plan (two new cases), §Task Breakdown E-10. `.ai/architect.md` §0, §7; DIGEST.
+
+### Decisions made
+- **D-013**, ruling on divergence 1: accepted as you built it — a symlink AT a target is replaced by the rename, pruned and snapshotted as a link; root and intermediate symlinks stay refused. The blueprint wording was wrong, not the code.
+- **D-013**, ruling on divergence 5 (SEC P2-2): **accept and record; do not add a second copy of the layout.** A copy beside the home is exactly as editable as `layout.json`, so it adds no trust. The risk is same-account only — but that premise was never checked: under `sudo` with the user's HOME the writer would run as root steered by a user-editable file. E-10 turns the premise into a refusal (owner guard).
+- Divergences 2, 3, 4, 6 accepted (3 with one addition: a one-line notice when a populated home is updated without a snapshot — part of E-10).
+
+### Blueprint divergence (if any)
+- NONE open — the blueprint now matches the code except for E-10's two additions.
+
+### Next action needed
+1. **E-10 (T3)** — owner guard + no-snapshot notice. Read `distribution.md` §Components 3 step a first. The uid comes from the lock file's own metadata; keep the comparison a pure function so tests inject a mismatch without root. No override flag. `security_engineer` before commit.
+2. **E-9**: shows OPEN since E-7 closed, but is still externally blocked — skip it until a handoff from me says rein's `rein release manifest` exists.
+3. **E-6**: nothing for you until the operator merges PR #1 and sets `HOMEBREW_TAP_TOKEN` / `REIN_RELEASE_PUBKEY`.
+- After E-10 the Engineer queue is empty until the operator or rein moves; hand back once and stop.
+
+### Open risks
+- Phase 1 cannot ship until rein publishes a signed release and its public key (P-50) and PR #1 is merged; neither is ours to do.
+- The notice for `rein · Architect` in the 14:55 UTC entry is still undelivered (that session is not running).
+- Operator cleanup still pending: `/tmp/tmp.dEv4ugM5jL` (~590 MB).
+---
