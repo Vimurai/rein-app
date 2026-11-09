@@ -114,6 +114,54 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-09T13:37:00.421Z"
+    },
+    {
+      "id": "E-7",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 3,
+      "description": "Rework the LayoutWriter and `rein-app rollback` from the whole-home staging swap to the in-place per-file sync of the manifest's mirrored directories (D-011): open only paths under layout.mirrored plus VERSION (everything else in $HOME/.rein is never read, copied, written or deleted); preflight refusals before any write (symlinked home, symlinked mirrored dir or target component, held lock); pure SyncPlan {ship, prune} with operator_owned protected inside mirrored dirs; snapshot of the release payload only to $HOME/.rein.prev-<oldver>/{tree/,VERSION,layout.json} (0700, temp-then-rename, N=2); sync with hooks last, temp file beside the target + manifest mode + rename, then prune; VERSION last; on failure restore from the snapshot through a fault seam; rollback snapshots the current tree, syncs the newest earlier snapshot back, removes it, re-runs rein doctor and restores code only. Remove the staging swap, the carry-over copies and OrphanedPrevious. Per .ai/blueprints/distribution.md §Components 3 (steps a–f) and 7, §Data Model (Snapshot, SyncPlan), §Security trust boundary 2, §Rollback Plan. Acceptance: §Test Plan cases \"Untouched outside the mirror\", \"Sync failure\", \"Snapshot\", \"Rollback\", \"Refusals\" plus the existing upgrade-semantics test green in cargo test --workspace on all three CI targets. Tier 3: security_engineer review before commit. No release tag before this is on master.",
+      "created_at": "2026-11-09T14:52:05.967Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-5"
+      ],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-09T14:52:05.974Z"
+    },
+    {
+      "id": "E-8",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Make `rein-app install --version` optional: with no version given, resolve the newest rein tag through the same resolver `update` uses (crates/rein-release/src/latest.rs — GitHub releases API, metadata only; the release is still verified and version-bound) and install it; an unreachable release server exits 11 as in `update`. Per .ai/blueprints/distribution.md §Components 7 and §API table row `install [--version X.Y.Z]` (D-012 ruling 4). Acceptance: stubbed-Http tests for install with no version (installs the newest tag), with --version (unchanged), and offline (exit 11); cargo test --workspace green.",
+      "created_at": "2026-11-09T14:52:10.770Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-09T14:52:10.770Z"
+    },
+    {
+      "id": "E-9",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Write the layout-equality test against install-rein.sh: from a rein checkout at tag T run install-rein.sh into temp HOME A, build the artifact with rein's own generator `rein release manifest`, sign it with our throwaway test minisign key, run `rein-app install --version T` from the fixture server into temp HOME B, and assert `diff -r A B` is empty except the documented exceptions (a retired MCP server's directory is the one expected until rein rules who removes it — report any other diff to the Architect rather than adjusting the writer). EXTERNALLY BLOCKED: do not start until rein P-50 ships `rein release manifest` (the Architect will say so in a handoff) — if this task auto-opens after E-7 while rein still lacks the generator, leave it OPEN and skip it. Per .ai/blueprints/distribution.md §Test Plan \"Layout equality\" and §E-## Task Breakdown E-9 (D-012 ruling 3). Acceptance: the test runs in CI when a rein checkout is available (gated on an env var naming it) and is green.",
+      "created_at": "2026-11-09T14:52:14.751Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-7"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-7"
+      ],
+      "updated_at": "2026-11-09T14:52:14.751Z"
     }
   ],
   "stamps": [
@@ -250,6 +298,24 @@
       "timestamp": "2026-11-09T10:41:52.067Z",
       "summary": "[TIER_3] E-5 ARCH_PASS + TESTS_PASS + SEC_PASS (after 1 fix round)",
       "sha": "8f6c731500a6191ad08216c3bb0ec2d8162d79b8",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner",
+      "task_id": "E-6",
+      "timestamp": "2026-11-09T13:42:10.855Z",
+      "summary": "[TIER_2] Blueprint aligned — E-6 update/rollback/doctor/launch (distribution.md C7-8); ORPHANED_WORK warn = files under distribution.md C4/C7, indexed from architect.md §0",
+      "sha": "640c7c88640a7375e525a9a01bcfa1156caaff5c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": "E-6",
+      "timestamp": "2026-11-09T13:42:11.638Z",
+      "summary": "[TIER_2] Blueprint aligned",
+      "sha": "640c7c88640a7375e525a9a01bcfa1156caaff5c",
       "author": "emirkovacevic@protonmail.com"
     }
   ],

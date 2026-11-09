@@ -52,8 +52,8 @@ Release runs only on version tags (E-6).
   on a pushed `v*` tag: build the five targets, attach archives + checksums to a GitHub
   release, publish the Homebrew formula to the tap. Windows: `installers = ["msi"]` for
   the launcher binary (phase 1 runs rein inside WSL).
-- `.deb` and AppImage: cargo-dist does not build either. Plan: a separate job after the
-  dist build using `cargo-deb` (Linux x86_64/aarch64) and `appimagetool`; each new tool
+- `.deb`: cargo-dist does not build it. A separate job after the dist build uses `cargo-deb`
+  (Linux x86_64/aarch64). AppImage is out of Phase 1 (D-012). Each new tool
   passes `skill: dependency_gate` first.
 - Build env `REIN_RELEASE_PUBKEY` (the minisign public key, not a secret) baked into every
   release binary (D-003, E-3 divergence 8). Without it `production_verifier()` is the
@@ -99,7 +99,7 @@ Release runs only on version tags (E-6).
   `release.yml` line `uses: ./.github/workflows/build-linux-packages.yml` is a hand fix and
   `allow-dirty = ["ci"]` stops `dist` from failing on it. After any `dist generate`, re-apply
   that one line (grep for `$/.github`).
-- **AppImage deferred** (D-010 named it first to drop): appimagetool publishes no versioned,
+- **AppImage out of Phase 1** (D-012; D-010 named it first to drop): appimagetool publishes no versioned,
   checksummed release to pin. Homebrew + .deb + tarball cover Linux.
 
 **Still needed from the operator before the first tag**

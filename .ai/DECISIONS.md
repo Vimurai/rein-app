@@ -381,3 +381,76 @@ job is `HOMEBREW_TAP_TOKEN` (tap repo contents:write only), exposed only to the 
 ### Rollback
 Remove `release.yml`, the cargo-dist `ci`/`installers`/`tap` keys and the
 `[package.metadata.deb]` block. No runtime code depends on any of them.
+
+## D-011 — The LayoutWriter syncs the mirrored directories in place; the Rein home is never copied or swapped, and operator data is never opened
+
+**Date**: 2026-11-09
+**Task**: review of E-5 (Engineer handoff 2026-11-09 14:45 UTC, divergences 1–2; security review E-5 P1-3) → E-7
+**Decision**: Replace the whole-home staging swap (blueprint v1 §Components 3, shipped in E-5) with an in-place per-file sync of the manifest's mirrored directories, a snapshot of the release payload only, and a rollback that restores code only.
+
+### Why needed
+E-5 built the next tree in `$HOME/.rein.staging-<ver>` by copying every non-mirrored live entry, then renamed the home aside. Three things follow, all confirmed on a live home on 2026-11-09:
+- **Size.** The home is 3.5 GB (`ci/` 3.0 GB, `mcp/*/node_modules` 551 MB); the release payload in the mirrored dirs is 8.9 MB. Every install copied the 3.5 GB, and N=2 previous trees kept up to 7 GB more. The "< 10 s" constraint was unreachable.
+- **Live data.** rein's MCP servers hold `approvals.sqlite`, `cache.sqlite`, `telemetry.sqlite` open with WAL files. A copy can tear a db/WAL pair; a process that opened a file before the swap keeps writing into the tree that was renamed away, so those writes (the approval ledger among them) are missing from the new home (SEC P1-3). `rollback` restored the older tree's operator files, i.e. rolled operator data back.
+- **The gate.** Between `rename(.rein → .rein.prev)` and `rename(staging → .rein)` there is no `$HOME/.rein`: every Claude Code hook path is missing for that window. `install-rein.sh` rejects a directory swap for exactly this reason (its E-304 comment: "a renamed-away hooks/ would leave a window in which every gate hook is missing, and mcp/ carries node_modules the source tree does not have").
+The blueprint's swap was this Architect's design, not a contract item; contract §2/§4 and rein D-153 r5 name `install-rein.sh` as the reference, and that script syncs per file.
+
+### Alternatives considered
+1. **Keep the swap, carry only `operator_owned`** (blueprint v1 literally) — drops committed data not on the schema-1 list (`approvals.sqlite*`, `cache.sqlite*`, `ci/`, `privacy/`, `trash/`); still copies 551 MB of `node_modules`; still has the gate window.
+2. **Keep the swap, carry everything non-mirrored** (E-5 as shipped) — no data dropped at copy time, but the size, torn-WAL, lost-write and gate-window problems above.
+3. **Keep the swap, refuse while rein processes are live** (SEC P1-3 option a) — the app would need its own process detection (a `rein doctor` concern we must not reimplement), an operator updating from inside a Rein session could never update, and the 3.5 GB copy and data rollback remain.
+4. **Swap each mirrored directory by rename** — `hooks/` still disappears for an instant, and `mcp/` contains operator-owned `node_modules` that would have to be moved between trees.
+5. **In-place per-file sync of the mirrored dirs (chosen)** — identical to the reference; I/O bounded by the release; operator data never opened, so nothing to tear, lose, duplicate or roll back; each file is old or new at every instant and `hooks` goes last; SEC P1-3 closes without a process check.
+
+### Constraints driving this decision
+- Contract: "Tarball == what `install-rein.sh` lays out"; operator-owned paths "never touched by an install" (rein D-153 r5).
+- Security: the safe-exec gate hooks live in the home; no install step may make them absent.
+- Carry-over ruling (divergence 1): **anything outside `layout.mirrored` is not ours** — never read, copied, written or deleted, whether or not `operator_owned` names it. `operator_owned` decides only inside mirrored dirs (protect from write/prune). The verifier rule "a release path outside `mirrored ∪ operator_owned` is rejected" is unchanged.
+- What is given up: whole-tree atomicity. A sync that dies midway leaves a mixed tree until the automatic restore (or a re-run) completes — the same exposure `install-rein.sh` and `rein sync` have today, bounded by verifying everything before the first write, per-file rename, `hooks` last, `VERSION` last, and restore from the snapshot.
+
+### Impact
+- Unlocks: E-7 (rework), E-9 (layout-equality test, once rein P-50 ships the generator). E-6's first release tag waits for E-7.
+- No migration: no rein-app release exists, so no operator has an E-5-format `.rein.prev-*` tree.
+- Asked of `rein` (contract clarification, not decided here): confirm the complement rule above in the manifest contract (or extend `operator_owned`), and rule who removes a retired MCP server's directory and legacy mirrors under an app install (`install-rein.sh` does both itself).
+- Risk if wrong: a release whose files only work as a set is briefly mixed on a home with running sessions. Mitigation is the ordering above; rein already lives with this on every `rein sync`.
+
+### Rollback
+Revert E-7; E-5's writer returns unchanged (it is self-contained in `layout.rs`/`rollback.rs`). Do not ship a release from that state.
+
+---
+
+## D-012 — E-5/E-6 divergence rulings: AppImage deferred out of Phase 1; smaller divergences accepted or scheduled
+
+**Date**: 2026-11-09
+**Task**: review of E-5/E-6 (Engineer handoff 2026-11-09 14:45 UTC, divergences 3–9)
+**Decision**: AppImage is not a Phase 1 deliverable; the remaining divergences are accepted as built except `install` requiring `--version` (E-8) and the unwritten layout-equality test (E-9).
+
+### Why needed
+The handoff listed nine divergences from `distribution.md`. D-011 settles 1–2; these need a recorded answer so the critics stop re-raising them and the blueprint matches the code.
+
+### Alternatives considered (AppImage)
+1. **Build with appimagetool's rolling `continuous` release** — not pinnable by version or checksum; an unpinned build tool in the release job contradicts the SHA-pinning rule in DEVOPS.md.
+2. **Vendor or self-build appimagetool** — real work and a new supply-chain item for a format whose audience is already served.
+3. **Defer (chosen)** — Linux is covered by the cargo-dist tarball + shell installer, `.deb`, and Homebrew on Linux. Reopen when appimagetool publishes a tagged, checksummed release, or an operator asks for it.
+
+### Rulings on the rest
+- (3) Layout-equality test: stays required; tracked as E-9, BLOCKED on rein P-50 (`rein release manifest`).
+- (4) `install` requires `--version`: not accepted — the API table's "default latest" stands; E-8. `update` resolving the tag through `api.github.com` (metadata only, release still verified and version-bound) is accepted.
+- (5) RuntimeCheck: Node ≥ `min_node` and git required, sqlite3/tmux/Claude Code reported only — accepted; `rein doctor` owns those verdicts.
+- (6) Snapshot ordering by `VERSION` mtime and "a release file at an operator-owned path is never written, even fresh" — accepted. `OrphanedPrevious` is removed by E-7 (the home never disappears under D-011).
+- (7) `launch` runs `rein-app update --yes` inside WSL, needs a Linux rein-app in the distro, refuses `;` in the project path — accepted.
+- (8) cargo-dist 0.34.0 hand fix under `allow-dirty = ["ci"]` — accepted as recorded in DEVOPS.md; re-check on any cargo-dist bump.
+- (9) Deferred security P2s: stale lock after SIGINT → Phase 2 (the message names the PID; the desktop app needs a real liveness check anyway). Runner env denylist beyond `CLAUDECODE` → accepted as is (architect.md §5). `O_NOFOLLOW` copies → moot after E-7 (no operator data is copied; E-7 refuses symlinked targets). Fresh-install directory modes 0755 → accepted. "No test for a swap failing midway" → closed by E-7's fault seam.
+
+### Constraints driving this decision
+- Release-job supply chain: every tool pinned (DEVOPS.md).
+- Never reimplement a `rein doctor` check (contract non-goal).
+
+### Impact
+- Unlocks: E-6 can close without AppImage once PR #1 is merged and the first tag builds (after E-7).
+- Risk if wrong: Linux users without apt or brew use the tarball installer — a worse first run, not a blocked one.
+
+### Rollback
+Add an AppImage job to `build-linux-packages.yml` under a new dependency_gate entry; nothing else depends on its absence.
+
+---
