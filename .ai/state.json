@@ -85,23 +85,23 @@
     {
       "id": "E-5",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Implement the LayoutWriter (unpack verified tarball into $HOME/.rein.staging-<ver>, check the stable layout bin/ hooks/ mcp/ shared/ scripts/ config/ secrets/ run/ VERSION, carry over operator-owned files accounts.json gate-override.json config/* secrets/* run/*, atomic rename with previous tree kept as .rein.prev-<ver> N=2, lock file) and the Runner that executes `rein install` then `rein doctor` from the installed tree with CLAUDECODE unset and output passed through verbatim; add the layout-equality test against install-rein.sh at the same tag, per .ai/blueprints/distribution.md §Components 3-5, §Security trust boundaries 2 and 4, §Test Plan. Tier 3: security_engineer review before commit.",
       "created_at": "2026-11-08T18:47:55.938Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-09T13:37:00.408Z",
+      "summary": "LayoutWriter + Runner + `rein-app install` (73fa5bc, 74f4ca8): staging swap, N=2 prev, lock held through rein; ARCH/TESTS/SEC pass; hosted CI green x3. Layout-equality test waits on rein P-50",
       "depends_on": [
         "E-3"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-08T19:31:29.953Z"
+      "updated_at": "2026-11-09T13:37:00.410Z"
     },
     {
       "id": "E-6",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Ship the Phase 1 distribution: Homebrew formula (tap), cargo-dist release workflow producing mac/linux binaries plus .deb/AppImage and a Windows installer; wire `rein-app update` (newest rein tag, release notes, confirm or --yes) and `rein-app rollback` (swap .rein.prev-*, re-run rein doctor) onto E-5; implement the Windows WslLauncher (wsl --status, install Ubuntu if absent, run Linux rein-app inside WSL, open Windows Terminal into the tmux session) behind a Shell trait with stubbed unit tests for no-WSL, no-distro, ready, per .ai/blueprints/distribution.md §Components 7-8, §API, §Rollback Plan, §Test Plan.",
       "created_at": "2026-11-08T18:48:02.390Z",
@@ -111,11 +111,9 @@
         "E-4",
         "E-5"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-5"
-      ],
-      "updated_at": "2026-11-08T18:48:02.390Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-09T13:37:00.421Z"
     }
   ],
   "stamps": [
@@ -216,6 +214,42 @@
       "timestamp": "2026-11-08T19:43:32.740Z",
       "summary": "[TIER_3] E-4 ARCH_PASS + TESTS_PASS + SEC_PASS (after 2 fix rounds)",
       "sha": "654bc38f0d32b1472d67361755710c1c891609e7",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-5",
+      "timestamp": "2026-11-09T10:34:16.967Z",
+      "summary": "No sovereignty violations (no .ai/ files touched), all files trace to E-5/distribution.md C3-5; P1: none; P2: (1) carry-over of all non-mirrored live entries exceeds the operator_owned-only text (justified, needs blueprint amendment), (2) install requires --version vs blueprint default latest (deferred to E-6), (3) layout-equality test vs install-rein.sh missing (blocked on rein P-50), (4) RuntimeCheck node/git-required vs blueprint table, (5) prev pruning by VERSION mtime, (6) operator-owned release file skipped on fresh install; new dev-deps (flate2/minisign/sha2/tar) need dependency_gate record",
+      "sha": "8f6c731500a6191ad08216c3bb0ec2d8162d79b8",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-5",
+      "timestamp": "2026-11-09T10:34:20.048Z",
+      "summary": "[TEST_PASSED] cargo test --workspace green (rein-app 9 unit + 4 cli, rein-profiles 4+13+1, rein-release 20 unit + layout_writer 7 + fetch 4 + verify 4 + conformance 1). Upgrade semantics (operator-owned kept, stale bin/old-tool pruned, N=2 prev, VERSION last, lock, stale staging, symlinks) covered by layout_writer; pure units in layout.rs/runner.rs; install_cmd exit codes 1/2/3/4 via stubbed Process. Advisory P2: layout-equality vs install-rein.sh not written (disclosed, blocked on rein P-50) — must be tracked as follow-up; layout.rs has no unit for atomic-swap mid-failure rollback.",
+      "sha": "8f6c731500a6191ad08216c3bb0ec2d8162d79b8",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "security_engineer",
+      "task_id": "E-5",
+      "timestamp": "2026-11-09T10:41:51.085Z",
+      "summary": "[TIER_3] E-5 re-review: P1-1 dir modes kept (0700 home stays 0700, staging 0700 until done), P1-2 lock held through rein install/doctor, P2-2..5 fixed; P2-1 read-only live dir fixed after (modes applied deepest-first); P1-3 live-copy concurrency → Architect",
+      "sha": "8f6c731500a6191ad08216c3bb0ec2d8162d79b8",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": "E-5",
+      "timestamp": "2026-11-09T10:41:52.067Z",
+      "summary": "[TIER_3] E-5 ARCH_PASS + TESTS_PASS + SEC_PASS (after 1 fix round)",
+      "sha": "8f6c731500a6191ad08216c3bb0ec2d8162d79b8",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
