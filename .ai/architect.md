@@ -155,7 +155,14 @@ manifest generator, `doctor --json`, and accounts docs; rein-plugins' first tag 
 - r6 key custody: the operator generates the pair; the public key is committed in rein as
   `docs/contract/release-key.pub`, the file we copy. r7: npm dependencies are outside the signature.
 - Shared fixtures arrive with rein E-418 and E-422 (`tests/fixtures/release/`).
-Open questions sent to `rein` on 2026-11-09 (D-011; (a) is answered by D-155 r2, (b) is still open):
+**rein D-155 addendum (2026-11-09, rein commit 3166bb3)** — answers to our D-014 notice:
+`rein install` in artifact mode removes a retired server's `mcp/<name>/` and the legacy
+mirrors (the app's writer leaves them); a `manifest.json` that disagrees with `VERSION` is
+`[INSTALL_INCOMPLETE]`, exit 3 (our write order hooks → `manifest.json` → `VERSION` is
+confirmed, no shared lock); `rein install` is safe on a rolled-back tree (stamp rewritten,
+`source: "restored"` for a clone-install snapshot); rein's writer never emits an extension
+record, directory entry or link. No open question remains with rein.
+Questions sent to `rein` on 2026-11-09 (D-011) — both answered, (a) by D-155 r2, (b) by the addendum:
 (a) confirm that everything outside `layout.mirrored` is untouched by an install and that
 `operator_owned` decides only inside mirrored dirs — or extend the list (`approvals.sqlite*`,
 `cache.sqlite*`, `telemetry.sqlite-wal/-shm`, `ci/`, `privacy/`, `trash/`, `clean.log`);

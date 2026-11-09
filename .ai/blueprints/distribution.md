@@ -123,7 +123,13 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    e. After `hooks`: the in-tarball `manifest.json`, byte for byte, to `$HOME/.rein/manifest.json`
       (tmp-and-rename) — it is how `rein install` recognises an artifact install (rein D-155
       r1/r4: `manifest.version == VERSION`). Then `VERSION` (one line, `manifest.version`)
-      last, tmp-and-rename, so a failed sync never advertises a version.
+      last, tmp-and-rename, so a failed sync never advertises a version. rein confirmed this
+      order (D-155 addendum r2) and fails closed on both in-between states: a `manifest.json`
+      that is unreadable, not schema 1, or disagrees with `VERSION` (or has none beside it) is
+      `[INSTALL_INCOMPLETE]`, exit 3, nothing done; a tree that differs from a matching
+      manifest is `[INSTALL_TREE_MISMATCH]`. rein reads no lock of ours. **Consequence for
+      us:** the home must never be left with a `manifest.json` that disagrees with `VERSION`
+      once a run has ended successfully or restored — step (f) and rollback own that pair.
    f. *Failure in d/e*: stop, sync the snapshot from (c) back with the same routine — the
       snapshot's `manifest.json` is put back, or the live one removed when the snapshot has
       none (a clone install has no manifest) — report
@@ -139,7 +145,10 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    Only contract §2.6 entry points are ever invoked. `rein install` finishes an unpacked
    artifact itself (rein D-155 r4): tree check against `manifest.json`, Node floor, hook
    interpreter probe, toolchain pin, install stamp (`source: "artifact"`), shell profile
-   lines; the app reimplements none of it. Its exits: 3 = `[INSTALL_TREE_MISMATCH]` or a gate
+   lines; it also removes a retired MCP server's whole directory and the legacy `gemini/` /
+   `agents/` mirrors (D-155 addendum r1) — the app's writer leaves those alone, as the
+   mirror rule says. The app reimplements none of it. Its exits: 3 = `[INSTALL_TREE_MISMATCH]`,
+   `[INSTALL_INCOMPLETE]` or a gate
    dependency off its pin, 1 = Node floor or `[HOOK_BASH_MISSING]`. The app reports a failed
    `rein install` as its own exit 13 (rein's code printed) and a failed `rein doctor` as exit
    3, and never retries or repairs either.
@@ -182,7 +191,11 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    when the snapshot has none), write its `VERSION`, remove the snapshot just restored
    (so a second rollback returns to the newer version), then run **`rein install` and
    `rein doctor`** exactly as after an install (D-014): a rollback is an install of the older
-   payload, and only `rein install` can re-pin the toolchain and rewrite the stamp for it.
+   payload, and only `rein install` can re-pin the toolchain and rewrite the stamp for it
+   (rein guarantees this is safe — D-155 addendum r3: in artifact mode the stamp is always
+   rewritten; after a rollback to a clone-install payload it becomes `source: "restored"` and
+   doctor prints one note line; `config/rein-workspace.txt` is not recreated by anything but
+   `bash install-rein.sh`, which the CLI says in its rollback summary for that case).
    Rollback restores **code only**: operator data is never rolled back.
    `rein-app doctor [--json]` passes the flag through to `rein doctor`; phase 1 never parses
    the document (exit 0 or 1 means stdout is one; anything else means it is not). Rollback works with the
@@ -381,10 +394,14 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   `rein release manifest <dir> --out <out> --pubkey <our test .pub>`
   (unsigned — signing is the separate `rein release sign` step), sign it with OUR throwaway
   test minisign key (never rein's `tests/fixtures/release/` pair, which no app bakes in), run
-  `rein-app install --version T` from the fixture server into temp HOME B; `diff -r` of A and
-  B is empty except the documented differences: B has `manifest.json` (a clone install
+  `rein-app install --version T` from the fixture server into temp HOME B. The comparison is
+  taken **after `rein install` has run on both sides** (D-155 addendum r1); `diff -r` of A and
+  B is then empty except the documented differences: B has `manifest.json` (a clone install
   removes it), the install stamp says `artifact` in B and a clone path in A, and
-  `config/rein-workspace.txt` exists only in A.
+  `config/rein-workspace.txt` exists only in A. A second case seeds both homes with a
+  retired server directory (`mcp/gone-mcp/node_modules/x`): our writer keeps it, `rein
+  install` removes it on both sides, and the diff stays empty — no expected difference is
+  left for retired servers.
 - Operator-owned conformance: every row of rein's `operator-owned-cases.json` (path, shipped,
   expected `kept` / `replaced` / `deleted`) holds for our plan function; the fixture is
   vendored and refreshed when rein bumps the manifest schema (interim copy until rein E-422).
@@ -472,5 +489,7 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   (§Components 3 step a, §Test Plan "Owner guard"; D-013 addendum). Depends on E-10.
 - **E-9** (T2, BLOCKED on rein E-417/E-418/E-420: `rein release stage|manifest` and artifact
   mode in `rein install`) Write the layout-equality test of
-  §Test Plan, including the list of diffs it finds (beyond the documented ones, a retired MCP
-  server's directory is the one expected until rein rules who removes it). Depends on E-13.
+  §Test Plan, compared after `rein install` on both sides; any diff beyond the documented
+  three is reported to the Architect, not adjusted for. (The registered task text still
+  names a retired MCP server's directory as an expected diff — rein's D-155 addendum r1
+  removed that: `rein install` deletes it on both sides. This blueprint governs.) Depends on E-13.

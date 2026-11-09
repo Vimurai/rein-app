@@ -541,3 +541,10 @@ D-155 r2 also confirms the D-011 scope rule (nothing outside the mirrored dirs i
 Each task reverts on its own. Reverting E-13 alone makes every artifact install fail rein's tree check, so E-12/E-13 revert together with a hold on releases.
 
 ---
+
+### D-014 Addendum 2026-11-09 — rein's answers (rein D-155 addendum, commit 3166bb3)
+- **Retired MCP server directories: `rein install` removes them, the app's writer does not.** The mirror rule is unchanged (an unshipped `mcp/<retired>/node_modules/` matches `operator_owned` and is kept by our sync); `rein install` in artifact mode then removes any `mcp/<name>/` with no shipped file beneath it, and the legacy `gemini/` / `agents/` mirrors. The layout-equality test (E-9) therefore compares after `rein install` on both sides and expects no retired-server difference. This closes question (b) of D-011; nothing is open with rein.
+- **Our write order is confirmed and both in-between states fail closed in rein**: `manifest.json` disagreeing with `VERSION` (or without one) is `[INSTALL_INCOMPLETE]`, exit 3; a differing tree is `[INSTALL_TREE_MISMATCH]`. No shared lock. What this asks of us: never end a successful or restored run with the pair in disagreement — already required of step (f) and rollback in E-13.
+- **Rollback then `rein install` is guaranteed safe**: the stamp is rewritten (`source: "restored"` when the snapshot came from a clone install). D-014 decision 2 stands as written.
+- **The strict reader is backed by a writer guarantee**: no extension record, directory entry or link is ever emitted; lifting that is a schema change with a notice to us first. D-014 decision 1 stands.
+- No task changes. E-9's registered text still calls a retired server's directory an expected diff; `distribution.md` §Test Plan governs.

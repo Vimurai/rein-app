@@ -15,11 +15,13 @@
 - D-011 (in-place sync, nothing outside the mirror is opened), D-012 (AppImage out of Phase 1), D-013 (target symlinks, snapshot trust, owner guard) stand.
 - Open queue: E-12, E-14 (OPEN); E-13 (after E-12), E-15 (after E-13); E-6 (first tag — needs `HOMEBREW_TAP_TOKEN` and a release key). BLOCKED externally: E-9 (rein E-417/E-418/E-420), E-16 (operator's key committed in rein), E-17 (rein E-422).
 - Phase 1 ships when: E-12..E-15 are on master, the operator generates the minisign pair and rein publishes a signed release, first tag builds.
-- Known risks: no rein release exists yet; release jobs unexercised; one question still open with rein (who removes a retired MCP server's directory under an app install); no README / operator docs in this repo.
+- rein D-155 addendum (3166bb3): `rein install` removes retired MCP server dirs (our writer keeps them; E-9 compares after `rein install` on both sides); a `manifest.json` ≠ `VERSION` is `[INSTALL_INCOMPLETE]` exit 3; rollback + `rein install` is safe. Nothing is open with rein.
+- Known risks: no rein release exists yet (rein's E-417..E-422 not built); release jobs unexercised; no README / operator docs in this repo.
 - Repo: `github.com/Vimurai/rein-app` (public, hosted CI green on 3 OSes). License Apache-2.0 (D-004) — awaiting operator confirmation.
 - Blueprints: `.ai/architect.md` (index), `.ai/blueprints/distribution.md` (Phase 1, revised 2026-11-09 for D-011..D-014). `desktop.md` not yet written.
 
 ## Recent changes (last 10)
+- 2026-11-09 Architect: rein D-155 addendum mirrored (D-014 addendum) — retired-server removal is `rein install`'s, write order confirmed, E-9 comparison point fixed; no task changes.
 - 2026-11-09 Architect: rein D-155 mirrored (D-014); distribution.md §Components 2/3/4/6/7, §Data Model, §API, §Security, §Test Plan revised; architect.md §3/§4/§5/§7/§8; E-12..E-17 registered; E-9/E-16/E-17 marked BLOCKED.
 - 2026-11-09 rein: P-50 closed (D-155, commit 316218b) — three contract corrections for rein-app.
 - 2026-11-09 Operator: PR #1 (release pipeline) merged.
