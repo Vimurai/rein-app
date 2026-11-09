@@ -5,7 +5,7 @@
 //! Rein write and is never overwritten while it exists (E-4 security review P1). A
 //! zero-byte backup means "there was no settings.json".
 //!
-//! Undo restores ONLY the four allowed keys from the backup onto the current file — a key
+//! Undo restores ONLY the three allowed keys from the backup onto the current file — a key
 //! absent from the backup is removed — and never copies any other key (E-4 security review
 //! P0: restoring the whole file could re-grant `permissions`/`defaultMode`, rein D-132).
 
@@ -181,7 +181,7 @@ pub fn apply(profile: &Profile, patch: &Patch, opts: ApplyOptions) -> Result<Out
     })
 }
 
-/// Restore the four allowed keys from the backup onto the current settings, then delete
+/// Restore the three allowed keys from the backup onto the current settings, then delete
 /// the backup. Every other key in the current file is kept as it is now.
 pub fn undo(profile: &Profile) -> Result<(), ApplyError> {
     let target = resolve_settings_path(profile)?;

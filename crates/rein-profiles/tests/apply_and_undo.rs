@@ -88,6 +88,29 @@ fn apply_backs_up_once_and_undo_restores_rein_keys_only() {
 }
 
 #[test]
+fn hooks_are_never_written_and_undo_keeps_what_rein_install_wrote_since() {
+    // rein D-155 r3: `hooks` belong to `rein install`. A backup taken before it changed them
+    // must not bring the old value back, and apply never touches them.
+    let home = tempfile::tempdir().unwrap();
+    let original = r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"old"}]}]}}"#;
+    write(&home.path().join(".claude/settings.json"), original);
+    let p = default_profile(home.path());
+    assert!(apply(&p, &registration(), WRITE).unwrap().written);
+    assert_eq!(read(&p.settings_path)["hooks"], read_str(original)["hooks"]);
+
+    let mut now = read(&p.settings_path);
+    let newer = json!({"Stop": [{"hooks": [{"type": "command", "command": "new"}]}]});
+    now["hooks"] = newer.clone(); // rein install rewrote them after apply
+    write(&p.settings_path, &now.to_string());
+    undo(&p).unwrap();
+    assert_eq!(read(&p.settings_path)["hooks"], newer);
+}
+
+fn read_str(s: &str) -> Value {
+    serde_json::from_str(s).unwrap()
+}
+
+#[test]
 fn planted_backup_cannot_inject_forbidden_keys() {
     // Security review P0, PoC2.
     let home = tempfile::tempdir().unwrap();

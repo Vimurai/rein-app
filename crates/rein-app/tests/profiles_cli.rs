@@ -27,7 +27,7 @@ fn settings(path: &Path) -> Value {
 }
 
 #[test]
-fn without_claude_hooks_and_fallback_marketplace_are_written_exit_4_and_undo_restores() {
+fn without_claude_the_fallback_marketplace_is_written_exit_4_hooks_untouched_and_undo_restores() {
     let home = tempfile::tempdir().unwrap();
     let h = home.path();
     let hooks = json!({"Stop": [{"hooks": [{"type": "command", "command": "/x/.rein/hooks/stop-hook.sh"}]}]});
@@ -38,8 +38,10 @@ fn without_claude_hooks_and_fallback_marketplace_are_written_exit_4_and_undo_res
     )
     .unwrap();
     fs::create_dir_all(h.join(".claude-personal")).unwrap();
-    let personal_original = "{\"permissions\":{\"deny\":[\"Bash(rm:*)\"]}}";
+    let personal_original = "{\"permissions\":{\"deny\":[\"Bash(rm:*)\"]},\"hooks\":{\"Stop\":[]}}";
     fs::write(h.join(".claude-personal/settings.json"), personal_original).unwrap();
+    let default_hooks_bytes = || settings(&h.join(".claude/settings.json"))["hooks"].to_string();
+    let before_default = default_hooks_bytes();
 
     let list = rein_app(h, &["profiles", "list"]);
     assert!(list.status.success());
@@ -58,7 +60,12 @@ fn without_claude_hooks_and_fallback_marketplace_are_written_exit_4_and_undo_res
     );
     assert!(String::from_utf8_lossy(&out.stderr).contains("`claude` not found"));
     let personal = settings(&h.join(".claude-personal/settings.json"));
-    assert_eq!(personal["hooks"], hooks);
+    // rein D-155 r3: hooks are rein install's — nothing is copied between profiles.
+    assert_eq!(
+        personal["hooks"],
+        json!({"Stop": []}),
+        "its own hooks, not default's"
+    );
     assert_eq!(personal["permissions"], json!({"deny": ["Bash(rm:*)"]}));
     assert_eq!(
         personal["extraKnownMarketplaces"]["rein-plugins"]["source"]["ref"], "stable",
@@ -68,10 +75,10 @@ fn without_claude_hooks_and_fallback_marketplace_are_written_exit_4_and_undo_res
         personal.get("enabledPlugins").is_none(),
         "never hand-written (D-005)"
     );
-    let default = settings(&h.join(".claude/settings.json"));
     assert_eq!(
-        default["hooks"], hooks,
-        "the hooks source keeps its own hooks"
+        default_hooks_bytes(),
+        before_default,
+        "default's hooks unchanged"
     );
 
     let undo = rein_app(h, &["profiles", "apply", "--undo"]);
@@ -79,6 +86,11 @@ fn without_claude_hooks_and_fallback_marketplace_are_written_exit_4_and_undo_res
     assert_eq!(
         settings(&h.join(".claude-personal/settings.json")),
         serde_json::from_str::<Value>(personal_original).unwrap()
+    );
+    assert_eq!(
+        default_hooks_bytes(),
+        before_default,
+        "undo leaves hooks alone"
     );
 }
 

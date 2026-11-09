@@ -76,9 +76,14 @@ fn random_object(r: &mut Rng, depth: u32) -> Map<String, Value> {
 #[test]
 fn only_allowed_keys_change_and_everything_else_is_preserved() {
     let patch = Patch::new()
-        .set(AllowedKey::Hooks, json!({"Stop": [{"hooks": [{"type": "command", "command": "~/.rein/hooks/stop-hook.sh"}]}]}))
-        .set(AllowedKey::ExtraKnownMarketplaces, rein_plugins::marketplace_entry())
-        .set(AllowedKey::EnabledPlugins, json!({"rein-ux@rein-plugins": true}))
+        .set(
+            AllowedKey::ExtraKnownMarketplaces,
+            rein_plugins::marketplace_entry(),
+        )
+        .set(
+            AllowedKey::EnabledPlugins,
+            json!({"rein-ux@rein-plugins": true}),
+        )
         .set(AllowedKey::Attribution, json!({"commit": "", "pr": ""}));
     let allowed: Vec<&str> = AllowedKey::ALL.iter().map(|k| k.json_key()).collect();
 

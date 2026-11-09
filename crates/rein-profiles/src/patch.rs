@@ -1,12 +1,27 @@
 //! The closed set of keys rein-app may write, and the pure merge (blueprint §Components 6,
 //! §Security trust boundary 3; contract §2.3; rein D-132 hard-deny).
 //!
-//! `autoMode`, `permissions` and `defaultMode` are not representable: the only way to name
-//! a key is [`AllowedKey`], which has no such variant.
+//! `hooks`, `autoMode`, `permissions` and `defaultMode` are not representable: the only way
+//! to name a key is [`AllowedKey`], which has no such variant. `hooks` belongs to `rein
+//! install` alone (rein D-155 r3, D-014): the app never reads, copies, writes or removes it.
 //!
 //! ```compile_fail
 //! // A forbidden key does not exist, so this cannot compile.
 //! let _ = rein_profiles::AllowedKey::Permissions;
+//! ```
+//!
+//! ```compile_fail
+//! // Nor does `hooks`.
+//! let _ = rein_profiles::AllowedKey::Hooks;
+//! ```
+//!
+//! ```
+//! // The three keys that do exist.
+//! let _ = [
+//!     rein_profiles::AllowedKey::EnabledPlugins,
+//!     rein_profiles::AllowedKey::ExtraKnownMarketplaces,
+//!     rein_profiles::AllowedKey::Attribution,
+//! ];
 //! ```
 
 use serde_json::{Map, Value};
@@ -14,8 +29,6 @@ use serde_json::{Map, Value};
 /// A settings key rein-app owns (contract §2.3). Closed: no other key can be written.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AllowedKey {
-    /// Replaced wholesale with the value `rein install` wrote (byte-identical, contract §2.3).
-    Hooks,
     /// Entries merged in; other plugins' entries kept.
     EnabledPlugins,
     /// Entries merged in; other marketplaces kept.
@@ -25,8 +38,7 @@ pub enum AllowedKey {
 }
 
 impl AllowedKey {
-    pub const ALL: [AllowedKey; 4] = [
-        AllowedKey::Hooks,
+    pub const ALL: [AllowedKey; 3] = [
         AllowedKey::EnabledPlugins,
         AllowedKey::ExtraKnownMarketplaces,
         AllowedKey::Attribution,
@@ -35,7 +47,6 @@ impl AllowedKey {
     /// The JSON key in `settings.json`.
     pub fn json_key(self) -> &'static str {
         match self {
-            AllowedKey::Hooks => "hooks",
             AllowedKey::EnabledPlugins => "enabledPlugins",
             AllowedKey::ExtraKnownMarketplaces => "extraKnownMarketplaces",
             AllowedKey::Attribution => "attribution",
@@ -169,14 +180,18 @@ mod tests {
                 AllowedKey::EnabledPlugins,
                 json!({"rein-ux@rein-plugins": true}),
             )
-            .set(AllowedKey::Hooks, json!({"Stop": []}));
+            .set(AllowedKey::Attribution, json!({"commit": "x"}));
         let (after, changes) = plan(&before, &patch).unwrap();
         assert_eq!(after["permissions"], before["permissions"]);
+        assert_eq!(
+            after["hooks"], before["hooks"],
+            "hooks belong to rein install"
+        );
         assert_eq!(
             after["enabledPlugins"],
             json!({"other@m": true, "rein-ux@rein-plugins": true})
         );
-        assert_eq!(after["hooks"], json!({"Stop": []}));
+        assert_eq!(after["attribution"], json!({"commit": "x"}));
         assert_eq!(changes.len(), 2);
     }
 

@@ -1,12 +1,12 @@
 //! `rein-app profiles list|apply` (blueprint §Components 6, §API; D-002, D-005, D-007, D-008).
 //!
 //! Per profile, `apply`:
-//! 1. copies `hooks` (as JSON value) from the default profile's settings.json — the file
-//!    `rein install` writes — into every other profile (no operator-chosen source:
-//!    E-4 security review P1);
-//! 2. registers the marketplace with `claude plugin marketplace add
+//! 1. registers the marketplace with `claude plugin marketplace add
 //!    Vimurai/rein-plugins#stable --scope user` and verifies the entry (D-007);
-//! 3. installs/disables plugins with `claude plugin install|disable` (D-005).
+//! 2. installs/disables plugins with `claude plugin install|disable` (D-005).
+//!
+//! `hooks` are `rein install`'s alone (rein D-155 r3, D-014): the app never reads a `hooks`
+//! value to copy it, never writes or removes one, and writes no file inside a project.
 //!
 //! The app never hand-writes `enabledPlugins`. `extraKnownMarketplaces` is hand-written
 //! only as the D-009 fallback when `claude` is absent (Claude Code registers it at its
@@ -19,7 +19,7 @@ use clap::{Args, Subcommand};
 use rein_profiles::{
     AllowedKey, ApplyError, ApplyOptions, Patch, PluginAction, PluginError, ProcessShell, Profile,
     Shell, check_plugins, ensure_backup, enumerate, marketplace_add_argv, plugin_argv,
-    read_settings, register_marketplace, rein_plugins, set_plugins, undo,
+    register_marketplace, rein_plugins, set_plugins, undo,
 };
 use serde_json::Value;
 
@@ -131,45 +131,10 @@ fn apply_all(all: &[Profile], args: &ApplyArgs, shell: &dyn Shell) -> ExitCode {
     };
 
     let mut status = Status::default();
-    let hooks_source = &all[0]; // `default` is always first (enumerate)
-    let hooks = match read_settings(&hooks_source.settings_path) {
-        Ok(Some((_, v))) => match v.get("hooks") {
-            Some(h @ Value::Object(_)) => Some(h.clone()),
-            Some(_) => {
-                eprintln!(
-                    "hooks: {} has a non-object `hooks`; not copied",
-                    hooks_source.settings_path.display()
-                );
-                status.record(EXIT_PARSE);
-                None
-            }
-            None => None,
-        },
-        Ok(None) => None,
-        Err(e) => {
-            eprintln!(
-                "hooks: {}: {e}; not copied",
-                hooks_source.settings_path.display()
-            );
-            status.record(EXIT_PARSE);
-            None
-        }
-    };
-    if hooks.is_none() {
-        println!(
-            "hooks: none in {} (run `rein install` first); not copied",
-            hooks_source.settings_path.display()
-        );
-    }
-
     let mut claude_missing = false;
     for profile in selected {
-        let patch = match &hooks {
-            Some(h) if !std::ptr::eq(profile, hooks_source) => {
-                Patch::new().set(AllowedKey::Hooks, h.clone())
-            }
-            _ => Patch::new(),
-        };
+        // `hooks` belong to `rein install` alone (rein D-155 r3, D-014): never read or copied.
+        let patch = Patch::new();
         if let Err(code) = apply_one(
             profile,
             &patch,
