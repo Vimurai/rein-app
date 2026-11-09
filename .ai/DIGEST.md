@@ -11,7 +11,8 @@
 - Contract: `rein` D-150 (`rein/plans/rein-ecosystem-contract.md`, `rein-app-plan.md`). Contract items are decided in `rein`, not here.
 - Current focus (top 3): E-2 workspace+CI (T2) → E-3 fail-closed verifier (T3) ∥ E-4 profile manager (T3) → E-5 layout writer (T3) → E-6 packaging+WSL (T2).
 - Contract rulings: rein D-153 (mirrored as D-003) — minisign + baked key, manifest schema 1, doctor JSON shape, accounts.json surface, upgrade preserves list (config/ mirrored). E-3/E-5 build against `.ai/blueprints/distribution.md`, not the older task text.
-- Known risks: rein's release workflow / manifest generator / doctor --json not yet shipped (E-3 uses a fixture key pair); rein-plugins remote `Vimurai/rein-plugins` not live yet; repo is not yet a git repository (E-2 inits).
+- Repo: `github.com/Vimurai/rein-app` (public, master pushed, hosted CI green on 3 OSes). License Apache-2.0 (D-004) — awaiting operator confirmation.
+- Known risks: rein's release workflow / manifest generator / doctor --json not yet shipped (E-3 uses a fixture key pair); rein-plugins remote `Vimurai/rein-plugins` not live yet.
 - Blueprints: `.ai/architect.md` (index), `.ai/blueprints/distribution.md` (Phase 1). `desktop.md` not yet written.
 
 ## Recent changes (last 10)

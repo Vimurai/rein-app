@@ -69,18 +69,18 @@
     {
       "id": "E-4",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Implement rein-profiles: enumerate Claude profiles (default config dir, ~/.claude-personal, every accounts.*.config_dir in $HOME/.rein/accounts.json), plan and apply a merge of ONLY the closed AllowedKey enum (hooks sourced from rein install output, enabledPlugins, extraKnownMarketplaces, attribution) into each settings.json via temp file + rename with a .rein-bak backup and --undo; property test proving every pre-existing key is preserved; wire `rein-app profiles list|apply`, per .ai/blueprints/distribution.md §Components 6, §Security trust boundary 3, §Test Plan. Tier 3: security_engineer review before commit.",
       "created_at": "2026-11-08T18:47:46.898Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-09T10:26:32.225Z",
+      "summary": "rein-profiles + `rein-app profiles list|apply` shipped 58b2413: AllowedKey merge with backup/undo (D-008), marketplace add #stable + read-back (D-007), claude-absent hand-write fallb …[full in LOG.md]",
       "depends_on": [
         "E-2"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-08T18:55:45.612Z"
+      "updated_at": "2026-11-09T10:26:32.227Z"
     },
     {
       "id": "E-5",
@@ -113,7 +113,6 @@
       ],
       "ready": false,
       "blocked_by": [
-        "E-4",
         "E-5"
       ],
       "updated_at": "2026-11-08T18:48:02.390Z"
