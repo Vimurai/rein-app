@@ -7,8 +7,8 @@ use std::path::Path;
 use semver::Version;
 
 use rein_release::{
-    FetchError, InstallPaths, LatestRelease, RollbackError, installed_version, latest_release,
-    rollback_tree,
+    FetchError, InstallPaths, LatestRelease, RollbackError, RunUid, installed_version,
+    latest_release, rollback_tree_with,
 };
 
 use crate::install_cmd::{self, Deps, EXIT_DOCTOR, EXIT_ERROR};
@@ -127,9 +127,9 @@ pub fn update_cli(home: &Path, yes: bool, latest_api: &str, deps: &Deps<'_>) -> 
     update(home, latest_api, Confirm::Ask(&mut lock), deps)
 }
 
-pub fn rollback(home: &Path, process: &dyn Process) -> u8 {
+pub fn rollback(home: &Path, process: &dyn Process, run_uid: RunUid) -> u8 {
     let paths = InstallPaths::new(home);
-    let (outcome, lock) = match rollback_tree(&paths) {
+    let (outcome, lock) = match rollback_tree_with(&paths, run_uid) {
         Ok(r) => r,
         Err(RollbackError::NoPrevious) => {
             eprintln!("rein-app: no previous tree to roll back to");
@@ -180,7 +180,7 @@ mod tests {
     use super::*;
     use crate::install_cmd::support::{Release, TestKey, VERSION};
     use crate::runner::Invocation;
-    use rein_release::{Http, ReleaseSource};
+    use rein_release::{Http, InstallLock, ReleaseSource};
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::fs;
@@ -237,6 +237,16 @@ mod tests {
     }
 
     fn run_update(home: &Path, http: &MemHttp, key: &TestKey, answer: Option<&str>) -> u8 {
+        run_update_as(home, http, key, answer, InstallLock::run_uid)
+    }
+
+    fn run_update_as(
+        home: &Path,
+        http: &MemHttp,
+        key: &TestKey,
+        answer: Option<&str>,
+        run_uid: RunUid,
+    ) -> u8 {
         let rein = OkRein::default();
         let verifier = key.verifier();
         let source = ReleaseSource {
@@ -247,6 +257,7 @@ mod tests {
             source: &source,
             verifier: &verifier,
             process: &rein,
+            run_uid,
         };
         match answer {
             None => update(home, API, Confirm::Yes, &deps),
@@ -291,6 +302,7 @@ mod tests {
             source: &source,
             verifier: &verifier,
             process: &rein,
+            run_uid: InstallLock::run_uid,
         };
         install_cli(
             home,
@@ -327,6 +339,44 @@ mod tests {
         assert!(!offline.path().join(".rein").exists());
     }
 
+    /// A uid that is never the owner of the test's home (owner guard, D-013).
+    #[cfg(unix)]
+    const FOREIGN: RunUid = |l| l.run_uid().map(|u| u.wrapping_add(1));
+
+    #[cfg(unix)]
+    #[test]
+    fn update_as_another_user_is_refused_before_anything_is_fetched() {
+        let home = tempfile::tempdir().unwrap();
+        let key = TestKey::generate();
+        let http = mem_release(&key, &format!("v{VERSION}"));
+        assert_eq!(
+            run_update_as(home.path(), &http, &key, None, FOREIGN),
+            EXIT_ERROR
+        );
+        let left: Vec<_> = fs::read_dir(home.path()).unwrap().collect();
+        assert!(left.is_empty(), "nothing written, no lock left: {left:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rollback_as_another_user_is_refused_and_leaves_no_lock() {
+        let home = tempfile::tempdir().unwrap();
+        let snap = home.path().join(".rein.prev-0.4.0");
+        fs::create_dir_all(snap.join("tree/bin")).unwrap();
+        fs::write(snap.join("tree/bin/rein"), "old").unwrap();
+        fs::write(snap.join("VERSION"), "0.4.0\n").unwrap();
+        fs::write(
+            snap.join("layout.json"),
+            r#"{"mirrored":["bin"],"operator_owned":[]}"#,
+        )
+        .unwrap();
+        let rein = OkRein::default();
+        assert_eq!(rollback(home.path(), &rein, FOREIGN), EXIT_ERROR);
+        assert!(!home.path().join(".rein").exists());
+        assert!(!home.path().join(".rein.lock").exists());
+        assert!(rein.0.borrow().is_empty(), "rein doctor not run");
+    }
+
     #[test]
     fn notes_lose_terminal_escapes_and_are_capped() {
         assert_eq!(
@@ -341,7 +391,10 @@ mod tests {
     fn rollback_without_a_previous_tree_exits_12_and_doctor_passes_rein_through() {
         let home = tempfile::tempdir().unwrap();
         let rein = OkRein::default();
-        assert_eq!(rollback(home.path(), &rein), EXIT_NO_PREVIOUS);
+        assert_eq!(
+            rollback(home.path(), &rein, InstallLock::run_uid),
+            EXIT_NO_PREVIOUS
+        );
         let snap = home.path().join(".rein.prev-0.4.0");
         fs::create_dir_all(snap.join("tree/bin")).unwrap();
         fs::write(snap.join("tree/bin/rein"), "old").unwrap();
@@ -351,7 +404,7 @@ mod tests {
             r#"{"mirrored":["bin"],"operator_owned":[]}"#,
         )
         .unwrap();
-        assert_eq!(rollback(home.path(), &rein), 0);
+        assert_eq!(rollback(home.path(), &rein, InstallLock::run_uid), 0);
         assert_eq!(
             fs::read_to_string(home.path().join(".rein/bin/rein")).unwrap(),
             "old"

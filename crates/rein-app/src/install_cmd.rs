@@ -7,8 +7,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use rein_release::{
-    Http, InstallLock, InstallPaths, ReleaseSource, SignatureVerifier, fetch_release,
-    install_tree_locked, verify_release,
+    Http, InstallLock, InstallOutcome, InstallPaths, ReleaseSource, RunUid, SignatureVerifier,
+    fetch_release, install_tree_locked, owner_guard, verify_release,
 };
 use semver::Version;
 
@@ -26,6 +26,8 @@ pub struct Deps<'a> {
     pub source: &'a ReleaseSource,
     pub verifier: &'a dyn SignatureVerifier,
     pub process: &'a dyn Process,
+    /// The owner guard's uid source (`InstallLock::run_uid`; tests inject a mismatch).
+    pub run_uid: RunUid,
 }
 
 /// A per-run download directory beside the Rein home, removed when dropped.
@@ -57,6 +59,33 @@ impl Drop for Scratch {
     }
 }
 
+/// What `install` reports after the layout step.
+pub fn outcome_lines(outcome: &InstallOutcome, rein: &Path) -> Vec<String> {
+    let mut lines = vec![format!(
+        "rein-app: installed rein {} at {}",
+        outcome.version,
+        rein.display()
+    )];
+    if let Some(prev) = &outcome.previous {
+        lines.push(format!(
+            "rein-app: previous version kept at {} (`rein-app rollback` restores it)",
+            prev.display()
+        ));
+    }
+    if outcome.unsnapshotted {
+        lines.push(
+            "rein-app: no snapshot taken — $HOME/.rein had no valid VERSION, so this update cannot be rolled back"
+                .to_string(),
+        );
+    }
+    for p in &outcome.skipped_operator_owned {
+        lines.push(format!(
+            "rein-app: kept your {p} (operator-owned; the release copy was not written)"
+        ));
+    }
+    lines
+}
+
 /// The pipeline; returns the exit code.
 pub fn install(home: &Path, version: &Version, deps: &Deps<'_>) -> u8 {
     let paths = InstallPaths::new(home);
@@ -67,6 +96,11 @@ pub fn install(home: &Path, version: &Version, deps: &Deps<'_>) -> u8 {
             return EXIT_ERROR;
         }
     };
+    // Owner guard (D-013): before anything is fetched or written; the lock is released.
+    if let Err(e) = owner_guard(&lock, deps.run_uid, &paths, &[]) {
+        eprintln!("rein-app: {e}");
+        return EXIT_ERROR;
+    }
     let scratch = match Scratch::create(home, version) {
         Ok(s) => s,
         Err(e) => {
@@ -112,19 +146,8 @@ pub fn install(home: &Path, version: &Version, deps: &Deps<'_>) -> u8 {
         }
     };
     drop(scratch);
-    println!(
-        "rein-app: installed rein {} at {}",
-        outcome.version,
-        paths.rein().display()
-    );
-    if let Some(prev) = &outcome.previous {
-        println!(
-            "rein-app: previous version kept at {} (`rein-app rollback` restores it)",
-            prev.display()
-        );
-    }
-    for p in &outcome.skipped_operator_owned {
-        println!("rein-app: kept your {p} (operator-owned; the release copy was not written)");
+    for line in outcome_lines(&outcome, &paths.rein()) {
+        println!("{line}");
     }
 
     // The lock is held through `rein install`/`rein doctor`: they write into the tree
@@ -205,6 +228,16 @@ mod tests {
 
     /// Run the pipeline against a fixture server serving `Release::good(signer)`, trusting `trusted`.
     fn run_with(signer: &TestKey, trusted: &TestKey, rein: &FakeRein, home: &Path) -> u8 {
+        run_as(signer, trusted, rein, home, InstallLock::run_uid)
+    }
+
+    fn run_as(
+        signer: &TestKey,
+        trusted: &TestKey,
+        rein: &FakeRein,
+        home: &Path,
+        run_uid: RunUid,
+    ) -> u8 {
         let source = ReleaseSource {
             base_url: serve(Release::good(signer).routes()),
         };
@@ -215,6 +248,7 @@ mod tests {
             source: &source,
             verifier: &verifier,
             process: rein,
+            run_uid,
         };
         install(home, &version(), &deps)
     }
@@ -283,6 +317,37 @@ mod tests {
         let rein = FakeRein::new(&[0, 1]);
         assert_eq!(run_with(&key, &key, &rein, home.path()), EXIT_DOCTOR);
         assert!(home.path().join(".rein/bin/rein").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_as_another_user_is_refused_naming_the_path() {
+        let home = tempfile::tempdir().unwrap();
+        let key = TestKey::generate();
+        let rein = FakeRein::new(&[]);
+        let foreign: RunUid = |l| l.run_uid().map(|u| u.wrapping_add(1));
+        assert_eq!(run_as(&key, &key, &rein, home.path(), foreign), EXIT_ERROR);
+        assert!(
+            leftovers(home.path()).is_empty(),
+            "nothing written, lock released"
+        );
+        assert!(rein.ran.borrow().is_empty());
+    }
+
+    #[test]
+    fn the_no_snapshot_notice_is_reported() {
+        let outcome = InstallOutcome {
+            version: Version::new(0, 5, 0),
+            previous: None,
+            pruned: vec![],
+            skipped_operator_owned: vec![],
+            unsnapshotted: true,
+        };
+        let lines = outcome_lines(&outcome, Path::new("/h/.rein"));
+        assert!(
+            lines.iter().any(|l| l.contains("cannot be rolled back")),
+            "{lines:?}"
+        );
     }
 
     #[test]

@@ -24,13 +24,13 @@ pub use fetch::{
 };
 pub use latest::{LatestRelease, MAX_LATEST_BYTES, REIN_LATEST_API, latest_release, parse_latest};
 pub use layout::{
-    InstallLock, InstallOutcome, InstallPaths, LayoutError, install_tree, install_tree_locked,
-    install_tree_with_faults, installed_version,
+    InstallLock, InstallOutcome, InstallPaths, LayoutError, RunUid, check_owners, install_tree,
+    install_tree_locked, install_tree_with_faults, installed_version, owner_guard, uid_of,
 };
 pub use manifest::{FileEntry, FileMode, Layout, Manifest, ManifestHeader, SUPPORTED_SCHEMA};
 pub use matcher::OperatorOwnedMatcher;
 pub use paths::check_rel_path;
-pub use rollback::{RollbackError, RollbackOutcome, rollback_tree};
+pub use rollback::{RollbackError, RollbackOutcome, rollback_tree, rollback_tree_with};
 pub use signature::{MinisignVerifier, Rejecting, SignatureVerifier, production_verifier};
 pub use snapshot::KEEP_SNAPSHOTS;
 pub use sync::{Faults, SyncPlan, plan};

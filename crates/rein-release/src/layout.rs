@@ -109,6 +109,9 @@ pub struct InstallOutcome {
     pub pruned: Vec<PathBuf>,
     /// Listed files that match `operator_owned` and were therefore not written.
     pub skipped_operator_owned: Vec<String>,
+    /// A populated home without a semver `VERSION` was updated with no snapshot, so this
+    /// update cannot be rolled back (D-013 notice).
+    pub unsnapshotted: bool,
 }
 
 /// Laying out the tree failed.
@@ -130,6 +133,12 @@ pub enum LayoutError {
         reason: String,
         snapshot: Option<PathBuf>,
         restored: bool,
+    },
+    /// The run's user does not own `path` (owner guard, D-013): nothing was written.
+    NotOwner {
+        path: PathBuf,
+        run_uid: u32,
+        owner_uid: u32,
     },
     /// Local I/O failed before any write.
     Io(String),
@@ -181,6 +190,15 @@ impl fmt::Display for LayoutError {
                     "layout: sync failed ({reason}); no earlier version to restore — re-run install to complete it"
                 ),
             },
+            LayoutError::NotOwner {
+                path,
+                run_uid,
+                owner_uid,
+            } => write!(
+                f,
+                "layout: {} belongs to uid {owner_uid} but rein-app runs as uid {run_uid} — run it as the owner (not via sudo); nothing was changed",
+                path.display()
+            ),
             LayoutError::Io(m) => write!(f, "layout: i/o error ({m})"),
         }
     }
@@ -193,6 +211,9 @@ impl std::error::Error for LayoutError {}
 pub struct InstallLock {
     path: PathBuf,
     token: String,
+    /// Owner of the file this run created, read from the open handle (fstat) — never from
+    /// the path, which a process owning `$HOME` could rename over (E-10 review P1-1).
+    uid: Option<u32>,
 }
 
 impl InstallLock {
@@ -207,12 +228,109 @@ impl InstallLock {
                 let token = format!("{} {nanos}\n", std::process::id());
                 f.write_all(token.as_bytes())
                     .map_err(|e| LayoutError::Io(format!("{}: {e}", path.display())))?;
-                Ok(Self { path, token })
+                let lock = Self {
+                    path,
+                    token,
+                    uid: None,
+                };
+                // Fail closed: on unix a uid we cannot read refuses the run instead of
+                // silently skipping the owner guard (E-10 re-review P2). Dropping `lock`
+                // removes the file.
+                let mut lock = lock;
+                lock.uid = handle_uid(&f)
+                    .map_err(|e| LayoutError::Io(format!("{}: {e}", lock.path.display())))?;
+                Ok(lock)
             }
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Err(LayoutError::Locked(path)),
             Err(e) => Err(LayoutError::Io(format!("{}: {e}", path.display()))),
         }
     }
+}
+
+impl InstallLock {
+    /// The uid this run writes as: the owner of the lock file it has just created (unix;
+    /// no `unsafe`, no extra dependency). `None` elsewhere — the guard is then a no-op.
+    pub fn run_uid(&self) -> Option<u32> {
+        self.uid
+    }
+}
+
+#[cfg(unix)]
+fn handle_uid(f: &fs::File) -> io::Result<Option<u32>> {
+    use std::os::unix::fs::MetadataExt;
+    Ok(Some(f.metadata()?.uid()))
+}
+
+#[cfg(not(unix))]
+fn handle_uid(_f: &fs::File) -> io::Result<Option<u32>> {
+    Ok(None)
+}
+
+/// How a run learns its own uid; tests substitute a different one to inject a mismatch.
+pub type RunUid = fn(&InstallLock) -> Option<u32>;
+
+/// Owner of `path` (not following a symlink). `None` if it does not exist or off unix.
+pub fn uid_of(path: &Path) -> Option<u32> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        fs::symlink_metadata(path).ok().map(|m| m.uid())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        None
+    }
+}
+
+/// Owner of the directory `path` resolves to (following a symlink).
+fn dir_uid(path: &Path) -> Option<u32> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        fs::metadata(path).ok().map(|m| m.uid())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        None
+    }
+}
+
+/// The owner guard's comparison (pure): the first path whose owner is not `run_uid`.
+pub fn check_owners(run_uid: u32, owners: &[(PathBuf, u32)]) -> Result<(), LayoutError> {
+    match owners.iter().find(|(_, uid)| *uid != run_uid) {
+        Some((path, owner_uid)) => Err(LayoutError::NotOwner {
+            path: path.clone(),
+            run_uid,
+            owner_uid: *owner_uid,
+        }),
+        None => Ok(()),
+    }
+}
+
+/// Owner guard (D-013, blueprint §Components 3 step a): right after the lock is taken,
+/// refuse unless this run's user owns `$HOME`, `$HOME/.rein` (when it exists) and every
+/// path in `extra`. A no-op where uids do not exist (Windows).
+pub fn owner_guard(
+    lock: &InstallLock,
+    run_uid: RunUid,
+    paths: &InstallPaths,
+    extra: &[&Path],
+) -> Result<(), LayoutError> {
+    let Some(me) = run_uid(lock) else {
+        return Ok(());
+    };
+    // $HOME is judged by the directory it resolves to — a root-owned symlink to the user's
+    // real home must not let root through (review P1-2). The rest are never followed.
+    let mut owners: Vec<(PathBuf, u32)> = dir_uid(paths.home())
+        .map(|u| (paths.home().to_path_buf(), u))
+        .into_iter()
+        .collect();
+    let mut rest = vec![paths.rein()];
+    rest.extend(extra.iter().map(|p| p.to_path_buf()));
+    owners.extend(rest.into_iter().filter_map(|p| uid_of(&p).map(|u| (p, u))));
+    check_owners(me, &owners)
 }
 
 impl Drop for InstallLock {
@@ -229,11 +347,13 @@ pub fn install_tree(
     paths: &InstallPaths,
     release: &VerifiedRelease,
 ) -> Result<InstallOutcome, LayoutError> {
-    let _lock = InstallLock::acquire(paths)?;
+    let lock = InstallLock::acquire(paths)?;
+    owner_guard(&lock, InstallLock::run_uid, paths, &[])?;
     install_tree_locked(paths, release)
 }
 
-/// [`install_tree`] for a caller that already holds the [`InstallLock`].
+/// [`install_tree`] for a caller that already holds the [`InstallLock`] and has run the
+/// [`owner_guard`].
 pub fn install_tree_locked(
     paths: &InstallPaths,
     release: &VerifiedRelease,
@@ -241,7 +361,8 @@ pub fn install_tree_locked(
     install_tree_with_faults(paths, release, &Faults::none())
 }
 
-/// [`install_tree_locked`] with the test fault seam.
+/// [`install_tree_locked`] with the test fault seam. The caller has already run the
+/// [`owner_guard`].
 #[doc(hidden)]
 pub fn install_tree_with_faults(
     paths: &InstallPaths,
@@ -270,6 +391,8 @@ pub fn install_tree_with_faults(
         .collect();
 
     // c. snapshot (only when an installed version exists)
+    let unsnapshotted =
+        live_exists && !scan.entries.is_empty() && installed_version(&live).is_none();
     let previous = match installed_version(&live) {
         Some(old) => Some(
             snapshot::take(paths, &live, &old, &scan.entries, layout)
@@ -318,6 +441,7 @@ pub fn install_tree_with_faults(
         previous,
         pruned: snapshot::prune(paths),
         skipped_operator_owned,
+        unsnapshotted,
     })
 }
 
@@ -406,5 +530,105 @@ mod tests {
         fs::write(p.lock(), "4242 1\n").unwrap(); // taken over by another run
         drop(held);
         assert!(p.lock().exists());
+    }
+}
+
+#[cfg(test)]
+mod owner_tests {
+    use super::*;
+
+    #[test]
+    fn owner_guard_comparison_names_the_first_foreign_path() {
+        let home = (PathBuf::from("/h"), 1000);
+        let rein = (PathBuf::from("/h/.rein"), 1000);
+        let snap = (PathBuf::from("/h/.rein.prev-0.4.0"), 1000);
+        assert!(check_owners(1000, &[home.clone(), rein.clone(), snap.clone()]).is_ok());
+        let cases = [
+            (vec![(PathBuf::from("/h"), 0), rein.clone()], "/h"),
+            (
+                vec![home.clone(), (PathBuf::from("/h/.rein"), 0)],
+                "/h/.rein",
+            ),
+            (
+                vec![
+                    home.clone(),
+                    rein.clone(),
+                    (PathBuf::from("/h/.rein.prev-0.4.0"), 0),
+                ],
+                "/h/.rein.prev-0.4.0",
+            ),
+        ];
+        for (owners, foreign) in cases {
+            match check_owners(1000, &owners) {
+                Err(LayoutError::NotOwner {
+                    path,
+                    run_uid: 1000,
+                    owner_uid: 0,
+                }) => {
+                    assert_eq!(path, Path::new(foreign));
+                }
+                other => panic!("{foreign}: {other:?}"),
+            }
+        }
+        // root running over a user's home is the case the guard exists for
+        assert!(check_owners(0, &[home]).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_run_uid_is_the_lock_files_owner_and_matches_a_home_we_created() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = InstallPaths::new(dir.path());
+        let lock = InstallLock::acquire(&p).unwrap();
+        assert_eq!(lock.run_uid(), uid_of(dir.path()));
+        assert!(owner_guard(&lock, InstallLock::run_uid, &p, &[]).is_ok());
+        let foreign: RunUid = |l| l.run_uid().map(|u| u.wrapping_add(1));
+        assert!(matches!(
+            owner_guard(&lock, foreign, &p, &[]),
+            Err(LayoutError::NotOwner { .. })
+        ));
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod owner_symlink_tests {
+    use super::*;
+    use std::os::unix::fs::MetadataExt;
+
+    #[test]
+    fn a_home_symlinked_to_someone_elses_directory_is_refused() {
+        // /tmp is root-owned; a link to it that WE own must not pass as "our" home.
+        let me = tempfile::NamedTempFile::new()
+            .unwrap()
+            .as_file()
+            .metadata()
+            .unwrap()
+            .uid();
+        if fs::metadata("/tmp").unwrap().uid() == me {
+            eprintln!("SKIP: /tmp is owned by the test user");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let link = dir.path().join("home");
+        std::os::unix::fs::symlink("/tmp", &link).unwrap();
+        let lock_home = InstallPaths::new(dir.path());
+        let lock = InstallLock::acquire(&lock_home).unwrap();
+        let err = owner_guard(&lock, InstallLock::run_uid, &InstallPaths::new(&link), &[]);
+        assert!(
+            matches!(err, Err(LayoutError::NotOwner { ref path, .. }) if path == &link),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn the_run_uid_survives_a_rename_over_the_lock_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = InstallPaths::new(dir.path());
+        let lock = InstallLock::acquire(&p).unwrap();
+        let mine = lock.run_uid();
+        let planted = dir.path().join("planted");
+        fs::write(&planted, "x").unwrap();
+        fs::rename(&planted, p.lock()).unwrap();
+        assert_eq!(lock.run_uid(), mine, "read from the handle, not the path");
     }
 }

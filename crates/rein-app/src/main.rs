@@ -87,7 +87,11 @@ fn main() -> ExitCode {
         Command::Update { yes } => {
             with_network(|deps| update_cmd::update_cli(&home, yes, REIN_LATEST_API, deps))
         }
-        Command::Rollback => update_cmd::rollback(&home, &runner::SystemProcess),
+        Command::Rollback => update_cmd::rollback(
+            &home,
+            &runner::SystemProcess,
+            rein_release::InstallLock::run_uid,
+        ),
         Command::Doctor => update_cmd::doctor(&home, &runner::SystemProcess),
         Command::Launch { dir } => launch(&dir),
         Command::Profiles(cmd) => return profiles_cmd::run(&home, cmd),
@@ -110,6 +114,7 @@ fn with_network(f: impl FnOnce(&install_cmd::Deps<'_>) -> u8) -> u8 {
         source: &ReleaseSource::rein_github(),
         verifier: verifier.as_ref(),
         process: &runner::SystemProcess,
+        run_uid: rein_release::InstallLock::run_uid,
     })
 }
 

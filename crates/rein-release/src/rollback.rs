@@ -10,7 +10,8 @@ use std::path::PathBuf;
 use semver::Version;
 
 use crate::layout::{
-    InstallLock, InstallPaths, LayoutError, home_exists, installed_version, sync_loaded,
+    InstallLock, InstallPaths, LayoutError, RunUid, home_exists, installed_version, owner_guard,
+    sync_loaded,
 };
 use crate::snapshot;
 use crate::sync::{self, Faults};
@@ -59,7 +60,17 @@ impl From<LayoutError> for RollbackError {
 pub fn rollback_tree(
     paths: &InstallPaths,
 ) -> Result<(RollbackOutcome, InstallLock), RollbackError> {
+    rollback_tree_with(paths, InstallLock::run_uid)
+}
+
+/// [`rollback_tree`] with the owner guard's uid source injectable (tests).
+#[doc(hidden)]
+pub fn rollback_tree_with(
+    paths: &InstallPaths,
+    run_uid: RunUid,
+) -> Result<(RollbackOutcome, InstallLock), RollbackError> {
     let lock = InstallLock::acquire(paths)?;
+    owner_guard(&lock, run_uid, paths, &[])?;
     let io_err = |e: std::io::Error| RollbackError::Layout(LayoutError::Io(e.to_string()));
     // Chosen before the new snapshot below exists, so it is the newest *earlier* one.
     let target = paths
@@ -68,6 +79,13 @@ pub fn rollback_tree(
         .into_iter()
         .next()
         .ok_or(RollbackError::NoPrevious)?;
+    // The snapshot steers what rollback writes: it must be ours too (D-013).
+    owner_guard(
+        &lock,
+        run_uid,
+        paths,
+        &[&target, &target.join("layout.json")],
+    )?;
     let snap = snapshot::load(&target)?;
     let live = paths.rein();
     let live_exists = home_exists(&live)?;

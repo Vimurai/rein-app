@@ -679,3 +679,22 @@ fn a_file_at_an_owned_directory_path_is_left_alone_and_restores_still_work() {
         b"stray"
     );
 }
+
+#[test]
+fn a_populated_home_without_a_version_updates_with_the_no_snapshot_notice() {
+    let h = Home::seeded();
+    fs::remove_file(h.rein().join("VERSION")).unwrap();
+    let out = install_tree(&h.paths, &h.release(&good_files())).unwrap();
+    assert!(out.unsnapshotted);
+    assert_eq!(out.previous, None);
+    assert_eq!(
+        fs::read_to_string(h.rein().join("VERSION")).unwrap(),
+        "0.5.0\n"
+    );
+    let fresh = Home::new();
+    assert!(
+        !install_tree(&fresh.paths, &fresh.release(&good_files()))
+            .unwrap()
+            .unsnapshotted
+    );
+}
