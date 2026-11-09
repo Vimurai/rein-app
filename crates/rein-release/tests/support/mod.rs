@@ -42,6 +42,18 @@ impl TestKey {
         MinisignVerifier::from_base64(&self.pk.to_base64()).unwrap()
     }
 
+    /// The same signature relabelled as a legacy (non-prehashed, `Ed`) one.
+    pub fn legacy_sign(&self, data: &[u8]) -> String {
+        let sig = self.sign(data);
+        let mut lines: Vec<String> = sig.lines().map(str::to_owned).collect();
+        let mut raw = b64_decode(&lines[1]);
+        assert_eq!(b64_encode(&raw), lines[1], "base64 round trip");
+        assert_eq!(&raw[..2], b"ED", "minisign writes prehashed signatures");
+        raw[1] = b'd'; // "Ed": the legacy algorithm id
+        lines[1] = b64_encode(&raw);
+        lines.join("\n") + "\n"
+    }
+
     pub fn sign(&self, data: &[u8]) -> String {
         minisign::sign(Some(&self.pk), &self.sk, data, None, None)
             .unwrap()
@@ -55,6 +67,13 @@ pub enum Entry {
     Dir(&'static str),
     DirWithData(&'static str, Vec<u8>),
     Symlink(&'static str, &'static str),
+    HardLink(&'static str, &'static str),
+    /// A pax extended header (typeflag `x`) carrying `data`.
+    Pax(&'static str, Vec<u8>),
+    /// A member with this raw typeflag byte (e.g. NUL, GNU `L`).
+    Typed(&'static str, Vec<u8>, u8),
+    /// Two zero blocks (end-of-archive) written mid-stream; later entries follow them.
+    EndMarker,
 }
 
 /// A file as the manifest lists it.
@@ -120,7 +139,11 @@ pub fn entries_for(files: &[Listed], manifest: &str) -> Vec<Entry> {
 pub fn tarball(entries: &[Entry]) -> Vec<u8> {
     let mut builder = tar::Builder::new(GzEncoder::new(Vec::new(), Compression::fast()));
     for entry in entries {
-        let mut h = tar::Header::new_old();
+        if matches!(entry, Entry::EndMarker) {
+            builder.get_mut().write_all(&[0u8; 1024]).unwrap();
+            continue;
+        }
+        let mut h = tar::Header::new_ustar(); // as rein's writer emits (D-155 r1)
         let (name, kind, data): (&str, tar::EntryType, &[u8]) = match entry {
             Entry::File(p, b) => (p, tar::EntryType::Regular, b),
             Entry::Dir(p) => (p, tar::EntryType::Directory, &[]),
@@ -129,10 +152,20 @@ pub fn tarball(entries: &[Entry]) -> Vec<u8> {
                 h.set_link_name(target).unwrap();
                 (p, tar::EntryType::Symlink, &[])
             }
+            Entry::HardLink(p, target) => {
+                h.set_link_name(target).unwrap();
+                (p, tar::EntryType::Link, &[])
+            }
+            Entry::Pax(p, b) => (p, tar::EntryType::XHeader, b),
+            Entry::Typed(p, b, flag) => (p, tar::EntryType::new(*flag), b),
+            Entry::EndMarker => unreachable!(),
         };
         let field = &mut h.as_old_mut().name;
         field[..name.len()].copy_from_slice(name.as_bytes());
         h.set_entry_type(kind);
+        if let Entry::Typed(_, _, flag) = entry {
+            h.as_mut_bytes()[156] = *flag; // raw: set_entry_type normalises NUL to '0'
+        }
         h.set_size(data.len() as u64);
         h.set_mode(0o644);
         h.set_cksum();
@@ -248,4 +281,37 @@ pub fn serve(routes: HashMap<String, Route>) -> String {
         }
     });
     base
+}
+
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn b64_decode(s: &str) -> Vec<u8> {
+    let val = |c: u8| B64.iter().position(|&b| b == c).unwrap() as u32;
+    let bytes: Vec<u8> = s.bytes().filter(|&c| c != b'=').collect();
+    let mut out = Vec::new();
+    for chunk in bytes.chunks(4) {
+        let mut n = 0u32;
+        for (i, &c) in chunk.iter().enumerate() {
+            n |= val(c) << (18 - 6 * i);
+        }
+        for i in 0..chunk.len().saturating_sub(1) {
+            out.push((n >> (16 - 8 * i)) as u8);
+        }
+    }
+    out
+}
+
+fn b64_encode(b: &[u8]) -> String {
+    let mut out = String::new();
+    for chunk in b.chunks(3) {
+        let n = chunk
+            .iter()
+            .enumerate()
+            .fold(0u32, |n, (i, &c)| n | (c as u32) << (16 - 8 * i));
+        for i in 0..=chunk.len() {
+            out.push(B64[((n >> (18 - 6 * i)) & 63) as usize] as char);
+        }
+        out.extend(std::iter::repeat_n('=', 3 - chunk.len()));
+    }
+    out
 }

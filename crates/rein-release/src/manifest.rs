@@ -211,21 +211,19 @@ impl Manifest {
         if let Some(f) = manifest
             .files
             .iter()
-            .find(|f| !manifest.in_layout(&f.path, false))
+            .find(|f| !manifest.under_mirrored(&f.path))
         {
             return Err(VerifyError::OutsideLayout(f.path.clone()));
         }
         Ok(manifest)
     }
 
-    /// Is `path` inside `layout.mirrored ∪ layout.operator_owned`?
-    /// A file must sit *under* a mirrored directory; a directory may be one.
-    pub fn in_layout(&self, path: &str, is_dir: bool) -> bool {
+    /// Is `path` a file under a `layout.mirrored` directory? Nothing else may ship (rein
+    /// D-155 r2): not a top-level file, not an operator-owned-only path.
+    pub fn under_mirrored(&self, path: &str) -> bool {
         let mut segs = path.split('/');
         let first = segs.next().unwrap_or_default();
-        let under_mirrored =
-            self.layout.mirrored.iter().any(|m| m == first) && (is_dir || segs.next().is_some());
-        under_mirrored || self.matcher.matches(path, is_dir)
+        self.layout.mirrored.iter().any(|m| m == first) && segs.next().is_some()
     }
 
     /// The operator-owned matcher built from `layout.operator_owned`.
@@ -277,9 +275,13 @@ mod tests {
         assert_eq!(m.key_id, "0123456789ABCDEF");
         assert_eq!(m.files[0].mode, FileMode::Executable);
         assert!(m.files[0].sha256.starts_with("ab"));
-        assert!(m.in_layout("secrets/x", false));
-        assert!(!m.in_layout("bin", false));
-        assert!(!m.in_layout("other/x", false));
+        assert!(m.under_mirrored("bin/x"));
+        assert!(
+            !m.under_mirrored("secrets/x"),
+            "owned-only paths cannot ship"
+        );
+        assert!(!m.under_mirrored("bin"));
+        assert!(!m.under_mirrored("other/x"));
     }
 
     #[test]

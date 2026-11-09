@@ -1,7 +1,10 @@
 //! The fail-closed verifier (blueprint §Components 2, order fixed by rein D-153 r1–r2):
-//! (a) manifest schema → (b) `key_id` → (c) minisign over the tarball → (d) require the
-//! in-tarball manifest to equal the beside one → (e) extract with sha256 + size of every
-//! listed file, no unlisted/missing/unsafe/out-of-layout path → (f) apply `mode`.
+//! (a) manifest schema → (b) `key_id` → (c) minisign over the tarball (prehashed only) →
+//! (d) member rules of rein D-155 r1 (first member `manifest.json`, regular files only, no
+//! links / directories / pax or GNU headers / devices / duplicates / `VERSION`), checked on
+//! headers before anything is written, then the in-tarball manifest must equal the beside
+//! one and the member set must equal `files` → (e) extract with sha256 + size of every
+//! listed file → (f) apply `mode`.
 //!
 //! Hardening from the E-3 security review: only `schema`/`version`/`key_id` are read from
 //! the unsigned beside manifest before the signature check (P1-1); the version must equal
@@ -12,7 +15,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufReader, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -83,12 +86,15 @@ pub fn verify_release(
         .verify(&mut tarball, &sig)
         .map_err(VerifyError::BadSignature)?;
 
-    // (d) the beside manifest must equal the signed in-tarball copy; only then parse it.
+    // (d) member rules (headers only), then the beside manifest must equal the signed
+    // in-tarball copy; only then parse it, and the member set must equal `files`.
     tarball.seek(SeekFrom::Start(0))?;
-    if read_inner_manifest(&mut tarball)? != beside {
+    let (inner, names) = scan_members(&mut tarball)?;
+    if inner != beside {
         return Err(VerifyError::ManifestMismatch);
     }
     let manifest = Manifest::parse(&beside)?;
+    check_member_set(&manifest, &names)?;
 
     // (e)–(f) extract into a fresh directory, removed on any failure.
     if fs::symlink_metadata(dest).is_ok() {
@@ -141,34 +147,107 @@ fn entry_path(entry: &tar::Entry<'_, impl Read>) -> Result<String, VerifyError> 
         .map_err(|_| VerifyError::UnsafePath(String::from_utf8_lossy(&raw).into_owned()))
 }
 
-/// Pass 1: the bytes of the single root `manifest.json` entry. Writes nothing.
-fn read_inner_manifest(tarball: &mut File) -> Result<Vec<u8>, VerifyError> {
+/// Upper bound on the zero padding after the end-of-archive marker.
+const MAX_TRAILER_BYTES: u64 = 1024 * 1024;
+
+/// Pass 1 — the member rules of rein D-155 r1, headers only; writes nothing. The first
+/// member is `manifest.json`; every member is a regular file (ustar typeflag `0`) with a
+/// safe, unique name; no `VERSION` member. Returns the manifest bytes and the other names.
+fn scan_members(tarball: &mut File) -> Result<(Vec<u8>, Vec<String>), VerifyError> {
     let mut archive = tar::Archive::new(GzDecoder::new(BufReader::new(tarball)));
-    let mut found: Option<Vec<u8>> = None;
-    for entry in archive.entries().map_err(unreadable)? {
+    let mut manifest: Option<Vec<u8>> = None;
+    let mut first_is_manifest = None;
+    let mut names = Vec::new();
+    let mut seen = HashSet::new();
+    // Raw: pax/GNU extension headers come through as members and are refused, never applied.
+    for entry in archive.entries().map_err(unreadable)?.raw(true) {
         let mut entry = entry.map_err(unreadable)?;
-        if entry_path(&entry)? != "manifest.json" {
+        let path = entry_path(&entry)?;
+        let kind = entry.header().entry_type();
+        // ustar typeflag '0' only: tar maps the old NUL typeflag to Regular too (review P2-1).
+        if kind != EntryType::Regular || entry.header().as_bytes()[156] != b'0' {
+            return Err(VerifyError::UnsupportedEntry {
+                path,
+                kind: if kind == EntryType::Regular {
+                    format!("Regular (typeflag {:#04x})", entry.header().as_bytes()[156])
+                } else {
+                    format!("{kind:?}")
+                },
+            });
+        }
+        let first = first_is_manifest.is_none();
+        if first {
+            first_is_manifest = Some(path == "manifest.json");
+        }
+        if !seen.insert(path.clone()) {
+            return Err(VerifyError::Duplicate(path));
+        }
+        if path == "manifest.json" {
+            if !first {
+                return Err(VerifyError::ManifestNotFirst);
+            }
+            let mut buf = Vec::new();
+            (&mut entry)
+                .take(MAX_MANIFEST_BYTES + 1)
+                .read_to_end(&mut buf)
+                .map_err(unreadable)?;
+            if buf.len() as u64 > MAX_MANIFEST_BYTES {
+                return Err(VerifyError::ManifestInvalid(
+                    "in-tarball manifest too large".into(),
+                ));
+            }
+            manifest = Some(buf);
             continue;
         }
-        if found.is_some() {
-            return Err(VerifyError::Duplicate("manifest.json".into()));
+        check_rel_path(&path).map_err(|_| VerifyError::UnsafePath(path.clone()))?;
+        if path == "VERSION" {
+            return Err(VerifyError::ForbiddenMember(path));
         }
-        let mut buf = Vec::new();
-        (&mut entry)
-            .take(MAX_MANIFEST_BYTES + 1)
-            .read_to_end(&mut buf)
-            .map_err(unreadable)?;
-        if buf.len() as u64 > MAX_MANIFEST_BYTES {
-            return Err(VerifyError::ManifestInvalid(
-                "in-tarball manifest too large".into(),
-            ));
-        }
-        found = Some(buf);
+        names.push(path);
     }
-    found.ok_or(VerifyError::ManifestNotInTarball)
+    // Nothing but zero padding after the end-of-archive marker, and nothing after the gzip
+    // stream: a strict reader accepts only what rein's writer emits (review P2-3).
+    let mut gz = archive.into_inner();
+    let mut rest = Vec::new();
+    (&mut gz)
+        .take(MAX_TRAILER_BYTES + 1)
+        .read_to_end(&mut rest)
+        .map_err(unreadable)?;
+    if rest.len() as u64 > MAX_TRAILER_BYTES || rest.iter().any(|&b| b != 0) {
+        return Err(VerifyError::TarballUnreadable(
+            "data after the end of the archive".into(),
+        ));
+    }
+    if !gz.into_inner().fill_buf().map_err(unreadable)?.is_empty() {
+        return Err(VerifyError::TarballUnreadable(
+            "data after the gzip stream".into(),
+        ));
+    }
+    match (manifest, first_is_manifest) {
+        (Some(m), Some(true)) => Ok((m, names)),
+        (None, _) => Err(VerifyError::ManifestNotInTarball),
+        (Some(_), _) => Err(VerifyError::ManifestNotFirst),
+    }
 }
 
-/// Pass 2: check and write every entry.
+/// The member set must equal `files` exactly (rein D-155 r1).
+fn check_member_set(manifest: &Manifest, names: &[String]) -> Result<(), VerifyError> {
+    let listed: HashSet<&str> = manifest.files.iter().map(|f| f.path.as_str()).collect();
+    if let Some(extra) = names.iter().find(|n| !listed.contains(n.as_str())) {
+        return Err(VerifyError::Unlisted(extra.clone()));
+    }
+    let present: HashSet<&str> = names.iter().map(String::as_str).collect();
+    if let Some(f) = manifest
+        .files
+        .iter()
+        .find(|f| !present.contains(f.path.as_str()))
+    {
+        return Err(VerifyError::Missing(f.path.clone()));
+    }
+    Ok(())
+}
+
+/// Pass 2: hash and write every listed member (the structure was proven in pass 1).
 fn extract(
     manifest: &Manifest,
     manifest_bytes: &[u8],
@@ -180,51 +259,23 @@ fn extract(
         .iter()
         .map(|f| (f.path.as_str(), f))
         .collect();
-    let mut seen: HashSet<String> = HashSet::new();
-
     let mut archive = tar::Archive::new(GzDecoder::new(BufReader::new(tarball)));
-    for entry in archive.entries().map_err(unreadable)? {
+    let mut written = 0usize;
+    // Raw: pax/GNU extension headers come through as members and are refused, never applied.
+    for entry in archive.entries().map_err(unreadable)?.raw(true) {
         let mut entry = entry.map_err(unreadable)?;
         let path = entry_path(&entry)?;
-        let header_size = entry.header().size().map_err(unreadable)?;
-        match entry.header().entry_type() {
-            EntryType::Regular | EntryType::Continuous => {}
-            EntryType::Directory => {
-                let dir = path.strip_suffix('/').unwrap_or(&path);
-                check_rel_path(dir).map_err(|_| VerifyError::UnsafePath(path.clone()))?;
-                if header_size != 0 {
-                    return Err(VerifyError::UnsupportedEntry {
-                        path,
-                        kind: "Directory with data".into(),
-                    });
-                }
-                if !manifest.in_layout(dir, true) {
-                    return Err(VerifyError::OutsideLayout(path));
-                }
-                continue; // directories are created on demand for listed files
-            }
-            // Metadata records the iterator has already applied.
-            EntryType::XGlobalHeader | EntryType::XHeader => continue,
-            other => {
-                return Err(VerifyError::UnsupportedEntry {
-                    path,
-                    kind: format!("{other:?}"),
-                });
-            }
-        }
-        check_rel_path(&path).map_err(|_| VerifyError::UnsafePath(path.clone()))?;
-        if !seen.insert(path.clone()) {
-            return Err(VerifyError::Duplicate(path));
-        }
         if path == "manifest.json" {
-            continue; // proven equal to the beside copy in pass 1
+            continue; // proven equal to the beside copy
         }
-        if !manifest.in_layout(&path, false) {
-            return Err(VerifyError::OutsideLayout(path));
-        }
+        // Pass 1 proved every member is a regular, listed, unique file.
         let Some(file) = listed.get(path.as_str()) else {
             return Err(VerifyError::Unlisted(path));
         };
+        let header_size = entry.header().size().map_err(unreadable)?;
+        if entry.header().entry_type() != EntryType::Regular {
+            return Err(VerifyError::TarballChanged);
+        }
         if header_size != file.size {
             return Err(VerifyError::SizeMismatch {
                 path,
@@ -233,10 +284,11 @@ fn extract(
             });
         }
         write_verified(dest, file, &mut entry)?;
+        written += 1;
     }
-
-    if let Some(f) = manifest.files.iter().find(|f| !seen.contains(&f.path)) {
-        return Err(VerifyError::Missing(f.path.clone()));
+    // Completeness is re-proven on the bytes pass 2 read, not only in pass 1 (review P2-2).
+    if written != manifest.files.len() {
+        return Err(VerifyError::TarballChanged);
     }
     fs::write(dest.join("manifest.json"), manifest_bytes)?;
     Ok(())

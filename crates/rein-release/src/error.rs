@@ -32,7 +32,7 @@ pub enum VerifyError {
     UnsafePath(String),
     /// A tarball entry is a symlink, hard link, device or other non-regular type.
     UnsupportedEntry { path: String, kind: String },
-    /// A path lies outside `layout.mirrored ∪ layout.operator_owned`.
+    /// A `files` path is not under a `layout.mirrored` directory (rein D-155 r2).
     OutsideLayout(String),
     /// The tarball contains a file the manifest does not list.
     Unlisted(String),
@@ -50,6 +50,10 @@ pub enum VerifyError {
     HashMismatch(String),
     /// The tarball has no `manifest.json`.
     ManifestNotInTarball,
+    /// `manifest.json` is not the tarball's first member (rein D-155 r1).
+    ManifestNotFirst,
+    /// A member the release format never ships (`VERSION`).
+    ForbiddenMember(String),
     /// The in-tarball `manifest.json` differs from the one beside the tarball.
     ManifestMismatch,
     /// The extraction directory already exists (refusing to write into it).
@@ -88,7 +92,7 @@ impl fmt::Display for VerifyError {
             UnsupportedEntry { path, kind } => {
                 write!(f, "tarball: unsupported entry type {kind} at '{path}'")
             }
-            OutsideLayout(p) => write!(f, "layout: '{p}' is outside the manifest layout"),
+            OutsideLayout(p) => write!(f, "layout: '{p}' is not under a layout.mirrored directory"),
             Unlisted(p) => write!(f, "files: '{p}' is in the tarball but not in the manifest"),
             Missing(p) => write!(f, "files: '{p}' is in the manifest but not in the tarball"),
             Duplicate(p) => write!(f, "tarball: duplicate entry '{p}'"),
@@ -101,6 +105,8 @@ impl fmt::Display for VerifyError {
             }
             HashMismatch(p) => write!(f, "files: '{p}' sha256 does not match the manifest"),
             ManifestNotInTarball => write!(f, "manifest: missing from the tarball"),
+            ManifestNotFirst => write!(f, "tarball: manifest.json is not the first member"),
+            ForbiddenMember(p) => write!(f, "tarball: '{p}' must not be shipped"),
             ManifestMismatch => write!(
                 f,
                 "manifest: the copy inside the tarball differs from the one beside it"

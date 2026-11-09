@@ -187,9 +187,9 @@ const CASES: &[Case] = &[
         expect: |e| matches!(e, VerifyError::UnsafePath(_)),
     },
     Case {
-        label: "tarball path outside the layout",
+        label: "tarball member not in `files` (outside the layout)",
         build: |k| with_entries(k, vec![Entry::File("evil/x", b"x".to_vec())]),
-        expect: |e| matches!(e, VerifyError::OutsideLayout(p) if p == "evil/x"),
+        expect: |e| matches!(e, VerifyError::Unlisted(p) if p == "evil/x"),
     },
     Case {
         label: "manifest lists a path outside the layout",
@@ -208,7 +208,7 @@ const CASES: &[Case] = &[
     Case {
         label: "symlink entry",
         build: |k| with_entries(k, vec![Entry::Symlink("bin/link", "/etc/passwd")]),
-        expect: |e| matches!(e, VerifyError::UnsupportedEntry { .. }),
+        expect: |e| matches!(e, VerifyError::UnsupportedEntry { kind, .. } if kind == "Symlink"),
     },
     Case {
         label: "duplicate entry",
@@ -221,11 +221,104 @@ const CASES: &[Case] = &[
         expect: |e| matches!(e, VerifyError::Duplicate(p) if p == "bin/rein"),
     },
     Case {
-        label: "directory entry outside the layout",
-        build: |k| with_entries(k, vec![Entry::Dir("evil/")]),
-        expect: |e| matches!(e, VerifyError::OutsideLayout(_)),
+        label: "a directory entry (rein's writer emits none)",
+        build: |k| with_entries(k, vec![Entry::Dir("bin/")]),
+        expect: |e| matches!(e, VerifyError::UnsupportedEntry { kind, .. } if kind == "Directory"),
+    },
+    // Member rules, rein D-155 r1 (E-12).
+    Case {
+        label: "hard link member",
+        build: |k| with_entries(k, vec![Entry::HardLink("bin/again", "bin/rein")]),
+        expect: |e| matches!(e, VerifyError::UnsupportedEntry { kind, .. } if kind == "Link"),
+    },
+    Case {
+        label: "pax extension header",
+        build: |k| {
+            let files = good_files();
+            let manifest = manifest_json(&k.key_id(), &files);
+            let mut entries = entries_for(&files, &manifest);
+            entries.insert(
+                1,
+                Entry::Pax("PaxHeader/bin/rein", b"21 path=bin/rein2\n".to_vec()),
+            );
+            Release::signed(k, &entries, manifest)
+        },
+        expect: |e| matches!(e, VerifyError::UnsupportedEntry { kind, .. } if kind == "XHeader"),
+    },
+    Case {
+        label: "manifest.json not the first member",
+        build: |k| {
+            let files = good_files();
+            let manifest = manifest_json(&k.key_id(), &files);
+            let mut entries = entries_for(&files, &manifest);
+            let m = entries.remove(0);
+            entries.push(m);
+            Release::signed(k, &entries, manifest)
+        },
+        expect: |e| matches!(e, VerifyError::ManifestNotFirst),
+    },
+    Case {
+        label: "old-style NUL typeflag (rein writes '0')",
+        build: |k| with_entries(k, vec![Entry::Typed("shared/x.mjs", b"x".to_vec(), 0)]),
+        expect: |e| matches!(e, VerifyError::UnsupportedEntry { kind, .. } if kind.contains("0x00")),
+    },
+    Case {
+        label: "GNU long-name header",
+        build: |k| {
+            with_entries(
+                k,
+                vec![Entry::Typed("././@LongLink", b"bin/rein2\0".to_vec(), b'L')],
+            )
+        },
+        expect: |e| matches!(e, VerifyError::UnsupportedEntry { kind, .. } if kind.contains("GNULongName")),
+    },
+    Case {
+        label: "a member after the end-of-archive marker",
+        build: |k| {
+            with_entries(
+                k,
+                vec![Entry::EndMarker, Entry::File("bin/evil", b"x".to_vec())],
+            )
+        },
+        expect: |e| matches!(e, VerifyError::TarballUnreadable(m) if m.contains("after the end")),
+    },
+    Case {
+        label: "a VERSION member",
+        build: |k| with_entries(k, vec![Entry::File("VERSION", b"0.5.0\n".to_vec())]),
+        expect: |e| matches!(e, VerifyError::ForbiddenMember(p) if p == "VERSION"),
+    },
+    Case {
+        label: "a top-level path in `files`",
+        build: |k| shipping(k, "accounts.json"),
+        expect: |e| matches!(e, VerifyError::OutsideLayout(p) if p == "accounts.json"),
+    },
+    Case {
+        label: "an operator-owned-only path in `files` (not under a mirrored dir)",
+        build: |k| shipping(k, "secrets/token"),
+        expect: |e| matches!(e, VerifyError::OutsideLayout(p) if p == "secrets/token"),
+    },
+    Case {
+        label: "legacy (non-prehashed) signature",
+        build: |k| {
+            let mut r = Release::good(k);
+            r.signature = k.legacy_sign(&r.tarball);
+            r
+        },
+        expect: |e| matches!(e, VerifyError::BadSignature(m) if m.to_lowercase().contains("legacy")),
     },
 ];
+
+/// A correctly signed release whose manifest lists and ships `path` too.
+fn shipping(key: &TestKey, path: &'static str) -> Release {
+    let mut files = good_files();
+    files.push(Listed {
+        path,
+        bytes: b"x".to_vec(),
+        mode: "0644",
+    });
+    let manifest = manifest_json(&key.key_id(), &files);
+    Release::signed(key, &entries_for(&files, &manifest), manifest)
+}
 
 #[test]
 fn every_defective_release_is_rejected_by_its_check_and_writes_nothing() {
