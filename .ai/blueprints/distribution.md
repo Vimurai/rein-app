@@ -3,7 +3,8 @@
 > Architect-owned. Derived from `rein` D-150 contract §2–§3 and `plans/rein-app-plan.md` Phase 1.
 > Index: `.ai/architect.md` §0. Tasks: E-2..E-9 (see §Task Breakdown; plan IDs E-1..E-5 shifted by one).
 > Revised 2026-11-09: LayoutWriter and rollback mechanics (D-011), E-5/E-6 divergence rulings (D-012),
-> E-7 rulings — target symlinks, snapshot trust, owner guard (D-013).
+> E-7 rulings — target symlinks, snapshot trust, owner guard (D-013); rein D-155 mirrored (D-014):
+> strict tarball members, shipped path wins, `manifest.json` in the home, three profile keys.
 
 ## Goal & Architecture
 Operators get Rein with one package-manager command on macOS, Linux and Windows (WSL2), and
@@ -17,7 +18,7 @@ installed payload → per-file sync of the mirrored dirs inside $HOME/.rein → 
 rein doctor` (D-011). Nothing reaches the home before the whole release has verified; the
 sync replaces each file atomically and restores from its snapshot if it cannot finish.
 Operator data is never part of the pipeline. Around it sit two side tools: a
-**profile manager** that edits four allow-listed settings keys per Claude profile, and an
+**profile manager** that edits three allow-listed settings keys per Claude profile, and an
 **updater/rollback** that keeps the last two payload snapshots.
 
 ## Components
@@ -28,11 +29,22 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    beside-tarball `manifest.json`, reject `schema != 1`; (b) compare `key_id` with the
    build-time baked minisign public key — mismatch fails with ONE line naming the newer
    rein-app version required (never a bare signature error); (c) **minisign** verify
-   `rein-X.Y.Z.tar.gz.minisig` over the tarball with the baked key; (d) extract to staging,
+   `rein-X.Y.Z.tar.gz.minisig` (prehashed form only) over the tarball with the baked key;
+   (d) extract to staging,
    require the in-tarball `manifest.json` to be byte-identical to the beside one; (e) sha256
    + size of every listed file; reject a listed file missing, a tarball file not listed, a
-   path with `..`/absolute/backslash, or a path outside `layout.mirrored ∪ operator_owned`;
-   (f) apply `mode` from the manifest (`bin/rein`, `hooks/*.sh` are `0755`). The
+   path with `..`/absolute/backslash, or a `files` path that is not under a `layout.mirrored`
+   directory (rein D-155 r2: nothing ships outside the mirror, so a top-level or
+   owned-only path in `files` is a refusal);
+   (f) apply `mode` from the manifest (`bin/rein`, `hooks/*.sh` are `0755`).
+   **Member rules (rein D-155 r1, binding — a strict reader that accepts only what rein's
+   writer emits):** the FIRST member is `manifest.json`; every other member is a regular file
+   (ustar typeflag `0`) named in `files`; the member set equals `files` exactly. Refused, for
+   the whole artifact and before any byte reaches the home: a directory entry, any link type,
+   a pax or GNU extension header, a device/FIFO, a duplicate name, `manifest.json` anywhere
+   but first, a `VERSION` member. The beside-tarball manifest is an untrusted convenience
+   copy: it may fail a run early (schema, `key_id`) but every decision that lets bytes into
+   the home is taken from the in-tarball manifest after the signature has passed. The
    `SignatureVerifier` trait stays (the test suite injects a fixture key pair); the production
    backend is minisign and the `Rejecting` backend remains selectable by build flag as the kill switch.
 3. **`rein-release::LayoutWriter`** (rein D-153 r5; mechanics **D-011**, which supersedes the
@@ -41,22 +53,29 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    the reference). `$HOME/.rein` itself is never renamed, copied or moved. For every dir in
    `layout.mirrored` (`bin hooks mcp shared claude contracts templates copilot scripts
    config`) the release content REPLACES the installed one; a file in a mirrored dir that the
-   tarball does not ship is deleted. **Scope rule (binding):** the writer opens only (i) paths
-   under a `layout.mirrored` directory and (ii) `VERSION`. Every other entry of the home — on
+   tarball does not ship is deleted. **Scope rule (binding; confirmed by rein D-155 r2):** the
+   writer opens only (i) paths under a `layout.mirrored` directory, (ii) `manifest.json` and
+   (iii) `VERSION` at the top of the home. Every other entry of the home — on
    the `operator_owned` list or not (`approvals.sqlite*`, `cache.sqlite*`, `ci/`, `privacy/`,
    `trash/`, `clean.log`, anything a later rein adds) — is never read, copied, written or
-   deleted. Inside mirrored dirs, paths matching `layout.operator_owned` are never written,
-   deleted or read: no release file lands on such a path even on a fresh install, and prune
-   never descends into an owned directory. Read the list
-   **from the manifest**, never hard-code it. Schema-1 list today: `accounts.json`, the gate's
-   override file, `secrets/`, `run/`, `memory/`, `incidents.ndjson`, `telemetry.sqlite`,
+   deleted. **Inside mirrored dirs `operator_owned` protects from deletion only, and a shipped
+   path wins over a pattern (rein D-155 r2):** a path in `files` is always written, even when
+   a pattern matches it (`mcp/orchestrator-mcp/package-lock.json` is shipped and matches
+   `mcp/*/package-lock.json`); a path not in `files` is deleted unless it matches a pattern.
+   An owned path the release does not ship is still never opened, and prune never descends
+   into an owned directory. `rein install` checks the installed tree against the manifest
+   afterwards (exit 3 on any difference), so a skipped shipped file is a failed install. Read the list
+   **from the manifest**, never hard-code it. Schema-1 list today (fourteen entries):
+   `accounts.json`, `gate-override.json`, `secrets/`, `run/`, `memory/`, `incidents.ndjson`, `telemetry.sqlite`,
    `INSIGHTS.md`, `memory-palace.md`, `config/rein-workspace.txt`, `config/install-stamp.json`,
-   `mcp/*/node_modules/`, `mcp/*/package-lock.json`. **Pattern syntax** (rein D-153 addendum,
+   `shared/toolchain.sh`, `mcp/*/node_modules/`, `mcp/*/package-lock.json`. **Pattern syntax** (rein D-153 addendum,
    binding): gitignore-style subset — literal path; trailing `/` = the directory and everything
    under it; `*` within one segment; `**` across segments; NO `!` negation, NO character
    classes, NO leading `/`. The matcher is a small pure function (`OperatorOwnedMatcher`)
    tested against rein's conformance fixture `tests/fixtures/release/operator-owned-cases.json`
-   (`{path, expected}` rows) copied into our fixtures.
+   (rows of path, shipped yes/no, expected `kept` / `replaced` / `deleted` — rein D-155;
+   published with rein E-422) copied into our fixtures; until it lands our interim fixture
+   uses the same three-column shape and carries the precedence case.
    **Steps** (all under `$HOME/.rein.lock`; the release is already fully verified, outside the home):
    a. *Preflight, no writes*: **owner guard** (D-013, unix) — the process must run as the
       owner of `$HOME`, of `$HOME/.rein` when it exists and, for rollback, of the snapshot
@@ -78,12 +97,17 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
       a directory is needed (`Conflict`), and a shipped name ending in the writer's own temp
       suffix. Inside a mirrored dir an entry of ANY type at an operator-owned path — a symlink
       or file where an owned directory belongs (`mcp/x/node_modules -> store`) — is owned:
-      never opened, snapshotted or pruned.
-   b. *Plan (pure)*: `ship` = manifest files minus operator-owned matches; `prune` = every
+      never opened, snapshotted or pruned, unless the release ships that exact path (then it
+      is a target like any other; a symlinked owned directory above a shipped path is an
+      intermediate symlink and refuses).
+   b. *Plan (pure)*: `ship` = every manifest file (the verifier has already proven each is
+      under a mirrored dir); `prune` = every
       file or symlink under a live mirrored dir that is neither in `ship` nor operator-owned.
-   c. *Snapshot*: copy the non-owned content of the live mirrored dirs to
-      `$HOME/.rein.prev-<oldver>/tree/`, with `VERSION` and `layout.json` (the `mirrored` +
-      `operator_owned` lists used) beside it; built under a temp name and renamed when
+   c. *Snapshot*: copy the non-owned content of the live mirrored dirs **plus the live file at
+      every `ship` path** (so a shipped path that a pattern also matches can be restored) to
+      `$HOME/.rein.prev-<oldver>/tree/`, with `VERSION`, `layout.json` (the `mirrored` +
+      `operator_owned` lists used) and the live top-level `manifest.json` when there is one
+      beside it; built under a temp name and renamed when
       complete, mode 0700, `~N` suffix on a name clash, symlinks copied as links. This is the
       release payload only (≈9 MB), never operator data. No live tree → no snapshot. Keep the
       N=2 newest snapshots. A live tree whose `VERSION` is missing or not semver gets no
@@ -96,8 +120,13 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
       directory → mode from the manifest → rename over the target, so a reader sees old or
       new, never half (a byte-identical file whose mode already matches MAY be skipped). Then
       remove that dir's `prune` entries and any directory left empty.
-   e. `VERSION` last, tmp-and-rename.
-   f. *Failure in d/e*: stop, sync the snapshot from (c) back with the same routine, report
+   e. After `hooks`: the in-tarball `manifest.json`, byte for byte, to `$HOME/.rein/manifest.json`
+      (tmp-and-rename) — it is how `rein install` recognises an artifact install (rein D-155
+      r1/r4: `manifest.version == VERSION`). Then `VERSION` (one line, `manifest.version`)
+      last, tmp-and-rename, so a failed sync never advertises a version.
+   f. *Failure in d/e*: stop, sync the snapshot from (c) back with the same routine — the
+      snapshot's `manifest.json` is put back, or the live one removed when the snapshot has
+      none (a clone install has no manifest) — report
       `Sync { restored }`; `VERSION` stays at the old version. On a fresh install there is
       nothing to restore: the partial tree has no `VERSION` and a re-run completes it.
    A temp file left by a killed run is an unshipped file and is pruned by the next run. No
@@ -107,7 +136,13 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
 4. **`rein-app::Runner`** — invokes `rein install` then `rein doctor` from
    `$HOME/.rein/bin` with a clean env (`CLAUDECODE` unset, PATH prefixed with
    `$HOME/.rein/bin`); streams output to the terminal verbatim; exit code propagates.
-   Only contract §2.6 entry points are ever invoked.
+   Only contract §2.6 entry points are ever invoked. `rein install` finishes an unpacked
+   artifact itself (rein D-155 r4): tree check against `manifest.json`, Node floor, hook
+   interpreter probe, toolchain pin, install stamp (`source: "artifact"`), shell profile
+   lines; the app reimplements none of it. Its exits: 3 = `[INSTALL_TREE_MISMATCH]` or a gate
+   dependency off its pin, 1 = Node floor or `[HOOK_BASH_MISSING]`. The app reports a failed
+   `rein install` as its own exit 13 (rein's code printed) and a failed `rein doctor` as exit
+   3, and never retries or repairs either.
 5. **`rein-app::RuntimeCheck`** — detects Node (≥ manifest `minNode`, default 22), git,
    sqlite3, tmux, Claude Code (`claude --version`); prints a table; missing Claude Code →
    print the official installer URL, do not bundle. Does not install anything itself in phase 1.
@@ -116,8 +151,12 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
 6. **`rein-profiles`** — enumerates profiles: default config dir (`~/.claude`),
    `~/.claude-personal` if present, and every `accounts.<name>.config_dir` in
    `$HOME/.rein/accounts.json`. For each `<config_dir>/settings.json`: read → parse →
-   merge ONLY `hooks` (sourced by calling `rein install`, never hand-authored),
-   `extraKnownMarketplaces` and `enabledPlugins` — **both owned, neither authored by hand**
+   merge ONLY the **three** keys the contract allows (rein D-155 r3, corrects contract §2.3):
+   `enabledPlugins`, `extraKnownMarketplaces`, `attribution`. **Never `hooks`**: the gate's
+   hook entries are not in a profile at all — they are in each project's
+   `.claude/settings.json`, written only by `rein init` / `rein sync` — and the app writes no
+   file inside a project. The app neither copies, authors nor removes a `hooks` key anywhere.
+   `extraKnownMarketplaces` and `enabledPlugins` are **both owned, neither authored by hand**
    (D-007, D-005): on Claude Code 2.1.319 a hand-written user-scope marketplace entry is not
    registered, so per profile with `CLAUDE_CONFIG_DIR=<config_dir>` the app runs
    `claude plugin marketplace add Vimurai/rein-plugins#stable --scope user`, then on
@@ -127,21 +166,26 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    (`source.repo == "Vimurai/rein-plugins"`, `source.ref == "stable"`, `"<p>@rein-plugins": true`);
    a missing/different `ref` is exit 7, never patched. All argv are constants behind `Shell`.
    `attribution` is written directly → validate JSON → temp file + rename. `claude` absent →
-   `attribution` + `hooks` applied, the D-002 marketplace entry is hand-written WITH
+   `attribution` applied, the D-002 marketplace entry is hand-written WITH
    `ref: "stable"` as a fallback (Claude Code reconciles it at its next session start —
    D-009), plugins skipped, exit 4. The D-007 path must be idempotent over an entry the
    reconciler already registered. Every pre-existing key
-   is preserved byte-for-byte in value. Writing `autoMode`, `permissions` or `defaultMode`
-   is a compile-time impossibility (the key set is a closed enum).
+   is preserved byte-for-byte in value. Writing `autoMode`, `permissions`, `defaultMode` or
+   `hooks` is a compile-time impossibility (the key set is a closed enum of three).
 7. **`rein-app::Updater`** — `rein-app update`: list newest `rein` tag, fetch its
    changelog/release notes, show diff vs installed `VERSION`, install on confirm (`--yes`
    for CI). The newest tag comes from the GitHub releases API (metadata only; the release is
    still verified and version-bound); `install` without `--version` uses the same resolver.
    `rein-app rollback` (D-011): take a snapshot of the current tree (step 3c), sync the newest
    earlier snapshot back with the LayoutWriter routine (`ship` = the snapshot's files, layout
-   from its validated `layout.json`), write its `VERSION`, remove the snapshot just restored
-   (so a second rollback returns to the newer version), re-run `rein doctor`. Rollback
-   restores **code only**: operator data is never rolled back. Rollback works with the
+   from its validated `layout.json`), put its `manifest.json` back (or remove the live one
+   when the snapshot has none), write its `VERSION`, remove the snapshot just restored
+   (so a second rollback returns to the newer version), then run **`rein install` and
+   `rein doctor`** exactly as after an install (D-014): a rollback is an install of the older
+   payload, and only `rein install` can re-pin the toolchain and rewrite the stamp for it.
+   Rollback restores **code only**: operator data is never rolled back.
+   `rein-app doctor [--json]` passes the flag through to `rein doctor`; phase 1 never parses
+   the document (exit 0 or 1 means stdout is one; anything else means it is not). Rollback works with the
    restored snapshot's layout, so a mirrored dir that only the newer release lists stays in
    place (unused by the older code; the next update prunes it).
 8. **`rein-app::WslLauncher`** (Windows target only) — `wsl --status`; if no distro,
@@ -154,21 +198,27 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
 
 ## Data Model
 ```
-// manifest.json schema 1 — rein D-153 r2 (binding). Paths relative to the Rein home, '/', no '..'.
+// manifest.json schema 1 — rein D-153 r2, D-155 (binding; normative text: rein `.ai/blueprints/release-artifact.md`,
+// published as rein `docs/app-contract.md` + `docs/contract/manifest.schema.json`). Paths relative to the Rein home,
+// '/', no '..'; every `files` path is under a `mirrored` dir; `mode` is "0755" or "0644" and nothing else.
 Manifest { schema: 1, version: SemVer, min_node: SemVer /* "22.5.0" */, key_id: String /* minisign key id */,
            layout: { mirrored: Vec<DirName>, operator_owned: Vec<RelPath|Glob> },
            files: Vec<{ path: RelPath, sha256: Hex64, size: u64, mode: OctalStr /* "0755" | "0644" */ }> }
 ReleaseAssets { tarball: Path, signature: Path /* .minisig */, manifest: Path, tag: String }
 VerifyReport { schema: Pass|Fail, key_id: Pass|NeedsApp(version), signature: Pass|Fail(reason),
                manifest_match: Pass|Fail, files: Vec<{path, Pass|Mismatch|Missing|Unlisted|OutsideLayout}> }
-DoctorJson { version: SemVer, status: ok|warn|fail, checks: Vec<{ id: SnakeCase, status, line: String, fix: Option<String> }> }  // rein D-153 r3; phase 2 renders it
+DoctorJson { schema: 1, version: SemVer, status: ok|warn|fail,
+             checks: Vec<{ id: SnakeCase, subject: Option<String>, status, line: String, fix: Option<String> }> }
+             // rein D-153 r3 + D-155 r5; (id, subject) unique, print order; phase 2 renders it, phase 1 passes it through.
+             // Not a polling probe — `rein state health --short` is.
 InstalledTree { root: $HOME/.rein, version: SemVer (from VERSION), snapshots: Vec<Snapshot> /* newest first, ≤ 2 */ }
 Snapshot { root: $HOME/.rein.prev-<ver>[~N], version: SemVer (root/VERSION),
            layout: { mirrored, operator_owned } (root/layout.json — validated like a manifest layout on read),
-           tree: root/tree/<mirrored dir>/… /* release payload only; no operator-owned path, nothing outside mirrored dirs */ }
+           manifest: Option<root/manifest.json> /* the home's manifest.json at snapshot time; absent for a clone install */,
+           tree: root/tree/<mirrored dir>/… /* release payload only: non-owned content + the files at shipped paths; nothing outside mirrored dirs */ }
 SyncPlan { ship: Vec<RelPath>, prune: Vec<RelPath> }   // pure function of (manifest | snapshot, live mirrored dirs)
 Profile { name: String, config_dir: AbsPath, settings_path: AbsPath, exists: bool }
-AllowedKey = Hooks | EnabledPlugins | ExtraKnownMarketplaces | Attribution   // closed enum
+AllowedKey = EnabledPlugins | ExtraKnownMarketplaces | Attribution   // closed enum of three (rein D-155 r3); no Hooks
 ProfilePatch { profile: Profile, changes: Map<AllowedKey, serde_json::Value> }
 RuntimeReport { node: Found(ver)|Missing|TooOld(ver), git, sqlite3, tmux, claude: Found|Missing }
 ```
@@ -179,10 +229,10 @@ tree's `VERSION` and the profiles' `settings.json`. No database, no app config f
 CLI (`rein-app`):
 | Command | Input | Output | Exit |
 |---|---|---|---|
-| `install [--version X.Y.Z] [--home DIR]` | tag (default latest) | verify report, doctor output | 0 ok · 2 verify fail · 3 doctor fail · 4 runtime missing |
+| `install [--version X.Y.Z] [--home DIR]` | tag (default latest) | verify report, `rein install` and `rein doctor` output | 0 ok · 2 verify fail · 3 `rein doctor` failed · 4 runtime missing · 13 `rein install` failed (its own code printed) |
 | `update [--yes]` | — | available version + notes, then install | as install · 10 already current · 11 offline |
-| `rollback` | — | restored version (code only — says operator data is untouched), doctor output | 0 · 12 no snapshot |
-| `doctor` | — | passthrough of `rein doctor` (and `--json` once P-50 lands) | rein's exit code |
+| `rollback` | — | restored version (code only — says operator data is untouched), `rein install` and `rein doctor` output | 0 · 3 · 13 as install · 12 no snapshot |
+| `doctor [--json]` | — | passthrough of `rein doctor [--json]`, stdout untouched | rein's exit code |
 | `profiles list` | — | table of Profile | 0 |
 | `profiles apply [--profile NAME] [--enable LIST\|all] [--disable LIST] [--undo]` | — | per-profile diff of allowed keys, then write; `--enable/--disable` shell out to `claude plugin …` (D-005) | 0 · 4 `claude` missing · 5 parse error · 6 forbidden key attempted (bug) · 7 `claude plugin` failed |
 | `launch` (Windows) | project dir | opens terminal into tmux | 0 · 20 WSL absent and install declined |
@@ -195,11 +245,18 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   no redirects off-host. **Trust root = the minisign public key compiled into the binary**
   (rein D-153 r1); the app never fetches a key. A `key_id` mismatch is a "newer rein-app
   required" error, surfaced before any signature check. The `Rejecting` backend is a
-  build-flag kill switch, not the default.
+  build-flag kill switch, not the default. **Where the baked key comes from (D-014):** a
+  file committed in this repo, copied byte for byte from rein `docs/contract/release-key.pub`
+  (rein D-155 r6) — reviewable in git, identical in CI and source builds, rotated by a
+  commit. Until the operator has generated the pair and rein has committed that file (E-16),
+  the build keeps reading the `REIN_RELEASE_PUBKEY` variable and fails closed without it. No
+  agent generates, handles or guesses a release key. **Outside the signature (rein D-155
+  r7):** the npm dependencies `rein install` fetches; only rein's gate pins cover them.
 - **Trust boundary 2 — `$HOME/.rein`**: written only by LayoutWriter, only under the mirrored
-  dirs and `VERSION`, per file via temp + rename, after the whole release has verified
-  (D-011). Tarball entries are checked for path traversal (`..`, absolute paths, symlinks
-  escaping the root) before extraction. Operator data is never opened, so there is nothing
+  dirs plus `manifest.json` and `VERSION`, per file via temp + rename, after the whole release has verified
+  (D-011). Tarball members are regular files only; a member the manifest does not list, an
+  absolute name, a `..` segment, a directory entry, an extension header or any link type
+  refuses the whole artifact before the first byte reaches the home (rein D-155 r1). Operator data is never opened, so there is nothing
   to tear, lose or duplicate: a rein that is running during an install keeps writing its own
   SQLite/WAL files undisturbed, and `hooks/` is never absent — every gate hook is the old or
   the new file at every instant (security review E-5 P1-3; no "refuse while rein runs" check).
@@ -222,11 +279,13 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   owners of the home, `.rein`, the snapshot root and its `layout.json`, not every entry
   beneath them, and snapshot/fetch-dir cleanup carries no owner check; a private home
   directory is the precondition, as it is for rein itself.
-- **Trust boundary 3 — profiles**: closed `AllowedKey` enum; `hooks` content comes only from
-  `rein install`'s own output (we re-read the file it wrote; we never author hook entries).
-  Hard-deny on `autoMode`/`permissions`/`defaultMode` (`rein` D-132) on EVERY path including
+- **Trust boundary 3 — profiles**: closed `AllowedKey` enum of three (`enabledPlugins`,
+  `extraKnownMarketplaces`, `attribution`). `hooks` is not ours in any file: the app never
+  reads a `hooks` value to copy it, never writes one, and writes nothing inside a project
+  (rein D-155 r3).
+  Hard-deny on `autoMode`/`permissions`/`defaultMode`/`hooks` (`rein` D-132, D-155) on EVERY path including
   undo. Temp file + rename; `settings.json.rein-bak` is written ONCE (pre-Rein state) and
-  never overwritten; `--undo` restores only the four allowed keys by value from it (D-008).
+  never overwritten; `--undo` restores only the three allowed keys by value from it (D-008).
   `config_dir`/`settings.json` symlinks escaping `config_dir` are refused.
 - **Trust boundary 4 — process**: only contract §2.6 `rein` entry points are executed, with
   args from a fixed list; no user-supplied strings reach a shell. Role tokens are never minted
@@ -250,12 +309,13 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 
 ## Rollback Plan
 - **Install/update**: the previous release payload is kept as the snapshot
-  `$HOME/.rein.prev-<ver>`; `rein-app rollback` syncs it back and re-runs `rein doctor`. A sync
+  `$HOME/.rein.prev-<ver>`; `rein-app rollback` syncs it back (its `manifest.json` included)
+  and re-runs `rein install` and `rein doctor`. A sync
   that fails midway restores from the snapshot it has just taken and leaves `VERSION` at the
   old version; if that restore also fails the error says so and names the snapshot, and
   re-running `install`/`rollback` converges (the sync is idempotent). Operator data is never
   part of an install or a rollback.
-- **Profiles**: `profiles apply --undo` restores the four allowed keys by value from the
+- **Profiles**: `profiles apply --undo` restores the three allowed keys by value from the
   once-written pre-Rein `settings.json.rein-bak` (removing keys the backup lacked); all other
   keys keep their current values — never a whole-file restore (D-008, security P0).
 - **Package**: `brew uninstall rein` / cargo-dist uninstaller removes the binary only; the
@@ -269,10 +329,23 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   manifest; manifest `schema: 2`; `key_id` mismatch (asserts the "newer rein-app" line);
   in-tarball manifest ≠ beside manifest; unlisted tarball file; `..` traversal entry; path
   outside `layout`; wrong `mode`. Each bad case asserts no write under a temp `$HOME`.
+  Member rules (E-12, rein D-155 r1), one refused fixture each: a directory entry; a symlink
+  and a hard link member; a pax extension header; `manifest.json` not first; a `VERSION`
+  member; a `files` path at the top level (`accounts.json`) and one under a non-mirrored
+  directory; a legacy (non-prehashed) signature. The good fixture is built the way rein's
+  writer builds it: `manifest.json` first, regular files only, no directory entries.
 - Upgrade semantics: seed a temp `$HOME/.rein` with operator-owned files (incl.
   `config/rein-workspace.txt`, a fake `mcp/x/node_modules/`) and a stale `bin/old-tool`;
   after install the operator-owned files are byte-identical, `bin/old-tool` is gone, and
   `config/` otherwise matches the tarball.
+- Shipped path wins (E-13, rein D-155 r2): the release ships
+  `mcp/orchestrator-mcp/package-lock.json`; a different live file at that path is replaced,
+  an unshipped `mcp/x/package-lock.json` and `shared/toolchain.sh` are kept, and after a
+  failed sync or a rollback the earlier lock file is back byte for byte.
+- `manifest.json` in the home (E-13): after install it is byte-identical to the in-tarball
+  manifest and is written after `hooks`, before `VERSION` (asserted at the fault seam's stop
+  points); a failed sync and a rollback put the earlier one back; rolling back to a snapshot
+  without one removes it.
 - Untouched outside the mirror (D-011): seed top-level entries the schema-1 list does not
   name (`approvals.sqlite` + `-wal`/`-shm`, `ci/x`, `trash/y`) and a mode-0000 file under
   `secrets/`; after install and after rollback each has the same inode and bytes (never
@@ -280,10 +353,15 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - Sync failure: a fault seam fails the k-th write for every k; after each run the mirrored
   dirs are byte-equal to the pre-install tree, `VERSION` is the old one, and at every stop
   point each `hooks/*` file exists and equals its old or its new content.
-- Snapshot: holds no operator-owned path and nothing from outside the mirrored dirs; N=2 kept;
+- Snapshot: holds no unshipped operator-owned path and nothing from outside the mirrored dirs
+  (besides its own `VERSION`, `layout.json`, `manifest.json`); N=2 kept;
   a tampered `layout.json` (`..`, a `/` in a mirrored name) is refused.
 - Rollback: operator files written after the update survive; the restored code equals the
   earlier payload; a second rollback returns to the newer version; no snapshot → exit 12.
+  With a stubbed `Process` (E-15): `rein install` then `rein doctor` run after the sync, in
+  that order, with the lock held; a failing `rein install` exits 13 and a failing
+  `rein doctor` exits 3, for `install`, `update` and `rollback` alike; `doctor --json` hands
+  the flag to rein and returns its stdout and exit code unchanged.
 - Refusals before any write: a symlinked mirrored dir, a symlinked intermediate component, a
   symlinked `$HOME/.rein`, a file/directory conflict, a held lock. A symlink at a target is
   replaced (its old target file is byte-unchanged); an unshipped link is pruned as a link.
@@ -298,22 +376,32 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   and no two tests share that path concurrently.
 - No-snapshot notice: updating a populated home without a semver `VERSION` prints the one
   line and still completes.
-- Layout equality (E-9, blocked on rein P-50): from a `rein` checkout at tag T, run `install-rein.sh` into temp HOME A;
-  build the artifact with rein's own generator `rein release manifest <tree> --out <dir>`
+- Layout equality (E-9, blocked on rein E-417/E-418/E-420): from a `rein` checkout at tag T, run `install-rein.sh` into temp HOME A;
+  build the artifact with rein's own tools `rein release stage <dir>` then
+  `rein release manifest <dir> --out <out> --pubkey <our test .pub>`
   (unsigned — signing is the separate `rein release sign` step), sign it with OUR throwaway
   test minisign key (never rein's `tests/fixtures/release/` pair, which no app bakes in), run
   `rein-app install --version T` from the fixture server into temp HOME B; `diff -r` of A and
-  B is empty except `VERSION` timestamp fields if any.
-- Operator-owned matcher conformance: every row of rein's `operator-owned-cases.json` yields
-  `expected`; the fixture is vendored and refreshed when rein bumps the manifest schema.
+  B is empty except the documented differences: B has `manifest.json` (a clone install
+  removes it), the install stamp says `artifact` in B and a clone path in A, and
+  `config/rein-workspace.txt` exists only in A.
+- Operator-owned conformance: every row of rein's `operator-owned-cases.json` (path, shipped,
+  expected `kept` / `replaced` / `deleted`) holds for our plan function; the fixture is
+  vendored and refreshed when rein bumps the manifest schema (interim copy until rein E-422).
+- Shared contract fixtures (E-17, blocked on rein E-422): `profile-settings-cases.json`
+  (settings before, the write attempted, accept / refuse) against `rein-profiles`;
+  `layout-v1.json` equals the layout our fixture manifests carry.
 - Profile merge: property test — for random pre-existing JSON, after `apply` every original
   key/value is intact and only allowed keys changed; attempting a forbidden key fails to compile.
+  E-14 (rein D-155 r3): a pre-existing `hooks` value — in the default profile and in every
+  other — is byte-identical after `apply` and after `--undo`; nothing is copied from one
+  profile to another; the `compile_fail` doctest covers `hooks`.
 - Marketplace pin: a local `file://` git fixture with a `stable` branch;
   `claude plugin marketplace add file:///…/fixture.git#stable --scope user` must yield
   `source.ref == "stable"` in the written entry, else exit 7 (D-007). Stubbed `Shell` tests
   assert the exact argv per profile; one real-CLI test is gated on `claude` being present.
 - Undo: after `apply` then operator edits to `permissions`, `--undo` leaves `permissions`
-  untouched and reverts only the four allowed keys (D-008).
+  untouched and reverts only the three allowed keys (D-008).
 - WSL launcher: unit tests against a stubbed `Shell` covering no-WSL, WSL-no-distro, ready.
 
 ## E-## Task Breakdown (registered IDs)
@@ -352,13 +440,37 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   `$HOME`, `$HOME/.rein`, or the snapshot being restored), and the one-line "no snapshot
   taken" notice of step c. §Security trust boundary 2, §Test Plan "Owner guard", "No-snapshot
   notice" (D-013). Depends on E-7. `security_engineer` before commit.
-- E-7, E-8, E-10 and E-11 are DONE (2026-11-09). Phase 1 code is complete; what remains is
-  E-6 (operator: merge PR #1, secrets, first tag) and E-9 (rein P-50).
+- E-7, E-8, E-10 and E-11 are DONE (2026-11-09). rein D-155 (2026-11-09, mirrored as D-014)
+  then corrected the contract in three places; E-12..E-15 bring the code in line, E-16/E-17
+  and E-9 wait on rein or the operator.
+- **E-12** (T3) Verifier, strict member rules of §Components 2 (rein D-155 r1): `manifest.json`
+  first; regular files only; directory entries, links, pax/GNU extension headers and a
+  `VERSION` member refused; every `files` path under a `layout.mirrored` dir; prehashed
+  signatures only. §Test Plan "Member rules". `security_engineer` before commit.
+- **E-13** (T3) LayoutWriter per rein D-155 r1/r2: a shipped path is always written
+  (`operator_owned` protects from deletion only); snapshot also holds the live file at every
+  shipped path and the home's `manifest.json`; `manifest.json` written after `hooks`, before
+  `VERSION`; restore and rollback put it back or remove it; interim conformance fixture in
+  the three-column shape. §Components 3 scope rule, steps a–f; §Test Plan "Shipped path
+  wins", "`manifest.json` in the home", "Snapshot". Depends on E-12. `security_engineer`.
+- **E-14** (T3) `rein-profiles` per rein D-155 r3: remove `Hooks` from `AllowedKey` and the
+  hooks copy in `profiles apply`; three keys in apply and undo. §Components 6, §Security
+  trust boundary 3, §Test Plan "Profile merge". `security_engineer` before commit.
+- **E-15** (T2) CLI: `rollback` runs `rein install` then `rein doctor`; a failed
+  `rein install` is exit 13 on `install`/`update`/`rollback`; `doctor --json` passthrough.
+  §Components 4, 7; §API. Depends on E-13.
+- **E-16** (T3, BLOCKED until rein commits `docs/contract/release-key.pub`) Bake the trust
+  root from a committed copy of that file instead of the `REIN_RELEASE_PUBKEY` variable;
+  release guard checks the file (`ci_gate` first). §Security trust boundary 1 (D-014).
+- **E-17** (T2, BLOCKED on rein E-422) Vendor rein's shared fixtures and run them: replace the
+  interim `operator-owned-cases.json`, add `profile-settings-cases.json` and `layout-v1.json`.
+  §Test Plan "Operator-owned conformance", "Shared contract fixtures".
 - **E-11** (T3) Make the owner guard unskippable: `owner_guard` returns a proof value with no
   public constructor, borrowed from the `InstallLock`; `install_tree_locked`,
   `install_tree_with_faults` and rollback's lock-held writer take it; `compile_fail` doctest;
   CLI refusal tests assert the named path; the `/tmp` test skips on an existing lock
   (§Components 3 step a, §Test Plan "Owner guard"; D-013 addendum). Depends on E-10.
-- **E-9** (T2, BLOCKED on rein P-50 `rein release manifest`) Write the layout-equality test of
-  §Test Plan, including the list of diffs it finds (a retired MCP server's directory is the
-  one expected until rein rules who removes it). Depends on E-7.
+- **E-9** (T2, BLOCKED on rein E-417/E-418/E-420: `rein release stage|manifest` and artifact
+  mode in `rein install`) Write the layout-equality test of
+  §Test Plan, including the list of diffs it finds (beyond the documented ones, a retired MCP
+  server's directory is the one expected until rein rules who removes it). Depends on E-13.

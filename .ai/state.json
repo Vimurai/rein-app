@@ -148,18 +148,20 @@
     {
       "id": "E-9",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "BLOCKED",
       "tier": 2,
       "description": "Write the layout-equality test against install-rein.sh: from a rein checkout at tag T run install-rein.sh into temp HOME A, build the artifact with rein's own generator `rein release manifest`, sign it with our throwaway test minisign key, run `rein-app install --version T` from the fixture server into temp HOME B, and assert `diff -r A B` is empty except the documented exceptions (a retired MCP server's directory is the one expected until rein rules who removes it — report any other diff to the Architect rather than adjusting the writer). EXTERNALLY BLOCKED: do not start until rein P-50 ships `rein release manifest` (the Architect will say so in a handoff) — if this task auto-opens after E-7 while rein still lacks the generator, leave it OPEN and skip it. Per .ai/blueprints/distribution.md §Test Plan \"Layout equality\" and §E-## Task Breakdown E-9 (D-012 ruling 3). Acceptance: the test runs in CI when a rein checkout is available (gated on an env var naming it) and is green.",
       "created_at": "2026-11-09T14:52:14.751Z",
       "completed_at": null,
       "summary": null,
       "depends_on": [
-        "E-7"
+        "E-13"
       ],
-      "ready": true,
-      "blocked_by": [],
-      "updated_at": "2026-11-09T15:29:46.502Z"
+      "ready": false,
+      "blocked_by": [
+        "E-13"
+      ],
+      "updated_at": "2026-11-09T17:01:23.096Z"
     },
     {
       "id": "E-10",
@@ -190,6 +192,98 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-09T16:07:03.119Z"
+    },
+    {
+      "id": "E-12",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 3,
+      "description": "Tighten the rein-release verifier to rein D-155 r1 (strict reader — accept only what rein's tarball writer emits): require `manifest.json` to be the FIRST member; accept only regular-file members (ustar typeflag 0) named in `files`; refuse the whole artifact, before any byte is written, on a directory entry, any link type, a pax or GNU extension header, a device/FIFO, a duplicate, `manifest.json` anywhere but first, or a `VERSION` member; reject at manifest validation any `files` path that is not under a `layout.mirrored` directory (a top-level or operator-owned-only path can no longer ship); keep prehashed-only minisign signatures and prove it with a legacy-signature fixture. Rebuild the good fixture the way rein's writer does (manifest first, regular files only, no directory entries). Per .ai/blueprints/distribution.md §Components 2 \"Member rules\", §Security trust boundary 2, D-014. Acceptance: §Test Plan \"Member rules\" — one refused fixture per rule, each asserting nothing was written under the temp home — and the existing verify/fetch suites green in cargo test --workspace on all three CI targets. Tier 3: security_engineer review before commit.",
+      "created_at": "2026-11-09T17:00:54.798Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-09T17:00:54.801Z"
+    },
+    {
+      "id": "E-13",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 3,
+      "description": "Bring the LayoutWriter in line with rein D-155 r1/r2: (1) a shipped path always wins — `ship` is every manifest file, `operator_owned` protects from deletion only (case: `mcp/orchestrator-mcp/package-lock.json` is shipped and matches `mcp/*/package-lock.json`, so it is written); an owned path the release does not ship is still never opened, and prune never descends into an owned directory; remove `skipped_operator_owned`; (2) the snapshot additionally holds the live file at every shipped path and the home's top-level `manifest.json`, and `snapshot::load` accepts shipped paths that match a pattern; (3) write the in-tarball `manifest.json` byte for byte to `$HOME/.rein/manifest.json` after `hooks` and before `VERSION` (temp + rename); failure restore and rollback put the snapshot's `manifest.json` back, or remove the live one when the snapshot has none; (4) reshape the interim conformance fixture to rein's three columns (path, shipped, expected kept/replaced/deleted) with the precedence case and `shared/toolchain.sh` as a kept path. The scope rule becomes: only paths under `layout.mirrored`, plus `manifest.json` and `VERSION`. Per .ai/blueprints/distribution.md §Components 3 (scope rule, steps a–f), §Data Model Snapshot, D-014. Acceptance: §Test Plan \"Shipped path wins\", \"`manifest.json` in the home\", \"Snapshot\", the conformance rows, and the existing every-k fault-restore and untouched-outside-the-mirror tests green in cargo test --workspace on all three CI targets. Tier 3: security_engineer review before commit.",
+      "created_at": "2026-11-09T17:01:01.314Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-12"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-12"
+      ],
+      "updated_at": "2026-11-09T17:01:01.315Z"
+    },
+    {
+      "id": "E-14",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 3,
+      "description": "Remove `hooks` from the profile manager per rein D-155 r3: delete `AllowedKey::Hooks` (the closed enum becomes `EnabledPlugins | ExtraKnownMarketplaces | Attribution`), delete the code in `profiles apply` that reads the default profile's `hooks` and copies it into other profiles together with its messages and exit paths, and make apply and `--undo` operate on three keys; the app must never read a `hooks` value to copy it, never write or remove one, and write no file inside a project. Update the compile_fail doctest so writing `hooks` (like `autoMode`, `permissions`, `defaultMode`) does not compile, and the help/diff text that says \"four keys\". Per .ai/blueprints/distribution.md §Components 6, §Data Model AllowedKey, §Security trust boundary 3, D-014. Acceptance: §Test Plan \"Profile merge\" E-14 additions (a pre-existing `hooks` value in the default profile and in every other profile is byte-identical after apply and after --undo; nothing is copied between profiles) and the existing property and undo tests green in cargo test --workspace. Tier 3: security_engineer review before commit.",
+      "created_at": "2026-11-09T17:01:05.312Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-09T17:01:05.313Z"
+    },
+    {
+      "id": "E-15",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Align the rein-app CLI with rein D-155 r4/r5: make `rollback` run `rein install` and then `rein doctor` after the sync (lock held, same Runner path as `install`) instead of doctor only; report a failed `rein install` as exit 13 on `install`, `update` and `rollback` with rein's own exit code printed (rein exit 3 = tree mismatch or gate pin, exit 1 = Node floor or missing /bin/bash -p), keeping exit 3 for a failed `rein doctor`, with no retry and no repair; add `rein-app doctor --json`, which passes the flag to `rein doctor` and returns its stdout and exit code untouched (no parsing in phase 1). Per .ai/blueprints/distribution.md §Components 4 and 7, §API table, D-014. Acceptance: §Test Plan \"Rollback\" E-15 lines with a stubbed Process (call order install→doctor under the lock; exit 13 vs 3 for all three commands; `doctor --json` argv and passthrough) green in cargo test --workspace on all three CI targets.",
+      "created_at": "2026-11-09T17:01:10.452Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-13"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-13"
+      ],
+      "updated_at": "2026-11-09T17:01:10.453Z"
+    },
+    {
+      "id": "E-16",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 3,
+      "description": "Bake the release trust root from a committed file: copy rein's `docs/contract/release-key.pub` byte for byte into this repo, build the production minisign verifier from it instead of the `REIN_RELEASE_PUBKEY` repository variable, and change the release workflow's key guard to check the committed file (run `skill: ci_gate` first and record the change in DEVOPS.md); keep the `Rejecting` kill switch selectable by build flag and keep failing closed when no real key is present. EXTERNALLY BLOCKED: do not start until the operator has generated the minisign pair and rein has committed `docs/contract/release-key.pub` (the Architect will say so in a handoff) — never generate, guess or substitute a key, and never commit a throwaway key as the production file. Per .ai/blueprints/distribution.md §Security trust boundary 1 \"Where the baked key comes from\", D-014 decision 4. Acceptance: a release build verifies a fixture signed with the matching key and refuses one signed with another; the workflow fails when the file is absent or malformed; cargo test --workspace green. Tier 3: security_engineer review before commit.",
+      "created_at": "2026-11-09T17:01:14.558Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-09T17:01:23.667Z"
+    },
+    {
+      "id": "E-17",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Vendor rein's shared contract fixtures from rein `tests/fixtures/release/` and run them: replace the interim `operator-owned-cases.json` with rein's (path, shipped, expected kept/replaced/deleted) and assert every row against the sync plan; add `profile-settings-cases.json` (settings before, the write attempted, accept/refuse) and assert every row against rein-profiles; add `layout-v1.json` and assert it equals the layout our fixture manifests carry; note in each test the rein commit the copy was taken from. EXTERNALLY BLOCKED: do not start until rein E-422 has published the fixtures (the Architect will say so in a handoff); report a row our code fails to the Architect instead of editing the fixture. Per .ai/blueprints/distribution.md §Test Plan \"Operator-owned conformance\" and \"Shared contract fixtures\", D-014. Acceptance: all three fixture suites green in cargo test --workspace on all three CI targets.",
+      "created_at": "2026-11-09T17:01:18.951Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-09T17:01:24.069Z"
     }
   ],
   "stamps": [

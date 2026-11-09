@@ -498,3 +498,46 @@ Remove the guard call; nothing else depends on it. The symlink rule and snapshot
 - **`owner_guard_with` still exported, doc-hidden:** accepted. The public `owner_guard` always reads the real uid and is the only form production code may call; a `test-seams` cargo feature would split the build and test matrix to hide a function from code that already runs in the same process. Same status as the `Faults` seam (blueprint §Security).
 - **The `--home /tmp` CLI test passes when it skips:** accepted. The refusal is proven for `install`, `update` and `rollback` by the injected-uid tests on every platform; the `/tmp` test is an extra real-uid check that runs on a fresh CI runner and may skip on a shared developer machine. A skip is not counted as coverage of anything the other tests do not already cover.
 - With E-11 the owner-guard line of work is closed. Reopen only if `rollback` or `install` ever has to run across a privilege boundary (a privileged helper, a system-wide install).
+
+---
+
+## D-014 — Mirror rein D-155: strict tarball members, a shipped path wins, `manifest.json` stays in the home, three profile keys; plus what follows for rollback, exit codes and the baked key
+
+**Date**: 2026-11-09
+**Task**: notice from `rein · Architect` (rein commit 316218b, D-155, P-50 closed) → E-12..E-17; revises D-003, D-011 (scope rule wording), D-002/D-008 ("four keys")
+**Decision**: Adopt rein D-155 r1–r7 as written (contract items are decided in `rein`), and settle the four consequences that are ours to decide.
+
+### Why needed
+rein wrote its release blueprint against its code and found the contract wrong in three places that our shipped code follows. Checked against our tree on 2026-11-09:
+- **Profiles (r3).** `AllowedKey::Hooks` exists and `profiles apply` copies the default profile's `hooks` object into every other profile. Gate hooks are not profile settings at all; the copy must go.
+- **Verifier (r1).** `verify.rs` accepts directory entries and pax extension headers and finds `manifest.json` anywhere in the archive; `in_layout` accepts a `files` path that is only operator-owned (a top-level `accounts.json` could ship). rein's writer emits none of these.
+- **Writer (r2).** `sync::plan` drops every shipped path that matches `operator_owned`. `mcp/orchestrator-mcp/package-lock.json` is shipped and matches `mcp/*/package-lock.json`, so today it would be skipped — and `rein install` now checks the installed tree against the manifest and exits 3 on the difference. Every app install would fail. The home also needs the unpacked `manifest.json`, which we do not write.
+D-155 r2 also confirms the D-011 scope rule (nothing outside the mirrored dirs is touched, listed or not), which answers our open question (a).
+
+### Our own decisions (not contract items)
+1. **Strict reader.** We refuse everything rein's writer does not emit — directory entries, links, pax/GNU extension headers, `manifest.json` not first, a `VERSION` member — instead of tolerating harmless-looking extras. An extension header can rename the member that follows it; a reader that accepts only typeflag `0` has no such parsing difference to exploit. Member *order* after the first is not enforced (rein's own `verify` does not enforce it either).
+2. **Rollback runs `rein install`, then `rein doctor`.** D-011 said doctor only. With D-155 r4 the toolchain pin and the install stamp are written by `rein install` from the installed tree; after a rollback they would describe the newer release. A rollback is an install of the older payload and gets the same two calls. The snapshot therefore carries the home's `manifest.json`; rolling back to a clone-install payload removes it so `rein install` is not mistaken for artifact mode.
+3. **Exit 13 for a failed `rein install`.** Until now a failed `rein install` and a failed `rein doctor` both exited 3. rein's exit 3 from `rein install` means "the tree on disk is not the manifest's" — right after our own sync that is our bug or a concurrent change, and callers (the Phase 2 window first) must tell it from an unhealthy doctor. rein's code is printed, never remapped further.
+4. **The baked key comes from a committed file.** rein D-155 r6 commits the public key as `docs/contract/release-key.pub` and names it as the file we copy. We commit a byte-identical copy and build from it, replacing the `REIN_RELEASE_PUBKEY` repository variable: a variable can be changed in repository settings with no review and no history, and a source build has no key at all. Deferred as E-16 until the operator has generated the pair; the variable path keeps failing closed meanwhile.
+
+### Alternatives considered
+1. **Keep copying `hooks` "because it worked"** — contradicts the contract and writes gate configuration somewhere `rein doctor` does not audit. Rejected.
+2. **Tolerate directory entries and pax headers** (current behaviour) — compatible with more tar writers, none of which sign rein releases. Rejected for the parsing-difference surface.
+3. **Keep skipping shipped operator-owned paths and ask rein to drop the tracked lock file** — rein rejected that itself (D-155 alt 4): it would change what a clone install lays out.
+4. **Have the app repair a tree mismatch** — reimplements `rein install`'s check; contract non-goal.
+5. **Adopt as above (chosen).**
+
+### Constraints driving this decision
+- Contract direction: a change is a D-### in `rein`; we revise, never the reverse (architect.md §2).
+- No release has shipped, so there is no migration: no profile in the wild carries a `hooks` key copied by the app, and no E-7-format snapshot lacks a `manifest.json` that should have one.
+- No agent generates or handles a release key (rein D-155 r6).
+
+### Impact
+- Unlocks: E-12 (verifier), E-13 (writer), E-14 (profiles), E-15 (CLI); E-16 and E-17 wait on the operator's key and rein E-422; E-9 now waits on rein E-417/E-418/E-420.
+- Still open with rein (question (b) of D-011): who removes a retired MCP server's directory under an app install. By D-155's rule its `node_modules` stays; `install-rein.sh` purges it. E-9 will show it.
+- Risk if wrong: the strict reader refuses a future rein writer change (e.g. pax for long names). That is a schema/contract change on rein's side and would arrive as a notice; the refusal message names the member.
+
+### Rollback
+Each task reverts on its own. Reverting E-13 alone makes every artifact install fail rein's tree check, so E-12/E-13 revert together with a hold on releases.
+
+---
