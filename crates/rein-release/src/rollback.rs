@@ -1,23 +1,27 @@
-//! `rein-app rollback` (blueprint §Components 7, §Rollback Plan): swap `$HOME/.rein` with
-//! the newest `$HOME/.rein.prev-*`. The rolled-back-from tree becomes a previous tree, so
-//! a second rollback swaps back. Operator files come with the tree they live in: what was
-//! written since the restored tree was replaced stays in the tree swapped out.
+//! `rein-app rollback` (blueprint §Components 7, §Rollback Plan; D-011): take a snapshot of
+//! the current payload, sync the newest earlier snapshot back with the LayoutWriter
+//! routine, write its `VERSION`, remove the snapshot just restored — so a second rollback
+//! returns to the newer version. Restores **code only**: nothing outside the mirrored dirs,
+//! and no operator-owned path inside them, is ever opened.
 
 use std::fs;
-use std::io;
 use std::path::PathBuf;
 
 use semver::Version;
 
-use crate::layout::{InstallLock, InstallPaths, LayoutError, free_prev_slot, installed_version};
+use crate::layout::{
+    InstallLock, InstallPaths, LayoutError, home_exists, installed_version, sync_loaded,
+};
+use crate::snapshot;
+use crate::sync::{self, Faults};
 
 /// What a rollback did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RollbackOutcome {
-    /// Version now live (`None` if its `VERSION` is missing or not semver).
-    pub restored: Option<Version>,
-    /// Where the tree that was live now lives (`None` if there was no live tree).
-    pub swapped_out: Option<PathBuf>,
+    /// Version now live.
+    pub restored: Version,
+    /// Snapshot of the payload that was live before (`None` if it had no valid `VERSION`).
+    pub snapshot: Option<PathBuf>,
 }
 
 /// Rolling back failed.
@@ -32,7 +36,10 @@ impl std::fmt::Display for RollbackError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RollbackError::NoPrevious => {
-                write!(f, "rollback: no previous tree ($HOME/.rein.prev-*)")
+                write!(
+                    f,
+                    "rollback: no snapshot ($HOME/.rein.prev-*) to roll back to"
+                )
             }
             RollbackError::Layout(e) => write!(f, "{e}"),
         }
@@ -41,109 +48,67 @@ impl std::fmt::Display for RollbackError {
 
 impl std::error::Error for RollbackError {}
 
-/// Take the install lock and swap in the newest previous tree. The caller keeps the
+impl From<LayoutError> for RollbackError {
+    fn from(e: LayoutError) -> Self {
+        RollbackError::Layout(e)
+    }
+}
+
+/// Take the install lock and roll back to the newest snapshot. The caller keeps the
 /// returned lock while it runs `rein doctor`.
 pub fn rollback_tree(
     paths: &InstallPaths,
 ) -> Result<(RollbackOutcome, InstallLock), RollbackError> {
-    let lock = InstallLock::acquire(paths).map_err(RollbackError::Layout)?;
-    let io_err = |e: io::Error| RollbackError::Layout(LayoutError::Staging(e.to_string()));
+    let lock = InstallLock::acquire(paths)?;
+    let io_err = |e: std::io::Error| RollbackError::Layout(LayoutError::Io(e.to_string()));
+    // Chosen before the new snapshot below exists, so it is the newest *earlier* one.
     let target = paths
         .previous_trees()
         .map_err(io_err)?
         .into_iter()
         .next()
         .ok_or(RollbackError::NoPrevious)?;
-
+    let snap = snapshot::load(&target)?;
     let live = paths.rein();
-    let live_exists = match fs::symlink_metadata(&live) {
-        Ok(m) if m.is_dir() => true,
-        Ok(_) => return Err(RollbackError::Layout(LayoutError::NotADirectory(live))),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => false,
-        Err(e) => return Err(io_err(e)),
-    };
+    let live_exists = home_exists(&live)?;
+    let source = snap.rels();
+    sync::preflight(&live, &snap.layout.mirrored, &source)?;
 
-    let mut swapped_out = None;
-    if live_exists {
-        let label = installed_version(&live).map_or_else(|| "unknown".into(), |v| v.to_string());
-        let slot = free_prev_slot(paths, &label);
-        fs::rename(&live, &slot).map_err(|e| {
-            RollbackError::Layout(LayoutError::Swap {
-                reason: format!("moving {} aside: {e}", live.display()),
-                staging: target.clone(),
-                restored: true,
-            })
-        })?;
-        swapped_out = Some(slot);
+    let current = match installed_version(&live) {
+        Some(v) if live_exists => {
+            let scan = sync::scan(&live, &snap.layout.mirrored, &snap.matcher).map_err(io_err)?;
+            Some(
+                snapshot::take(paths, &live, &v, &scan.entries, &snap.layout)
+                    .map_err(|e| LayoutError::Snapshot(e.to_string()))?,
+            )
+        }
+        _ => None,
+    };
+    if !live_exists {
+        fs::create_dir(&live).map_err(io_err)?;
     }
-    if let Err(e) = fs::rename(&target, &live) {
-        let restored = swapped_out
+
+    let synced = sync_loaded(&live, &snap, &Faults::none()).and_then(|()| {
+        sync::write_version(&live, &snap.version.to_string(), &Faults::none())
+            .map_err(|e| LayoutError::Io(e.to_string()))
+    });
+    if let Err(e) = synced {
+        let restored = current
             .as_ref()
-            .is_none_or(|s| fs::rename(s, &live).is_ok());
-        return Err(RollbackError::Layout(LayoutError::Swap {
-            reason: format!("renaming {} into place: {e}", target.display()),
-            staging: target,
+            .is_some_and(|s| crate::layout::sync_from_snapshot(&live, s).is_ok());
+        return Err(RollbackError::Layout(LayoutError::Sync {
+            reason: e.to_string(),
+            snapshot: current,
             restored,
         }));
     }
+    let _ = fs::remove_dir_all(&snap.root);
+    snapshot::prune(paths);
     Ok((
         RollbackOutcome {
-            restored: installed_version(&live),
-            swapped_out,
+            restored: snap.version,
+            snapshot: current,
         },
         lock,
     ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::{Duration, SystemTime};
-
-    fn tree(path: &std::path::Path, version: &str, age_days: u64) {
-        fs::create_dir_all(path).unwrap();
-        let v = path.join("VERSION");
-        fs::write(&v, format!("{version}\n")).unwrap();
-        let f = fs::File::options().write(true).open(&v).unwrap();
-        f.set_modified(SystemTime::now() - Duration::from_secs(age_days * 86_400))
-            .unwrap();
-    }
-
-    #[test]
-    fn swaps_in_the_newest_previous_tree_and_back_again() {
-        let home = tempfile::tempdir().unwrap();
-        let p = InstallPaths::new(home.path());
-        tree(&p.prev("0.3.0"), "0.3.0", 20);
-        tree(&p.prev("0.4.0"), "0.4.0", 10);
-        tree(&p.rein(), "0.5.0", 0);
-
-        let (out, lock) = rollback_tree(&p).unwrap();
-        assert_eq!(out.restored, Some(Version::new(0, 4, 0)));
-        assert_eq!(out.swapped_out, Some(p.prev("0.5.0")));
-        assert!(p.lock().exists(), "lock held for the caller's rein doctor");
-        drop(lock);
-
-        let (again, _lock) = rollback_tree(&p).unwrap();
-        assert_eq!(again.restored, Some(Version::new(0, 5, 0)), "toggles back");
-    }
-
-    #[test]
-    fn no_previous_tree_is_its_own_error_and_changes_nothing() {
-        let home = tempfile::tempdir().unwrap();
-        let p = InstallPaths::new(home.path());
-        tree(&p.rein(), "0.5.0", 0);
-        assert!(matches!(rollback_tree(&p), Err(RollbackError::NoPrevious)));
-        assert!(p.rein().join("VERSION").exists());
-        assert!(!p.lock().exists());
-    }
-
-    #[test]
-    fn restores_a_previous_tree_when_the_live_one_is_missing() {
-        let home = tempfile::tempdir().unwrap();
-        let p = InstallPaths::new(home.path());
-        tree(&p.prev("0.4.0"), "0.4.0", 1);
-        let (out, _lock) = rollback_tree(&p).unwrap();
-        assert_eq!(out.restored, Some(Version::new(0, 4, 0)));
-        assert_eq!(out.swapped_out, None);
-    }
 }

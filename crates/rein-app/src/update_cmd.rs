@@ -114,15 +114,14 @@ pub fn rollback(home: &Path, process: &dyn Process) -> u8 {
             return EXIT_ERROR;
         }
     };
-    let restored = outcome
-        .restored
-        .map_or_else(|| "(unknown version)".to_string(), |v| v.to_string());
-    println!("rein-app: rolled back to rein {restored}");
-    if let Some(out) = &outcome.swapped_out {
+    println!(
+        "rein-app: rolled back to rein {} (code only; your data in $HOME/.rein is unchanged)",
+        outcome.restored
+    );
+    if let Some(snap) = &outcome.snapshot {
         println!(
-            "rein-app: the tree you rolled back from is kept at {} — operator files written since \
-             the restored tree was replaced (accounts, approvals, secrets) are there, not in $HOME/.rein",
-            out.display()
+            "rein-app: the version you rolled back from is kept at {} — `rein-app rollback` again returns to it",
+            snap.display()
         );
     }
     let result = run_rein(process, home, &[ReinCommand::Doctor]);
@@ -270,9 +269,20 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         let rein = OkRein::default();
         assert_eq!(rollback(home.path(), &rein), EXIT_NO_PREVIOUS);
-        fs::create_dir_all(home.path().join(".rein.prev-0.4.0")).unwrap();
-        fs::write(home.path().join(".rein.prev-0.4.0/VERSION"), "0.4.0\n").unwrap();
+        let snap = home.path().join(".rein.prev-0.4.0");
+        fs::create_dir_all(snap.join("tree/bin")).unwrap();
+        fs::write(snap.join("tree/bin/rein"), "old").unwrap();
+        fs::write(snap.join("VERSION"), "0.4.0\n").unwrap();
+        fs::write(
+            snap.join("layout.json"),
+            r#"{"mirrored":["bin"],"operator_owned":[]}"#,
+        )
+        .unwrap();
         assert_eq!(rollback(home.path(), &rein), 0);
+        assert_eq!(
+            fs::read_to_string(home.path().join(".rein/bin/rein")).unwrap(),
+            "old"
+        );
         assert_eq!(*rein.0.borrow(), [vec!["doctor"]]);
         assert_eq!(doctor(home.path(), &rein), 0);
     }

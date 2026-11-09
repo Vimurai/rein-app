@@ -1,44 +1,31 @@
-//! `LayoutWriter` — lay a verified release out as the Rein home (blueprint §Components 3,
-//! rein D-153 r5, §Security trust boundary 2, §Execution Constraints single-writer).
+//! `LayoutWriter` — lay a verified release out as the Rein home by an **in-place, per-file
+//! sync of the mirrored directories** (blueprint §Components 3 steps a–f, D-011, which
+//! supersedes the E-5 whole-home staging swap), the way `install-rein.sh` does it.
 //!
-//! The next tree is built in `$HOME/.rein.staging-<ver>` and swapped in by rename:
+//! `$HOME/.rein` itself is never renamed, copied or moved. Only paths under a
+//! `layout.mirrored` directory and `VERSION` are opened; inside the mirrored dirs,
+//! `layout.operator_owned` paths are never opened either. Steps, all under
+//! `$HOME/.rein.lock`:
 //!
-//! 1. every listed file under a `layout.mirrored` directory comes from the verified release,
-//!    so a mirrored directory holds exactly what the tarball ships (stale files, e.g. a
-//!    retired `bin/old-tool`, are gone);
-//! 2. every path matching `layout.operator_owned` is carried over from the live tree, never
-//!    taken from the tarball — the list is read from the manifest, never hard-coded;
-//! 3. every top-level entry of the live tree that is NOT a mirrored directory is carried
-//!    over as is. `install-rein.sh` never touches those either, and the live home holds
-//!    rein data the schema-1 `operator_owned` list does not name (`approvals.sqlite`,
-//!    `*.sqlite-wal`, `ci/`, `trash/`): dropping them would lose committed data;
-//! 4. `VERSION` is written last (temp file + rename);
-//! 5. the live tree is renamed to `$HOME/.rein.prev-<oldver>` (`~N` appended if taken)
-//!    and the staging tree to `$HOME/.rein`; at most [`KEEP_PREVIOUS`] previous trees are
-//!    kept.
-//!
-//! Directories in the new tree take the mode of the same directory in the live tree, and
-//! the staging root is 0700 until it is complete, so a `chmod 700` home stays private.
-//!
-//! Carried-over entries are copied, never moved, so the live tree is unchanged until the
-//! swap. Symlinks are copied as links (never followed); sockets and FIFOs are skipped.
-//! `$HOME/.rein.lock` keeps a second `install`/`update`/`rollback` out.
+//! a. preflight refusals before any write (symlinked home, mirrored dir or target component);
+//! b. pure [`SyncPlan`](crate::SyncPlan) `{ship, prune}`;
+//! c. snapshot of the live payload to `$HOME/.rein.prev-<oldver>` (N=2 kept);
+//! d. sync, `hooks` last: temp file beside the target, mode, rename; then prune;
+//! e. `VERSION` last;
+//! f. on a failure in d/e, sync the snapshot back; `VERSION` stays old.
 
 use std::fmt;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use semver::Version;
 
-use crate::manifest::Manifest;
+use crate::snapshot;
+use crate::sync::{self, Faults, ShipItem, Source};
 use crate::verify::VerifiedRelease;
 
-/// Previous trees kept beside the live one (blueprint: N=2).
-pub const KEEP_PREVIOUS: usize = 2;
-
 const PREV_PREFIX: &str = ".rein.prev-";
-const STAGING_PREFIX: &str = ".rein.staging-";
 
 /// Where the Rein home and its siblings live under a home directory.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,6 +37,10 @@ impl InstallPaths {
     pub fn new(home: impl Into<PathBuf>) -> Self {
         Self { home: home.into() }
     }
+    /// The home directory itself.
+    pub fn home(&self) -> &Path {
+        &self.home
+    }
     /// `$HOME/.rein`
     pub fn rein(&self) -> PathBuf {
         self.home.join(".rein")
@@ -58,15 +49,12 @@ impl InstallPaths {
     pub fn lock(&self) -> PathBuf {
         self.home.join(".rein.lock")
     }
-    /// `$HOME/.rein.staging-<ver>`
-    pub fn staging(&self, v: &Version) -> PathBuf {
-        self.home.join(format!("{STAGING_PREFIX}{v}"))
-    }
     /// `$HOME/.rein.prev-<label>`
     pub fn prev(&self, label: &str) -> PathBuf {
         self.home.join(format!("{PREV_PREFIX}{label}"))
     }
-    /// Previous trees, newest first (by when their `VERSION` was written).
+    /// Snapshots (directories holding real `VERSION` and `layout.json` files), newest first
+    /// by when their `VERSION` was written.
     pub fn previous_trees(&self) -> io::Result<Vec<PathBuf>> {
         let mut found = Vec::new();
         for entry in fs::read_dir(&self.home)? {
@@ -75,6 +63,13 @@ impl InstallPaths {
             let Some(name) = name.to_str() else { continue };
             if !name.starts_with(PREV_PREFIX) || !entry.file_type()?.is_dir() {
                 continue; // a symlink named .rein.prev-* is never ours to touch
+            }
+            // Only a snapshot we wrote (real VERSION + layout.json files) is pruned or
+            // restored; an operator's own `.rein.prev-manual` is left alone (review P2-3).
+            let real_file =
+                |n: &str| fs::symlink_metadata(entry.path().join(n)).is_ok_and(|m| m.is_file());
+            if !real_file("VERSION") || !real_file("layout.json") {
+                continue;
             }
             let stamp = fs::symlink_metadata(entry.path().join("VERSION"))
                 .and_then(|m| m.modified())
@@ -92,38 +87,52 @@ pub fn installed_version(tree: &Path) -> Option<Version> {
     Version::parse(raw.trim()).ok()
 }
 
+/// `.rein.prev-<label>`, or `.rein.prev-<label>~N` if that name is taken — an existing
+/// snapshot is never overwritten.
+pub(crate) fn free_prev_slot(paths: &InstallPaths, label: &str) -> PathBuf {
+    let mut slot = paths.prev(label);
+    let mut n = 1;
+    while fs::symlink_metadata(&slot).is_ok() {
+        slot = paths.prev(&format!("{label}~{n}"));
+        n += 1;
+    }
+    slot
+}
+
 /// What an install did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallOutcome {
     pub version: Version,
-    /// Where the replaced tree now lives, if there was one.
+    /// The snapshot of the replaced payload, if there was an installed version.
     pub previous: Option<PathBuf>,
-    /// Previous trees removed to keep [`KEEP_PREVIOUS`].
+    /// Snapshots removed to keep [`snapshot::KEEP_SNAPSHOTS`](crate::KEEP_SNAPSHOTS).
     pub pruned: Vec<PathBuf>,
     /// Listed files that match `operator_owned` and were therefore not written.
     pub skipped_operator_owned: Vec<String>,
-    /// Live-tree entries not carried over (sockets, FIFOs, devices).
-    pub skipped_special: Vec<String>,
 }
 
-/// Laying out the tree failed. `$HOME/.rein` is unchanged unless the error says otherwise.
+/// Laying out the tree failed.
 #[derive(Debug)]
 pub enum LayoutError {
     /// Another install/update/rollback holds `$HOME/.rein.lock`.
     Locked(PathBuf),
-    /// `$HOME/.rein` is missing but a previous tree exists.
-    OrphanedPrevious(PathBuf),
-    /// `$HOME/.rein` exists but is not a directory (a symlink or a file).
+    /// A path that must be a directory is not one (nothing was written).
     NotADirectory(PathBuf),
-    /// Building the staging tree failed; the staging tree was removed.
-    Staging(String),
-    /// The swap failed; the staging tree is left for inspection. `restored` says whether
-    /// `$HOME/.rein` was put back (it is only missing if `restored` is false).
-    Swap {
+    /// A symlink where the writer would have to write through it (nothing was written).
+    Symlink(PathBuf),
+    /// A directory where a release file goes, or a file where a directory is needed
+    /// (nothing was written).
+    Conflict(PathBuf),
+    /// A snapshot could not be taken or read.
+    Snapshot(String),
+    /// The sync failed. `snapshot` was synced back when `restored`; `VERSION` is unchanged.
+    Sync {
         reason: String,
-        staging: PathBuf,
+        snapshot: Option<PathBuf>,
         restored: bool,
     },
+    /// Local I/O failed before any write.
+    Io(String),
 }
 
 impl fmt::Display for LayoutError {
@@ -134,42 +143,55 @@ impl fmt::Display for LayoutError {
                 "layout: {} exists — another rein-app install/update/rollback is running; it holds that run's PID — remove the file only if no such process is alive",
                 p.display()
             ),
-            LayoutError::OrphanedPrevious(p) => write!(
+            LayoutError::NotADirectory(p) => {
+                write!(
+                    f,
+                    "layout: {} is not a directory — nothing was changed",
+                    p.display()
+                )
+            }
+            LayoutError::Symlink(p) => write!(
                 f,
-                "layout: $HOME/.rein is missing but {} exists — move it back to $HOME/.rein (or remove it) and re-run",
+                "layout: {} is a symlink; rein-app never writes through one — nothing was changed",
                 p.display()
             ),
-            LayoutError::NotADirectory(p) => write!(
+            LayoutError::Conflict(p) => write!(
                 f,
-                "layout: {} is not a directory (symlinked Rein homes are not supported)",
+                "layout: {} is in the way of the release layout (file vs directory) — nothing was changed",
                 p.display()
             ),
-            LayoutError::Staging(m) => write!(f, "layout: staging failed ({m})"),
-            LayoutError::Swap {
+            LayoutError::Snapshot(m) => write!(f, "layout: snapshot: {m}"),
+            LayoutError::Sync {
                 reason,
-                staging,
+                snapshot,
                 restored,
-            } => write!(
-                f,
-                "layout: swap failed ({reason}); staging tree left at {}; previous tree {}",
-                staging.display(),
-                if *restored {
-                    "restored"
-                } else {
-                    "NOT restored — see the .rein.prev-* directory"
-                }
-            ),
+            } => match (snapshot, restored) {
+                (Some(s), true) => write!(
+                    f,
+                    "layout: sync failed ({reason}); the previous files were restored from {}",
+                    s.display()
+                ),
+                (Some(s), false) => write!(
+                    f,
+                    "layout: sync failed ({reason}) and restoring {} failed too — re-run install or rollback",
+                    s.display()
+                ),
+                (None, _) => write!(
+                    f,
+                    "layout: sync failed ({reason}); no earlier version to restore — re-run install to complete it"
+                ),
+            },
+            LayoutError::Io(m) => write!(f, "layout: i/o error ({m})"),
         }
     }
 }
 
 impl std::error::Error for LayoutError {}
 
-/// Held while laying out; removes `$HOME/.rein.lock` when dropped.
+/// Held while laying out; removes `$HOME/.rein.lock` when dropped, if still its own.
 #[derive(Debug)]
 pub struct InstallLock {
     path: PathBuf,
-    /// What this run wrote into the lock; only a lock holding it is removed (P2-2).
     token: String,
 }
 
@@ -184,11 +206,11 @@ impl InstallLock {
                     .map_or(0, |d| d.as_nanos());
                 let token = format!("{} {nanos}\n", std::process::id());
                 f.write_all(token.as_bytes())
-                    .map_err(|e| LayoutError::Staging(format!("{}: {e}", path.display())))?;
+                    .map_err(|e| LayoutError::Io(format!("{}: {e}", path.display())))?;
                 Ok(Self { path, token })
             }
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Err(LayoutError::Locked(path)),
-            Err(e) => Err(LayoutError::Staging(format!("{}: {e}", path.display()))),
+            Err(e) => Err(LayoutError::Io(format!("{}: {e}", path.display()))),
         }
     }
 }
@@ -216,328 +238,130 @@ pub fn install_tree_locked(
     paths: &InstallPaths,
     release: &VerifiedRelease,
 ) -> Result<InstallOutcome, LayoutError> {
+    install_tree_with_faults(paths, release, &Faults::none())
+}
+
+/// [`install_tree_locked`] with the test fault seam.
+#[doc(hidden)]
+pub fn install_tree_with_faults(
+    paths: &InstallPaths,
+    release: &VerifiedRelease,
+    faults: &Faults,
+) -> Result<InstallOutcome, LayoutError> {
     let live = paths.rein();
-    let live_exists = match fs::symlink_metadata(&live) {
-        Ok(m) if m.is_dir() => true,
-        Ok(_) => return Err(LayoutError::NotADirectory(live)),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => false,
-        Err(e) => return Err(LayoutError::Staging(format!("{}: {e}", live.display()))),
-    };
-    // No live tree but a previous one: a swap failed and was not restored, or the operator
-    // moved the home away. Installing fresh would leave their data behind (P2-4).
-    if !live_exists
-        && let Some(prev) = paths
-            .previous_trees()
-            .ok()
-            .and_then(|p| p.into_iter().next())
-    {
-        return Err(LayoutError::OrphanedPrevious(prev));
-    }
-
+    let live_exists = home_exists(&live)?;
     let manifest = &release.manifest;
-    let staging = paths.staging(&manifest.version);
-    let mut outcome = InstallOutcome {
-        version: manifest.version.clone(),
-        previous: None,
-        pruned: Vec::new(),
-        skipped_operator_owned: Vec::new(),
-        skipped_special: Vec::new(),
-    };
+    let layout = &manifest.layout;
+    let matcher = manifest.operator_owned();
+    let source: Vec<&str> = manifest.files.iter().map(|f| f.path.as_str()).collect();
 
-    // A staging tree left by an earlier failed swap is ours by name; rebuild from scratch.
-    remove_own_dir(&staging).map_err(|e| LayoutError::Staging(e.to_string()))?;
-    let built = build_staging(
-        manifest,
-        &release.tree,
-        live_exists.then_some(live.as_path()),
-        &staging,
-        &mut outcome,
-    );
-    if let Err(e) = built {
-        let _ = fs::remove_dir_all(&staging);
-        return Err(LayoutError::Staging(e.to_string()));
+    // a. preflight, b. plan
+    sync::preflight(&live, &layout.mirrored, &source)?;
+    let scan = if live_exists {
+        sync::scan(&live, &layout.mirrored, matcher).map_err(|e| LayoutError::Io(e.to_string()))?
+    } else {
+        sync::Scan::default()
+    };
+    let plan = sync::plan(&source, &scan.entries, matcher);
+    let skipped_operator_owned = source
+        .iter()
+        .filter(|p| !plan.ship.iter().any(|s| s == *p))
+        .map(|p| p.to_string())
+        .collect();
+
+    // c. snapshot (only when an installed version exists)
+    let previous = match installed_version(&live) {
+        Some(old) => Some(
+            snapshot::take(paths, &live, &old, &scan.entries, layout)
+                .map_err(|e| LayoutError::Snapshot(e.to_string()))?,
+        ),
+        None => None,
+    };
+    if !live_exists {
+        fs::create_dir(&live).map_err(|e| LayoutError::Io(e.to_string()))?;
     }
 
-    // The swap: the only mutation of $HOME/.rein.
-    if live_exists {
-        let label =
-            installed_version(&live).map_or_else(|| "unknown".to_string(), |v| v.to_string());
-        let prev = free_prev_slot(paths, &label);
-        if let Err(e) = fs::rename(&live, &prev) {
-            return Err(LayoutError::Swap {
-                reason: format!("moving {} aside: {e}", live.display()),
-                staging,
-                restored: true, // the live tree was not moved
-            });
-        }
-        if let Err(e) = fs::rename(&staging, &live) {
-            let restored = fs::rename(&prev, &live).is_ok();
-            return Err(LayoutError::Swap {
-                reason: format!("renaming staging into place: {e}"),
-                staging,
-                restored,
-            });
-        }
-        outcome.previous = Some(prev);
-    } else if let Err(e) = fs::rename(&staging, &live) {
-        return Err(LayoutError::Swap {
-            reason: format!("renaming staging into place: {e}"),
-            staging,
-            restored: true, // there was nothing to restore
+    // d. sync, e. VERSION
+    let modes: std::collections::HashMap<&str, u32> = manifest
+        .files
+        .iter()
+        .map(|f| (f.path.as_str(), f.mode.bits()))
+        .collect();
+    let items: Vec<ShipItem> = plan
+        .ship
+        .iter()
+        .map(|rel| ShipItem {
+            rel: rel.clone(),
+            src: Source::File {
+                from: release.tree.join(rel),
+                mode: modes[rel.as_str()],
+            },
+        })
+        .collect();
+    let synced = sync::apply(&live, &layout.mirrored, &items, &plan, &scan.dirs, faults)
+        .and_then(|()| sync::write_version(&live, &manifest.version.to_string(), faults));
+
+    // f. restore on failure
+    if let Err(e) = synced {
+        let restored = !faults.skip_restore
+            && previous
+                .as_ref()
+                .is_some_and(|s| sync_from_snapshot(&live, s).is_ok());
+        return Err(LayoutError::Sync {
+            reason: e.to_string(),
+            snapshot: previous,
+            restored,
         });
     }
-
-    // Keep N previous trees. A failure here leaves an extra tree, never a broken one.
-    if let Ok(prevs) = paths.previous_trees() {
-        for old in prevs.into_iter().skip(KEEP_PREVIOUS) {
-            if fs::remove_dir_all(&old).is_ok() {
-                outcome.pruned.push(old);
-            }
-        }
-    }
-    Ok(outcome)
+    Ok(InstallOutcome {
+        version: manifest.version.clone(),
+        previous,
+        pruned: snapshot::prune(paths),
+        skipped_operator_owned,
+    })
 }
 
-/// `.rein.prev-<label>`, or `.rein.prev-<label>~N` if that name is taken — an existing
-/// previous tree is never overwritten (P2-3).
-pub(crate) fn free_prev_slot(paths: &InstallPaths, label: &str) -> PathBuf {
-    let mut slot = paths.prev(label);
-    let mut n = 1;
-    while fs::symlink_metadata(&slot).is_ok() {
-        slot = paths.prev(&format!("{label}~{n}"));
-        n += 1;
-    }
-    slot
-}
-
-/// Remove `dir` if it is a real directory; refuse a symlink or file in its place.
-fn remove_own_dir(dir: &Path) -> io::Result<()> {
-    match fs::symlink_metadata(dir) {
-        Ok(m) if m.is_dir() => fs::remove_dir_all(dir),
-        Ok(_) => Err(io::Error::other(format!(
-            "{} exists and is not a directory",
-            dir.display()
-        ))),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
+/// `$HOME/.rein`: `Ok(false)` if absent, `Ok(true)` if a real directory, else refuse.
+pub(crate) fn home_exists(live: &Path) -> Result<bool, LayoutError> {
+    match fs::symlink_metadata(live) {
+        Ok(m) if m.file_type().is_symlink() => Err(LayoutError::Symlink(live.to_path_buf())),
+        Ok(m) if m.is_dir() => Ok(true),
+        Ok(_) => Err(LayoutError::NotADirectory(live.to_path_buf())),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(LayoutError::Io(format!("{}: {e}", live.display()))),
     }
 }
 
-/// Where carried entries come from and go to.
-struct Trees<'a> {
-    staging: &'a Path,
-    live: Option<&'a Path>,
-    /// Directories created by `ensure_parents`, in creation order (parents first).
-    created: std::cell::RefCell<Vec<PathBuf>>,
+/// Sync the snapshot at `root` into `live` (failure restore and rollback). `VERSION` is
+/// not touched.
+pub(crate) fn sync_from_snapshot(
+    live: &Path,
+    root: &Path,
+) -> Result<snapshot::Loaded, LayoutError> {
+    let snap = snapshot::load(root)?;
+    sync_loaded(live, &snap, &Faults::none())?;
+    Ok(snap)
 }
 
-impl Trees<'_> {
-    /// Create the missing parents of `rel` inside staging, 0700 for now; [`Self::apply_modes`]
-    /// gives each the mode of the same live directory at the end, deepest first, so a
-    /// read-only live directory (0500 `config/`) does not block writing into its copy.
-    /// The staging root stays 0700 until then (E-5 security review P1-1, re-review P2-1).
-    fn ensure_parents(&self, rel: &Path) -> io::Result<()> {
-        let Some(parent) = rel.parent() else {
-            return Ok(());
-        };
-        let mut cur = PathBuf::new();
-        for comp in parent.components() {
-            cur.push(comp);
-            let dir = self.staging.join(&cur);
-            if fs::symlink_metadata(&dir).is_err() {
-                create_private_dir(&dir)?;
-                self.created.borrow_mut().push(cur.clone());
-            }
-        }
-        Ok(())
-    }
-
-    /// Give every directory `ensure_parents` created its live counterpart's mode (default
-    /// 0755), children before parents.
-    fn apply_modes(&self) -> io::Result<()> {
-        for rel in self.created.borrow().iter().rev() {
-            set_dir_mode(
-                &self.staging.join(rel),
-                self.live.map(|l| l.join(rel)).as_deref(),
-            )?;
-        }
-        Ok(())
-    }
-}
-
-fn build_staging(
-    manifest: &Manifest,
-    verified: &Path,
-    live: Option<&Path>,
-    staging: &Path,
-    outcome: &mut InstallOutcome,
-) -> io::Result<()> {
-    create_private_dir(staging)?;
-    let trees = Trees {
-        staging,
+pub(crate) fn sync_loaded(
+    live: &Path,
+    snap: &snapshot::Loaded,
+    faults: &Faults,
+) -> Result<(), LayoutError> {
+    let source = snap.rels();
+    sync::preflight(live, &snap.layout.mirrored, &source)?;
+    let io_err = |e: io::Error| LayoutError::Io(e.to_string());
+    let scan = sync::scan(live, &snap.layout.mirrored, &snap.matcher).map_err(io_err)?;
+    let plan = sync::plan(&source, &scan.entries, &snap.matcher);
+    sync::apply(
         live,
-        created: std::cell::RefCell::new(Vec::new()),
-    };
-    let owned = manifest.operator_owned();
-
-    // 1. Mirrored files from the verified release (operator-owned ones are never written).
-    for file in &manifest.files {
-        if owned.matches(&file.path, false) || has_owned_ancestor(manifest, &file.path) {
-            outcome.skipped_operator_owned.push(file.path.clone());
-            continue;
-        }
-        let rel = Path::new(&file.path);
-        trees.ensure_parents(rel)?;
-        fs::copy(verified.join(rel), staging.join(rel))?; // the verifier's mode comes along
-    }
-
-    // 2–3. Carry over from the live tree.
-    if let Some(live) = live {
-        for entry in fs::read_dir(live)? {
-            let entry = entry?;
-            let name = entry.file_name();
-            let Some(utf8) = name.to_str() else {
-                // Not a manifest path either way: carry it over untouched.
-                copy_entry(&trees, Path::new(&name), outcome)?;
-                continue;
-            };
-            if utf8 == "VERSION" {
-                continue; // written last, below
-            }
-            let mirrored = manifest.layout.mirrored.iter().any(|m| m == utf8);
-            if !mirrored {
-                copy_entry(&trees, Path::new(&name), outcome)?;
-            } else if entry.file_type()?.is_dir() {
-                carry_owned(manifest, &trees, utf8, outcome)?;
-            }
-            // A mirrored name that is not a directory in the live tree is replaced.
-        }
-    }
-
-    // 4. VERSION last, then the root takes the live root's mode.
-    let tmp = staging.join("VERSION.tmp");
-    let mut f = File::create_new(&tmp)?;
-    writeln!(f, "{}", manifest.version)?;
-    f.sync_all()?;
-    drop(f);
-    fs::rename(&tmp, staging.join("VERSION"))?;
-    trees.apply_modes()?;
-    set_dir_mode(staging, live)
-}
-
-/// Does any proper ancestor directory of `path` match `operator_owned`?
-fn has_owned_ancestor(manifest: &Manifest, path: &str) -> bool {
-    let owned = manifest.operator_owned();
-    let mut end = 0;
-    while let Some(i) = path[end..].find('/') {
-        end += i;
-        if owned.matches(&path[..end], true) {
-            return true;
-        }
-        end += 1;
-    }
-    false
-}
-
-/// Inside a mirrored directory, carry over only operator-owned entries.
-fn carry_owned(
-    manifest: &Manifest,
-    trees: &Trees<'_>,
-    rel: &str,
-    outcome: &mut InstallOutcome,
-) -> io::Result<()> {
-    let owned = manifest.operator_owned();
-    let Some(live) = trees.live else {
-        return Ok(());
-    };
-    for entry in fs::read_dir(live.join(rel))? {
-        let entry = entry?;
-        let name = entry.file_name();
-        let Some(name) = name.to_str() else { continue }; // never a manifest path
-        let child = format!("{rel}/{name}");
-        let kind = entry.file_type()?;
-        if owned.matches(&child, kind.is_dir()) {
-            copy_entry(trees, Path::new(&child), outcome)?;
-        } else if kind.is_dir() && owned.may_contain(&child) {
-            carry_owned(manifest, trees, &child, outcome)?;
-        }
-    }
-    Ok(())
-}
-
-/// Copy the live entry at `rel` (a file, symlink or directory tree) into staging without
-/// following symlinks. An existing target is an error, never overwritten.
-fn copy_entry(trees: &Trees<'_>, rel: &Path, outcome: &mut InstallOutcome) -> io::Result<()> {
-    let Some(live) = trees.live else {
-        return Ok(());
-    };
-    let (from, to) = (live.join(rel), trees.staging.join(rel));
-    let meta = fs::symlink_metadata(&from)?;
-    trees.ensure_parents(rel)?;
-    let kind = meta.file_type();
-    if kind.is_symlink() {
-        copy_symlink(&from, &to)
-    } else if kind.is_dir() {
-        create_private_dir(&to)?;
-        for entry in fs::read_dir(&from)? {
-            copy_entry(trees, &rel.join(entry?.file_name()), outcome)?;
-        }
-        fs::set_permissions(&to, meta.permissions())
-    } else if kind.is_file() {
-        if fs::symlink_metadata(&to).is_ok() {
-            return Err(io::Error::other(format!(
-                "{}: target already exists",
-                rel.display()
-            )));
-        }
-        fs::copy(&from, &to).map(|_| ())
-    } else {
-        outcome.skipped_special.push(rel.display().to_string());
-        Ok(())
-    }
-}
-
-/// `mkdir` with mode 0700 (unix).
-fn create_private_dir(dir: &Path) -> io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        fs::DirBuilder::new().mode(0o700).create(dir)
-    }
-    #[cfg(not(unix))]
-    {
-        fs::create_dir(dir)
-    }
-}
-
-/// Give `dir` the permission bits of `like` when that is a directory, else 0755.
-#[cfg(unix)]
-fn set_dir_mode(dir: &Path, like: Option<&Path>) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    let mode = like
-        .and_then(|p| fs::symlink_metadata(p).ok())
-        .filter(fs::Metadata::is_dir)
-        .map_or(0o755, |m| m.permissions().mode() & 0o7777);
-    fs::set_permissions(dir, fs::Permissions::from_mode(mode))
-}
-
-#[cfg(not(unix))]
-fn set_dir_mode(_dir: &Path, _like: Option<&Path>) -> io::Result<()> {
-    Ok(())
-}
-
-#[cfg(unix)]
-fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
-    std::os::unix::fs::symlink(fs::read_link(from)?, to)
-}
-
-#[cfg(not(unix))]
-fn copy_symlink(from: &Path, _to: &Path) -> io::Result<()> {
-    // Windows runs rein inside WSL (Component 8); the layout writer runs there.
-    Err(io::Error::other(format!(
-        "{}: symlinks are not supported on this platform",
-        from.display()
-    )))
+        &snap.layout.mirrored,
+        &snap.items,
+        &plan,
+        &scan.dirs,
+        faults,
+    )
+    .map_err(io_err)
 }
 
 #[cfg(test)]
@@ -547,10 +371,8 @@ mod tests {
     #[test]
     fn paths_are_siblings_of_the_rein_home() {
         let p = InstallPaths::new("/h");
-        let v = Version::new(0, 5, 0);
         assert_eq!(p.rein(), Path::new("/h/.rein"));
         assert_eq!(p.lock(), Path::new("/h/.rein.lock"));
-        assert_eq!(p.staging(&v), Path::new("/h/.rein.staging-0.5.0"));
         assert_eq!(p.prev("0.4.0"), Path::new("/h/.rein.prev-0.4.0"));
     }
 

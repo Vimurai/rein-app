@@ -118,13 +118,13 @@ pub fn install(home: &Path, version: &Version, deps: &Deps<'_>) -> u8 {
         paths.rein().display()
     );
     if let Some(prev) = &outcome.previous {
-        println!("rein-app: previous tree kept at {}", prev.display());
+        println!(
+            "rein-app: previous version kept at {} (`rein-app rollback` restores it)",
+            prev.display()
+        );
     }
     for p in &outcome.skipped_operator_owned {
         println!("rein-app: kept your {p} (operator-owned; the release copy was not written)");
-    }
-    for p in &outcome.skipped_special {
-        println!("rein-app: not carried over (socket/FIFO): {p}");
     }
 
     // The lock is held through `rein install`/`rein doctor`: they write into the tree

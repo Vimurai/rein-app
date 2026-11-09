@@ -83,9 +83,9 @@ struct RawManifest {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RawLayout {
-    mirrored: Vec<String>,
-    operator_owned: Vec<String>,
+pub(crate) struct RawLayout {
+    pub(crate) mirrored: Vec<String>,
+    pub(crate) operator_owned: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -234,7 +234,7 @@ impl Manifest {
     }
 }
 
-fn validate_layout(raw: RawLayout) -> Result<Layout, String> {
+pub(crate) fn validate_layout(raw: RawLayout) -> Result<Layout, String> {
     if raw.mirrored.is_empty() {
         return Err("layout.mirrored is empty".into());
     }
