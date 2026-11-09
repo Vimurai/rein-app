@@ -176,22 +176,51 @@ pub fn install(home: &Path, version: &Version, deps: &Deps<'_>) -> u8 {
     // meanwhile (E-5 security review P1-2). rein itself never reads the lock file.
     let result = install_then_doctor(deps.process, home);
     drop(lock);
+    exit_for(result)
+}
+
+/// A failed `rein install` (exit 13).
+pub const EXIT_REIN_INSTALL: u8 = 13;
+
+/// Map how `rein install` / `rein doctor` ended to rein-app's exit code (blueprint §API,
+/// D-014): a failed `rein install` is 13 with rein's own code printed, a failed
+/// `rein doctor` is 3. No retry, no repair.
+pub fn exit_for(result: RunOutcome) -> u8 {
+    let kept = "the previous version, if any, is kept as $HOME/.rein.prev-* (`rein-app rollback` restores it)";
     match result {
         RunOutcome::Ok => 0,
-        RunOutcome::Failed { cmd, code } => {
-            let what = match cmd {
-                ReinCommand::Install => "rein install",
-                ReinCommand::Doctor => "rein doctor",
+        RunOutcome::Failed {
+            cmd: ReinCommand::Install,
+            code,
+        } => {
+            let why = match code {
+                Some(3) => {
+                    "exit 3: the installed tree does not match the manifest, or the gate pin"
+                }
+                Some(1) => "exit 1: Node below the floor, or /bin/bash -p missing",
+                _ => "",
             };
             let code = code.map_or_else(|| "a signal".to_string(), |c| format!("exit {c}"));
-            eprintln!(
-                "rein-app: {what} failed ({code}); the previous version, if any, is kept as $HOME/.rein.prev-* (`rein-app rollback` restores it)"
-            );
+            let why = if why.is_empty() {
+                code
+            } else {
+                why.to_string()
+            };
+            eprintln!("rein-app: rein install failed ({why}); nothing was repaired; {kept}");
+            EXIT_REIN_INSTALL
+        }
+        RunOutcome::Failed { code, .. } => {
+            let code = code.map_or_else(|| "a signal".to_string(), |c| format!("exit {c}"));
+            eprintln!("rein-app: rein doctor reported problems ({code}); {kept}");
             EXIT_DOCTOR
         }
         RunOutcome::NotStarted { cmd, reason } => {
             eprintln!("rein-app: could not start rein {cmd:?}: {reason}");
-            EXIT_DOCTOR
+            if cmd == ReinCommand::Install {
+                EXIT_REIN_INSTALL
+            } else {
+                EXIT_DOCTOR
+            }
         }
     }
 }

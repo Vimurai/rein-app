@@ -47,10 +47,14 @@ enum Command {
         yes: bool,
     },
     /// Restore the previous rein version's code from its snapshot (your data is kept),
-    /// then run `rein doctor`.
+    /// then run `rein install` and `rein doctor`.
     Rollback,
     /// Run `rein doctor` from the installed tree.
-    Doctor,
+    Doctor {
+        /// Pass `--json` to `rein doctor`; its output is printed untouched.
+        #[arg(long)]
+        json: bool,
+    },
     /// Windows: open Windows Terminal into rein inside WSL2 (installing WSL/Ubuntu if absent).
     Launch {
         /// Project directory to start rein in.
@@ -93,7 +97,7 @@ fn main() -> ExitCode {
             &runner::SystemProcess,
             rein_release::InstallLock::run_uid,
         ),
-        Command::Doctor => update_cmd::doctor(&home, &runner::SystemProcess),
+        Command::Doctor { json } => update_cmd::doctor(&home, &runner::SystemProcess, json),
         Command::Launch { dir } => launch(&dir),
         Command::Profiles(cmd) => return profiles_cmd::run(&home, cmd),
     };
@@ -162,6 +166,8 @@ mod tests {
         assert!(matches!(cli.command, Command::Install { version: None }));
         let cli = Cli::try_parse_from(["rein-app", "update", "--yes"]).unwrap();
         assert!(matches!(cli.command, Command::Update { yes: true }));
+        let cli = Cli::try_parse_from(["rein-app", "doctor", "--json"]).unwrap();
+        assert!(matches!(cli.command, Command::Doctor { json: true }));
         for sub in ["rollback", "doctor", "launch"] {
             assert!(Cli::try_parse_from(["rein-app", sub]).is_ok(), "{sub}");
         }

@@ -70,6 +70,8 @@ impl Process for SystemProcess {
 pub enum ReinCommand {
     Install,
     Doctor,
+    /// `rein doctor --json`: stdout passed through untouched (no parsing in phase 1).
+    DoctorJson,
 }
 
 impl ReinCommand {
@@ -77,6 +79,7 @@ impl ReinCommand {
         match self {
             ReinCommand::Install => vec!["install"],
             ReinCommand::Doctor => vec!["doctor"],
+            ReinCommand::DoctorJson => vec!["doctor", "--json"],
         }
     }
 }
