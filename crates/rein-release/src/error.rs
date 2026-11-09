@@ -130,6 +130,8 @@ pub enum FetchError {
     TooLarge { url: String, cap: u64 },
     /// Network or TLS failure.
     Network(String),
+    /// Release metadata (the latest-release answer) is malformed.
+    Metadata(String),
     /// Local I/O failed while writing the download.
     Io(String),
 }
@@ -142,6 +144,7 @@ impl fmt::Display for FetchError {
             Status { url, status } => write!(f, "fetch: {url} answered HTTP {status}"),
             TooLarge { url, cap } => write!(f, "fetch: {url} exceeds the {cap}-byte cap"),
             Network(m) => write!(f, "fetch: network error ({m})"),
+            Metadata(m) => write!(f, "fetch: release metadata invalid ({m})"),
             Io(m) => write!(f, "fetch: i/o error ({m})"),
         }
     }

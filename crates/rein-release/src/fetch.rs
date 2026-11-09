@@ -33,11 +33,13 @@ pub struct HostPolicy {
 
 impl HostPolicy {
     /// GitHub releases: `github.com`, which redirects asset downloads to its two
-    /// asset CDNs. Nothing else, HTTPS only.
+    /// asset CDNs, and `api.github.com` for the latest-release lookup (metadata only,
+    /// see `latest.rs`). Nothing else, HTTPS only.
     pub fn github() -> Self {
         Self {
             https_hosts: [
                 "github.com",
+                "api.github.com",
                 "objects.githubusercontent.com",
                 "release-assets.githubusercontent.com",
             ]
@@ -89,6 +91,8 @@ impl ReqwestHttp {
                     attempt.error(msg)
                 }
             }))
+            // GitHub's API refuses requests without a User-Agent; a generic client name.
+            .user_agent(concat!("rein-app/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(Duration::from_secs(30))
             .timeout(Duration::from_secs(15 * 60))
             .build()
@@ -241,6 +245,7 @@ mod tests {
             "https://github.com/Vimurai/rein/releases/download/v1.0.0/x"
         ));
         assert!(ok("https://objects.githubusercontent.com/x"));
+        assert!(ok(crate::latest::REIN_LATEST_API));
         assert!(!ok("http://github.com/x"));
         assert!(!ok("https://evil.example/x"));
         assert!(!ok("https://github.com.evil.example/x"));

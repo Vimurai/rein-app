@@ -7,10 +7,12 @@
 
 mod error;
 mod fetch;
+mod latest;
 mod layout;
 mod manifest;
 mod matcher;
 mod paths;
+mod rollback;
 mod signature;
 mod verify;
 
@@ -18,6 +20,7 @@ pub use error::{FetchError, VerifyError};
 pub use fetch::{
     HostPolicy, Http, MAX_TARBALL_BYTES, ReleaseSource, ReqwestHttp, asset_names, fetch_release,
 };
+pub use latest::{LatestRelease, MAX_LATEST_BYTES, REIN_LATEST_API, latest_release, parse_latest};
 pub use layout::{
     InstallLock, InstallOutcome, InstallPaths, KEEP_PREVIOUS, LayoutError, install_tree,
     install_tree_locked, installed_version,
@@ -25,5 +28,6 @@ pub use layout::{
 pub use manifest::{FileEntry, FileMode, Layout, Manifest, ManifestHeader, SUPPORTED_SCHEMA};
 pub use matcher::OperatorOwnedMatcher;
 pub use paths::check_rel_path;
+pub use rollback::{RollbackError, RollbackOutcome, rollback_tree};
 pub use signature::{MinisignVerifier, Rejecting, SignatureVerifier, production_verifier};
 pub use verify::{ReleaseAssets, VerifiedRelease, verify_release};

@@ -5,7 +5,6 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
 
 use rein_release::{
     Http, InstallLock, InstallPaths, ReleaseSource, SignatureVerifier, fetch_release,
@@ -56,10 +55,6 @@ impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
     }
-}
-
-pub fn run(home: &Path, version: &Version, deps: &Deps<'_>) -> ExitCode {
-    ExitCode::from(install(home, version, deps))
 }
 
 /// The pipeline; returns the exit code.
@@ -159,7 +154,7 @@ pub fn install(home: &Path, version: &Version, deps: &Deps<'_>) -> u8 {
 
 #[cfg(test)]
 #[path = "../../rein-release/tests/support/mod.rs"]
-mod support;
+pub(crate) mod support;
 
 #[cfg(test)]
 mod tests {

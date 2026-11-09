@@ -300,7 +300,7 @@ pub fn install_tree_locked(
 
 /// `.rein.prev-<label>`, or `.rein.prev-<label>~N` if that name is taken — an existing
 /// previous tree is never overwritten (P2-3).
-fn free_prev_slot(paths: &InstallPaths, label: &str) -> PathBuf {
+pub(crate) fn free_prev_slot(paths: &InstallPaths, label: &str) -> PathBuf {
     let mut slot = paths.prev(label);
     let mut n = 1;
     while fs::symlink_metadata(&slot).is_ok() {

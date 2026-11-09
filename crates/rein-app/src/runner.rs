@@ -119,7 +119,12 @@ pub enum RunOutcome {
 
 /// `rein install` then `rein doctor`; stops at the first failure.
 pub fn install_then_doctor(proc: &dyn Process, home: &Path) -> RunOutcome {
-    for cmd in [ReinCommand::Install, ReinCommand::Doctor] {
+    run_rein(proc, home, &[ReinCommand::Install, ReinCommand::Doctor])
+}
+
+/// Run `cmds` in order from the installed tree; stops at the first failure.
+pub fn run_rein(proc: &dyn Process, home: &Path, cmds: &[ReinCommand]) -> RunOutcome {
+    for &cmd in cmds {
         let inv = rein_invocation(home, cmd, std::env::var_os("PATH"));
         match proc.run(&inv) {
             Ok(Some(0)) => {}
