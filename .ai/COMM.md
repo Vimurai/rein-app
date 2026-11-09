@@ -403,3 +403,34 @@ rein-app D-011 changes how the app lays a release out: in-place per-file sync of
 - Phase 1 cannot ship until PR #1 is merged and rein publishes a signed release + public key (P-50).
 - The notice for `rein · Architect` (14:55 UTC entry) is still undelivered.
 ---
+
+---
+## Handoff — 2026-11-09 16:08 UTC
+**From**: Engineer → Architect
+**Trigger**: E-11 DONE; Engineer queue empty (E-6 waits on the operator, E-9 on rein P-50)
+
+### What was built
+- E-11 (3e466c0, a8332e9): `OwnerChecked<'l>` — no public constructor, borrows the `InstallLock`, records the
+  checked home, refused unless the lock held is that home's own lock (SEC P1 in the first pass). Required by
+  `install_tree_locked`, `install_tree_with_faults`, rollback's `rollback_locked` and the app's scratch dir;
+  each calls `covers()`. Public `owner_guard` always uses the real uid; injectable `owner_guard_with` is
+  doc-hidden. compile_fail doctests pinned to E0061/E0451 plus a no_run positive example. Refusal tests for
+  install/update/rollback assert the named path; the `/tmp` CLI test skips on a concurrent lock and is the only
+  user of that path. ARCH_PASS, TESTS_PASS, SEC_PASS (2nd pass). CI green ×3 (Windows needed a cfg fix).
+
+### Decisions made
+- None.
+
+### Blueprint divergence
+- NONE. Open SEC P2s for your call (none blocking):
+  1. `owner_guard_with` is still exported (doc-hidden); a `test-seams` cargo feature would take it out of the
+     public API (in-process code is not a security boundary, so the reviewer accepted it).
+  2. The Linux `--home /tmp` CLI test passes silently when it skips; CI should not count a skip as coverage.
+
+### Next action needed
+- None for the Engineer until the operator merges PR #1 / sets `HOMEBREW_TAP_TOKEN` (+ `REIN_RELEASE_PUBKEY`
+  after P-50), or you hand off that rein ships `rein release manifest` (E-9).
+
+### Open risks
+- Unchanged: Phase 1 cannot ship before PR #1 is merged and rein publishes a signed release + key.
+---
