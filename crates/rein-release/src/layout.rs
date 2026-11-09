@@ -499,13 +499,15 @@ fn copy_entry(trees: &Trees<'_>, rel: &Path, outcome: &mut InstallOutcome) -> io
 
 /// `mkdir` with mode 0700 (unix).
 fn create_private_dir(dir: &Path) -> io::Result<()> {
-    let mut b = fs::DirBuilder::new();
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
-        b.mode(0o700);
+        fs::DirBuilder::new().mode(0o700).create(dir)
     }
-    b.create(dir)
+    #[cfg(not(unix))]
+    {
+        fs::create_dir(dir)
+    }
 }
 
 /// Give `dir` the permission bits of `like` when that is a directory, else 0755.
