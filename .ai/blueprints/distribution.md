@@ -2,7 +2,8 @@
 
 > Architect-owned. Derived from `rein` D-150 contract §2–§3 and `plans/rein-app-plan.md` Phase 1.
 > Index: `.ai/architect.md` §0. Tasks: E-2..E-9 (see §Task Breakdown; plan IDs E-1..E-5 shifted by one).
-> Revised 2026-11-09: LayoutWriter and rollback mechanics (D-011), E-5/E-6 divergence rulings (D-012).
+> Revised 2026-11-09: LayoutWriter and rollback mechanics (D-011), E-5/E-6 divergence rulings (D-012),
+> E-7 rulings — target symlinks, snapshot trust, owner guard (D-013).
 
 ## Goal & Architecture
 Operators get Rein with one package-manager command on macOS, Linux and Windows (WSL2), and
@@ -57,10 +58,22 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    tested against rein's conformance fixture `tests/fixtures/release/operator-owned-cases.json`
    (`{path, expected}` rows) copied into our fixtures.
    **Steps** (all under `$HOME/.rein.lock`; the release is already fully verified, outside the home):
-   a. *Preflight, no writes*: `$HOME/.rein` is absent (fresh install → create it) or a real
-      directory; every live mirrored dir is a real directory and no existing component of any
-      target path is a symlink — otherwise refuse, naming the path (`install-rein.sh`
-      `[INSTALL_BIN_SYMLINK]`). Nothing is ever written through a symlink.
+   a. *Preflight, no writes*: **owner guard** (D-013, unix) — the process must run as the
+      owner of `$HOME`, of `$HOME/.rein` when it exists and, for rollback, of the snapshot
+      root and its `layout.json`; the uid is read from the lock file the run has just created
+      (no `unsafe`, no new dependency); a mismatch (e.g. `sudo rein-app update` with the
+      user's HOME) refuses, naming the path. Then: `$HOME/.rein` is absent (fresh install →
+      create it) or a real directory; every live mirrored dir is a real directory and no
+      *intermediate* component of a target path is a symlink — otherwise refuse, naming the
+      path (`install-rein.sh` `[INSTALL_BIN_SYMLINK]`). A symlink **at** a target path is not
+      a refusal: the rename replaces the link itself, an unshipped link is pruned as a link
+      and snapshotted as a link (as `rsync -a --delete` does) — refusing it would let one
+      stray `bin/x -> …` block restore-on-failure and rollback. Nothing is ever written
+      through a symlink. Also refused: a directory where a release file goes or a file where
+      a directory is needed (`Conflict`), and a shipped name ending in the writer's own temp
+      suffix. Inside a mirrored dir an entry of ANY type at an operator-owned path — a symlink
+      or file where an owned directory belongs (`mcp/x/node_modules -> store`) — is owned:
+      never opened, snapshotted or pruned.
    b. *Plan (pure)*: `ship` = manifest files minus operator-owned matches; `prune` = every
       file or symlink under a live mirrored dir that is neither in `ship` nor operator-owned.
    c. *Snapshot*: copy the non-owned content of the live mirrored dirs to
@@ -68,7 +81,11 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
       `operator_owned` lists used) beside it; built under a temp name and renamed when
       complete, mode 0700, `~N` suffix on a name clash, symlinks copied as links. This is the
       release payload only (≈9 MB), never operator data. No live tree → no snapshot. Keep the
-      N=2 newest snapshots.
+      N=2 newest snapshots. A live tree whose `VERSION` is missing or not semver gets no
+      snapshot either (nothing to label or roll back to): the sync still runs and the CLI
+      says in one line that no snapshot was taken and rollback is unavailable for this
+      update. Only a directory with a real `VERSION` and `layout.json` counts as a snapshot;
+      any other `.rein.prev-*` is the operator's and is never pruned or restored.
    d. *Sync*: mirrored dirs in manifest order with **`hooks` last** (a hook never lands before
       the `mcp/` and `shared/` it calls). Per `ship` file: temp file in the target's own
       directory → mode from the manifest → rename over the target, so a reader sees old or
@@ -119,7 +136,9 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    earlier snapshot back with the LayoutWriter routine (`ship` = the snapshot's files, layout
    from its validated `layout.json`), write its `VERSION`, remove the snapshot just restored
    (so a second rollback returns to the newer version), re-run `rein doctor`. Rollback
-   restores **code only**: operator data is never rolled back.
+   restores **code only**: operator data is never rolled back. Rollback works with the
+   restored snapshot's layout, so a mirrored dir that only the newer release lists stays in
+   place (unused by the older code; the next update prunes it).
 8. **`rein-app::WslLauncher`** (Windows target only) — `wsl --status`; if no distro,
    `wsl --install -d Ubuntu`; runs the Linux `rein-app update --yes` inside the distro (a
    fresh home installs, exit 10 "already current" counts as success; a Linux `rein-app` must
@@ -181,7 +200,15 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   the new file at every instant (security review E-5 P1-3; no "refuse while rein runs" check).
   A snapshot is local, unsigned data in the same trust domain as the home: it is a real 0700
   directory (never a symlink), its `layout.json` is validated like a manifest layout, and
-  only paths under its listed mirrored dirs are ever restored.
+  only paths under its listed mirrored dirs are ever restored. **Accepted residual risk
+  (D-013, security review E-7 P2-2):** whoever can edit a snapshot's `layout.json` can widen
+  what `rollback` syncs and prunes (`mirrored += secrets`). That needs write access as the
+  home's owner, which already allows editing `secrets/`, `hooks/` and the gate directly; a
+  second local copy of the layout would be exactly as editable and adds no trust. What makes
+  the premise hold is the **owner guard** (step 3a): the writer never runs as a different
+  user than the one who owns the home and the snapshot, so a root-run rollback can never be
+  steered by a user-edited file, and no root-owned file lands in a user's home. The `Faults`
+  seam is `#[doc(hidden)]` test surface; no production caller (phase 2 included) may set it.
 - **Trust boundary 3 — profiles**: closed `AllowedKey` enum; `hooks` content comes only from
   `rein install`'s own output (we re-read the file it wrote; we never author hook entries).
   Hard-deny on `autoMode`/`permissions`/`defaultMode` (`rein` D-132) on EVERY path including
@@ -244,7 +271,16 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   a tampered `layout.json` (`..`, a `/` in a mirrored name) is refused.
 - Rollback: operator files written after the update survive; the restored code equals the
   earlier payload; a second rollback returns to the newer version; no snapshot → exit 12.
-- Refusals before any write: a symlinked mirrored dir, a symlinked `$HOME/.rein`, a held lock.
+- Refusals before any write: a symlinked mirrored dir, a symlinked intermediate component, a
+  symlinked `$HOME/.rein`, a file/directory conflict, a held lock. A symlink at a target is
+  replaced (its old target file is byte-unchanged); an unshipped link is pruned as a link.
+- Owner guard (E-10, unix): the comparison is a pure function over uids, unit-tested for
+  equal / home differs / `.rein` differs / snapshot differs; one CLI test per command
+  (`install`, `update`, `rollback`) asserts that a mismatch exits non-zero with the path
+  named, writes nothing and leaves no lock behind (the mismatch is injected through the
+  function's uid inputs — tests never need root).
+- No-snapshot notice: updating a populated home without a semver `VERSION` prints the one
+  line and still completes.
 - Layout equality (E-9, blocked on rein P-50): from a `rein` checkout at tag T, run `install-rein.sh` into temp HOME A;
   build the artifact with rein's own generator `rein release manifest <tree> --out <dir>`
   (unsigned — signing is the separate `rein release sign` step), sign it with OUR throwaway
@@ -294,6 +330,11 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   mirror" through "Refusals". Depends on E-5. `security_engineer` before commit.
 - **E-8** (T2) Make `install --version` optional: with no version, resolve the newest tag
   through the `update` resolver (§Components 7, §API). Depends on E-6 code (`latest.rs`).
+- **E-10** (T3) Owner guard of §Components 3 step a for `install`/`update`/`rollback`
+  (refuse when the run's uid — read from its own lock file — differs from the owner of
+  `$HOME`, `$HOME/.rein`, or the snapshot being restored), and the one-line "no snapshot
+  taken" notice of step c. §Security trust boundary 2, §Test Plan "Owner guard", "No-snapshot
+  notice" (D-013). Depends on E-7. `security_engineer` before commit.
 - **E-9** (T2, BLOCKED on rein P-50 `rein release manifest`) Write the layout-equality test of
   §Test Plan, including the list of diffs it finds (a retired MCP server's directory is the
   one expected until rein rules who removes it). Depends on E-7.

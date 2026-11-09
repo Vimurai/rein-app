@@ -425,3 +425,37 @@ The handoff listed nine divergences from `distribution.md`. D-011 settles 1–2;
 Add an AppImage job to `build-linux-packages.yml` under a new dependency_gate entry; nothing else depends on its absence.
 
 ---
+
+## D-013 — E-7 rulings: a symlink at a target is replaced, not refused; a snapshot's layout is trusted within the home owner's account, and an owner guard enforces that premise
+
+**Date**: 2026-11-09
+**Task**: review of E-7/E-8 (Engineer handoff 2026-11-09 15:30 UTC, divergences 1–6; security review E-7 P1-2, P2-2) → E-10
+**Decision**: Accept the implemented symlink rule and the unsigned snapshot `layout.json` as built, reject a second local copy of the layout, and add a check that `install`/`update`/`rollback` run only as the owner of the home and of the snapshot.
+
+### Why needed
+D-011's step (a) said "no existing component of any target path is a symlink". Taken literally, one unshipped `bin/env-link` in a live home blocks restore-on-failure and rollback, because the snapshot carries the link back (SEC P1-2). Separately, `rollback` takes its scope from the snapshot's own `layout.json`; an edited file (`mirrored += secrets`) makes rollback sync and prune a directory the release never owned (SEC P2-2), and there is no signed copy of the layout on disk to compare against.
+
+### Alternatives considered (snapshot layout, P2-2)
+1. **Keep the last signed manifest's layout beside the home and require `snapshot.mirrored ⊆` it** (Engineer's option) — the copy lives in the same account and is exactly as editable as `layout.json`; it adds a second file to keep in step and no trust.
+2. **Make rollback a signed operation**: cache the previous release's tarball + `.minisig` and re-verify with the baked key — real trust, but no rollback after a key rotation, none for the first update over an `install-rein.sh` home, and it restores the release as shipped rather than what was installed. A redesign for a same-account risk; revisit only if rollback ever needs to cross a privilege boundary.
+3. **Accept, and enforce the premise (chosen)** — editing `layout.json` needs write access as the home's owner, who can already edit `secrets/`, `hooks/` and the gate directly, so no boundary is crossed *provided the writer runs as that same user*. That proviso was assumed, not checked: `sudo rein-app rollback` with the user's HOME (the default on macOS) would run as root steered by a user-editable file, and any root-run install leaves root-owned files in the home that rein then cannot update. The owner guard makes the proviso a refusal.
+
+### Rulings on the rest
+- (1) Symlink at a target: replaced by the rename, pruned and snapshotted as a link; a symlinked mirrored root or intermediate component is still refused. This is what `rsync -a --delete` does in the reference. Blueprint step (a) reworded.
+- (2) An entry of any type at an operator-owned directory path is owned (never opened, snapshotted, pruned) — accepted; stricter than the blueprint.
+- (3) No snapshot without a semver live `VERSION`; `Conflict` refusals; only directories with a real `VERSION` + `layout.json` count as snapshots — accepted, with one addition: the CLI says in one line when a populated home is updated without a snapshot (E-10).
+- (4) Rollback uses the restored snapshot's layout, so a mirrored dir only the newer release lists stays in place — accepted; the next update prunes it.
+- (6) `#[doc(hidden)] pub Faults`, exports `plan`/`SyncPlan`/`KEEP_SNAPSHOTS` — accepted; no production caller may set a fault.
+
+### Constraints driving this decision
+- No `unsafe` and no new dependency for one uid: the run's uid is the owner of the lock file it has just created (`MetadataExt::uid`).
+- The app must never be a way to turn a user-writable file into a root action.
+
+### Impact
+- Unlocks: E-10 (owner guard + no-snapshot notice). Does not block E-6 or E-9.
+- Risk if wrong: a home whose `$HOME` is owned by another uid than the invoking user (unusual mounts) is refused with the path named; there is deliberately no override flag.
+
+### Rollback
+Remove the guard call; nothing else depends on it. The symlink rule and snapshot format are unaffected.
+
+---

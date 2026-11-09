@@ -10,7 +10,7 @@
 ## 0. Blueprint Index (JIT — load only what the task needs)
 | Domain | File | Phase | Status |
 |---|---|---|---|
-| Distribution: installer, verifier, layout writer, profile manager, updater, WSL launcher | `.ai/blueprints/distribution.md` | 1 | ACTIVE — E-2..E-5 done, E-6 in PR #1, E-7..E-9 open |
+| Distribution: installer, verifier, layout writer, profile manager, updater, WSL launcher | `.ai/blueprints/distribution.md` | 1 | ACTIVE — E-2..E-5, E-7, E-8 done; E-6 in PR #1; E-10 open; E-9 blocked on rein |
 | Desktop: Tauri window, pane view, status, settings UI, bundled Node, signing | `.ai/blueprints/desktop.md` | 2 | NOT WRITTEN — authored when Phase 1 ships |
 
 ## 1. System Philosophy
@@ -109,7 +109,9 @@ Follow-ups from the E-5/E-6 review (2026-11-09, D-011/D-012):
 | **E-7** | LayoutWriter + rollback reworked to the in-place sync (D-011) | 3 | E-5 |
 | **E-8** | `install` without `--version` resolves the newest tag | 2 | E-6 code |
 | **E-9** | layout-equality test vs `install-rein.sh` — BLOCKED on rein P-50 | 2 | E-7 |
-No release tag is pushed before E-7 is on master. AppImage is out of Phase 1 (D-012).
+| **E-10** | owner guard for install/update/rollback + "no snapshot" notice (D-013) | 3 | E-7 |
+E-7 and E-8 are DONE (2026-11-09). AppImage is out of Phase 1 (D-012). Phase 1 ships when
+PR #1 is merged, rein publishes a signed release + public key (P-50), and the first tag builds.
 
 ## 8. Contract Rulings received from `rein` (P-50 → rein D-153, mirrored as rein-app D-003)
 All five open questions are closed; `distribution.md` carries the detail. Summary:
