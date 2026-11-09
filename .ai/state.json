@@ -176,6 +176,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-09T15:44:55.753Z"
+    },
+    {
+      "id": "E-11",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 3,
+      "description": "Make the owner guard a compile-time precondition in rein-release (follows E-10, which is DONE): change `owner_guard` to return a proof value that has no public constructor and borrows the `InstallLock`, and require a reference to it in every lock-held function that writes (`install_tree_locked`, `install_tree_with_faults`, rollback's lock-held writer), updating `install_cmd`, `rollback_tree_with` and the tests; add a `compile_fail` doctest showing a lock-held writer cannot be called without it. Tighten the tests: each CLI refusal test (install, update, rollback) asserts the offending path appears in the error, and the Linux test that uses the real `/tmp` as a foreign-owned home skips when `/tmp/.rein.lock` already exists and never shares that path with a concurrently running test. Per .ai/blueprints/distribution.md §Components 3 step a (type-level precondition), §Test Plan \"Owner guard\" (E-11 additions), D-013 addendum. Acceptance: cargo test --workspace (doctests included) green on all three CI targets; no behaviour change for a correctly guarded run. Tier 3: security_engineer review before commit.",
+      "created_at": "2026-11-09T15:46:30.843Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-09T15:46:30.845Z"
     }
   ],
   "stamps": [

@@ -62,7 +62,12 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
       owner of `$HOME`, of `$HOME/.rein` when it exists and, for rollback, of the snapshot
       root and its `layout.json`; the uid is read from the lock file the run has just created
       (no `unsafe`, no new dependency); a mismatch (e.g. `sudo rein-app update` with the
-      user's HOME) refuses, naming the path. Then: `$HOME/.rein` is absent (fresh install →
+      user's HOME) refuses, naming the path. `$HOME` is judged by the directory it resolves
+      to; `.rein` and snapshot paths are never followed; a uid that cannot be read refuses.
+      The guard is a **type-level precondition** (E-11): it returns a proof value that only
+      it can construct, borrowed from the lock, and every lock-held function that writes
+      takes that value — a caller (phase 2 included) cannot reach the writer without having
+      run the guard, the same way a forbidden settings key cannot be written. Then: `$HOME/.rein` is absent (fresh install →
       create it) or a real directory; every live mirrored dir is a real directory and no
       *intermediate* component of a target path is a symlink — otherwise refuse, naming the
       path (`install-rein.sh` `[INSTALL_BIN_SYMLINK]`). A symlink **at** a target path is not
@@ -209,6 +214,11 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   user than the one who owns the home and the snapshot, so a root-run rollback can never be
   steered by a user-edited file, and no root-owned file lands in a user's home. The `Faults`
   seam is `#[doc(hidden)]` test surface; no production caller (phase 2 included) may set it.
+  **Unsupported, documented, not defended (D-013 addendum):** a `--home` inside a directory
+  that other users can write (`/tmp`, a shared root-owned directory). The guard checks the
+  owners of the home, `.rein`, the snapshot root and its `layout.json`, not every entry
+  beneath them, and snapshot/fetch-dir cleanup carries no owner check; a private home
+  directory is the precondition, as it is for rein itself.
 - **Trust boundary 3 — profiles**: closed `AllowedKey` enum; `hooks` content comes only from
   `rein install`'s own output (we re-read the file it wrote; we never author hook entries).
   Hard-deny on `autoMode`/`permissions`/`defaultMode` (`rein` D-132) on EVERY path including
@@ -278,7 +288,11 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   equal / home differs / `.rein` differs / snapshot differs; one CLI test per command
   (`install`, `update`, `rollback`) asserts that a mismatch exits non-zero with the path
   named, writes nothing and leaves no lock behind (the mismatch is injected through the
-  function's uid inputs — tests never need root).
+  function's uid inputs — tests never need root). E-11 adds: each CLI refusal asserts the
+  offending path appears in the message; a `compile_fail` doctest proves a lock-held writer
+  cannot be called without the guard's proof value; a test that needs a real foreign-owned
+  directory (`--home /tmp`) skips when `/tmp/.rein.lock` already exists instead of failing,
+  and no two tests share that path concurrently.
 - No-snapshot notice: updating a populated home without a semver `VERSION` prints the one
   line and still completes.
 - Layout equality (E-9, blocked on rein P-50): from a `rein` checkout at tag T, run `install-rein.sh` into temp HOME A;
@@ -335,6 +349,11 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   `$HOME`, `$HOME/.rein`, or the snapshot being restored), and the one-line "no snapshot
   taken" notice of step c. §Security trust boundary 2, §Test Plan "Owner guard", "No-snapshot
   notice" (D-013). Depends on E-7. `security_engineer` before commit.
+- **E-11** (T3) Make the owner guard unskippable: `owner_guard` returns a proof value with no
+  public constructor, borrowed from the `InstallLock`; `install_tree_locked`,
+  `install_tree_with_faults` and rollback's lock-held writer take it; `compile_fail` doctest;
+  CLI refusal tests assert the named path; the `/tmp` test skips on an existing lock
+  (§Components 3 step a, §Test Plan "Owner guard"; D-013 addendum). Depends on E-10.
 - **E-9** (T2, BLOCKED on rein P-50 `rein release manifest`) Write the layout-equality test of
   §Test Plan, including the list of diffs it finds (a retired MCP server's directory is the
   one expected until rein rules who removes it). Depends on E-7.
