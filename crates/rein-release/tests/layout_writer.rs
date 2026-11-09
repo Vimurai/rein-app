@@ -92,7 +92,12 @@ fn digest(root: &Path) -> BTreeMap<String, (Vec<u8>, u32)> {
     fn go(root: &Path, dir: &Path, out: &mut BTreeMap<String, (Vec<u8>, u32)>) {
         for e in fs::read_dir(dir).unwrap() {
             let p = e.unwrap().path();
-            let rel = p.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+            // Manifest-style keys on every OS (Windows joins with '\').
+            let rel = p
+                .strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
             let meta = fs::symlink_metadata(&p).unwrap();
             if meta.file_type().is_symlink() {
                 let target = fs::read_link(&p).unwrap().to_string_lossy().into_owned();
