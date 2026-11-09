@@ -458,3 +458,35 @@ rein-app D-011 changes how the app lays a release out: in-place per-file sync of
 - Phase 1 cannot ship before PR #1 is merged and rein publishes a signed release + key (P-50).
 - The notice for `rein · Architect` (14:55 UTC entry) is still undelivered.
 ---
+
+---
+## Handoff — 2026-11-09 17:05 UTC
+**From**: Architect → Engineer
+**Trigger**: rein P-50 closed (rein D-155, commit 316218b) — three contract corrections; mirrored as D-014; E-12..E-17 registered
+
+### What was built
+- Read rein's D-155, `.ai/blueprints/release-artifact.md` and the amended contract §2–3, then checked each ruling against our code.
+- `.ai/blueprints/distribution.md` revised: §Components 2 (member rules), 3 (scope rule, shipped path wins, steps b/c/e/f), 4 (what `rein install` does now, exit 13), 6 (three keys), 7 (rollback runs `rein install`, `doctor --json`); §Data Model (DoctorJson, Snapshot, AllowedKey); §API; §Security trust boundaries 1–3; §Rollback Plan; §Test Plan; §Task Breakdown. `.ai/architect.md` §0, §3, §4, §5, §7, §8; DIGEST.
+
+### Decisions made
+- **D-014** — rein D-155 adopted as written, plus four decisions of ours: strict reader; rollback runs `rein install` then `rein doctor`; a failed `rein install` is exit 13; the baked key comes from a committed copy of rein's `docs/contract/release-key.pub` (later, E-16).
+
+### Blueprint divergence (if any)
+What on master now contradicts the contract (none of it was wrong when written — the contract text was):
+1. `sync::plan` drops shipped paths that match `operator_owned`. `mcp/orchestrator-mcp/package-lock.json` is shipped and matches `mcp/*/package-lock.json`; `rein install` now checks the tree against the manifest and exits 3, so **every app install would fail** until E-13.
+2. The home gets no `manifest.json`; `rein install` needs it to recognise an artifact install (E-13).
+3. `verify.rs` accepts directory entries and pax headers and finds `manifest.json` anywhere; `in_layout` lets an owned-only path ship (E-12).
+4. `AllowedKey::Hooks` and the hooks copy in `profiles apply` (E-14).
+5. `rollback` runs doctor only; a failed `rein install` and a failed `rein doctor` both exit 3 (E-15).
+
+### Next action needed
+1. **E-12 (T3)** verifier → **E-13 (T3)** writer → **E-15 (T2)** CLI, in that order (E-13 relies on E-12's guarantee that every `files` path is under a mirrored dir). **E-14 (T3)** profiles is independent — do it whenever. Read the named blueprint sections before each; `security_engineer` before each Tier 3 commit.
+2. E-13 detail worth reading twice: an owned path the release does NOT ship is still never opened; only the exact shipped path is. A symlinked owned directory above a shipped path is an intermediate symlink and refuses.
+3. **BLOCKED, do not start**: E-9 (rein E-417/E-418/E-420), E-16 (the operator's key committed in rein — never generate or substitute a key), E-17 (rein E-422). I will hand off when each unblocks.
+4. E-6 stays open for the first tag.
+
+### Open risks
+- rein has built none of D-155 yet (its E-417..E-422 are open), so E-12..E-15 are tested against our own fixtures built the way rein's blueprint says its writer will; E-9 and E-17 are the real cross-check.
+- Still open with rein: who removes a retired MCP server's directory under an app install.
+- The earlier notice for `rein · Architect` is superseded: question (a) is answered by D-155 r2; (b) is re-sent today.
+---
