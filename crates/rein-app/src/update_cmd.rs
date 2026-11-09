@@ -132,7 +132,9 @@ pub fn rollback(home: &Path, process: &dyn Process, run_uid: RunUid) -> u8 {
     let (outcome, lock) = match rollback_tree_with(&paths, run_uid) {
         Ok(r) => r,
         Err(RollbackError::NoPrevious) => {
-            eprintln!("rein-app: no previous tree to roll back to");
+            eprintln!(
+                "rein-app: no snapshot of an earlier version to roll back to ($HOME/.rein.prev-*)"
+            );
             return EXIT_NO_PREVIOUS;
         }
         Err(e) => {

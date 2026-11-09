@@ -1,6 +1,6 @@
 //! `rein-app install --version X.Y.Z` (blueprint §API, §Core Concept pipeline):
 //! lock → fetch → verify → runtime check → lay out → `rein install` → `rein doctor`.
-//! Every step before the layout swap leaves `$HOME/.rein` untouched.
+//! Every step before the layout sync leaves `$HOME/.rein` untouched.
 
 use std::fs;
 use std::io;
@@ -177,7 +177,7 @@ pub fn install(home: &Path, version: &Version, deps: &Deps<'_>) -> u8 {
     }
 
     // The lock is held through `rein install`/`rein doctor`: they write into the tree
-    // (install-stamp, mcp node_modules), so no other install or rollback may swap it
+    // (install-stamp, mcp node_modules), so no other install or rollback may sync it
     // meanwhile (E-5 security review P1-2). rein itself never reads the lock file.
     let result = install_then_doctor(deps.process, home);
     drop(lock);
@@ -190,7 +190,7 @@ pub fn install(home: &Path, version: &Version, deps: &Deps<'_>) -> u8 {
             };
             let code = code.map_or_else(|| "a signal".to_string(), |c| format!("exit {c}"));
             eprintln!(
-                "rein-app: {what} failed ({code}); the previous tree, if any, is kept as $HOME/.rein.prev-*"
+                "rein-app: {what} failed ({code}); the previous version, if any, is kept as $HOME/.rein.prev-* (`rein-app rollback` restores it)"
             );
             EXIT_DOCTOR
         }

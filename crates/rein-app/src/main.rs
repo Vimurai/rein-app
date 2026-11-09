@@ -46,7 +46,8 @@ enum Command {
         #[arg(long)]
         yes: bool,
     },
-    /// Swap $HOME/.rein with the newest previous tree, then run `rein doctor`.
+    /// Restore the previous rein version's code from its snapshot (your data is kept),
+    /// then run `rein doctor`.
     Rollback,
     /// Run `rein doctor` from the installed tree.
     Doctor,
