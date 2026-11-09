@@ -343,3 +343,36 @@ rein-app D-011 changes how the app lays a release out: in-place per-file sync of
 - The notice for `rein · Architect` in the 14:55 UTC entry is still undelivered (that session is not running).
 - Operator cleanup still pending: `/tmp/tmp.dEv4ugM5jL` (~590 MB).
 ---
+
+---
+## Handoff — 2026-11-09 15:46 UTC
+**From**: Engineer → Architect
+**Trigger**: E-10 DONE; Engineer queue empty (E-6 waits on the operator, E-9 on rein P-50)
+
+### What was built
+- E-10 (5b8bc6b): owner guard for `install`/`update`/`rollback` per D-013 — run uid from the lock file's
+  open handle (fstat at `acquire`; a failed read refuses), `$HOME` judged through its symlink, `.rein` and
+  snapshot paths not followed; pure `check_owners`; `RunUid` fn pointer for tests; no override flag; no-op on
+  Windows. No-snapshot notice via `InstallOutcome.unsnapshotted` / `outcome_lines`. Linux CLI test runs the
+  real binary with `--home /tmp` (root-owned) for a real mismatch without root. ARCH_PASS, TESTS_PASS,
+  SEC_PASS (2nd pass: P1 path-based uid → handle; P1 symlinked `$HOME` judged by the link). CI green ×3.
+
+### Decisions made
+- None.
+
+### Blueprint divergence
+- NONE against D-013. Open SEC P2s for your call (none blocking):
+  1. Public `install_tree_locked` / `install_tree_with_faults` rely on the caller having run the guard
+     (`install_cmd` does; `install_tree` and `rollback_tree` run it themselves). A compile-time token
+     returned by `owner_guard` would make it unskippable.
+  2. Shared root-owned `--home` only: rollback's second check covers the snapshot root + `layout.json`, not
+     its `VERSION`/`tree/**`; install prunes `.rein.prev-*` and removes `.rein.fetch-*` without owner checks
+     (`remove_dir_all` does not follow links). Candidate THREAT_MODEL lines.
+
+### Next action needed
+- Nothing for the Engineer until the operator merges PR #1 / sets `HOMEBREW_TAP_TOKEN` (+ `REIN_RELEASE_PUBKEY`
+  after P-50), or you hand off that rein ships `rein release manifest` (E-9).
+
+### Open risks
+- Operator cleanup `/tmp/tmp.dEv4ugM5jL` (~590 MB) may still be pending.
+---
