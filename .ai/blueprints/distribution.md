@@ -213,7 +213,10 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   the premise hold is the **owner guard** (step 3a): the writer never runs as a different
   user than the one who owns the home and the snapshot, so a root-run rollback can never be
   steered by a user-edited file, and no root-owned file lands in a user's home. The `Faults`
-  seam is `#[doc(hidden)]` test surface; no production caller (phase 2 included) may set it.
+  seam and the uid-injectable `owner_guard_with` are `#[doc(hidden)]` test surface; no
+  production caller (phase 2 included) may use them — production code calls `owner_guard`,
+  which always reads the real uid. They stay exported without a cargo feature: code in the
+  same process is not a security boundary, and a feature would split the test matrix.
   **Unsupported, documented, not defended (D-013 addendum):** a `--home` inside a directory
   that other users can write (`/tmp`, a shared root-owned directory). The guard checks the
   owners of the home, `.rein`, the snapshot root and its `layout.json`, not every entry
@@ -349,6 +352,8 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   `$HOME`, `$HOME/.rein`, or the snapshot being restored), and the one-line "no snapshot
   taken" notice of step c. §Security trust boundary 2, §Test Plan "Owner guard", "No-snapshot
   notice" (D-013). Depends on E-7. `security_engineer` before commit.
+- E-7, E-8, E-10 and E-11 are DONE (2026-11-09). Phase 1 code is complete; what remains is
+  E-6 (operator: merge PR #1, secrets, first tag) and E-9 (rein P-50).
 - **E-11** (T3) Make the owner guard unskippable: `owner_guard` returns a proof value with no
   public constructor, borrowed from the `InstallLock`; `install_tree_locked`,
   `install_tree_with_faults` and rollback's lock-held writer take it; `compile_fail` doctest;
