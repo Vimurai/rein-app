@@ -8,8 +8,8 @@ use std::fs;
 use std::path::Path;
 
 use rein_release::{
-    Faults, InstallPaths, LayoutError, RollbackError, VerifiedRelease, install_tree,
-    install_tree_with_faults, rollback_tree, verify_release,
+    Faults, InstallLock, InstallPaths, LayoutError, RollbackError, VerifiedRelease, install_tree,
+    install_tree_with_faults, owner_guard, rollback_tree, verify_release,
 };
 use semver::Version;
 use support::{Listed, Release, TestKey, VERSION, entries_for, good_files, manifest_json};
@@ -85,6 +85,13 @@ impl Home {
     fn rein(&self) -> std::path::PathBuf {
         self.paths.rein()
     }
+}
+
+/// A faulted install, through the owner guard like every production caller.
+fn faulty(h: &Home, faults: &Faults) -> Result<rein_release::InstallOutcome, LayoutError> {
+    let lock = InstallLock::acquire(&h.paths)?;
+    let checked = owner_guard(&lock, &h.paths, &[])?;
+    install_tree_with_faults(&h.paths, &h.release(&good_files()), &checked, faults)
 }
 
 /// Every entry under `root`: path → (symlink target or bytes, mode).
@@ -267,7 +274,7 @@ fn a_failure_at_every_step_restores_the_old_payload() {
     loop {
         let h = Home::seeded();
         let faults = Faults::fail_at(k);
-        match install_tree_with_faults(&h.paths, &h.release(&good_files()), &faults) {
+        match faulty(&h, &faults) {
             Ok(_) => {
                 assert!(k > faults.steps(), "the fault at step {k} never fired");
                 break;
@@ -291,8 +298,7 @@ fn a_failure_at_every_step_restores_the_old_payload() {
 #[test]
 fn a_failed_fresh_install_has_no_version_and_a_rerun_completes_it() {
     let h = Home::new();
-    let err = install_tree_with_faults(&h.paths, &h.release(&good_files()), &Faults::fail_at(2))
-        .unwrap_err();
+    let err = faulty(&h, &Faults::fail_at(2)).unwrap_err();
     assert!(
         matches!(err, LayoutError::Sync { snapshot: None, .. }),
         "{err}"
@@ -490,7 +496,7 @@ fn at_every_stop_point_hooks_are_old_or_new_and_land_last() {
     loop {
         let h = Home::seeded();
         let faults = Faults::stop_at(k);
-        if install_tree_with_faults(&h.paths, &h.release(&good_files()), &faults).is_ok() {
+        if faulty(&h, &faults).is_ok() {
             break;
         }
         let rein = h.rein();
@@ -582,9 +588,7 @@ fn a_live_symlink_does_not_block_restore_or_rollback() {
     let before = digest(&seed().rein());
     for k in 1..=3 {
         let h = seed();
-        let err =
-            install_tree_with_faults(&h.paths, &h.release(&good_files()), &Faults::fail_at(k))
-                .unwrap_err();
+        let err = faulty(&h, &Faults::fail_at(k)).unwrap_err();
         assert!(
             matches!(err, LayoutError::Sync { restored: true, .. }),
             "k={k}: {err}"
@@ -661,8 +665,7 @@ fn a_file_at_an_owned_directory_path_is_left_alone_and_restores_still_work() {
     let h = Home::seeded();
     write(&h.rein().join("mcp/z/node_modules"), b"stray");
     let before = digest(&h.rein());
-    let err = install_tree_with_faults(&h.paths, &h.release(&good_files()), &Faults::fail_at(1))
-        .unwrap_err();
+    let err = faulty(&h, &Faults::fail_at(1)).unwrap_err();
     assert!(
         matches!(err, LayoutError::Sync { restored: true, .. }),
         "{err}"

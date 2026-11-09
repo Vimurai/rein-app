@@ -7,8 +7,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use rein_release::{
-    Http, InstallLock, InstallOutcome, InstallPaths, ReleaseSource, RunUid, SignatureVerifier,
-    fetch_release, install_tree_locked, owner_guard, verify_release,
+    Http, InstallLock, InstallOutcome, InstallPaths, OwnerChecked, ReleaseSource, RunUid,
+    SignatureVerifier, fetch_release, install_tree_locked, owner_guard_with, verify_release,
 };
 use semver::Version;
 
@@ -34,8 +34,12 @@ pub struct Deps<'a> {
 struct Scratch(PathBuf);
 
 impl Scratch {
-    fn create(home: &Path, v: &Version) -> io::Result<Self> {
-        let dir = home.join(format!(".rein.fetch-{v}"));
+    /// Lock-held write beside the Rein home: needs the owner guard's proof (E-11).
+    fn create(paths: &InstallPaths, v: &Version, checked: &OwnerChecked<'_>) -> io::Result<Self> {
+        checked
+            .covers(paths)
+            .map_err(|e| io::Error::other(e.to_string()))?;
+        let dir = paths.home().join(format!(".rein.fetch-{v}"));
         // Ours by name; the install lock is held, so no other run is using it.
         match fs::symlink_metadata(&dir) {
             Ok(m) if m.is_dir() => fs::remove_dir_all(&dir)?,
@@ -57,6 +61,25 @@ impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
     }
+}
+
+/// Print an error line. Tests also see the lines their own thread reported, so a refusal
+/// test can assert what was named (D-013 / E-11).
+pub fn report(line: String) {
+    #[cfg(test)]
+    REPORTED.with(|r| r.borrow_mut().push(line.clone()));
+    eprintln!("{line}");
+}
+
+#[cfg(test)]
+thread_local! {
+    pub static REPORTED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The lines [`report`]ed on this thread so far (tests).
+#[cfg(test)]
+pub fn reported() -> String {
+    REPORTED.with(|r| r.borrow().join("\n"))
 }
 
 /// What `install` reports after the layout step.
@@ -97,11 +120,14 @@ pub fn install(home: &Path, version: &Version, deps: &Deps<'_>) -> u8 {
         }
     };
     // Owner guard (D-013): before anything is fetched or written; the lock is released.
-    if let Err(e) = owner_guard(&lock, deps.run_uid, &paths, &[]) {
-        eprintln!("rein-app: {e}");
-        return EXIT_ERROR;
-    }
-    let scratch = match Scratch::create(home, version) {
+    let checked = match owner_guard_with(&lock, deps.run_uid, &paths, &[]) {
+        Ok(c) => c,
+        Err(e) => {
+            report(format!("rein-app: {e}"));
+            return EXIT_ERROR;
+        }
+    };
+    let scratch = match Scratch::create(&paths, version, &checked) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("rein-app: cannot create the download directory: {e}");
@@ -138,7 +164,7 @@ pub fn install(home: &Path, version: &Version, deps: &Deps<'_>) -> u8 {
         return EXIT_RUNTIME;
     }
 
-    let outcome = match install_tree_locked(&paths, &release) {
+    let outcome = match install_tree_locked(&paths, &release, &checked) {
         Ok(o) => o,
         Err(e) => {
             eprintln!("rein-app: {e}");
@@ -327,6 +353,11 @@ mod tests {
         let rein = FakeRein::new(&[]);
         let foreign: RunUid = |l| l.run_uid().map(|u| u.wrapping_add(1));
         assert_eq!(run_as(&key, &key, &rein, home.path(), foreign), EXIT_ERROR);
+        let said = reported();
+        assert!(
+            said.contains(&format!("{} belongs to uid", home.path().display())),
+            "the refused path is named: {said}"
+        );
         assert!(
             leftovers(home.path()).is_empty(),
             "nothing written, lock released"

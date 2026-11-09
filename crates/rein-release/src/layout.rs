@@ -312,14 +312,36 @@ pub fn check_owners(run_uid: u32, owners: &[(PathBuf, u32)]) -> Result<(), Layou
 /// Owner guard (D-013, blueprint §Components 3 step a): right after the lock is taken,
 /// refuse unless this run's user owns `$HOME`, `$HOME/.rein` (when it exists) and every
 /// path in `extra`. A no-op where uids do not exist (Windows).
-pub fn owner_guard(
-    lock: &InstallLock,
+pub fn owner_guard<'l>(
+    lock: &'l InstallLock,
+    paths: &InstallPaths,
+    extra: &[&Path],
+) -> Result<OwnerChecked<'l>, LayoutError> {
+    owner_guard_with(lock, InstallLock::run_uid, paths, extra)
+}
+
+/// [`owner_guard`] with the uid source injectable (tests inject a mismatch).
+#[doc(hidden)]
+pub fn owner_guard_with<'l>(
+    lock: &'l InstallLock,
     run_uid: RunUid,
     paths: &InstallPaths,
     extra: &[&Path],
-) -> Result<(), LayoutError> {
+) -> Result<OwnerChecked<'l>, LayoutError> {
+    // The proof covers the home whose lock is held — never another one (E-11 review P1-1).
+    if lock.path != paths.lock() {
+        return Err(LayoutError::Io(format!(
+            "owner guard: the lock held is {} but the home is {}",
+            lock.path.display(),
+            paths.home().display()
+        )));
+    }
+    let proof = OwnerChecked {
+        _lock: lock,
+        home: paths.home().to_path_buf(),
+    };
     let Some(me) = run_uid(lock) else {
-        return Ok(());
+        return Ok(proof); // no uids on this platform: nothing to compare
     };
     // $HOME is judged by the directory it resolves to — a root-owned symlink to the user's
     // real home must not let root through (review P1-2). The rest are never followed.
@@ -330,7 +352,58 @@ pub fn owner_guard(
     let mut rest = vec![paths.rein()];
     rest.extend(extra.iter().map(|p| p.to_path_buf()));
     owners.extend(rest.into_iter().filter_map(|p| uid_of(&p).map(|u| (p, u))));
-    check_owners(me, &owners)
+    check_owners(me, &owners).map(|()| proof)
+}
+
+/// Proof that the [`owner_guard`] passed for one home while its [`InstallLock`] is held
+/// (D-013 addendum). It has no public constructor and borrows the lock, so every
+/// lock-held writer that takes one can only be reached through the guard, and only while
+/// that lock lives.
+///
+/// ```compile_fail,E0061
+/// // A writer cannot be called without the proof …
+/// fn skip(p: &rein_release::InstallPaths, r: &rein_release::VerifiedRelease) {
+///     let _ = rein_release::install_tree_locked(p, r);
+/// }
+/// ```
+///
+/// ```compile_fail,E0451
+/// // … and the proof cannot be built outside the guard.
+/// fn forge(home: std::path::PathBuf, lock: &rein_release::InstallLock) {
+///     let _ = rein_release::OwnerChecked { _lock: lock, home };
+/// }
+/// ```
+///
+/// ```no_run
+/// // The only way in:
+/// fn guarded(p: &rein_release::InstallPaths, r: &rein_release::VerifiedRelease)
+///     -> Result<(), rein_release::LayoutError>
+/// {
+///     let lock = rein_release::InstallLock::acquire(p)?;
+///     let ok = rein_release::owner_guard(&lock, p, &[])?;
+///     rein_release::install_tree_locked(p, r, &ok)?;
+///     Ok(())
+/// }
+/// ```
+#[derive(Debug)]
+pub struct OwnerChecked<'l> {
+    _lock: &'l InstallLock,
+    home: PathBuf,
+}
+
+impl OwnerChecked<'_> {
+    /// Refuse to act on a home the guard did not check.
+    pub fn covers(&self, paths: &InstallPaths) -> Result<(), LayoutError> {
+        if self.home == paths.home() {
+            Ok(())
+        } else {
+            Err(LayoutError::Io(format!(
+                "owner guard ran for {} but the write targets {}",
+                self.home.display(),
+                paths.home().display()
+            )))
+        }
+    }
 }
 
 impl Drop for InstallLock {
@@ -348,27 +421,29 @@ pub fn install_tree(
     release: &VerifiedRelease,
 ) -> Result<InstallOutcome, LayoutError> {
     let lock = InstallLock::acquire(paths)?;
-    owner_guard(&lock, InstallLock::run_uid, paths, &[])?;
-    install_tree_locked(paths, release)
+    let checked = owner_guard(&lock, paths, &[])?;
+    install_tree_locked(paths, release, &checked)
 }
 
-/// [`install_tree`] for a caller that already holds the [`InstallLock`] and has run the
-/// [`owner_guard`].
+/// [`install_tree`] for a caller that holds the [`InstallLock`]; `checked` (from
+/// [`owner_guard`]) proves the guard passed for this home.
 pub fn install_tree_locked(
     paths: &InstallPaths,
     release: &VerifiedRelease,
+    checked: &OwnerChecked<'_>,
 ) -> Result<InstallOutcome, LayoutError> {
-    install_tree_with_faults(paths, release, &Faults::none())
+    install_tree_with_faults(paths, release, checked, &Faults::none())
 }
 
-/// [`install_tree_locked`] with the test fault seam. The caller has already run the
-/// [`owner_guard`].
+/// [`install_tree_locked`] with the test fault seam.
 #[doc(hidden)]
 pub fn install_tree_with_faults(
     paths: &InstallPaths,
     release: &VerifiedRelease,
+    checked: &OwnerChecked<'_>,
     faults: &Faults,
 ) -> Result<InstallOutcome, LayoutError> {
+    checked.covers(paths)?;
     let live = paths.rein();
     let live_exists = home_exists(&live)?;
     let manifest = &release.manifest;
@@ -538,6 +613,16 @@ mod owner_tests {
     use super::*;
 
     #[test]
+    fn a_proof_never_covers_a_home_whose_lock_is_not_held() {
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        let lock_a = InstallLock::acquire(&InstallPaths::new(a.path())).unwrap();
+        let err = owner_guard(&lock_a, &InstallPaths::new(b.path()), &[]);
+        assert!(matches!(err, Err(LayoutError::Io(_))), "{err:?}");
+        assert!(owner_guard(&lock_a, &InstallPaths::new(a.path()), &[]).is_ok());
+    }
+
+    #[test]
     fn owner_guard_comparison_names_the_first_foreign_path() {
         let home = (PathBuf::from("/h"), 1000);
         let rein = (PathBuf::from("/h/.rein"), 1000);
@@ -581,10 +666,10 @@ mod owner_tests {
         let p = InstallPaths::new(dir.path());
         let lock = InstallLock::acquire(&p).unwrap();
         assert_eq!(lock.run_uid(), uid_of(dir.path()));
-        assert!(owner_guard(&lock, InstallLock::run_uid, &p, &[]).is_ok());
+        assert!(owner_guard(&lock, &p, &[]).is_ok());
         let foreign: RunUid = |l| l.run_uid().map(|u| u.wrapping_add(1));
         assert!(matches!(
-            owner_guard(&lock, foreign, &p, &[]),
+            owner_guard_with(&lock, foreign, &p, &[]),
             Err(LayoutError::NotOwner { .. })
         ));
     }
@@ -608,16 +693,18 @@ mod owner_symlink_tests {
             eprintln!("SKIP: /tmp is owned by the test user");
             return;
         }
+        // The rule, without a lock under /tmp (the CLI test owns that path): $HOME is
+        // judged by the directory it resolves to, not by the link.
         let dir = tempfile::tempdir().unwrap();
         let link = dir.path().join("home");
         std::os::unix::fs::symlink("/tmp", &link).unwrap();
-        let lock_home = InstallPaths::new(dir.path());
-        let lock = InstallLock::acquire(&lock_home).unwrap();
-        let err = owner_guard(&lock, InstallLock::run_uid, &InstallPaths::new(&link), &[]);
-        assert!(
-            matches!(err, Err(LayoutError::NotOwner { ref path, .. }) if path == &link),
-            "{err:?}"
-        );
+        assert_eq!(uid_of(&link), Some(me), "the link is ours");
+        assert_eq!(dir_uid(&link), Some(fs::metadata("/tmp").unwrap().uid()));
+        let owners = [(link.clone(), dir_uid(&link).unwrap())];
+        assert!(matches!(
+            check_owners(me, &owners),
+            Err(LayoutError::NotOwner { ref path, .. }) if path == &link
+        ));
     }
 
     #[test]

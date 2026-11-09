@@ -4,6 +4,9 @@
 //! user) while `$HOME` belongs to someone else — exactly the `sudo` shape inverted.
 //! `install` and `rollback` refuse before any network or write; the uid-injected
 //! in-process tests in install_cmd.rs / update_cmd.rs cover `update` and Windows/macOS.
+//! This is the ONLY test that may use `/tmp` as a home (and so `/tmp/.rein.lock`): both
+//! runs happen in this one test, one after the other, and the test skips when the lock
+//! already exists or is taken concurrently by another process on the machine.
 #![cfg(target_os = "linux")]
 
 use std::os::unix::fs::MetadataExt;
@@ -33,6 +36,11 @@ fn install_and_rollback_as_a_non_owner_name_the_path_and_leave_nothing() {
             .output()
             .unwrap();
         let stderr = String::from_utf8_lossy(&out.stderr);
+        if stderr.contains("/tmp/.rein.lock exists") {
+            // Another process on this machine took the shared lock after our check.
+            eprintln!("SKIP: /tmp/.rein.lock taken concurrently");
+            return;
+        }
         assert_eq!(out.status.code(), Some(1), "{args:?}: {stderr}");
         assert!(
             stderr.contains(&format!(

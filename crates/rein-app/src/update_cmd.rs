@@ -136,7 +136,7 @@ pub fn rollback(home: &Path, process: &dyn Process, run_uid: RunUid) -> u8 {
             return EXIT_NO_PREVIOUS;
         }
         Err(e) => {
-            eprintln!("rein-app: {e}");
+            install_cmd::report(format!("rein-app: {e}"));
             return EXIT_ERROR;
         }
     };
@@ -353,6 +353,11 @@ mod tests {
             run_update_as(home.path(), &http, &key, None, FOREIGN),
             EXIT_ERROR
         );
+        let said = install_cmd::reported();
+        assert!(
+            said.contains(&format!("{} belongs to uid", home.path().display())),
+            "the refused path is named: {said}"
+        );
         let left: Vec<_> = fs::read_dir(home.path()).unwrap().collect();
         assert!(left.is_empty(), "nothing written, no lock left: {left:?}");
     }
@@ -372,6 +377,11 @@ mod tests {
         .unwrap();
         let rein = OkRein::default();
         assert_eq!(rollback(home.path(), &rein, FOREIGN), EXIT_ERROR);
+        let said = install_cmd::reported();
+        assert!(
+            said.contains(&format!("{} belongs to uid", home.path().display())),
+            "the refused path is named: {said}"
+        );
         assert!(!home.path().join(".rein").exists());
         assert!(!home.path().join(".rein.lock").exists());
         assert!(rein.0.borrow().is_empty(), "rein doctor not run");

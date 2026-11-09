@@ -24,8 +24,9 @@ pub use fetch::{
 };
 pub use latest::{LatestRelease, MAX_LATEST_BYTES, REIN_LATEST_API, latest_release, parse_latest};
 pub use layout::{
-    InstallLock, InstallOutcome, InstallPaths, LayoutError, RunUid, check_owners, install_tree,
-    install_tree_locked, install_tree_with_faults, installed_version, owner_guard, uid_of,
+    InstallLock, InstallOutcome, InstallPaths, LayoutError, OwnerChecked, RunUid, check_owners,
+    install_tree, install_tree_locked, install_tree_with_faults, installed_version, owner_guard,
+    owner_guard_with, uid_of,
 };
 pub use manifest::{FileEntry, FileMode, Layout, Manifest, ManifestHeader, SUPPORTED_SCHEMA};
 pub use matcher::OperatorOwnedMatcher;

@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use semver::Version;
 
 use crate::layout::{
-    InstallLock, InstallPaths, LayoutError, RunUid, home_exists, installed_version, owner_guard,
-    sync_loaded,
+    InstallLock, InstallPaths, LayoutError, OwnerChecked, RunUid, home_exists, installed_version,
+    owner_guard_with, sync_loaded,
 };
 use crate::snapshot;
 use crate::sync::{self, Faults};
@@ -70,7 +70,7 @@ pub fn rollback_tree_with(
     run_uid: RunUid,
 ) -> Result<(RollbackOutcome, InstallLock), RollbackError> {
     let lock = InstallLock::acquire(paths)?;
-    owner_guard(&lock, run_uid, paths, &[])?;
+    owner_guard_with(&lock, run_uid, paths, &[])?;
     let io_err = |e: std::io::Error| RollbackError::Layout(LayoutError::Io(e.to_string()));
     // Chosen before the new snapshot below exists, so it is the newest *earlier* one.
     let target = paths
@@ -80,13 +80,29 @@ pub fn rollback_tree_with(
         .next()
         .ok_or(RollbackError::NoPrevious)?;
     // The snapshot steers what rollback writes: it must be ours too (D-013).
-    owner_guard(
-        &lock,
-        run_uid,
-        paths,
-        &[&target, &target.join("layout.json")],
-    )?;
-    let snap = snapshot::load(&target)?;
+    let outcome = {
+        let checked = owner_guard_with(
+            &lock,
+            run_uid,
+            paths,
+            &[&target, &target.join("layout.json")],
+        )?;
+        rollback_locked(paths, &target, &checked)?
+    };
+    Ok((outcome, lock))
+}
+
+/// The lock-held writer of a rollback: `checked` proves the owner guard passed for this
+/// home while its lock is held. Its only caller ran the guard for `target` and
+/// `target/layout.json` too; the proof itself records only the home.
+fn rollback_locked(
+    paths: &InstallPaths,
+    target: &std::path::Path,
+    checked: &OwnerChecked<'_>,
+) -> Result<RollbackOutcome, RollbackError> {
+    checked.covers(paths)?;
+    let io_err = |e: std::io::Error| RollbackError::Layout(LayoutError::Io(e.to_string()));
+    let snap = snapshot::load(target)?;
     let live = paths.rein();
     let live_exists = home_exists(&live)?;
     let source = snap.rels();
@@ -122,11 +138,8 @@ pub fn rollback_tree_with(
     }
     let _ = fs::remove_dir_all(&snap.root);
     snapshot::prune(paths);
-    Ok((
-        RollbackOutcome {
-            restored: snap.version,
-            snapshot: current,
-        },
-        lock,
-    ))
+    Ok(RollbackOutcome {
+        restored: snap.version,
+        snapshot: current,
+    })
 }
