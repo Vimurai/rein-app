@@ -177,3 +177,59 @@ throwaway minisign key. No change to E-2.
 ### Blueprint divergence
 - NONE in code; Architect model corrected (D-005 (c) retracted). distribution.md Component 6 updated.
 ---
+
+---
+## Handoff — 2026-11-09 14:45 UTC
+**From**: Engineer → Architect
+**Trigger**: E-4, E-5 DONE; E-6 code half on master, release pipeline in PR #1 (awaiting operator review)
+
+### What was built
+- E-4 closed (shipped 58b2413; ARCH/TESTS/SEC pass).
+- E-5 (73fa5bc, 74f4ca8): `crates/rein-release/src/layout.rs` LayoutWriter (staging 0700 → rename
+  swap, `VERSION` last, `.rein.prev-<ver>` N=2 with `~N` on a label clash, `$HOME/.rein.lock`
+  removed only by its owner and held through `rein install`/`rein doctor`, live directory modes
+  kept); `crates/rein-app/src/runner.rs` Runner + RuntimeCheck; `rein-app install --version`.
+  ARCH_PASS, TESTS_PASS, SEC_PASS (2nd pass).
+- E-6 code (082c1da): `latest.rs` (GitHub API newest tag), `rollback.rs`, `rein-app update|rollback|doctor`,
+  `wsl.rs` WslLauncher + `rein-app launch`. ALIGN_PASS.
+- E-6 pipeline: PR #1 (`engineer/e6-release-pipeline`, 93c4674) — cargo-dist release.yml, msi,
+  Homebrew → new repo `Vimurai/homebrew-tap`, .deb job, key guard. PR checks green; the merge was
+  refused by the permission classifier (needs operator review). DEVOPS E-6, D-010.
+
+### Decisions made
+- D-010 (Engineer, dependency_gate): cargo-dist / cargo-deb / appimagetool as build tools; operator
+  chose "build the pipeline now, guarded" and "create the tap".
+
+### Blueprint divergence
+1. **Carry-over beyond operator_owned (needs ruling + rein contract item).** Live homes hold
+   `approvals.sqlite`, `cache.sqlite`, `*.sqlite-wal/-shm`, `ci/`, `privacy/`, `trash/`, none on the
+   schema-1 `operator_owned` list. The writer carries every non-mirrored top-level entry (as
+   install-rein.sh leaves them); the literal blueprint would drop committed WAL data.
+2. **SEC P1-3 (open, Architect):** copying while rein runs can tear SQLite+WAL pairs and drop writes
+   made mid-install (approval ledger); `trash/`, `ci/` duplicated ×3 with N=2. Options: refuse while
+   rein processes are live, or swap the mirrored dirs inside the live tree instead of copying
+   operator data out. `rollback` likewise restores the older tree's operator files (newer ones stay
+   in the swapped-out tree; the CLI says so).
+3. Layout-equality test vs install-rein.sh not written — rein has no `rein release manifest` (P-50).
+4. `install` requires `--version`; `update` resolves the newest tag via api.github.com (added to the
+   host policy, metadata only; the release is still verified and version-bound).
+5. RuntimeCheck: node ≥ min_node and git required; sqlite3/tmux/claude reported only.
+6. Previous trees ordered by `VERSION` mtime; no live tree + a previous tree → refuse (`OrphanedPrevious`);
+   a release file at an operator-owned path is never written, even on a fresh install.
+7. `launch` runs `rein-app update --yes` inside WSL (not `install`), requires a Linux rein-app
+   already in the distro, refuses project paths containing `;` (wt.exe separator).
+8. AppImage deferred (no pinnable appimagetool release); cargo-dist 0.34.0 renders local reusable
+   jobs as `uses: $/…` — one hand fix under `allow-dirty = ["ci"]`.
+9. Deferred SEC P2s: stale lock after SIGINT (no liveness check without unsafe), runner env denylist
+   beyond `CLAUDECODE`, O_NOFOLLOW copies, fresh-install dirs 0755 regardless of umask; no test for
+   a swap failing midway (no seam).
+
+### Next action needed
+- Rule on divergences 1–2 (and ask rein to extend `operator_owned`); decide AppImage.
+- E-6 stays OPEN until PR #1 is merged by the operator and the first tag can build:
+  operator adds `HOMEBREW_TAP_TOKEN` (secret), and `REIN_RELEASE_PUBKEY` (variable) once rein P-50 lands.
+
+### Open risks
+- No rein release can be installed until rein publishes a signed release and its public key.
+- Release jobs (key guard, .deb) are unexercised until the first tag.
+---
