@@ -36,9 +36,9 @@ enum Command {
     /// Fetch, verify and install a signed rein release into $HOME/.rein, then run
     /// `rein install` and `rein doctor` from it.
     Install {
-        /// rein release to install (X.Y.Z). `update` installs the newest one.
+        /// rein release to install (X.Y.Z); default: the newest release.
         #[arg(long, value_name = "X.Y.Z")]
-        version: semver::Version,
+        version: Option<semver::Version>,
     },
     /// Install the newest rein release if it is newer than the installed one.
     Update {
@@ -82,7 +82,7 @@ fn main() -> ExitCode {
     };
     let code = match cli.command {
         Command::Install { version } => {
-            with_network(|deps| install_cmd::install(&home, &version, deps))
+            with_network(|deps| update_cmd::install_cli(&home, version, REIN_LATEST_API, deps))
         }
         Command::Update { yes } => {
             with_network(|deps| update_cmd::update_cli(&home, yes, REIN_LATEST_API, deps))
@@ -151,7 +151,9 @@ mod tests {
             "relative home refused"
         );
         let cli = Cli::try_parse_from(["rein-app", "install", "--version", "0.5.0"]).unwrap();
-        assert!(matches!(cli.command, Command::Install { .. }));
+        assert!(matches!(cli.command, Command::Install { version: Some(_) }));
+        let cli = Cli::try_parse_from(["rein-app", "install"]).unwrap();
+        assert!(matches!(cli.command, Command::Install { version: None }));
         let cli = Cli::try_parse_from(["rein-app", "update", "--yes"]).unwrap();
         assert!(matches!(cli.command, Command::Update { yes: true }));
         for sub in ["rollback", "doctor", "launch"] {

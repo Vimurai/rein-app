@@ -4,8 +4,11 @@
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::Path;
 
+use semver::Version;
+
 use rein_release::{
-    FetchError, InstallPaths, RollbackError, installed_version, latest_release, rollback_tree,
+    FetchError, InstallPaths, LatestRelease, RollbackError, installed_version, latest_release,
+    rollback_tree,
 };
 
 use crate::install_cmd::{self, Deps, EXIT_DOCTOR, EXIT_ERROR};
@@ -43,18 +46,41 @@ pub fn sanitise_notes(notes: &str) -> String {
     out
 }
 
+/// The newest release, or the exit code to return (11 when the server is unreachable).
+fn resolve_latest(deps: &Deps<'_>, latest_api: &str) -> Result<LatestRelease, u8> {
+    latest_release(deps.http, latest_api).map_err(|e| match e {
+        FetchError::Network(_) | FetchError::Status { .. } => {
+            eprintln!("rein-app: cannot reach the release server — {e}");
+            EXIT_OFFLINE
+        }
+        e => {
+            eprintln!("rein-app: {e}");
+            EXIT_ERROR
+        }
+    })
+}
+
+/// `rein-app install [--version X.Y.Z]`: without a version, install the newest release
+/// (same resolver as `update`; blueprint §API, D-012 ruling 4).
+pub fn install_cli(home: &Path, version: Option<Version>, latest_api: &str, deps: &Deps<'_>) -> u8 {
+    let version = match version {
+        Some(v) => v,
+        None => match resolve_latest(deps, latest_api) {
+            Ok(l) => {
+                println!("rein-app: newest rein release is {}", l.version);
+                l.version
+            }
+            Err(code) => return code,
+        },
+    };
+    install_cmd::install(home, &version, deps)
+}
+
 pub fn update(home: &Path, latest_api: &str, confirm: Confirm<'_>, deps: &Deps<'_>) -> u8 {
     let installed = installed_version(&InstallPaths::new(home).rein());
-    let latest = match latest_release(deps.http, latest_api) {
+    let latest = match resolve_latest(deps, latest_api) {
         Ok(l) => l,
-        Err(e @ (FetchError::Network(_) | FetchError::Status { .. })) => {
-            eprintln!("rein-app: cannot reach the release server — {e}");
-            return EXIT_OFFLINE;
-        }
-        Err(e) => {
-            eprintln!("rein-app: {e}");
-            return EXIT_ERROR;
-        }
+        Err(code) => return code,
     };
     if installed.as_ref().is_some_and(|v| *v >= latest.version) {
         println!(
@@ -252,6 +278,53 @@ mod tests {
             EXIT_OFFLINE
         );
         assert!(!home.path().join(".rein").exists());
+    }
+
+    fn run_install(home: &Path, http: &MemHttp, key: &TestKey, version: Option<&str>) -> u8 {
+        let rein = OkRein::default();
+        let verifier = key.verifier();
+        let source = ReleaseSource {
+            base_url: BASE.into(),
+        };
+        let deps = Deps {
+            http,
+            source: &source,
+            verifier: &verifier,
+            process: &rein,
+        };
+        install_cli(
+            home,
+            version.map(|v| Version::parse(v).unwrap()),
+            API,
+            &deps,
+        )
+    }
+
+    #[test]
+    fn install_without_a_version_installs_the_newest_tag() {
+        let home = tempfile::tempdir().unwrap();
+        let key = TestKey::generate();
+        let http = mem_release(&key, &format!("v{VERSION}"));
+        assert_eq!(run_install(home.path(), &http, &key, None), 0);
+        assert_eq!(
+            fs::read_to_string(home.path().join(".rein/VERSION")).unwrap(),
+            format!("{VERSION}\n")
+        );
+    }
+
+    #[test]
+    fn install_with_a_version_skips_the_lookup_and_offline_exits_11() {
+        let home = tempfile::tempdir().unwrap();
+        let key = TestKey::generate();
+        let mut http = mem_release(&key, "v9.9.9");
+        http.0.remove(API); // the API is never asked when --version is given
+        assert_eq!(run_install(home.path(), &http, &key, Some(VERSION)), 0);
+        let offline = tempfile::tempdir().unwrap();
+        assert_eq!(
+            run_install(offline.path(), &MemHttp(HashMap::new()), &key, None),
+            EXIT_OFFLINE
+        );
+        assert!(!offline.path().join(".rein").exists());
     }
 
     #[test]
