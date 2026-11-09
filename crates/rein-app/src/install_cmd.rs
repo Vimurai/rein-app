@@ -76,8 +76,8 @@ thread_local! {
     pub static REPORTED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// The lines [`report`]ed on this thread so far (tests).
-#[cfg(test)]
+/// The lines [`report`]ed on this thread so far (the unix-only refusal tests read them).
+#[cfg(all(test, unix))]
 pub fn reported() -> String {
     REPORTED.with(|r| r.borrow().join("\n"))
 }
