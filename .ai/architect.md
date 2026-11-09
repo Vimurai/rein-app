@@ -10,7 +10,7 @@
 ## 0. Blueprint Index (JIT — load only what the task needs)
 | Domain | File | Phase | Status |
 |---|---|---|---|
-| Distribution: installer, verifier, layout writer, profile manager, updater, WSL launcher | `.ai/blueprints/distribution.md` | 1 | ACTIVE — E-2..E-6 |
+| Distribution: installer, verifier, layout writer, profile manager, updater, WSL launcher | `.ai/blueprints/distribution.md` | 1 | ACTIVE — E-2..E-5 done, E-6 in PR #1, E-7..E-9 open |
 | Desktop: Tauri window, pane view, status, settings UI, bundled Node, signing | `.ai/blueprints/desktop.md` | 2 | NOT WRITTEN — authored when Phase 1 ships |
 
 ## 1. System Philosophy
@@ -76,7 +76,9 @@ rein (logic, v0.4.0) ──signed release──▶ rein-app (Rust shell)
   env (unset `CLAUDECODE` as `.ai/providers.json` does). It parses `--json` outputs; text
   output is displayed verbatim, never parsed, until P-50 lands.
 - **Trust boundaries**: (a) network → verifier (untrusted bytes until signature + hashes
-  pass); (b) app → `$HOME/.rein` (write only via the layout writer, once, atomically);
+  pass); (b) app → `$HOME/.rein` (write only via the layout writer, only under the manifest's
+  mirrored dirs + `VERSION`, per file by temp + rename; everything else in the home is never
+  opened — D-011);
   (c) app → `<config_dir>/settings.json` (allow-list of four keys; every other key preserved
   byte-for-byte); (d) app → `rein` CLI (invoke only the §3.6 entry points).
 - **Runtime deps (phase 1)**: Node 22+, git, sqlite3, tmux, Claude Code — detected and
@@ -101,6 +103,13 @@ a placeholder E-1 (closed as superseded). Mapping:
 | E-5 Homebrew formula + cargo-dist release + updater/rollback + WSL launcher | **E-6** | 2 | E-4, E-5 |
 Tier 3 tasks require `security_engineer` review before commit (ENGINEER.md mid-task trigger).
 Execution order: E-2 → (E-3 ∥ E-4) → E-5 → E-6.
+Follow-ups from the E-5/E-6 review (2026-11-09, D-011/D-012):
+| Registered | Scope | Tier | Depends on |
+|---|---|---|---|
+| **E-7** | LayoutWriter + rollback reworked to the in-place sync (D-011) | 3 | E-5 |
+| **E-8** | `install` without `--version` resolves the newest tag | 2 | E-6 code |
+| **E-9** | layout-equality test vs `install-rein.sh` — BLOCKED on rein P-50 | 2 | E-7 |
+No release tag is pushed before E-7 is on master. AppImage is out of Phase 1 (D-012).
 
 ## 8. Contract Rulings received from `rein` (P-50 → rein D-153, mirrored as rein-app D-003)
 All five open questions are closed; `distribution.md` carries the detail. Summary:
@@ -113,14 +122,24 @@ All five open questions are closed; `distribution.md` carries the detail. Summar
    list is read from the manifest's `layout.operator_owned`, never hard-coded. Reference stays `install-rein.sh`.
 Still pending from `rein` (not blocking): the P-50 E-## that publish the release workflow,
 manifest generator, `doctor --json`, and accounts docs; rein-plugins' first tag on `stable`.
+Open questions sent to `rein` on 2026-11-09 (D-011; we behave per (a) until answered):
+(a) confirm that everything outside `layout.mirrored` is untouched by an install and that
+`operator_owned` decides only inside mirrored dirs — or extend the list (`approvals.sqlite*`,
+`cache.sqlite*`, `telemetry.sqlite-wal/-shm`, `ci/`, `privacy/`, `trash/`, `clean.log`);
+(b) who removes a retired MCP server's directory and the legacy mirrors under an app install.
 
 ## 9. Error Handling & Edge Cases (system level)
 - Verification failure of any kind → nothing is written to `$HOME/.rein`; exit non-zero with
-  the failing check named. No partial installs: unpack to a staging dir, verify, then atomic rename.
+  the failing check named. The release is unpacked and verified outside the home; the sync
+  then replaces files one by one (each atomic) and restores from its snapshot if it cannot
+  finish — the same guarantee `install-rein.sh` gives, not a whole-tree rename (D-011).
 - `rein doctor` reports ✗ → app shows doctor's own fix line; app adds no remediation of its own.
 - Profile file unparseable → refuse to write that profile, continue others, exit non-zero.
 - Offline → `update` says so and exits; installed tree untouched.
-- Rollback keeps N=2 trees; `rollback` swaps symlink/dir and re-runs `rein doctor`.
+- Rollback keeps N=2 snapshots of the release payload (never operator data); `rollback`
+  syncs the newest one back and re-runs `rein doctor`.
+- rein running during an install is normal: operator data is never touched and no hook is
+  ever missing, so there is no "stop rein first" check.
 
 ## 10. Development Cycle (Plan-Build-Test)
 1. **Plan**: Architect writes/updates this file + `.ai/blueprints/*.md`, registers E-## via
