@@ -233,3 +233,40 @@ throwaway minisign key. No change to E-2.
 - No rein release can be installed until rein publishes a signed release and its public key.
 - Release jobs (key guard, .deb) are unexercised until the first tag.
 ---
+
+---
+## Handoff — 2026-11-09 14:55 UTC
+**From**: Architect → Engineer
+**Trigger**: review of E-4/E-5/E-6 (handoff 14:45 UTC); rulings D-011, D-012; E-7..E-9 registered
+
+### What was built
+- Reviewed E-5 `layout.rs` / `rollback.rs`, the E-6 code, PR #1's workflow shape, and rein's `install-rein.sh`.
+- `.ai/blueprints/distribution.md` revised: §Core Concept, §Components 3 (rewritten, steps a–f), 5, 7, 8, §Data Model (`Snapshot`, `SyncPlan`), §API (`rollback` row), §Security trust boundary 2, §Execution Constraints, §Rollback Plan, §Test Plan (five new cases), §Task Breakdown (E-6 note, E-7..E-9).
+- `.ai/architect.md` §0, §5(b), §7, §8, §9; `.ai/DIGEST.md` refreshed.
+
+### Decisions made
+- **D-011** — ruling on divergences 1–2 and SEC P1-3: neither option offered. The whole-home staging swap goes; the writer syncs the mirrored dirs **in place, per file**, exactly as `install-rein.sh` does. Measured on a live home: 3.5 GB total (`ci/` 3.0 GB, `mcp/*/node_modules` 551 MB) against an 8.9 MB release payload — E-5 copies all of it on every install and keeps two more copies. rein's installer also rejects a directory swap in its own comments (E-304): a renamed-away `hooks/` leaves every gate hook missing. Consequences: anything outside `layout.mirrored` is never opened (so no carry-over list question, no torn WAL, no lost approval writes, no duplication); the snapshot is the release payload only; `rollback` restores code only; no "refuse while rein runs" check.
+- **D-012** — AppImage deferred out of Phase 1 (no pinnable appimagetool). Divergences: (3) → E-9; (4) `install` must default to latest → E-8, the `api.github.com` resolver is accepted; (5), (6), (7), (8) accepted as built; (9) stale lock → Phase 2, env denylist and 0755 accepted, `O_NOFOLLOW` moot after E-7, "no swap-failure test" closed by E-7's fault seam.
+- The blueprint's swap was my design error, not yours — E-5 implemented what was written and flagged the right problems.
+
+### Blueprint divergence (if any)
+- E-5 as shipped now diverges from the revised blueprint by design; E-7 closes it. Lock, Runner, RuntimeCheck and the `install` command stand unchanged.
+
+### Next action needed
+1. **E-7 (T3)** first — read `distribution.md` §Components 3 and 7 before touching `layout.rs`. `security_engineer` before commit. The snapshot layout (`.rein.prev-<ver>/{tree/,VERSION,layout.json}`) and the step order are binding; how you build the fault seam is yours.
+2. **E-8 (T2)** — `install` without `--version`.
+3. **E-9** stays BLOCKED after E-7 until I hand off that rein's `rein release manifest` exists; if it auto-opens, skip it.
+4. **E-6 / PR #1**: still the operator's merge. Before it merges, merge master into `engineer/e6-release-pipeline`: `.ai/DECISIONS.md` will conflict (your D-010 vs D-011/D-012 appended on master) — keep both, D-010 first, and drop the bridging note above D-011. Remove AppImage from the pipeline plan in DEVOPS.md if it is still listed as planned. **No release tag before E-7 is on master.**
+
+### Open risks
+- `rein · Architect` is not live, so the notice below is undelivered; D-011 does not wait for the answers (we behave per (a)).
+- A retired MCP server's directory keeps its protected `node_modules` after an app install (`install-rein.sh` removes it itself) — E-9 will show this as the one expected diff until rein rules.
+- Per-file sync gives up whole-tree atomicity; mitigations are in D-011 (verify first, `hooks` last, `VERSION` last, restore from snapshot).
+
+### Notice for `rein · Architect` (UNDELIVERED — relay when that session is up)
+rein-app D-011 changes how the app lays a release out: in-place per-file sync of `layout.mirrored`, nothing else in the home is opened. Two contract questions; rein-app proceeds per (a) until answered:
+- (a) Please state in the manifest contract that every path outside `layout.mirrored` is untouched by an install and that `layout.operator_owned` decides only inside mirrored dirs. Live homes hold rein data the schema-1 list does not name: `approvals.sqlite*`, `cache.sqlite*`, `telemetry.sqlite-wal/-shm`, `ci/`, `privacy/`, `trash/`, `clean.log`. If you would rather keep the list exhaustive, extend it and the conformance fixture.
+- (b) `install-rein.sh` removes a retired MCP server's mirror directory (including its `node_modules`) and the legacy `gemini/` and `agents/` mirrors. Under an app install, who does that — a manifest field, or `rein install`? The app never deletes an operator-owned path on its own.
+- FYI: AppImage is out of rein-app Phase 1 (D-012); `plans/rein-app-plan.md` line 14 lists it.
+- Still needed from P-50: `rein release manifest`, a signed release, the public key + `key_id`, `doctor --json`.
+---
