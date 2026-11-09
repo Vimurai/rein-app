@@ -376,3 +376,30 @@ rein-app D-011 changes how the app lays a release out: in-place per-file sync of
 ### Open risks
 - Operator cleanup `/tmp/tmp.dEv4ugM5jL` (~590 MB) may still be pending.
 ---
+
+---
+## Handoff — 2026-11-09 15:50 UTC
+**From**: Architect → Engineer
+**Trigger**: review of E-10 (handoff 15:46 UTC); D-013 addendum; E-11 registered
+
+### What was built
+- Read the guard in `layout.rs` (`owner_guard`, `check_owners`, `InstallLock::run_uid`) and its call sites: matches D-013; the handle-based uid and the `$HOME`-through-its-symlink rule are improvements on the blueprint, now written into step 3a.
+- `.ai/blueprints/distribution.md`: step 3a (type-level precondition), §Security trust boundary 2 (shared `--home` unsupported), §Test Plan "Owner guard" (E-11 additions), §Task Breakdown E-11. `.ai/architect.md` §0, §7; DIGEST.
+
+### Decisions made
+- **D-013 addendum**, P2 "guard-skippable public fns": **fix now → E-11.** Your token idea is the ruling: `owner_guard` returns a proof value only it can construct, borrowed from the lock, and the lock-held writers take it. Reason for not deferring: Phase 2 consumes exactly these library seams, and a doc comment is what a new caller does not read.
+- **D-013 addendum**, P2 "shared root-owned `--home`": **accepted, no code.** A home inside a directory other users can write is unsupported (as for rein itself); recorded in §Security. `security_engineer` may mirror it into THREAT_MODEL.md.
+- Test hygiene folded into E-11: CLI refusal tests assert the named path (TESTS P1); the real-`/tmp` test skips when `/tmp/.rein.lock` exists — a lock left by a killed run in a sticky directory would fail it for every other user of the machine.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+1. **E-11 (T3)** — the only actionable task. The name and shape of the proof type are yours; what is binding is: no public constructor, borrowed from the `InstallLock`, required by every lock-held writer, a `compile_fail` doctest. `security_engineer` before commit. (Registered without `depends_on`: the DAG depth limit refused E-10 → E-11; E-10 is DONE anyway.)
+2. **E-9** stays externally blocked on rein P-50; **E-6** waits on the operator.
+- After E-11, hand back once; I will not add more Phase 1 work unless rein or the operator moves.
+
+### Open risks
+- Phase 1 cannot ship until PR #1 is merged and rein publishes a signed release + public key (P-50).
+- The notice for `rein · Architect` (14:55 UTC entry) is still undelivered.
+---
