@@ -6,6 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+authors = ["Emir Kovacevic"]
 publish = false
 
 [[bin]]
@@ -29,3 +31,22 @@ minisign = "0.10.0"
 sha2 = "0.11.1"
 tar = "0.4.46"
 tempfile = "3.27.0"
+
+# `.deb` via cargo-deb in the release workflow (E-6, D-010). The binary only; the Rein home
+# is operator data and is never installed or removed by the package.
+[package.metadata.deb]
+maintainer = "Emir Kovacevic <emirkovacevic@protonmail.com>"
+section = "devel"
+priority = "optional"
+extended-description = "Installs, verifies and updates a signed Rein release into $HOME/.rein and manages Claude Code profile settings."
+assets = [["target/release/rein-app", "usr/bin/", "755"]]
+
+[package.metadata.dist]
+# publish = false keeps it off crates.io; dist still releases the binary.
+dist = true
+
+[package.metadata.wix]
+upgrade-guid = "96C86356-32D7-4A0F-A291-90EBDB54BD32"
+path-guid = "C882D330-1E0E-4F1C-8A4F-09C9D328FDB2"
+license = false
+eula = false

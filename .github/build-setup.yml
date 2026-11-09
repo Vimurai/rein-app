@@ -1,0 +1,18 @@
+# Inserted by cargo-dist before every release build (github-build-setup, E-6 / D-010).
+# The minisign public key is baked into rein-app at build time (D-003). A release built
+# without it trusts no key and every install would fail closed — refuse to build one.
+- name: Bake the rein release public key
+  shell: bash
+  env:
+    PUBKEY: ${{ vars.REIN_RELEASE_PUBKEY }}
+  run: |
+    if [ -z "$PUBKEY" ]; then
+      echo "::error::repository variable REIN_RELEASE_PUBKEY is not set (rein P-50) — refusing to build a release that cannot verify rein"
+      exit 1
+    fi
+    # A minisign public key is one base64 line; anything else could inject into GITHUB_ENV.
+    if ! printf '%s' "$PUBKEY" | grep -Eq '^[A-Za-z0-9+/]+={0,2}$'; then
+      echo "::error::REIN_RELEASE_PUBKEY is not a single base64 line"
+      exit 1
+    fi
+    echo "REIN_RELEASE_PUBKEY=$PUBKEY" >> "$GITHUB_ENV"

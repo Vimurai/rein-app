@@ -8,6 +8,7 @@ edition = "2024"
 rust-version = "1.88"
 license = "Apache-2.0"
 repository = "https://github.com/Vimurai/rein-app"
+homepage = "https://github.com/Vimurai/rein-app"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -15,16 +16,37 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 
-# cargo-dist (E-2 declares targets only; release workflow + installers are E-6).
+# Config for 'dist'
 [workspace.metadata.dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.34.0"
-targets = [
-  "aarch64-apple-darwin",
-  "x86_64-apple-darwin",
-  "aarch64-unknown-linux-gnu",
-  "x86_64-unknown-linux-gnu",
-  "x86_64-pc-windows-msvc",
-]
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["shell", "powershell", "homebrew", "msi"]
+# A GitHub repo to push Homebrew formulas to
+tap = "Vimurai/homebrew-tap"
+# Publish jobs to run in CI
+publish-jobs = ["homebrew"]
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# Whether to install an updater program
+install-updater = false
+# E-6: fail any release build that would not carry rein's public key (D-003, D-010)
+github-build-setup = "../build-setup.yml"
+# E-6: .deb packages (cargo-dist has no .deb installer — D-010)
+local-artifacts-jobs = ["./build-linux-packages"]
+# cargo-dist 0.34.0 renders a local reusable workflow as `$/.github/...`; release.yml carries
+# one hand fix (`./.github/...`), so `dist generate` must not overwrite it unchecked.
+allow-dirty = ["ci"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+
+# Third-party actions pinned by commit, as in ci.yml (DEVOPS E-2/E-6).
+[workspace.metadata.dist.github-action-commits]
+"actions/checkout" = "d23441a48e516b6c34aea4fa41551a30e30af803" # v6.1.0
+"actions/upload-artifact" = "cf430e030ddbb5b0abf93d22962f4752f3646cd9" # v7.0.2
+"actions/download-artifact" = "9000827ccba6bdab643e8b6fd33ac0654aef8333" # v8.0.2
 
 [profile.dist]
 inherits = "release"

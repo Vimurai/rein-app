@@ -345,3 +345,39 @@ Remove the fallback branch; D-007 alone remains.
 - `[FIXTURE_Q4_OBSERVED] before any start: registered=false` · `after one unauthenticated start: registered=true` — registration-by-start reproduced on a clean runner. Confirms the D-009 fallback (hand-written entry with `ref` when `claude` is absent) is honoured at the next start.
 - `rein-seo@rein-plugins from settings alone (sync-install forced): not-installed; loaded-at-init=true` — with a `directory` source Claude Code loads the plugin in place from the marketplace copy without an `installed_plugins.json` record. Relevance to rein-app: our read-back (D-007) verifies `settings.json` (`extraKnownMarketplaces` entry, `enabledPlugins` `true` written by `claude plugin install`), never `installed_plugins.json`, so this does not affect exit 7. Phase 2 status must not treat "no install record" as "not loaded" — use `claude plugin list` or the init event.
 - M1 (github source, HEAD vs origin/stable) and M4 now running on their E-4 branch; M2 awaits the operator's CI secret. Nothing reopens D-007/D-009.
+
+## D-010 — E-6 release build tools: cargo-dist, cargo-deb, appimagetool (dependency_gate, Engineer-recorded)
+
+**Date**: 2026-11-09
+**Task**: E-6 (release pipeline)
+**Decision**: ADOPT — operator chose "build the pipeline, guarded" on 2026-11-09 (installs the
+tools, release workflow fails while `REIN_RELEASE_PUBKEY` is empty). These are **build-time
+tools run in CI and on the release machine**; none is linked into the `rein-app` binary.
+
+| Tool | Version | License | Use |
+|---|---|---|---|
+| cargo-dist (`dist`) | 0.34.0 (already pinned in `[workspace.metadata.dist]`) | MIT/Apache-2.0 | generate + run `release.yml`: archives, checksums, msi, Homebrew formula |
+| cargo-deb | 3.8.0 | MIT | `.deb` for x86_64/aarch64 Linux (cargo-dist has no .deb installer) |
+| appimagetool | pinned release + sha256 in the workflow | MIT | AppImage for x86_64 Linux |
+
+### Why needed
+distribution.md E-6 names Homebrew, `.deb`/AppImage and a Windows installer. cargo-dist covers
+archives, Homebrew and msi; it builds neither `.deb` nor AppImage.
+
+### Alternatives considered
+1. **Hand-written release workflow** — rejected: cargo-dist's generated workflow is checked by
+   `dist plan` and is the tool the blueprint and E-2 already chose.
+2. **nfpm / fpm for .deb** — rejected: a second packaging config language; cargo-deb reads
+   `Cargo.toml` metadata we already maintain.
+3. **No AppImage** — possible; kept because the blueprint names it. It is the first thing to
+   drop if appimagetool causes trouble (Homebrew + .deb cover Linux).
+
+### Security track record / maintenance
+cargo-dist (axodotdev) and cargo-deb (kornelski) are widely used and released in 2026.
+appimagetool is fetched by URL in CI: pin the release asset and verify its sha256 before
+running it. All three run only in the release job, on a pushed tag; the only secret in that
+job is `HOMEBREW_TAP_TOKEN` (tap repo contents:write only), exposed only to the publish step.
+
+### Rollback
+Remove `release.yml`, the cargo-dist `ci`/`installers`/`tap` keys and the
+`[package.metadata.deb]` block. No runtime code depends on any of them.
