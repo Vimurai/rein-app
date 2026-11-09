@@ -1088,8 +1088,14 @@ name = "rein-app"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "flate2",
+ "minisign",
  "rein-profiles",
+ "rein-release",
+ "semver",
  "serde_json",
+ "sha2 0.11.1",
+ "tar",
  "tempfile",
 ]
 

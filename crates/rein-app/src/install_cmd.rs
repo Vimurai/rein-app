@@ -1,0 +1,302 @@
+//! `rein-app install --version X.Y.Z` (blueprint §API, §Core Concept pipeline):
+//! lock → fetch → verify → runtime check → lay out → `rein install` → `rein doctor`.
+//! Every step before the layout swap leaves `$HOME/.rein` untouched.
+
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+
+use rein_release::{
+    Http, InstallLock, InstallPaths, ReleaseSource, SignatureVerifier, fetch_release,
+    install_tree_locked, verify_release,
+};
+use semver::Version;
+
+use crate::runner::{Process, ReinCommand, RunOutcome, RuntimeReport, install_then_doctor};
+
+/// Exit codes (blueprint §API).
+pub const EXIT_ERROR: u8 = 1;
+pub const EXIT_VERIFY: u8 = 2;
+pub const EXIT_DOCTOR: u8 = 3;
+pub const EXIT_RUNTIME: u8 = 4;
+
+/// Everything `install` talks to, injectable for tests.
+pub struct Deps<'a> {
+    pub http: &'a dyn Http,
+    pub source: &'a ReleaseSource,
+    pub verifier: &'a dyn SignatureVerifier,
+    pub process: &'a dyn Process,
+}
+
+/// A per-run download directory beside the Rein home, removed when dropped.
+struct Scratch(PathBuf);
+
+impl Scratch {
+    fn create(home: &Path, v: &Version) -> io::Result<Self> {
+        let dir = home.join(format!(".rein.fetch-{v}"));
+        // Ours by name; the install lock is held, so no other run is using it.
+        match fs::symlink_metadata(&dir) {
+            Ok(m) if m.is_dir() => fs::remove_dir_all(&dir)?,
+            Ok(_) => {
+                return Err(io::Error::other(format!(
+                    "{} exists and is not a directory",
+                    dir.display()
+                )));
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+        fs::create_dir(&dir)?;
+        Ok(Self(dir))
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+pub fn run(home: &Path, version: &Version, deps: &Deps<'_>) -> ExitCode {
+    ExitCode::from(install(home, version, deps))
+}
+
+/// The pipeline; returns the exit code.
+pub fn install(home: &Path, version: &Version, deps: &Deps<'_>) -> u8 {
+    let paths = InstallPaths::new(home);
+    let lock = match InstallLock::acquire(&paths) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("rein-app: {e}");
+            return EXIT_ERROR;
+        }
+    };
+    let scratch = match Scratch::create(home, version) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("rein-app: cannot create the download directory: {e}");
+            return EXIT_ERROR;
+        }
+    };
+
+    println!("rein-app: fetching rein {version}");
+    let assets = match fetch_release(deps.http, deps.source, version, &scratch.0) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("rein-app: {e}");
+            return EXIT_VERIFY;
+        }
+    };
+    let release = match verify_release(&assets, deps.verifier, version, &scratch.0.join("tree")) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("rein-app: verification failed — {e}");
+            return EXIT_VERIFY;
+        }
+    };
+    println!(
+        "rein-app: rein {version} verified (signature, manifest, {} files)",
+        release.manifest.files.len()
+    );
+
+    let report = RuntimeReport::probe(deps.process, &release.manifest.min_node);
+    print!("{}", report.table());
+    if !report.ready() {
+        eprintln!(
+            "rein-app: required runtime missing — install it and re-run; nothing was changed"
+        );
+        return EXIT_RUNTIME;
+    }
+
+    let outcome = match install_tree_locked(&paths, &release) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("rein-app: {e}");
+            return EXIT_ERROR;
+        }
+    };
+    drop(scratch);
+    println!(
+        "rein-app: installed rein {} at {}",
+        outcome.version,
+        paths.rein().display()
+    );
+    if let Some(prev) = &outcome.previous {
+        println!("rein-app: previous tree kept at {}", prev.display());
+    }
+    for p in &outcome.skipped_operator_owned {
+        println!("rein-app: kept your {p} (operator-owned; the release copy was not written)");
+    }
+    for p in &outcome.skipped_special {
+        println!("rein-app: not carried over (socket/FIFO): {p}");
+    }
+
+    // The lock is held through `rein install`/`rein doctor`: they write into the tree
+    // (install-stamp, mcp node_modules), so no other install or rollback may swap it
+    // meanwhile (E-5 security review P1-2). rein itself never reads the lock file.
+    let result = install_then_doctor(deps.process, home);
+    drop(lock);
+    match result {
+        RunOutcome::Ok => 0,
+        RunOutcome::Failed { cmd, code } => {
+            let what = match cmd {
+                ReinCommand::Install => "rein install",
+                ReinCommand::Doctor => "rein doctor",
+            };
+            let code = code.map_or_else(|| "a signal".to_string(), |c| format!("exit {c}"));
+            eprintln!(
+                "rein-app: {what} failed ({code}); the previous tree, if any, is kept as $HOME/.rein.prev-*"
+            );
+            EXIT_DOCTOR
+        }
+        RunOutcome::NotStarted { cmd, reason } => {
+            eprintln!("rein-app: could not start rein {cmd:?}: {reason}");
+            EXIT_DOCTOR
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "../../rein-release/tests/support/mod.rs"]
+mod support;
+
+#[cfg(test)]
+mod tests {
+    use super::support::{Release, TestKey, VERSION, serve};
+    use super::*;
+    use crate::runner::Invocation;
+    use rein_release::{HostPolicy, ReqwestHttp};
+    use std::cell::RefCell;
+
+    /// rein itself is stubbed: every tool is present; `rein` exits with the queued codes.
+    struct FakeRein {
+        node: Option<&'static str>,
+        exits: RefCell<Vec<i32>>,
+        ran: RefCell<Vec<Invocation>>,
+    }
+
+    impl FakeRein {
+        fn new(exits: &[i32]) -> Self {
+            Self {
+                node: Some("v22.11.0"),
+                exits: RefCell::new(exits.to_vec()),
+                ran: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl Process for FakeRein {
+        fn run(&self, inv: &Invocation) -> io::Result<Option<i32>> {
+            let home = &inv.set.iter().find(|(k, _)| *k == "HOME").unwrap().1;
+            assert!(
+                Path::new(home).join(".rein.lock").exists(),
+                "the install lock is held while rein runs"
+            );
+            self.ran.borrow_mut().push(inv.clone());
+            Ok(Some(self.exits.borrow_mut().remove(0)))
+        }
+        fn capture(&self, program: &str, _args: &[&str]) -> Option<String> {
+            match program {
+                "node" => self.node.map(str::to_string),
+                _ => Some(format!("{program} 1.0")),
+            }
+        }
+    }
+
+    fn version() -> Version {
+        Version::parse(VERSION).unwrap()
+    }
+
+    /// Run the pipeline against a fixture server serving `Release::good(signer)`, trusting `trusted`.
+    fn run_with(signer: &TestKey, trusted: &TestKey, rein: &FakeRein, home: &Path) -> u8 {
+        let source = ReleaseSource {
+            base_url: serve(Release::good(signer).routes()),
+        };
+        let http = ReqwestHttp::new(HostPolicy::loopback_only()).unwrap();
+        let verifier = trusted.verifier();
+        let deps = Deps {
+            http: &http,
+            source: &source,
+            verifier: &verifier,
+            process: rein,
+        };
+        install(home, &version(), &deps)
+    }
+
+    fn leftovers(home: &Path) -> Vec<String> {
+        let mut v: Vec<String> = fs::read_dir(home)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn installs_then_runs_rein_install_and_doctor_from_the_new_tree() {
+        let home = tempfile::tempdir().unwrap();
+        let key = TestKey::generate();
+        let rein = FakeRein::new(&[0, 0]);
+        assert_eq!(run_with(&key, &key, &rein, home.path()), 0);
+        assert_eq!(
+            leftovers(home.path()),
+            [".rein"],
+            "no lock, fetch or staging dir left"
+        );
+        assert_eq!(
+            fs::read_to_string(home.path().join(".rein/VERSION")).unwrap(),
+            "0.5.0\n"
+        );
+        let ran = rein.ran.borrow();
+        assert_eq!(ran.len(), 2);
+        assert_eq!(ran[0].program, home.path().join(".rein/bin/rein"));
+        assert_eq!(
+            (ran[0].args.clone(), ran[1].args.clone()),
+            (vec!["install"], vec!["doctor"])
+        );
+    }
+
+    #[test]
+    fn a_bad_signature_exits_2_and_writes_nothing() {
+        let home = tempfile::tempdir().unwrap();
+        let (signer, other) = (TestKey::generate(), TestKey::generate());
+        let rein = FakeRein::new(&[]);
+        assert_eq!(run_with(&signer, &other, &rein, home.path()), EXIT_VERIFY);
+        assert!(leftovers(home.path()).is_empty());
+        assert!(rein.ran.borrow().is_empty());
+    }
+
+    #[test]
+    fn missing_node_exits_4_before_the_live_tree_is_touched() {
+        let home = tempfile::tempdir().unwrap();
+        let live = home.path().join(".rein");
+        fs::create_dir_all(live.join("bin")).unwrap();
+        fs::write(live.join("VERSION"), "0.4.0\n").unwrap();
+        let key = TestKey::generate();
+        let mut rein = FakeRein::new(&[]);
+        rein.node = None;
+        assert_eq!(run_with(&key, &key, &rein, home.path()), EXIT_RUNTIME);
+        assert_eq!(fs::read_to_string(live.join("VERSION")).unwrap(), "0.4.0\n");
+        assert_eq!(leftovers(home.path()), [".rein"]);
+    }
+
+    #[test]
+    fn a_failing_doctor_exits_3_with_the_new_tree_in_place() {
+        let home = tempfile::tempdir().unwrap();
+        let key = TestKey::generate();
+        let rein = FakeRein::new(&[0, 1]);
+        assert_eq!(run_with(&key, &key, &rein, home.path()), EXIT_DOCTOR);
+        assert!(home.path().join(".rein/bin/rein").exists());
+    }
+
+    #[test]
+    fn a_held_lock_exits_1_without_fetching() {
+        let home = tempfile::tempdir().unwrap();
+        fs::write(home.path().join(".rein.lock"), "1").unwrap();
+        let key = TestKey::generate();
+        let rein = FakeRein::new(&[]);
+        assert_eq!(run_with(&key, &key, &rein, home.path()), EXIT_ERROR);
+        assert_eq!(leftovers(home.path()), [".rein.lock"]);
+    }
+}
