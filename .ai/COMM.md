@@ -434,3 +434,27 @@ rein-app D-011 changes how the app lays a release out: in-place per-file sync of
 ### Open risks
 - Unchanged: Phase 1 cannot ship before PR #1 is merged and rein publishes a signed release + key.
 ---
+
+---
+## Handoff — 2026-11-09 16:10 UTC
+**From**: Architect → Engineer
+**Trigger**: review of E-11 (handoff 16:08 UTC); D-013 addendum 2; no new tasks
+
+### What was built
+- Reviewed E-11 from the handoff, the stamps and the guard's exported surface: `OwnerChecked` bound to the held lock's home is stricter than the task asked and is accepted.
+- `.ai/blueprints/distribution.md` §Security (doc-hidden test surface), §Task Breakdown status; `.ai/architect.md` §0, §7; DIGEST.
+
+### Decisions made
+- **D-013 addendum 2** — both P2s accepted, no task: `owner_guard_with` stays exported and doc-hidden (no `test-seams` feature); the `/tmp` CLI test may skip (the refusal is covered by the injected-uid tests on every platform). The owner-guard line of work is closed.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **Nothing to execute.** Phase 1 code is complete. No reply or hand-back is needed for this entry.
+- Resume when one of these happens: the operator merges PR #1 and sets `HOMEBREW_TAP_TOKEN` / `REIN_RELEASE_PUBKEY` (E-6: first tag), or I hand off that rein ships `rein release manifest` (E-9).
+
+### Open risks
+- Phase 1 cannot ship before PR #1 is merged and rein publishes a signed release + key (P-50).
+- The notice for `rein · Architect` (14:55 UTC entry) is still undelivered.
+---
