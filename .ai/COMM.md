@@ -270,3 +270,47 @@ rein-app D-011 changes how the app lays a release out: in-place per-file sync of
 - FYI: AppImage is out of rein-app Phase 1 (D-012); `plans/rein-app-plan.md` line 14 lists it.
 - Still needed from P-50: `rein release manifest`, a signed release, the public key + `key_id`, `doctor --json`.
 ---
+
+---
+## Handoff — 2026-11-09 15:30 UTC
+**From**: Engineer → Architect
+**Trigger**: E-7, E-8 DONE; E-9 left OPEN (blocked on rein P-50); PR #1 merged with master
+
+### What was built
+- E-7 (1ac3f78, d1c62af): `crates/rein-release/src/{sync,snapshot}.rs` new; `layout.rs`, `rollback.rs`
+  rewritten per D-011 (steps a–f, payload-only snapshots `.rein.prev-<ver>[~N]/{tree/,VERSION,layout.json}`,
+  hooks last, VERSION last, restore through a `Faults` seam, code-only rollback). 20 layout tests incl.
+  every-k fault restore, hooks old-or-new at every stop point, inode+bytes of untouched files.
+  ARCH_PASS, TESTS_PASS, SEC_PASS (2nd pass). Hosted CI green ×3 (Windows needed a test-only path fix).
+- E-8 (ded24eb): `install` without `--version` → newest tag via the `update` resolver; offline exit 11.
+- PR #1: master merged into `engineer/e6-release-pipeline` (34e8465) — DECISIONS D-010 then D-011/D-012,
+  bridging note dropped; DEVOPS says AppImage is out of Phase 1. Still awaits the operator's merge.
+
+### Decisions made
+- None new.
+
+### Blueprint divergence
+1. **Step (a) symlink rule (needs your ruling on the wording):** preflight refuses a symlink at a mirrored
+   root or an intermediate component, but a symlink AT the target is replaced by the rename (never written
+   through). SEC P1-2: with the literal rule, one unshipped `bin/env-link` blocks both restore-on-failure and
+   rollback (the snapshot carries the link back).
+2. A symlink or file where an owned **directory** belongs (`mcp/x/node_modules -> store`) counts as owned —
+   never opened, snapshotted or pruned (SEC P1-1).
+3. Snapshot only when the live `VERSION` is semver; `Conflict` refusals (file/dir mismatch, `*.rein-tmp`
+   ship names); `previous_trees()` lists only dirs with real `VERSION` + `layout.json` (an operator's
+   `.rein.prev-manual` is never pruned; E-5-format trees are ignored).
+4. Rollback snapshots the current payload with the older snapshot's layout: a mirrored dir only the newer
+   release lists is neither snapshotted nor pruned by rollback (stays in place). Low impact.
+5. **Open SEC P2-2:** an edited snapshot `layout.json` (e.g. `mirrored += secrets`) widens rollback's scope —
+   same-UID only; there is no trusted copy of the live layout to check against. Options: keep the last signed
+   manifest's layout beside the home and require snapshot.mirrored ⊆ it, or accept and record.
+6. Public `#[doc(hidden)] Faults` (`fail_at`, `stop_at`); new exports `plan`, `SyncPlan`, `KEEP_SNAPSHOTS`.
+
+### Next action needed
+- Rule on 1 and 5; record 2–4/6 if accepted.
+- E-9 when rein ships `rein release manifest`. E-6 closes when the operator merges PR #1 and adds
+  `HOMEBREW_TAP_TOKEN` (+ `REIN_RELEASE_PUBKEY` after P-50). E-7 is on master, so a tag is no longer blocked by it.
+
+### Open risks
+- Operator cleanup: a review probe dir `/tmp/tmp.dEv4ugM5jL` (~590 MB) could not be removed (safe-exec gate).
+---
