@@ -180,16 +180,16 @@
     {
       "id": "E-11",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Make the owner guard a compile-time precondition in rein-release (follows E-10, which is DONE): change `owner_guard` to return a proof value that has no public constructor and borrows the `InstallLock`, and require a reference to it in every lock-held function that writes (`install_tree_locked`, `install_tree_with_faults`, rollback's lock-held writer), updating `install_cmd`, `rollback_tree_with` and the tests; add a `compile_fail` doctest showing a lock-held writer cannot be called without it. Tighten the tests: each CLI refusal test (install, update, rollback) asserts the offending path appears in the error, and the Linux test that uses the real `/tmp` as a foreign-owned home skips when `/tmp/.rein.lock` already exists and never shares that path with a concurrently running test. Per .ai/blueprints/distribution.md §Components 3 step a (type-level precondition), §Test Plan \"Owner guard\" (E-11 additions), D-013 addendum. Acceptance: cargo test --workspace (doctests included) green on all three CI targets; no behaviour change for a correctly guarded run. Tier 3: security_engineer review before commit.",
       "created_at": "2026-11-09T15:46:30.843Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-09T16:07:03.118Z",
+      "summary": "OwnerChecked proof (private, lock-borrowed, bound to the held lock's home) required by every lock-held writer; compile_fail doctests; refusal tests assert path (3e466c0, a8332e9); CI green x3",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-09T15:46:30.845Z"
+      "updated_at": "2026-11-09T16:07:03.119Z"
     }
   ],
   "stamps": [
@@ -434,6 +434,42 @@
       "timestamp": "2026-11-09T15:41:14.570Z",
       "summary": "[TIER_3] E-10 ARCH_PASS + TESTS_PASS + SEC_PASS (after 1 fix round)",
       "sha": "9be3c6da6dc38cdda62f739a416a642c4cefa859",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-11",
+      "timestamp": "2026-11-09T15:49:44.611Z",
+      "summary": "No sovereignty violations (no .ai/ files in diff). OwnerChecked<'l> has private fields, only owner_guard constructs it, borrows InstallLock, required by install_tree_locked, install_tree_with_faults and rollback_locked; compile_fail doctests cover missing proof and forging. Disclosed additions (home-binding covers(), cfg(test) report() sink) are small, trace to D-013 addendum test-hygiene and the proof's purpose. CLI refusal tests assert named path; /tmp test skips on existing lock. All changes trace to E-11.",
+      "sha": "f63867a55626f2404e619feac7e9c1bc52abc70f",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-11",
+      "timestamp": "2026-11-09T15:50:02.700Z",
+      "summary": "[TESTS_PASS] cargo test --workspace all green, 0 failed; rein-release --doc 3/3 (2 compile_fail + 1 positive no_run sharing names); install/update/rollback refusal tests assert offending path; /tmp test skips on existing or concurrently-taken lock, sole /tmp user",
+      "sha": "f63867a55626f2404e619feac7e9c1bc52abc70f",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "security_engineer",
+      "task_id": "E-11",
+      "timestamp": "2026-11-09T15:55:42.587Z",
+      "summary": "[TIER_3] E-11 re-review: P1 proof bound to the held lock's home; public owner_guard uses the real uid (injectable form doc-hidden); scratch dir gated + covers(); open P2: doc-hidden owner_guard_with still exported (feature-gate candidate)",
+      "sha": "f63867a55626f2404e619feac7e9c1bc52abc70f",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": "E-11",
+      "timestamp": "2026-11-09T15:55:43.632Z",
+      "summary": "[TIER_3] E-11 ARCH_PASS + TESTS_PASS + SEC_PASS (after 1 fix round)",
+      "sha": "f63867a55626f2404e619feac7e9c1bc52abc70f",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
