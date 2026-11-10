@@ -75,8 +75,20 @@ says so in one line, and rollback is unavailable for that update.
 
 ## Profile settings (`profiles apply`)
 
-rein-app finds Claude Code profiles in the default config directory (`~/.claude`),
-`~/.claude-personal` if present, and every `config_dir` listed in `$HOME/.rein/accounts.json`.
+rein-app finds Claude Code profiles in this order:
+
+1. `default`: the default config directory, `~/.claude`.
+2. Every account in `$HOME/.rein/accounts.json`, under its name, at its `config_dir`.
+   rein-app reads that file but never writes it; `rein account add` and
+   `rein account remove` change it.
+3. `personal`: `~/.claude-personal`, if it exists and no usable account is named
+   `personal`.
+
+A directory is listed once, under the first name that reaches it. `default` is reserved for
+`~/.claude`: an account with that name pointing elsewhere is skipped with a warning. An
+account whose name is not printable ASCII (or is longer than 64 bytes), or whose
+`config_dir` is missing or not absolute, is skipped with a warning.
+
 In each profile's `settings.json` it manages exactly **three keys**: `enabledPlugins`,
 `extraKnownMarketplaces` and `attribution`.
 

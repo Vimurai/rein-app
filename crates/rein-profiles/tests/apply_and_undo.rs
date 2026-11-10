@@ -54,8 +54,122 @@ fn enumerate_lists_default_personal_and_valid_accounts_once() {
     );
     let e = enumerate(h);
     let names: Vec<&str> = e.profiles.iter().map(|p| p.name.as_str()).collect();
-    assert_eq!(names, ["default", "personal", "work"]);
+    assert_eq!(
+        names,
+        ["default", "work", "personal"],
+        "rows before the built-in (D-022)"
+    );
     assert_eq!(e.warnings.len(), 4, "{:?}", e.warnings);
+}
+
+/// D-022, extending `enumerate_lists_default_personal_and_valid_accounts_once`: the report
+/// from the operator's machine — a `personal` row at `~/.claude-personal` was warned about as
+/// reserved, then listed anyway (through the built-in).
+#[test]
+fn a_personal_row_is_an_ordinary_account_and_beats_the_built_in() {
+    let home = tempfile::tempdir().unwrap();
+    let h = home.path();
+    fs::create_dir_all(h.join(".claude-personal")).unwrap();
+    let rows = |personal: &Path| {
+        write(
+            &h.join(".rein/accounts.json"),
+            &json!({"accounts": {"personal": {"config_dir": personal, "added": "2026-11-10"}}})
+                .to_string(),
+        );
+        let e = enumerate(h);
+        let listed: Vec<(String, std::path::PathBuf)> = e
+            .profiles
+            .iter()
+            .map(|p| (p.name.clone(), p.config_dir.clone()))
+            .collect();
+        (listed, e.warnings)
+    };
+
+    let (listed, warnings) = rows(&h.join(".claude-personal"));
+    assert_eq!(
+        listed,
+        [
+            ("default".into(), h.join(".claude")),
+            ("personal".into(), h.join(".claude-personal"))
+        ]
+    );
+    assert!(
+        warnings.is_empty(),
+        "no warning for a listed row: {warnings:?}"
+    );
+
+    let (listed, warnings) = rows(&h.join("elsewhere"));
+    assert_eq!(
+        listed,
+        [
+            ("default".into(), h.join(".claude")),
+            ("personal".into(), h.join("elsewhere"))
+        ],
+        "the row's config_dir wins; the built-in is not listed under that name"
+    );
+    assert!(warnings.is_empty(), "{warnings:?}");
+
+    fs::remove_file(h.join(".rein/accounts.json")).unwrap();
+    let names: Vec<String> = enumerate(h).profiles.into_iter().map(|p| p.name).collect();
+    assert_eq!(
+        names,
+        ["default", "personal"],
+        "no row: the built-in is listed"
+    );
+
+    // An unusable `personal` row is warned about and does not hide the built-in.
+    write(
+        &h.join(".rein/accounts.json"),
+        &json!({"accounts": {"personal": {"config_dir": "relative"}}}).to_string(),
+    );
+    let e = enumerate(h);
+    let listed: Vec<_> = e
+        .profiles
+        .iter()
+        .map(|p| (p.name.as_str(), p.config_dir.clone()))
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            ("default", h.join(".claude")),
+            ("personal", h.join(".claude-personal"))
+        ]
+    );
+    assert_eq!(e.warnings.len(), 1, "{:?}", e.warnings);
+}
+
+#[test]
+fn row_names_get_a_terminal_safety_check_not_a_grammar() {
+    let home = tempfile::tempdir().unwrap();
+    let h = home.path();
+    write(
+        &h.join(".rein/accounts.json"),
+        &json!({"accounts": {
+            "client-a2": {"config_dir": h.join("a")},
+            "Work.Old_1": {"config_dir": h.join("b")},
+            "bad\u{1b}[2J": {"config_dir": h.join("c")},
+            "has space": {"config_dir": h.join("d")},
+            "default": {"config_dir": h.join(".claude")}
+        }})
+        .to_string(),
+    );
+    let e = enumerate(h);
+    let mut names: Vec<&str> = e.profiles.iter().map(|p| p.name.as_str()).collect();
+    names.sort();
+    assert_eq!(names, ["Work.Old_1", "client-a2", "default"]);
+    assert_eq!(e.warnings.len(), 2, "{:?}", e.warnings);
+    assert!(
+        e.warnings
+            .iter()
+            .all(|w| !w.bytes().any(|b| b < 0x20 || b == 0x7f)),
+        "no raw control byte: {:?}",
+        e.warnings
+    );
+    assert!(
+        e.warnings.iter().any(|w| w.contains("\\u{1b}")),
+        "{:?}",
+        e.warnings
+    );
 }
 
 #[test]
