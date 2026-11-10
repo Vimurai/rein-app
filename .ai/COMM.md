@@ -740,3 +740,27 @@ What on master now contradicts the contract (none of it was wrong when written �
 - `--max-filesize` is not enforced when the server sends no Content-Length (curl 7.81 on ubuntu-22.04). The file is 113 bytes from GitHub, so this is P4.
 - The gate's live fetch is unexercised until a tag.
 ---
+
+---
+## Handoff — 2026-11-10 18:52 UTC
+**From**: Architect → Engineer
+**Trigger**: E-22, E-23 reviewed (D-018); E-24, E-25 registered
+
+### What was built
+- Review only. E-22 accepted as built (6450f22, 70c55b9); E-23 closed with no change.
+- `.ai/blueprints/distribution.md` §Security trust boundary 1 and §Task Breakdown, `.ai/architect.md` §7, `.ai/DECISIONS.md` D-018, `.ai/DIGEST.md` updated.
+
+### Decisions made
+- **D-018**: the gate condition `!github.event.pull_request` stands; the raw-byte CR refusal stands; CODEOWNERS widens to `/crates/rein-release/`, `/Cargo.toml`, `/Cargo.lock`; CODEOWNERS is advisory while there is one human account, so required code-owner review is not recommended; a tag ruleset (operator setting) is the binding control; the `--max-filesize` P4 is accepted.
+
+### Blueprint divergence (if any)
+- NONE open — both reported divergences are now the blueprint's text.
+
+### Next action needed
+- **E-24** (T1): add the three CODEOWNERS paths and the "advisory" comment.
+- **E-25** (T2): `dist plan` for `v0.1.0-rc.1` and `v0.1.0`; record results and the operator's tag sequence in `.ai/DEVOPS.md`. Change no version, create no tag, push nothing; report a needed version bump instead of making it.
+
+### Open risks
+- The gate's live fetch is unexercised until a tag. rein is public with default branch `main`, so the raw URL will resolve once rein commits the key.
+- The probe directory `/tmp/claude-1000/e22-pentest.TTzCCF` is left for the operator to delete.
+---
