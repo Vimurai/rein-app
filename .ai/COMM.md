@@ -833,3 +833,37 @@ What on master now contradicts the contract (none of it was wrong when written �
 - Not ruled: a shipped path differing only by case from an operator-owned file already in the home on a case-insensitive filesystem. Raise it with rein if a real case appears.
 - Key status: rein's remote `main` now carries the public key, blob id equal to ours (verified by the Architect), so the tag gate's comparison will pass.
 ---
+
+---
+## Handoff — 2026-11-10 22:57 UTC
+**From**: Engineer → Architect
+**Trigger**: E-26 complete
+
+### What was built
+- **E-26** (24ed040, hosted CI green ×3, run 42918663301):
+  - `paths.rs`: `check_path_alphabet` (0x20–0x7E) and `check_case_collisions`, an ASCII-lowercased per-segment tree walk where directory prefixes count and both paths are named. Memory is linear in path length.
+  - `Manifest::parse`: applies both to every `layout.mirrored` name and `files` path. `validate_layout` is untouched, so snapshot `layout.json` is not re-checked (D-020 r5).
+  - Tests: unit rows in paths.rs and manifest.rs; 3 `verify_release` CASES; `install_cmd::a_case_colliding_release_exits_2_with_the_home_untouched`.
+  - `docs/operator-guide.md`: refusal row added.
+  - Reviews: [ARCH_PASS] [SEC_PASS] [TESTS_PASS]; security_engineer pass done.
+
+### Decisions made
+- None new.
+
+### Blueprint divergence (if any)
+- E-26 / D-020 r2 say "before signature or tarball work". `Manifest::parse` runs where it always ran: after the signature check and `scan_members`, before the member-set check, staging and any write. ARCH and SEC both say: fix the wording, not the code.
+
+### Next action needed
+- **Ruling needed (security_engineer P2, outside D-020):** a case-only rename across releases deletes the shipped file on a case-insensitive home (APFS, drvfs).
+  - Mechanism: v0.4 has `shared/locate.sh`, v0.5 ships `shared/Locate.sh`. `sync.rs` `plan` compares names exactly, `apply` writes then prunes, and the prune removes `shared/locate.sh`, which is the file just written. The install exits 0. Reproduced on /mnt/c drvfs with a fixture that mirrors plan, write, prune.
+  - Rollback and failure-restore have the same issue in reverse.
+  - Options proposed: (a) never prune a live entry whose ASCII-folded path, or a prefix of it, equals a shipped path; (b) prune before write within a root; (c) after sync, confirm every shipped path exists with its hash.
+- P3s for your call:
+  - NTFS 8.3 short names (`LONGFI~1.SH`) alias long names and pass the case rule. Possibly a rein addendum refusing `~<digit>` segments.
+  - `operator_owned` patterns are not ASCII-checked, and matcher errors print them raw.
+- FYI sent earlier: rein D-153 addendum 2 (accounts.json closed shape; the app never writes it). rein-app already complies. Stale wording remains at profile.rs:5.
+
+### Open risks
+- The P2 above (silent file loss on a case-only rename).
+- E-6, E-9 and E-17 remain blocked on the operator and on rein (E-418 PR #36 re-running CI; E-419..E-422 not started; no signed release).
+---
