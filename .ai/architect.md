@@ -149,8 +149,13 @@ All five open questions are closed; `distribution.md` carries the detail. Summar
 1. Signature: **minisign**, public key baked in at build; rotation == app release; `key_id` check first.
 2. Manifest: **schema 1** as in §3.1; reject unknown schema, out-of-layout path, unlisted tarball file.
 3. `rein doctor --json`: shape in §3.4; until it ships, pass text through verbatim, parse nothing.
-4. `accounts.json`: only `accounts.<name>.config_dir` (absolute) is contract; `default` is not
-   listed; everything else opaque, preserved byte-for-byte. Docs land as `rein/docs/accounts.md` + JSON schema.
+4. `accounts.json` (rein D-153 addendum 2, 2026-11-10 — replaces the withdrawn "everything
+   else opaque, preserved byte-for-byte" clause): closed shape
+   `{"accounts": {"<name>": {"config_dir", "added"}}}`, no other key at either level; rein's
+   `accounts.py` is the only writer. rein-app **never writes the file** — a future account
+   UI calls `rein account add` / `rein account remove`. As a reader it relies on
+   `config_dir` (absolute) only, ignores unknown row keys, and treats `added` as optional.
+   Docs land as rein `docs/accounts.md` + `docs/contract/accounts.schema.json` (rein E-422).
 5. Upgrade semantics: `config/` is **mirrored**, not preserved (two files kept); operator-owned
    list is read from the manifest's `layout.operator_owned`, never hard-coded. Reference stays `install-rein.sh`.
 Still pending from `rein` (not blocking): the P-50 E-## that publish the release workflow,

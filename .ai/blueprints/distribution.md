@@ -187,7 +187,8 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    reported only — `rein doctor` judges them (D-012).
 6. **`rein-profiles`** — enumerates profiles: default config dir (`~/.claude`),
    `~/.claude-personal` if present, and every `accounts.<name>.config_dir` in
-   `$HOME/.rein/accounts.json`. For each `<config_dir>/settings.json`: read → parse →
+   `$HOME/.rein/accounts.json` (read-only here: rein's `accounts.py` is the file's only
+   writer, and only `config_dir` is relied on — rein D-153 addendum 2). For each `<config_dir>/settings.json`: read → parse →
    merge ONLY the **three** keys the contract allows (rein D-155 r3, corrects contract §2.3):
    `enabledPlugins`, `extraKnownMarketplaces`, `attribution`. **Never `hooks`**: the gate's
    hook entries are not in a profile at all — they are in each project's
