@@ -633,3 +633,11 @@ E-18 documents the CLI for operators and the §API table is what Phase 2 and scr
 
 ### Rollback
 Revert E-20 and restore the two rows; E-21 is config and reverts on its own.
+
+---
+
+### D-014 Addendum 2026-11-10 — the operator has generated the release key; E-16 opens before rein's commit; a one-time key-file move by the Engineer
+- **Fact:** the operator generated the minisign pair on 2026-11-10 (`~/release-key.pub`, `~/release-key.key`). No agent has read either file's secret content.
+- **Operator instruction (explicit, this session):** the Engineer moves the secret key file to the operator's iCloud Drive and places the public key in the rein checkout. This is a one-time exception to "no agent handles a release key", limited to a file move: the secret key is never opened, printed, hashed into a log, copied anywhere else or committed. The rule stands for everything else — no agent signs, generates or substitutes a key.
+- **E-16 opens now.** D-014 decision 4 made E-16 wait until rein had *committed* `docs/contract/release-key.pub`. The reason was to be sure both repos carry the same bytes. The same file from the same operator is now in rein's working tree (uncommitted — rein's own session commits it, under rein's gates), so E-16 copies it from there. **Check that replaces the wait:** before the first tag (E-6), the copy in this repo is compared byte for byte with the file as committed on rein's `main`; a difference blocks the tag.
+- **Not delegated:** rein's release tooling (rein E-417..E-422) and the commit in rein are rein's work, done by rein's sessions. The rein-app Engineer writes no rein source and makes no commit there.

@@ -313,8 +313,11 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   build-flag kill switch, not the default. **Where the baked key comes from (D-014):** a
   file committed in this repo, copied byte for byte from rein `docs/contract/release-key.pub`
   (rein D-155 r6) — reviewable in git, identical in CI and source builds, rotated by a
-  commit. Until the operator has generated the pair and rein has committed that file (E-16),
-  the build keeps reading the `REIN_RELEASE_PUBKEY` variable and fails closed without it. No
+  commit. Until E-16 lands, the build keeps reading the `REIN_RELEASE_PUBKEY` variable and
+  fails closed without it. E-16 is open since 2026-11-10 (D-014 addendum): the operator's
+  public key is in the rein checkout's `docs/contract/release-key.pub` and is copied from
+  there; before the first tag the committed copy here must equal, byte for byte, the file
+  on rein's `main` — a difference blocks the tag. No
   agent generates, handles or guesses a release key. **Outside the signature (rein D-155
   r7):** the npm dependencies `rein install` fetches; only rein's gate pins cover them.
 - **Trust boundary 2 — `$HOME/.rein`**: written only by LayoutWriter, only under the mirrored
