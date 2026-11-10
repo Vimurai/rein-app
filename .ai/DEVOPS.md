@@ -187,3 +187,36 @@ Rollback: revert the three files; the `.msi` loses its license files, and `allow
 - **Review round 1 fixes:**
   - (P1) Added `.gitattributes`: `docs/contract/release-key.pub -text`. Windows runners (`core.autocrlf=true`) would otherwise check the file out with CRLF, failing the Windows tests and guard and baking a key that refuses everything.
   - (P2) The guard now also refuses a NUL byte (`tr -d '\000' | cmp`) and a comment whose key id differs from the id inside the key (`base64 -d | od`, bytes 2..10 little-endian). Review round 2 (P2-2) tightened both sides further: the guard checks that the decoded algorithm bytes are `Ed`, and `from_pub_file` compares the key id exactly (upper case, as minisign writes it), no longer ignoring case. Known remaining difference: none found by round 2's 42-file probe after these two fixes. Re-run: wrong id → 1, NUL after the key → 1, colon comment form → 0, CRLF → 1, real file → 0.
+
+### 2026-11-10 — E-22: one tested key-file guard, a tag gate against rein's `main`, CODEOWNERS (ci_gate, D-017)
+
+**What changes and why.**
+- The key-file guard pasted into three places (E-16) moves to `.github/scripts/check-release-key.sh`. `.github/build-setup.yml` (and its inlined copy in `release.yml`) and `build-linux-packages.yml` call it with `bash`.
+- New `.github/scripts/compare-release-key.sh A B`: exits 0 only when both files exist and are byte-identical.
+- New tag gate: in `release.yml` `plan`, right after checkout and before dist is installed, and only on a tag push (`startsWith(github.ref, 'refs/tags/')`). It fetches rein's `main` copy over HTTPS (`curl --proto '=https' --tlsv1.2 -fsSL`, size-capped) into `$RUNNER_TEMP`, compares it with ours, and deletes it. A 404, a fetch error or any difference fails `plan`, so no artifact job runs.
+- New corpus test `.github/scripts/test-release-key-scripts.sh` builds its fixtures in a `mktemp -d` directory from the committed key. It runs as a step in `ci.yml` on all three OSes, with no network.
+- New `.github/CODEOWNERS`: `@Vimurai` for `docs/contract/**`, `.gitattributes` and `.github/**`.
+
+**Security implications.**
+- No secret is involved. One new network access happens on tag runs only: an anonymous GET of a public 113-byte file from `raw.githubusercontent.com`.
+- The fetched bytes are compared and discarded; nothing is built from them, so the binary still never fetches a key (D-017 ruling 1).
+- Pull-request runs never fetch.
+- CODEOWNERS binds only when branch protection requires code-owner review. That is a repository setting, and the operator's call.
+
+**Rollback.** Revert the E-22 commit. That restores the inline guards from 0d573f6 and removes the gate. The baked key is unaffected.
+
+**Testing.** The corpus test runs locally and in hosted CI on Linux, macOS and Windows (Git Bash). The gate's fetch runs only on a tag, so the gate step's own logic is exercised locally against a temp file; the curl call is unexercised until a tag.
+
+**Results (E-22, local)**
+- `bash .github/scripts/test-release-key-scripts.sh`: 24 cases, 0 failed, 0 skipped on Linux (WSL2). It covers 3 accepted, 15 refused (each refused for its own reason) and 6 comparison cases. Where a host cannot create a symlink, that case is a recorded SKIP, never a pass.
+- Tag-gate step run locally against rein's `main` today: `curl: (22) … 404`, then `::error::cannot fetch …`, exit 1. It fails closed and will fail every tag until rein commits the key on `main` (D-017, intended). A failed fetch also removes any partial download.
+- All five workflow and setup YAML files parse. `dist plan` exit 0. The guard logic lives only in `.github/scripts/check-release-key.sh`; the workflows call it with `bash`.
+- Pull-request runs: the gate step carries `if: startsWith(github.ref, 'refs/tags/')`, so `plan` on a PR never fetches.
+- Unexercised until a tag: the gate's live fetch and compare, and the script call inside `build-local-artifacts` and `deb`. The corpus itself runs on macOS and Windows Git Bash in `ci.yml` on every push.
+- **Review fixes (E-22 Tier 3):**
+  - (P1) `.gitattributes` adds `*.sh text eol=lf`. Windows runners check out with `core.autocrlf=true`, and a CRLF `set -euo pipefail\r` makes bash exit 2 on every run. That would have broken the corpus step on windows-latest and the key check in the Windows release build.
+  - The gate condition is now `!github.event.pull_request`, identical to `plan`'s `publishing` output, so any run that can publish is gated (including a future `workflow_dispatch`).
+  - The corpus `expect` now requires exit exactly 1 plus the refusal's own reason on stderr. A crash or a refusal for another reason fails the case. Proven by forcing `exit 2` in a copy of the check script: 18 failed.
+  - Re-apply note: `Cargo.toml` (above `allow-dirty`) now lists both hand edits in `release.yml` that `dist generate` would drop: the `./.github` path fix and the tag-gate step.
+- **Open, for the operator (not code):** a tag ruleset, so that tags on commits from before E-22 cannot run the ungated `release.yml`; and branch protection requiring code-owner review, so CODEOWNERS binds. Also, `security_engineer` left a probe directory, `/tmp/claude-1000/e22-pentest.TTzCCF` (copies of the scripts and the public key only), which the safe-exec hook would not let it delete.
+- **Hosted CI 42875792979 (6450f22): windows-latest failed one corpus case.** "CRLF line endings" was accepted (exit 0) on Git Bash, while ubuntu and macos refused it. Cause: Git Bash's command substitution drops the CR, so `COMMENT=$(sed -n 1p …)` looked clean. The binary would still refuse such a key (fails closed), but the guard must agree on every OS. Fix: a raw-byte CR check (`tr -d '\r' | cmp`, the same technique as the NUL check, which passes on Windows), plus a corpus row with a CR in the middle of the key line. The symlink case is a recorded SKIP on windows-latest, as designed.

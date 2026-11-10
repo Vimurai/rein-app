@@ -703,3 +703,40 @@ What on master now contradicts the contract (none of it was wrong when written �
 - The tag gate will fail every tag until rein commits the key on `main`. That is intended.
 - The mode of the secret key on the drvfs mount (0777) is a property of that mount, not something to fix from here.
 ---
+
+---
+## Handoff — 2026-11-10 18:49 UTC
+**From**: Engineer → Architect
+**Trigger**: E-22, E-23 complete; queue exhausted
+
+### What was built
+- **E-23**: no change needed. The `main.wxs` comment was already ASCII in 6bf6244 (E-21 fix round), and the file is ASCII-only with CRLF kept.
+- **E-22** (6450f22, follow-up 70c55b9):
+  - `.github/scripts/check-release-key.sh` is now the only place the guard logic lives. The three workflow places call it.
+  - New `compare-release-key.sh`, and a 26-case corpus, `test-release-key-scripts.sh`. A refusal must exit exactly 1 with its own reason, so a crash fails the case. The corpus runs in `ci.yml` on all three OSes.
+  - The tag gate sits in `plan` right after checkout. It fetches rein's main copy over HTTPS (`-f`, size-capped), compares, deletes the fetched bytes, and fails closed on a 404.
+  - CODEOWNERS: `@Vimurai` for `/docs/contract/`, `/.gitattributes`, `/.github/`. `.gitattributes` adds `*.sh text eol=lf`.
+  - The `Cargo.toml` re-apply note now lists the tag gate as a hand edit in `release.yml`.
+- **Hosted CI found a real Windows difference.** Git Bash's `$(...)` drops the CR, so the guard accepted a CRLF file on windows-latest only. A raw-byte CR check now catches it (70c55b9). CI is green on all three OSes, and the corpus passes on each; Windows records the symlink case as a SKIP, as designed.
+- Tier 3: all six critics passed. The P1 they found (CRLF `.sh` files on Windows) is fixed.
+
+### Decisions made
+- None of my own.
+
+### Blueprint divergence (if any)
+- The gate condition is `!github.event.pull_request`, the same condition as `plan`'s `publishing` output, not literally "tag pushes only". The two are equivalent under today's triggers, and this one also covers a future `workflow_dispatch` (security review P2).
+- The guard now also refuses any CR byte, which the blueprint's list doesn't name. It only tightens the check and matches `from_pub_file`.
+
+### Next action needed
+- Review E-22. Engineer queue is empty.
+- **For the operator** (repository settings, not code):
+  - a tag ruleset, so a tag on a commit from before E-22 can't run the ungated `release.yml`;
+  - branch protection requiring code-owner review, so CODEOWNERS binds;
+  - delete `/tmp/claude-1000/e22-pentest.TTzCCF`, the security review's probe copies, which the safe-exec hook blocked;
+  - rein must commit `docs/contract/release-key.pub` on `main` before any tag can pass the gate.
+- Review P3, yours to rule: CODEOWNERS does not cover `crates/rein-release/`, which consumes the key, or the dist metadata in `Cargo.toml`.
+
+### Open risks
+- `--max-filesize` is not enforced when the server sends no Content-Length (curl 7.81 on ubuntu-22.04). The file is 113 bytes from GitHub, so this is P4.
+- The gate's live fetch is unexercised until a tag.
+---
