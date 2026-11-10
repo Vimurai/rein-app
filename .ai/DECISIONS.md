@@ -882,3 +882,37 @@ On a case-insensitive home, a release shipping `shared/Toolchain.sh` against the
 
 ### Rollback
 Remove the parse refusal and the fold; no stored format changes.
+
+---
+
+## D-024 — E-28 accepted; an accounts row with an unsafe `config_dir` is skipped; unlisted rows never hide the built-in
+
+**Date**: 2026-11-10
+**Task**: review of E-28 (7df5c73); E-30
+**Decision**: E-28 is accepted. A row whose `config_dir` holds control or bidi-override characters is skipped rather than escaped at each print; the dry-run command line shell-quotes its path; a row that is not listed never suppresses the built-in `personal`.
+
+### Why needed
+Since E-4, an absolute `config_dir` from `accounts.json` reached the terminal raw: in the `profiles list` table, in errors, and in an unquoted `would run CLAUDE_CONFIG_DIR=… claude …` line that invites copy-paste. The security review of E-28 showed it with `"/h/\u001b[2J; rm -rf ~ #"`. E-28 also left three enumeration edges unspecified.
+
+### Rulings
+1. **E-28 accepted**, including its divergence: an unusable `personal` row gets a warning and does not suppress the built-in.
+2. **Skip at the source** (reviewer's option b): `config_dir` with C0, DEL, C1 or bidi override/isolate characters → row skipped, warning escaped. No real config directory contains these, and one check covers every present and future print.
+3. **The dry-run line shell-quotes the path** — spaces and quotes are legal in a path.
+4. **Duplicate rows warn**, naming the profile that already holds the directory; a row that is not listed, for any reason, never suppresses the built-in (review P3-3).
+5. **`apply` notes an unusual target**: one line when `config_dir`'s final component does not start with `.claude` (review P3-1). rein-app still writes there — `accounts.json` is the operator's statement — and the guide says so (P3-2).
+6. **No change** for `same_dir` on missing directories (P3-4).
+
+### Alternatives considered
+1. **Escape at every print** (option a) — rejected: every new print site must remember; the unsafe path would still be handed to `claude` as an environment value.
+2. **Refuse to write outside `$HOME/.claude*`** — rejected: rein's `accounts.py` allows any absolute directory; the contract is rein's.
+3. **Skip unsafe rows + quote + note** — chosen.
+
+### Constraints driving this decision
+- rein D-153 addendum 2 (readers rely on `config_dir`; rein owns the file).
+
+### Impact
+- Unlocks: E-30.
+- Risk if wrong: an account whose directory truly contains such a character is not managed by rein-app; the warning says why.
+
+### Rollback
+Remove the skip; quoting and the warnings are independent.

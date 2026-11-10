@@ -226,7 +226,17 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    against a grammar of ours (rein's `accounts.py` owns the grammar); it is checked only
    for terminal safety — printable ASCII 0x21–0x7E, at most 64 bytes — and a failing row is
    skipped with a warning that shows the name escaped. No warning is ever printed for a
-   row that is then listed. For each `<config_dir>/settings.json`: read → parse →
+   row that is then listed. **A row that is not listed never suppresses the built-in
+   (D-024):** "no row has that name" means no *listed* row — an unusable `personal` row
+   (missing or relative `config_dir`, unsafe bytes, or a duplicate of a directory already
+   listed) gets its warning and the built-in is still considered. A row dropped as a
+   duplicate is warned about, naming the profile that already holds the directory.
+   **`config_dir` terminal safety (D-024, E-30):** a row whose `config_dir` contains a C0
+   control, DEL, a C1 control or a Unicode bidirectional-override/isolate character is
+   skipped with an escaped warning — such a path never reaches a table, an error or a
+   command line. The dry-run `would run …` line shell-quotes the path. `apply` prints one
+   note when a profile's `config_dir` has a final component that does not start with
+   `.claude` (rein-app writes wherever `accounts.json` points; the guide says so). For each `<config_dir>/settings.json`: read → parse →
    merge ONLY the **three** keys the contract allows (rein D-155 r3, corrects contract §2.3):
    `enabledPlugins`, `extraKnownMarketplaces`, `attribution`. **Never `hooks`**: the gate's
    hook entries are not in a profile at all — they are in each project's
@@ -626,6 +636,9 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - E-22 (guard script, tag gate, `CODEOWNERS`) is DONE and E-23 needed no change (already
   ASCII since 6bf6244); both reviewed in D-018.
 - E-24 and E-25 are DONE, reviewed in D-019. E-26 is DONE, reviewed in D-021.
+- **E-30** (T3) `config_dir` terminal safety, shell-quoted dry-run line, duplicate-row
+  warning, unlisted row never suppresses the built-in, note for an unusual `config_dir`
+  (§Components 6; D-024).
 - **E-29** (T3) Refuse a shipped path that is a case variant of an owned pattern; owned
   matching folds ASCII case for protection; symlink case-variant is a preflight Conflict;
   all manifest-derived error text escaped (§Components 2, §Components 3 step b; D-023).
