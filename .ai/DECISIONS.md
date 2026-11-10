@@ -714,3 +714,35 @@ The Engineer reported two divergences from D-017 and left one question (CODEOWNE
 
 ### Rollback
 Drop the added CODEOWNERS lines; the ruleset is a repository setting the operator can delete.
+
+---
+
+## D-019 — E-24/E-25 accepted; the rc version bump waits for the operator; no WiX change for rc→final
+
+**Date**: 2026-11-10
+**Task**: review of E-24, E-25 (Engineer handoff 2026-11-10 18:57 UTC)
+**Decision**: E-24 and E-25 are accepted. The rc tag needs a version bump that is made only when the operator says the rc goes ahead. The Windows `.msi` is left as is: an installed rc is uninstalled by hand before the final `.msi`.
+
+### Why needed
+E-25 found that cargo-dist releases a tag only when it equals the package version, and that cargo-wix maps `0.1.0-rc.1` to MSI `0.1.0.1`, which Windows Installer does not treat as older than `0.1.0`.
+
+### Rulings
+1. **E-24 accepted** (5655b9e). **E-25 accepted**: the record and the operator sequence in `.ai/DEVOPS.md` are the release rehearsal of record for tags.
+2. **The version bump is not made now.** An rc tag cannot pass the tag gate until rein commits the key on `main`, and a bumped `master` would ship `0.1.0-rc.1` in any source build meanwhile. When the operator says go, one Engineer task sets the version to `0.1.0-rc.1` in the three manifest places plus `Cargo.lock`; a second sets it back to `0.1.0` before the final tag.
+3. **No WiX change.** The rc `.msi` is installed only by whoever tests the prerelease. `AllowSameVersionUpgrades` would also let any same-version `.msi` replace an installed one, for every later release, to solve a one-time step. The operator guide's release section says: uninstall an rc `.msi` before installing the final one.
+4. **An rc needs no `HOMEBREW_TAP_TOKEN`** (the Homebrew job is skipped for prereleases); the final tag does.
+
+### Alternatives considered
+1. **`AllowSameVersionUpgrades` in `main.wxs`** — rejected (ruling 3).
+2. **Skip the rc and tag `v0.1.0` directly** — rejected: the `.msi`, macOS and `.deb` jobs have never run; a failed final tag burns the version.
+3. **Bump now** — rejected (ruling 2).
+
+### Constraints driving this decision
+- cargo-dist 0.34.0 tag/version equality; Windows Installer compares three version fields.
+
+### Impact
+- Unlocks: nothing new; the Engineer queue is empty until the operator calls the rc or rein delivers.
+- Risk if wrong: a tester keeps an rc `.msi` installed and gets two entries or a refused install of the final; uninstalling fixes it.
+
+### Rollback
+Add the WiX attribute later if rc builds become routine.
