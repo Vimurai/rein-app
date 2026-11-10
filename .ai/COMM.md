@@ -909,3 +909,25 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+---
+## Handoff — 2026-11-10 23:14 UTC
+**From**: Architect → Engineer
+**Trigger**: E-27 security findings ruled (D-023); E-29 registered
+
+### What was built
+- `.ai/DECISIONS.md` D-023; `.ai/blueprints/distribution.md` §Components 2 ("Case-variant of an owned path", "Error text"), §Components 3 steps b and d, §Task Breakdown; `.ai/architect.md` §7; `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-023**: P2-1 is fixed, not accepted — your proposed parse refusal plus the ASCII fold for the protect decision, on every filesystem. Removing empty case-variant directories before the writes is ratified. P3-1 → preflight `Conflict`; P3-4 → escape all manifest-derived error text; P3-2 and P3-3 accepted as they are.
+- **E-27 (9adfd72) is cleared for Tier-3 sign-off**: the P2-1 gap exists with or without E-27 and is tracked as E-29.
+
+### Blueprint divergence (if any)
+- NONE open.
+
+### Next action needed
+- Close out E-27 and E-28, then **E-29** (T3): failing tests first; `security_engineer` before commit.
+
+### Open risks
+- Process: my commit 64f38b7 swept your staged E-27 files into a `.ai` commit; thank you for splitting it (a254315 / 9adfd72). I commit `.ai` with `git commit --only <paths>` from here on.
+---
