@@ -641,3 +641,40 @@ Revert E-20 and restore the two rows; E-21 is config and reverts on its own.
 - **Operator instruction (explicit, this session):** the Engineer moves the secret key file to the operator's iCloud Drive and places the public key in the rein checkout. This is a one-time exception to "no agent handles a release key", limited to a file move: the secret key is never opened, printed, hashed into a log, copied anywhere else or committed. The rule stands for everything else — no agent signs, generates or substitutes a key.
 - **E-16 opens now.** D-014 decision 4 made E-16 wait until rein had *committed* `docs/contract/release-key.pub`. The reason was to be sure both repos carry the same bytes. The same file from the same operator is now in rein's working tree (uncommitted — rein's own session commits it, under rein's gates), so E-16 copies it from there. **Check that replaces the wait:** before the first tag (E-6), the copy in this repo is compared byte for byte with the file as committed on rein's `main`; a difference blocks the tag.
 - **Not delegated:** rein's release tooling (rein E-417..E-422) and the commit in rein are rein's work, done by rein's sessions. The rein-app Engineer writes no rein source and makes no commit there.
+
+---
+
+## D-017 — E-16 review: one tested guard script, a tag gate that compares our key with rein's `main`, CODEOWNERS; the production key signs no fixture
+
+**Date**: 2026-11-10
+**Task**: review of E-16, E-18, E-20, E-21 (Engineer handoff 2026-11-10 14:42 UTC; security review E-16 P2-1..P2-3) → E-22, E-23
+**Decision**: Accept E-16, E-18, E-20 and E-21 as built; turn the pre-tag key comparison into a workflow step that blocks the release; move the key-file guard into one script with a test; add CODEOWNERS; and refuse an operator-signed test fixture.
+
+### Why needed
+E-16 made a committed file the trust root. Three things around it rest on a person remembering: comparing the file with rein's copy before a tag (D-014 addendum), reviewing a change to it, and keeping three pasted copies of the guard shell identical — a guard that has never run on macOS or Windows Git Bash.
+
+### Rulings
+1. **Tag gate — scripted, blocking (P2-1).** On a tag push, before any artifact build, the release workflow fetches `docs/contract/release-key.pub` from rein's `main` and compares it byte for byte with ours. Absent or different fails the release. This also makes the order mechanical: no rein-app tag can build until rein has committed the same key. The fetched bytes are never built from, so "the app never fetches a key" stands.
+2. **CODEOWNERS (P2-1) — yes**, for `docs/contract/**`, `.gitattributes` and `.github/**`. It binds only once branch protection requires code-owner review, which is the operator's repository setting.
+3. **Guard shell (P2-3) — one script, tested on three OSes.** `.github/scripts/check-release-key.sh` replaces the three copies; a fixture corpus runs through it in the CI matrix, so Git Bash and macOS are exercised before a tag, not by one.
+4. **No fixture signed with the production key.** The secret key signs rein releases and nothing else. A signed test blob would be a production signature over non-release content, would need the operator to fetch the key back for a test, and proves only what the first real release proves anyway. The parse, key-id and same-code-path tests stand as E-16's acceptance.
+5. **Stale blueprint text fixed**: `REIN_RELEASE_PUBKEY` is gone; every build bakes the committed key; `reject-all-signatures` is the trust-nothing build.
+6. **E-21 as built accepted**: `allow-dirty = ["msi"]` and README in the archives. The non-ASCII comment in `main.wxs` (declared windows-1252) becomes ASCII — E-23.
+7. **E-20 as built accepted**, including a rein exit code outside 0..=255 mapping to 14.
+
+### Alternatives considered (ruling 1)
+1. **Keep it a checklist line in E-6** — the check that guards the trust root would depend on memory on the one day everything else is also new. Rejected.
+2. **Vendor rein as a git submodule and compare locally** — pins a rein commit in this repo for one 113-byte file and adds a submodule to every clone. Rejected.
+3. **Fetch and compare in the release workflow (chosen)** — one HTTPS GET to a public repository, compared and discarded.
+
+### Constraints driving this decision
+- The comparison must fail closed: a 404 (rein has not committed the key) is a failure, not a skip.
+- Pull-request runs must not need rein's copy to exist; the gate runs on tag pushes only.
+- No agent handles the secret key (D-014; the one-time move on 2026-11-10 was the operator's instruction and is over).
+
+### Impact
+- Unlocks: E-22, E-23. E-6 gains a hard precondition: rein's `main` carries the same public key.
+- Risk if wrong: a GitHub raw-content outage at tag time fails the release; re-running the workflow is the fix.
+
+### Rollback
+Remove the gate step and restore the inline guards from 0d573f6; the baked key is unaffected.

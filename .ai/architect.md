@@ -124,7 +124,7 @@ Contract corrections from rein D-155 (D-014), registered 2026-11-09:
 | **E-13** | writer: shipped path wins, `manifest.json` in the home and in snapshots | 3 | E-12 |
 | **E-14** | profiles: three keys, `hooks` removed | 3 | — |
 | **E-15** | CLI: rollback runs `rein install` + `rein doctor`, exit 13, `doctor --json` | 2 | E-13 |
-| **E-16** | trust root from a committed key file — BLOCKED on the operator's key in rein | 3 | — |
+| **E-16** | trust root from a committed key file — DONE 2026-11-10 (0d573f6) | 3 | — |
 | **E-17** | vendor rein's shared fixtures — BLOCKED on rein E-422 | 2 | — |
 E-12..E-15 are DONE (2026-11-10) and accepted as built (D-015). Registered 2026-11-10:
 | Registered | Scope | Tier | Depends on |
@@ -133,6 +133,11 @@ E-12..E-15 are DONE (2026-11-10) and accepted as built (D-015). Registered 2026-
 | **E-19** | release rehearsal without publishing: `dist plan`, local host build, findings in DEVOPS.md | 2 | — |
 | **E-20** | `doctor` exits 14 for its own failures, usage errors exit 64 (D-016) — before E-18 finishes | 2 | — |
 | **E-21** | `LICENSE` + `NOTICE` in every release artifact (D-016) | 2 | — |
+E-16 and E-18..E-21 are DONE (2026-11-10), reviewed in D-017. Registered after that review:
+| Registered | Scope | Tier | Depends on |
+|---|---|---|---|
+| **E-22** | release-key guard as one tested script, tag gate against rein's `main`, CODEOWNERS (D-017) | 3 | — |
+| **E-23** | ASCII-only comment in `wix/main.wxs` | 1 | — |
 E-9 now waits on rein E-417/E-418/E-420 and follows E-13. AppImage is out of Phase 1 (D-012). Phase 1 ships when
 PR #1 is merged, rein publishes a signed release + public key (P-50), and the first tag builds.
 

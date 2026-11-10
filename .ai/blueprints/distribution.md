@@ -236,8 +236,8 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    installer/updater shell for Rein) and is not (no Rein logic; it never edits a project),
    the status line "no release has been published yet" until E-6 closes, the install
    channels as *planned* (Homebrew tap, `.deb`, Windows launcher over WSL2), building from
-   source (and that a source build without a baked key refuses every release — fail
-   closed), and the license. The guide documents only behaviour this blueprint states:
+   source (every build bakes the committed key `docs/contract/release-key.pub` — E-16; a
+   build with the `reject-all-signatures` feature trusts nothing and refuses every release), and the license. The guide documents only behaviour this blueprint states:
    every command and exit code of §API, in one table; what an install touches (the scope
    rule: mirrored dirs + `manifest.json` + `VERSION`; operator data never opened);
    snapshots and `rollback` (code only, two kept, second rollback returns); `profiles
@@ -313,11 +313,21 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   build-flag kill switch, not the default. **Where the baked key comes from (D-014):** a
   file committed in this repo, copied byte for byte from rein `docs/contract/release-key.pub`
   (rein D-155 r6) — reviewable in git, identical in CI and source builds, rotated by a
-  commit. Until E-16 lands, the build keeps reading the `REIN_RELEASE_PUBKEY` variable and
-  fails closed without it. E-16 is open since 2026-11-10 (D-014 addendum): the operator's
-  public key is in the rein checkout's `docs/contract/release-key.pub` and is copied from
-  there; before the first tag the committed copy here must equal, byte for byte, the file
-  on rein's `main` — a difference blocks the tag. No
+  commit. **As built (E-16, 2026-11-10):** `docs/contract/release-key.pub` is committed
+  (`.gitattributes` `-text`, so no checkout rewrites its line ends) and baked with
+  `include_str!` through a strict parser; a file that does not parse yields the `Rejecting`
+  backend. The `REIN_RELEASE_PUBKEY` variable is gone. **Key-file guard (D-017):** one
+  script, `.github/scripts/check-release-key.sh`, is the only implementation of the file
+  check (regular file, no NUL, two lines, `Ed` algorithm bytes, comment id == key id); the
+  release workflows call it, and CI runs it against a fixture corpus on all three OSes.
+  **Tag gate (D-017):** on a tag push, before any artifact is built, the release workflow
+  fetches `docs/contract/release-key.pub` from rein's `main` over HTTPS and compares it byte
+  for byte with the committed copy — absent or different fails the release. The fetched
+  bytes are compared and discarded, never built from. `CODEOWNERS` names the operator for
+  `docs/contract/**`, `.gitattributes`, `.github/**`. **The production key signs rein
+  releases and nothing else:** no fixture is ever signed with it; the positive proof that
+  the baked key matches the operator's secret key is the first real rein release verifying
+  (E-9 / the rc install). No
   agent generates, handles or guesses a release key. **Outside the signature (rein D-155
   r7):** the npm dependencies `rein install` fetches; only rein's gate pins cover them.
 - **Trust boundary 2 — `$HOME/.rein`**: written only by LayoutWriter, only under the mirrored
@@ -482,6 +492,13 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - Operator docs (E-18): every command, flag and exit code in `docs/operator-guide.md`
   matches the §API table and `rein-app --help` / `<command> --help` output; no statement
   claims a published release, a download URL or a key.
+- Key-file guard and tag gate (E-22): a test runs `.github/scripts/check-release-key.sh` over
+  a fixture corpus — the committed key passes; a symlink, a NUL byte, one line, three lines,
+  CRLF, a non-`Ed` algorithm, a comment id that differs from the key id, an empty and a
+  missing file each fail — in the CI matrix on Linux, macOS and Windows. The comparison
+  step is a second script taking the two file paths (equal → 0, different or absent → non-
+  zero), tested the same way without network; only the workflow does the fetch. No workflow
+  carries its own copy of either check.
 - Exit codes (E-20): with a stubbed `Process`, `doctor` and `doctor --json` return 14 when
   rein is not started and when it ends without a code, and rein's 0 / 1 / other codes
   unchanged; an unknown subcommand and an unknown flag exit 64 with usage on stderr;
@@ -551,7 +568,13 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - **E-15** (T2) CLI: `rollback` runs `rein install` then `rein doctor`; a failed
   `rein install` is exit 13 on `install`/`update`/`rollback`; `doctor --json` passthrough.
   §Components 4, 7; §API. Depends on E-13.
-- **E-16** (T3, BLOCKED until rein commits `docs/contract/release-key.pub`) Bake the trust
+- E-16, E-18..E-21 are DONE (2026-11-10), reviewed in D-017.
+- **E-22** (T3) Release-key guard in one tested script, the tag gate against rein's `main`,
+  and `CODEOWNERS` (§Security trust boundary 1 "Key-file guard", "Tag gate"; D-017).
+  `ci_gate` first; `security_engineer` before commit.
+- **E-23** (T1) Make the comment in `crates/rein-app/wix/main.wxs` ASCII-only (the file
+  declares windows-1252).
+- **E-16** (T3, DONE) Bake the trust
   root from a committed copy of that file instead of the `REIN_RELEASE_PUBKEY` variable;
   release guard checks the file (`ci_gate` first). §Security trust boundary 1 (D-014).
 - **E-17** (T2, BLOCKED on rein E-422) Vendor rein's shared fixtures and run them: replace the
