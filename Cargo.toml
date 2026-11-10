@@ -38,7 +38,11 @@ github-build-setup = "../build-setup.yml"
 local-artifacts-jobs = ["./build-linux-packages"]
 # cargo-dist 0.34.0 renders a local reusable workflow as `$/.github/...`; release.yml carries
 # one hand fix (`./.github/...`), so `dist generate` must not overwrite it unchecked.
-allow-dirty = ["ci"]
+# E-21: main.wxs carries one hand edit too (LICENSE + NOTICE components beside bin\); dist's
+# `wix.license` takes a single file, so `dist init` must not regenerate it unchecked.
+allow-dirty = ["ci", "msi"]
+# E-21: Apache-2.0 §4(d) — NOTICE travels with every archive (LICENSE is auto-included).
+include = ["NOTICE"]
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
 

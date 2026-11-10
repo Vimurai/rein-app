@@ -103,11 +103,13 @@
                       4. Uncomment the `ComponentRef` tag with the Id attribute value of "License"
                          further down in this file.
                     -->
-                    <!--
+                    <!-- E-21: Apache-2.0 section 4(d) - LICENSE and NOTICE installed beside bin\ (no EULA dialog). -->
                     <Component Id='License' Guid='*'>
-                        <File Id='LicenseFile' Name='ChangeMe' DiskId='1' Source='C:\Path\To\File' KeyPath='yes'/>
+                        <File Id='LicenseFile' Name='LICENSE' DiskId='1' Source='..\..\LICENSE' KeyPath='yes'/>
                     </Component>
-                    -->
+                    <Component Id='Notice' Guid='*'>
+                        <File Id='NoticeFile' Name='NOTICE' DiskId='1' Source='..\..\NOTICE' KeyPath='yes'/>
+                    </Component>
 
                     <Directory Id='Bin' Name='bin'>
                         <Component Id='Path' Guid='C882D330-1E0E-4F1C-8A4F-09C9D328FDB2' KeyPath='yes'>
@@ -147,7 +149,8 @@
               Uncomment the following `ComponentRef` tag to add the license
               sidecar file to the installer.
             -->
-            <!--<ComponentRef Id='License'/>-->
+            <ComponentRef Id='License'/>
+            <ComponentRef Id='Notice'/>
 
             <ComponentRef Id='binary0'/>
 

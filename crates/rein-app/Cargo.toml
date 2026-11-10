@@ -39,7 +39,12 @@ maintainer = "Emir Kovacevic <emirkovacevic@protonmail.com>"
 section = "devel"
 priority = "optional"
 extended-description = "Installs, verifies and updates a signed Rein release into $HOME/.rein and manages Claude Code profile settings."
-assets = [["target/release/rein-app", "usr/bin/", "755"]]
+assets = [
+    ["target/release/rein-app", "usr/bin/", "755"],
+    # E-21: Apache-2.0 §4(d) — the license and NOTICE travel with the package.
+    ["../../LICENSE", "usr/share/doc/rein-app/", "644"],
+    ["../../NOTICE", "usr/share/doc/rein-app/", "644"],
+]
 
 [package.metadata.dist]
 # publish = false keeps it off crates.io; dist still releases the binary.
