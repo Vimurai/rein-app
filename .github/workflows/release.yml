@@ -60,6 +60,21 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+      # D-017 tag gate (E-22): on a tag push only, before anything is built, rein's main must
+      # publish the same release key we bake. Fetched bytes are compared and discarded.
+      - name: "Tag gate: our release key equals rein's main"
+        # Same condition as the `publishing` output: every run that can publish is gated.
+        if: ${{ !github.event.pull_request }}
+        shell: bash
+        run: |
+          THEIRS="$RUNNER_TEMP/rein-main-release-key.pub"
+          curl --proto '=https' --tlsv1.2 -fsSL --max-filesize 4096 --retry 3 \
+            -o "$THEIRS" https://raw.githubusercontent.com/Vimurai/rein/main/docs/contract/release-key.pub \
+            || { rm -f -- "$THEIRS"; echo "::error::cannot fetch docs/contract/release-key.pub from rein's main (absent or unreachable) — refusing to release"; exit 1; }
+          status=0
+          bash .github/scripts/compare-release-key.sh docs/contract/release-key.pub "$THEIRS" || status=$?
+          rm -f -- "$THEIRS"
+          exit "$status"
       - name: Install dist
         # we specify bash to get pipefail; it guards against the `curl` command
         # failing. otherwise `sh` won't catch that `curl` returned non-0
@@ -128,32 +143,7 @@ jobs:
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
       - name: "Check the committed rein release public key"
-        run: |
-          F=docs/contract/release-key.pub
-          if [ ! -f "$F" ] || [ -L "$F" ]; then
-            echo "::error::$F is missing (D-014: the release trust root is a committed copy of rein's file) — refusing to build a release that cannot verify rein"
-            exit 1
-          fi
-          if ! tr -d '\000' < "$F" | cmp -s - "$F" \
-            || [ "$(awk 'END { print NR }' "$F")" != 2 ] \
-            || ! sed -n 1p "$F" | grep -Eq '^untrusted comment: minisign public key:? [0-9A-F]{16}$' \
-            || ! sed -n 2p "$F" | grep -Eq '^RW[A-Za-z0-9+/]{54}$'; then
-            echo "::error::$F is not a minisign public key file (2 lines: comment with key id, base64 Ed25519 key)"
-            exit 1
-          fi
-          # A minisign Ed25519 public key starts with the algorithm bytes "Ed".
-          if [ "$(sed -n 2p "$F" | base64 -d | head -c 2)" != Ed ]; then
-            echo "::error::$F is not a minisign Ed25519 public key"
-            exit 1
-          fi
-          # The id in the comment must be the id inside the key (bytes 2..10, little-endian).
-          NAMED=$(sed -n 1p "$F" | awk '{ print $NF }')
-          ACTUAL=$(sed -n 2p "$F" | base64 -d | od -An -tx1 -j2 -N8 | awk '{ for (i = NF; i > 0; i--) printf "%s", toupper($i); print "" }')
-          if [ "$NAMED" != "$ACTUAL" ]; then
-            echo "::error::$F comment names key $NAMED but the key is $ACTUAL"
-            exit 1
-          fi
-          echo "release key: $ACTUAL"
+        run: "bash .github/scripts/check-release-key.sh"
         shell: "bash"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}

@@ -1,3 +1,5 @@
 # E-16: the release trust root must stay byte-for-byte as committed (D-014) on every
 # checkout, Windows runners included (core.autocrlf would otherwise bake CRLF in).
 docs/contract/release-key.pub -text
+# E-22: shell scripts run on Windows runners too (Git Bash); a CRLF checkout breaks bash.
+*.sh text eol=lf

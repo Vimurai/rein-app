@@ -36,8 +36,9 @@ install-updater = false
 github-build-setup = "../build-setup.yml"
 # E-6: .deb packages (cargo-dist has no .deb installer — D-010)
 local-artifacts-jobs = ["./build-linux-packages"]
-# cargo-dist 0.34.0 renders a local reusable workflow as `$/.github/...`; release.yml carries
-# one hand fix (`./.github/...`), so `dist generate` must not overwrite it unchecked.
+# release.yml carries hand edits `dist generate` would drop, so it must not overwrite it
+# unchecked: (1) cargo-dist 0.34.0 renders a local reusable workflow as `$/.github/...`, fixed
+# to `./.github/...`; (2) the D-017 tag gate step in `plan` (E-22), right after checkout.
 # E-21: main.wxs carries one hand edit too (LICENSE + NOTICE components beside bin\); dist's
 # `wix.license` takes a single file, so `dist init` must not regenerate it unchecked.
 allow-dirty = ["ci", "msi"]
