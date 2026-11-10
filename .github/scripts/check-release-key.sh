@@ -18,6 +18,11 @@ fi
 if ! tr -d '\000' < "$F" | cmp -s - "$F"; then
   fail "contains a NUL byte"
 fi
+# Checked on the raw bytes: Git Bash's command substitution drops a CR, so the line checks
+# below would not see one (E-22 hosted windows-latest run 42875792979).
+if ! tr -d '\r' < "$F" | cmp -s - "$F"; then
+  fail "contains a carriage return (CRLF line endings)"
+fi
 if [ "$(awk 'END { print NR }' "$F")" != 2 ]; then
   fail "does not have exactly two lines"
 fi
