@@ -39,6 +39,14 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    path with `..`/absolute/backslash, or a `files` path that is not under a `layout.mirrored`
    directory (rein D-155 r2: nothing ships outside the mirror, so a top-level or
    owned-only path in `files` is a refusal);
+   **path alphabet and case rule (rein D-155 addendum 3, mirrored D-020; E-26):** at step
+   (a), with the manifest parse and before any signature or tarball work, every `files`
+   path and every `layout.mirrored` name must be printable ASCII (bytes 0x20–0x7E), and no
+   two paths may be equal after ASCII-lowercasing (A–Z only) while differing in bytes —
+   every directory prefix of a path counts as a path (`shared/Lib` beside
+   `shared/lib/x.mjs` collides). Either is a verification failure (exit 2) naming the path
+   or the two paths; nothing is staged or written. The tarball member set equals `files`,
+   so members need no second check. Windows-reserved names are not ruled (rein has not);
    (f) apply `mode` from the manifest (`bin/rein`, `hooks/*.sh` are `0755`).
    **Member rules (rein D-155 r1, binding — a strict reader that accepts only what rein's
    writer emits):** the FIRST member is `manifest.json`; every other member is a regular file
@@ -578,7 +586,10 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - E-16, E-18..E-21 are DONE (2026-11-10), reviewed in D-017.
 - E-22 (guard script, tag gate, `CODEOWNERS`) is DONE and E-23 needed no change (already
   ASCII since 6bf6244); both reviewed in D-018.
-- **E-24** (T1) Extend `.github/CODEOWNERS` to `/crates/rein-release/`, `/Cargo.toml`,
+- E-24 and E-25 are DONE, reviewed in D-019.
+- **E-26** (T3) Verifier refuses non-printable-ASCII paths and ASCII-case-colliding paths at
+  manifest parse (§Components 2 "path alphabet and case rule"; D-020).
+- **E-24** (T1, DONE) Extend `.github/CODEOWNERS` to `/crates/rein-release/`, `/Cargo.toml`,
   `/Cargo.lock` (§Security trust boundary 1; D-018).
 - **E-25** (T2) Rehearse the release-candidate tag: run `dist plan` for `v0.1.0-rc.1` and
   `v0.1.0`, record in `.ai/DEVOPS.md` what an rc tag needs (§Test Plan "Release

@@ -746,3 +746,37 @@ E-25 found that cargo-dist releases a tag only when it equals the package versio
 
 ### Rollback
 Add the WiX attribute later if rc builds become routine.
+
+---
+
+## D-020 — Mirror rein D-155 addendum 3: the verifier refuses non-ASCII and case-colliding paths
+
+**Date**: 2026-11-10
+**Task**: E-26 (relayed by the Engineer from rein c07b4e4)
+**Decision**: `rein-release` refuses, at manifest parse, any manifest whose paths are not printable ASCII or that contains two paths equal under ASCII-lowercasing but different in bytes (directory prefixes included).
+
+### Why needed
+rein's generator now refuses such path sets (`[RELEASE_CASE_COLLISION]`). On a case-insensitive filesystem (macOS default) a colliding release would have one file silently overwrite another during the in-place sync, after verification passed. Our verifier is a strict reader that accepts only what rein's writer emits (rein D-155 r1), so the reader carries the same rule.
+
+### Rulings
+1. The rule is rein's, mirrored exactly: printable ASCII 0x20–0x7E; ASCII-only folding (A–Z); every directory prefix of a path counts.
+2. It is checked in the manifest parse, before signature and tarball work. The tarball member set must equal `files`, so members need no second check.
+3. The outcome is a verification failure, exit 2. No new exit code.
+4. It applies on every OS, not only macOS: one rule, one test set, and a home can be moved between filesystems.
+5. Snapshot `layout.json` is not re-checked: its paths came from a manifest that passed.
+6. Not ruled: Windows-reserved names (rein has not ruled them), and a shipped path that differs only by case from an operator-owned file already in the home.
+
+### Alternatives considered
+1. **Trust the signature** — rejected: a signed artifact from an older or buggy generator would still overwrite silently; the strict-reader rule exists for this.
+2. **Check in the layout writer against the live filesystem** — rejected: depends on the machine, and refuses after staging instead of before anything is read.
+3. **Check at manifest parse** — chosen.
+
+### Constraints driving this decision
+- rein D-155 r1 (strict reader), D-155 addendum 3; contract items are decided in rein and mirrored here.
+
+### Impact
+- Unlocks: E-26.
+- Risk if wrong: a legitimate release with a non-ASCII or case-distinct path is refused — but rein's generator cannot produce one.
+
+### Rollback
+Remove the two checks; no stored format changes.
