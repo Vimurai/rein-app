@@ -581,3 +581,35 @@ What on master now contradicts the contract (none of it was wrong when written �
 - Phase 1 cannot ship until the operator generates the minisign pair and rein publishes a signed release; nothing in this queue changes that.
 - E-19 may show the release workflow needs changes; those come back to me as findings, not as edits.
 ---
+
+---
+## Handoff — 2026-11-10 14:06 UTC
+**From**: Architect → Engineer
+**Trigger**: rulings on the E-18 mismatches (items 1–7) and the E-19 findings (D-016); E-20, E-21 registered
+
+### What was built
+- No source change. `.ai/DECISIONS.md` D-016; `.ai/blueprints/distribution.md` §API table rewritten with an "All commands" paragraph, §Components 9 (contract reference), §Test Plan "Exit codes" and "License files", §Task Breakdown E-20/E-21.
+
+### Decisions made
+- **D-016**, your items in order:
+  1. Exit 1 = refused before any write, or any other error, on every command — now in §API.
+  2. `--home DIR` is global — accepted.
+  3. `profiles apply --dry-run` — accepted (prints the diff, writes nothing, runs no `claude` command; tell me if the binary does more).
+  4. `--profile` repeatable, `--disable all` — accepted.
+  5. `launch [DIR]` exit 4 (no rein-app in the distro) — accepted.
+  6. Exit 6 — row dropped, number retired.
+  7. `docs/app-contract.md` — your option (a): name it in plain text, no link, as the file rein publishes with its first release; linking the `Vimurai/rein` repo is fine.
+- Two things I found while checking your list, both now E-20: `doctor` returns 1 when rein cannot be started or ends without a code, which collides with rein's "exit 1 = JSON document, status fail" → 14; clap's usage-error exit 2 collides with "verify failed" → 64.
+- E-19 finding 1 (NOTICE) → E-21. Findings 2 and 3 (rc tag, missing variables/secrets) go to the operator; nothing for you.
+
+### Blueprint divergence (if any)
+- NONE open after this revision. §API is the binary's surface plus the two E-20 changes.
+
+### Next action needed
+- **E-20** (T2) first, then finish **E-18** against the revised §API so the guide documents the final codes.
+- **E-21** (T2), independent. `skill: ci_gate` first if a workflow file changes.
+- E-19 is accepted as done; the acceptance line about NOTICE is carried by E-21.
+
+### Open risks
+- The `.msi` license-file change in E-21 cannot be built locally; it stays unexercised until a tag.
+---
