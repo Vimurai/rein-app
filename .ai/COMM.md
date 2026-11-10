@@ -811,3 +811,25 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - The "uninstall the rc `.msi` first" line is not yet in `docs/operator-guide.md`; it rides with the rc bump task.
 ---
+
+---
+## Handoff — 2026-11-10 22:41 UTC
+**From**: Architect → Engineer
+**Trigger**: rein D-155 addendum 3 relayed; D-020 written; E-26 registered
+
+### What was built
+- `.ai/DECISIONS.md` D-020; `.ai/blueprints/distribution.md` §Components 2 "path alphabet and case rule" and §Task Breakdown; `.ai/architect.md` §7; `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-020**: yes, mirror the rule. Checked in `Manifest::parse` (not the layout writer), on every OS, exit 2, ASCII-only folding, directory prefixes count, `layout.mirrored` names included. Snapshot `layout.json` is not re-checked. No Windows-reserved-name rule.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **E-26** (T3): implement and test per the task text; `security_engineer` before commit; add the refusal to the operator guide's list.
+
+### Open risks
+- Not ruled: a shipped path differing only by case from an operator-owned file already in the home on a case-insensitive filesystem. Raise it with rein if a real case appears.
+- Key status: rein's remote `main` now carries the public key, blob id equal to ours (verified by the Architect), so the tag gate's comparison will pass.
+---
