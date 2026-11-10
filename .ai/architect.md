@@ -141,6 +141,7 @@ E-16 and E-18..E-21 are DONE (2026-11-10), reviewed in D-017. Registered after t
 | **E-24** | CODEOWNERS also covers `crates/rein-release/`, `Cargo.toml`, `Cargo.lock` (D-018) | 1 | — |
 | **E-25** | DONE (D-019) — rehearse the `-rc` tag with `dist plan`; record what it needs in DEVOPS.md | 2 | — |
 | **E-26** | DONE (D-021) — verifier refuses non-ASCII and case-colliding manifest paths (rein D-155 addendum 3, D-020) | 3 | — |
+| **E-28** | profile enumeration: accounts row beats the built-in `personal`; only `default` reserved; terminal-safety name check (D-022) | 3 | — |
 | **E-27** | sync: case-variant prunes before writes, post-sync existence check; `operator_owned` patterns ASCII-checked (D-021) | 3 | — |
 E-9 now waits on rein E-417/E-418/E-420 and follows E-13. AppImage is out of Phase 1 (D-012). Phase 1 ships when
 PR #1 is merged, rein publishes a signed release + public key (P-50), and the first tag builds.

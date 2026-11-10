@@ -201,7 +201,17 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
 6. **`rein-profiles`** — enumerates profiles: default config dir (`~/.claude`),
    `~/.claude-personal` if present, and every `accounts.<name>.config_dir` in
    `$HOME/.rein/accounts.json` (read-only here: rein's `accounts.py` is the file's only
-   writer, and only `config_dir` is relied on — rein D-153 addendum 2). For each `<config_dir>/settings.json`: read → parse →
+   writer, and only `config_dir` is relied on — rein D-153 addendum 2). **Enumeration order
+   and names (D-022, E-28):** (1) `default` = `~/.claude`; (2) every `accounts.json` row, the
+   row's `config_dir` authoritative for its name — a row named `personal` is an ordinary
+   account; (3) the built-in `~/.claude-personal`, named `personal`, only when no row has
+   that name and the directory is not already listed. A directory is listed once. Only
+   `default` is reserved: a row named `default` is silent when it points at `~/.claude` and
+   otherwise skipped with a warning that says exactly that. A row name is not re-validated
+   against a grammar of ours (rein's `accounts.py` owns the grammar); it is checked only
+   for terminal safety — printable ASCII 0x21–0x7E, at most 64 bytes — and a failing row is
+   skipped with a warning that shows the name escaped. No warning is ever printed for a
+   row that is then listed. For each `<config_dir>/settings.json`: read → parse →
    merge ONLY the **three** keys the contract allows (rein D-155 r3, corrects contract §2.3):
    `enabledPlugins`, `extraKnownMarketplaces`, `attribution`. **Never `hooks`**: the gate's
    hook entries are not in a profile at all — they are in each project's
@@ -601,6 +611,8 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - E-22 (guard script, tag gate, `CODEOWNERS`) is DONE and E-23 needed no change (already
   ASCII since 6bf6244); both reviewed in D-018.
 - E-24 and E-25 are DONE, reviewed in D-019. E-26 is DONE, reviewed in D-021.
+- **E-28** (T3) Profile enumeration: accounts rows before the built-in `personal`, only
+  `default` reserved, terminal-safety name check, no false warning (§Components 6; D-022).
 - **E-27** (T3) Sync removes case-variant prune entries before the writes and checks every
   shipped path after the sync; `operator_owned` patterns join the ASCII rule (§Components 2,
   §Components 3 step d; D-021).

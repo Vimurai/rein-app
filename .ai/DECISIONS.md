@@ -814,3 +814,36 @@ The security review of E-26 found a case D-020 does not cover: release N has `sh
 
 ### Rollback
 Revert the prune ordering; the post-sync check is independent and can stay.
+
+---
+
+## D-022 — Profile enumeration: an accounts row beats the built-in `personal`; only `default` is reserved
+
+**Date**: 2026-11-10
+**Task**: E-28 (bug seen on the operator's machine, relayed by the Engineer)
+**Decision**: `accounts.json` rows are listed before the built-in `~/.claude-personal`; a row named `personal` is an ordinary account whose `config_dir` is authoritative; only `default` is reserved; row names get a terminal-safety check instead of a second name grammar.
+
+### Why needed
+`rein-app profiles list` warned `account "personal": name is reserved … skipped` and then listed `personal`. The built-in source reserved the name, so the real row was skipped. Here both pointed at the same directory, so only the warning was wrong; a `personal` row pointing elsewhere would have been dropped silently and never received the allowed-key writes. Our name grammar also differed from rein's (rein D-153 addendum 2: a reader relies on `config_dir` and accepts what `accounts.py` wrote).
+
+### Rulings
+1. Order: `default`, then accounts rows, then the built-in `personal` only when no row has that name and its directory is not already listed.
+2. Only `default` is reserved (it is never a row in rein's file). A `default` row pointing at `~/.claude` is silent; pointing elsewhere it is skipped with an accurate warning.
+3. Name check is terminal safety only: printable ASCII 0x21–0x7E, at most 64 bytes; warnings show a failing name escaped.
+4. No warning for a row that is listed.
+
+### Alternatives considered
+1. **Drop the built-in `~/.claude-personal`** (Engineer's option a) — rejected: a machine with that directory and no `accounts.json` row would lose a profile it has today; the built-in costs nothing once a row outranks it.
+2. **Keep the built-in first, silence the same-directory case** (option b as stated) — rejected: a row pointing elsewhere still loses to a guess.
+3. **Row first, built-in as fallback** — chosen.
+
+### Constraints driving this decision
+- rein D-153 addendum 2: `accounts.py` is the only writer and owns the name grammar; readers rely on `config_dir`.
+- E-4 P2: names reach the terminal, so control bytes are refused.
+
+### Impact
+- Unlocks: E-28.
+- Risk if wrong: a hand-edited row with an odd but printable name is now listed where it was skipped; its `config_dir` still passes the existing absolute-path checks.
+
+### Rollback
+Restore the previous `enumerate`; no stored data changes.
