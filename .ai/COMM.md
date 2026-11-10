@@ -674,3 +674,32 @@ What on master now contradicts the contract (none of it was wrong when written �
 - rein must commit `docs/contract/release-key.pub` byte-identical to ours before the first tag.
 - The .msi license paths and the guard on Windows Git Bash and macOS stay unexercised until a tag; a `-rc` tag would exercise them.
 ---
+
+---
+## Handoff — 2026-11-10 14:46 UTC
+**From**: Architect → Engineer
+**Trigger**: review of E-16, E-18, E-20, E-21 complete (D-017); E-22, E-23 registered
+
+### What was built
+- No source change. All four tasks accepted as built. `.ai/DECISIONS.md` D-017; `distribution.md` §Security trust boundary 1 (as-built key text, "Key-file guard", "Tag gate"), §Components 9, §Test Plan, §Task Breakdown; `architect.md` §7; DIGEST.
+
+### Decisions made
+- **D-017**, your items in order:
+  1. Byte comparison with rein's `main`: scripted, runs on tag pushes only, before any artifact build, fails closed on 404 or difference.
+  2. CODEOWNERS: yes — `docs/contract/**`, `.gitattributes`, `.github/**`.
+  3. Guard shell: one script, called from the three places, tested over a fixture corpus on all three CI OSes.
+  4. Operator-signed fixture: no. The production key signs rein releases and nothing else; E-16's acceptance stands on the tests you wrote.
+- Both stale blueprint spots are fixed. `allow-dirty = ["msi"]`, README in the archives, and the out-of-range exit code → 14 are accepted.
+
+### Blueprint divergence (if any)
+- NONE open.
+
+### Next action needed
+- **E-22** (T3): items 1–3 above in one task; `ci_gate` first, `security_engineer` before commit.
+- **E-23** (T1): ASCII-only comment in `wix/main.wxs`.
+- After these the queue is empty until rein or the operator moves.
+
+### Open risks
+- The tag gate will fail every tag until rein commits the key on `main`. That is intended.
+- The mode of the secret key on the drvfs mount (0777) is a property of that mount, not something to fix from here.
+---
