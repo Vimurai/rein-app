@@ -42,6 +42,11 @@ impl TestKey {
         MinisignVerifier::from_base64(&self.pk.to_base64()).unwrap()
     }
 
+    /// This key as a `minisign.pub` file (comment line + key line), as rein commits it.
+    pub fn pub_file(&self) -> String {
+        self.pk.to_box().unwrap().into_string()
+    }
+
     /// The same signature relabelled as a legacy (non-prehashed, `Ed`) one.
     pub fn legacy_sign(&self, data: &[u8]) -> String {
         let sig = self.sign(data);

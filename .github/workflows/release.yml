@@ -127,21 +127,34 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
-      - name: "Bake the rein release public key"
+      - name: "Check the committed rein release public key"
         run: |
-          if [ -z "$PUBKEY" ]; then
-            echo "::error::repository variable REIN_RELEASE_PUBKEY is not set (rein P-50) — refusing to build a release that cannot verify rein"
+          F=docs/contract/release-key.pub
+          if [ ! -f "$F" ] || [ -L "$F" ]; then
+            echo "::error::$F is missing (D-014: the release trust root is a committed copy of rein's file) — refusing to build a release that cannot verify rein"
             exit 1
           fi
-          # A minisign public key is one base64 line; anything else could inject into GITHUB_ENV.
-          if ! printf '%s' "$PUBKEY" | grep -Eq '^[A-Za-z0-9+/]+={0,2}$'; then
-            echo "::error::REIN_RELEASE_PUBKEY is not a single base64 line"
+          if ! tr -d '\000' < "$F" | cmp -s - "$F" \
+            || [ "$(awk 'END { print NR }' "$F")" != 2 ] \
+            || ! sed -n 1p "$F" | grep -Eq '^untrusted comment: minisign public key:? [0-9A-F]{16}$' \
+            || ! sed -n 2p "$F" | grep -Eq '^RW[A-Za-z0-9+/]{54}$'; then
+            echo "::error::$F is not a minisign public key file (2 lines: comment with key id, base64 Ed25519 key)"
             exit 1
           fi
-          echo "REIN_RELEASE_PUBKEY=$PUBKEY" >> "$GITHUB_ENV"
+          # A minisign Ed25519 public key starts with the algorithm bytes "Ed".
+          if [ "$(sed -n 2p "$F" | base64 -d | head -c 2)" != Ed ]; then
+            echo "::error::$F is not a minisign Ed25519 public key"
+            exit 1
+          fi
+          # The id in the comment must be the id inside the key (bytes 2..10, little-endian).
+          NAMED=$(sed -n 1p "$F" | awk '{ print $NF }')
+          ACTUAL=$(sed -n 2p "$F" | base64 -d | od -An -tx1 -j2 -N8 | awk '{ for (i = NF; i > 0; i--) printf "%s", toupper($i); print "" }')
+          if [ "$NAMED" != "$ACTUAL" ]; then
+            echo "::error::$F comment names key $NAMED but the key is $ACTUAL"
+            exit 1
+          fi
+          echo "release key: $ACTUAL"
         shell: "bash"
-        env:
-          "PUBKEY": "${{ vars.REIN_RELEASE_PUBKEY }}"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest

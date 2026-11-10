@@ -1,14 +1,17 @@
 //! The `SignatureVerifier` seam (blueprint §Components 2, rein D-153 r1).
 //!
-//! Trust root: a minisign public key compiled into the binary from the build-time
-//! environment variable `REIN_RELEASE_PUBKEY` (the base64 key line of `minisign.pub`).
-//! The app never fetches a key. A build without the variable, or one built with the
-//! `reject-all-signatures` feature (the kill switch), trusts nothing and every install
-//! fails closed.
+//! Trust root: the minisign public key committed at `docs/contract/release-key.pub` — a
+//! byte-for-byte copy of rein's file of the same path (D-014 decision 4, E-16) — compiled
+//! into the binary. The app never fetches a key. A committed file that does not parse, or a
+//! build with the `reject-all-signatures` feature (the kill switch), trusts nothing and
+//! every install fails closed.
 
 use std::io::Read;
 
 use minisign_verify::{PublicKey, Signature};
+
+/// The release public key file as committed (`docs/contract/release-key.pub`), baked in.
+pub const BAKED_RELEASE_KEY: &str = include_str!("../../../docs/contract/release-key.pub");
 
 /// Upper bound on a `.minisig` file.
 pub const MAX_SIGNATURE_BYTES: u64 = 64 * 1024;
@@ -28,6 +31,37 @@ pub struct MinisignVerifier {
 }
 
 impl MinisignVerifier {
+    /// Build from the text of a `minisign.pub` file, strictly: exactly two lines (one
+    /// trailing newline allowed) — `untrusted comment: minisign public key[:] <ID>` and the
+    /// base64 key line — where `<ID>` must equal the key id inside the key.
+    pub fn from_pub_file(text: &str) -> Result<Self, String> {
+        let body = text.strip_suffix('\n').unwrap_or(text);
+        let lines: Vec<&str> = body.split('\n').collect();
+        let [comment, key] = lines[..] else {
+            return Err(format!(
+                "public key file: expected 2 lines, found {}",
+                lines.len()
+            ));
+        };
+        // The minisign CLI writes `…public key <ID>`, the minisign crate `…public key: <ID>`.
+        let id = comment
+            .strip_prefix("untrusted comment: minisign public key")
+            .map(|rest| rest.strip_prefix(':').unwrap_or(rest))
+            .and_then(|rest| rest.strip_prefix(' '))
+            .ok_or("public key file: first line is not a minisign public key comment")?;
+        if key.trim() != key {
+            return Err("public key file: whitespace around the key line".into());
+        }
+        let verifier = Self::from_base64(key)?;
+        if id != verifier.key_id {
+            return Err(format!(
+                "public key file: comment names key {id}, the key is {}",
+                verifier.key_id
+            ));
+        }
+        Ok(verifier)
+    }
+
     /// Build from the base64 key line of a `minisign.pub` file.
     pub fn from_base64(public_key_b64: &str) -> Result<Self, String> {
         let b64 = public_key_b64.trim();
@@ -95,14 +129,11 @@ pub fn production_verifier() -> Box<dyn SignatureVerifier> {
             "built with the reject-all-signatures kill switch",
         ));
     }
-    match option_env!("REIN_RELEASE_PUBKEY") {
-        None => Box::new(Rejecting::new("built without REIN_RELEASE_PUBKEY")),
-        Some(b64) => match MinisignVerifier::from_base64(b64) {
-            Ok(v) => Box::new(v),
-            Err(e) => Box::new(Rejecting::new(format!(
-                "baked REIN_RELEASE_PUBKEY is invalid: {e}"
-            ))),
-        },
+    match MinisignVerifier::from_pub_file(BAKED_RELEASE_KEY) {
+        Ok(v) => Box::new(v),
+        Err(e) => Box::new(Rejecting::new(format!(
+            "baked docs/contract/release-key.pub is invalid: {e}"
+        ))),
     }
 }
 
@@ -157,15 +188,52 @@ mod tests {
         assert!(r.verify(&mut &b"data"[..], "sig").is_err());
     }
 
+    /// Replaces the env-var form of this test (E-16): the committed file must parse, so a
+    /// malformed key fails `cargo test` (CI) before any release is built.
     #[test]
-    fn production_verifier_matches_the_baked_key() {
+    fn production_verifier_trusts_the_committed_key_file() {
         let baked = production_verifier().key_id();
-        match option_env!("REIN_RELEASE_PUBKEY") {
-            // No key baked in: fail closed.
-            None => assert!(baked.is_err()),
-            // A release build: the baked key must parse, or this test fails the release.
-            Some(_) if cfg!(feature = "reject-all-signatures") => assert!(baked.is_err()),
-            Some(_) => assert!(baked.is_ok(), "{baked:?}"),
+        if cfg!(feature = "reject-all-signatures") {
+            assert!(baked.is_err());
+            return;
+        }
+        let id = BAKED_RELEASE_KEY
+            .lines()
+            .next()
+            .and_then(|l| l.rsplit(' ').next())
+            .unwrap();
+        assert_eq!(baked.unwrap(), id.to_ascii_uppercase());
+    }
+
+    #[test]
+    fn pub_file_parser_refuses_anything_but_the_minisign_format() {
+        let (comment, key) = BAKED_RELEASE_KEY.trim_end().split_once('\n').unwrap();
+        assert!(MinisignVerifier::from_pub_file(BAKED_RELEASE_KEY).is_ok());
+        assert!(MinisignVerifier::from_pub_file(&format!("{comment}\n{key}")).is_ok());
+        let colon = comment.replacen("public key ", "public key: ", 1);
+        assert!(MinisignVerifier::from_pub_file(&format!("{colon}\n{key}\n")).is_ok());
+        for bad in [
+            String::new(),
+            key.to_string(),
+            format!("{comment}\n{key}\n\n"),
+            format!("{comment}\n{key}\nextra"),
+            format!("{comment}\r\n{key}\n"),
+            format!("{comment}\n {key}\n"),
+            format!("untrusted comment: something else\n{key}\n"),
+            format!(
+                "{}\n{key}\n",
+                comment.replacen("public key ", "public key", 1)
+            ),
+            format!(
+                "{}\n{key}\n",
+                comment.replacen("public key ", "public key  ", 1)
+            ),
+            format!("untrusted comment: minisign public key 0000000000000000\n{key}\n"),
+            format!("{comment}\n{}\n", &key[..key.len() - 4]),
+            format!("{comment}\nnot*base64\n"),
+            format!("{}\n{key}\n", comment.to_ascii_lowercase()), // key id in lower case
+        ] {
+            assert!(MinisignVerifier::from_pub_file(&bad).is_err(), "{bad:?}");
         }
     }
 }

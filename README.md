@@ -31,9 +31,13 @@ cargo build --release
 ./target/release/rein-app --help
 ```
 
-A release build is built with Rein's release public key baked in (no such key exists
-yet). **A source build without that key refuses every release**: it fails closed and installs nothing. It is useful for
-development and for running the tests (`cargo test --workspace`), but it cannot install Rein.
+Every build, a source build included, has the Rein release public key compiled in from
+[`docs/contract/release-key.pub`](docs/contract/release-key.pub), a copy of the key Rein
+will sign its releases with. rein-app never fetches a key: it installs only a release whose
+signature matches that key, and fails closed on anything else. Building with the
+`reject-all-signatures` feature (`cargo build --release --features
+rein-release/reject-all-signatures`) gives a binary that trusts no key and refuses every
+release.
 
 ## Documentation
 

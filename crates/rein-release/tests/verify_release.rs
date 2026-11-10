@@ -7,7 +7,7 @@ mod support;
 use std::fs;
 use std::path::Path;
 
-use rein_release::{Rejecting, SignatureVerifier, VerifyError, verify_release};
+use rein_release::{MinisignVerifier, Rejecting, SignatureVerifier, VerifyError, verify_release};
 use support::*;
 
 fn requested() -> semver::Version {
@@ -329,6 +329,30 @@ fn every_defective_release_is_rejected_by_its_check_and_writes_nothing() {
         assert!((case.expect)(&err), "{}: wrong error: {err}", case.label);
         assert!(clean, "{}: wrote under HOME", case.label);
     }
+}
+
+/// E-16 acceptance, extending `good_release_extracts_every_listed_file_with_its_mode`: the
+/// production path builds its verifier from a committed `minisign.pub` file. Built from a
+/// test key's file it verifies a release signed with that key and refuses (key id first,
+/// nothing written) one signed with another. The production key's secret half is never
+/// available to tests, so the baked file itself is covered by the parser and key-id unit
+/// tests in `signature.rs`.
+#[test]
+fn a_verifier_from_a_pub_file_accepts_its_own_key_and_refuses_another() {
+    let key = TestKey::generate();
+    let verifier = MinisignVerifier::from_pub_file(&key.pub_file()).unwrap();
+    assert_eq!(verifier.key_id().unwrap(), key.key_id());
+    let (result, clean) = run(&Release::good(&key), &verifier);
+    assert!(result.is_ok(), "{result:?}");
+    assert!(!clean, "the good release is extracted");
+
+    let other = TestKey::generate();
+    let (result, clean) = run(&Release::good(&other), &verifier);
+    assert!(
+        matches!(result, Err(VerifyError::NeedsNewerApp { .. })),
+        "{result:?}"
+    );
+    assert!(clean);
 }
 
 #[test]
