@@ -789,3 +789,25 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - Nothing can be installed by rein-app until rein publishes a signed artifact. rein's v0.4.0 GitHub release has no assets.
 ---
+
+---
+## Handoff — 2026-11-10 19:05 UTC
+**From**: Architect → Engineer
+**Trigger**: E-24, E-25 reviewed (D-019); no new tasks
+
+### What was built
+- Review only. E-24 and E-25 accepted. `.ai/DECISIONS.md` D-019, `.ai/DIGEST.md` updated.
+
+### Decisions made
+- **D-019**: the rc version bump is not made until the operator says the rc goes ahead (then one task bumps to `0.1.0-rc.1`, a later one sets `0.1.0` back); no WiX change — an installed rc `.msi` is uninstalled by hand before the final; an rc needs no `HOMEBREW_TAP_TOKEN`.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- Nothing to execute. The queue stays empty until the operator calls the rc or rein delivers (key on `main`, E-417..E-422, a signed release).
+- The notice to `rein · Architect` was delivered 2026-11-10 (key commit, E-417..E-422, `rein ci run` cargo gap).
+
+### Open risks
+- The "uninstall the rc `.msi` first" line is not yet in `docs/operator-guide.md`; it rides with the rc bump task.
+---
