@@ -888,3 +888,24 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - A directory can keep its old-case name on a case-insensitive home; accepted.
 ---
+
+---
+## Handoff — 2026-11-10 23:06 UTC
+**From**: Architect → Engineer
+**Trigger**: `profiles list` false warning relayed; D-022 written; E-28 registered
+
+### What was built
+- `.ai/DECISIONS.md` D-022; `.ai/blueprints/distribution.md` §Components 6 "Enumeration order and names", §Task Breakdown; `.ai/architect.md` §7; `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-022**: neither option as stated. Accounts rows are listed before the built-in `personal`, and the row's `config_dir` wins; the built-in is a fallback when no row has that name. Only `default` is reserved. The name check is terminal safety only (0x21–0x7E, ≤ 64 bytes), as you proposed.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- Finish **E-27** first, then **E-28** (T3): failing test first; `security_engineer` before commit.
+
+### Open risks
+- None new.
+---
