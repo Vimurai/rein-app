@@ -1,9 +1,9 @@
 {
   "version": "1.0",
   "project": {
-    "current_tier": 3,
+    "current_tier": 2,
     "release_verdict": null,
-    "focus": "Phase 1 distribution bootstrap (E-2..E-6): Cargo workspace, fail-closed release verifier, layout writer, profile manager, packaging + WSL launcher — per .ai/blueprints/distribution.md",
+    "focus": "Phase 1 distribution: D-155 corrections shipped and reviewed (D-015); E-18 operator docs and E-19 release rehearsal open; first tag (E-6) waits on the operator's minisign key and HOMEBREW_TAP_TOKEN; E-9/E-16/E-17 wait on rein — per .ai/blueprints/distribution.md",
     "rein_version": "0.4.0",
     "provisioned_at": "2026-11-08T18:36:23.529Z"
   },
@@ -157,11 +157,9 @@
       "depends_on": [
         "E-13"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-13"
-      ],
-      "updated_at": "2026-11-09T17:01:23.096Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T13:54:02.727Z"
     },
     {
       "id": "E-10",
@@ -196,80 +194,76 @@
     {
       "id": "E-12",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Tighten the rein-release verifier to rein D-155 r1 (strict reader — accept only what rein's tarball writer emits): require `manifest.json` to be the FIRST member; accept only regular-file members (ustar typeflag 0) named in `files`; refuse the whole artifact, before any byte is written, on a directory entry, any link type, a pax or GNU extension header, a device/FIFO, a duplicate, `manifest.json` anywhere but first, or a `VERSION` member; reject at manifest validation any `files` path that is not under a `layout.mirrored` directory (a top-level or operator-owned-only path can no longer ship); keep prehashed-only minisign signatures and prove it with a legacy-signature fixture. Rebuild the good fixture the way rein's writer does (manifest first, regular files only, no directory entries). Per .ai/blueprints/distribution.md §Components 2 \"Member rules\", §Security trust boundary 2, D-014. Acceptance: §Test Plan \"Member rules\" — one refused fixture per rule, each asserting nothing was written under the temp home — and the existing verify/fetch suites green in cargo test --workspace on all three CI targets. Tier 3: security_engineer review before commit.",
       "created_at": "2026-11-09T17:00:54.798Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-10T13:53:51.854Z",
+      "summary": "Strict tarball reader (5dad595): header-only pass 1 before any write — manifest.json first, ustar '0' regular files only, unique safe names, no VERSION, zero padding only after EOA; …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-09T17:00:54.801Z"
+      "updated_at": "2026-11-10T13:53:51.856Z"
     },
     {
       "id": "E-13",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "DONE",
       "tier": 3,
       "description": "Bring the LayoutWriter in line with rein D-155 r1/r2: (1) a shipped path always wins — `ship` is every manifest file, `operator_owned` protects from deletion only (case: `mcp/orchestrator-mcp/package-lock.json` is shipped and matches `mcp/*/package-lock.json`, so it is written); an owned path the release does not ship is still never opened, and prune never descends into an owned directory; remove `skipped_operator_owned`; (2) the snapshot additionally holds the live file at every shipped path and the home's top-level `manifest.json`, and `snapshot::load` accepts shipped paths that match a pattern; (3) write the in-tarball `manifest.json` byte for byte to `$HOME/.rein/manifest.json` after `hooks` and before `VERSION` (temp + rename); failure restore and rollback put the snapshot's `manifest.json` back, or remove the live one when the snapshot has none; (4) reshape the interim conformance fixture to rein's three columns (path, shipped, expected kept/replaced/deleted) with the precedence case and `shared/toolchain.sh` as a kept path. The scope rule becomes: only paths under `layout.mirrored`, plus `manifest.json` and `VERSION`. Per .ai/blueprints/distribution.md §Components 3 (scope rule, steps a–f), §Data Model Snapshot, D-014. Acceptance: §Test Plan \"Shipped path wins\", \"`manifest.json` in the home\", \"Snapshot\", the conformance rows, and the existing every-k fault-restore and untouched-outside-the-mirror tests green in cargo test --workspace on all three CI targets. Tier 3: security_engineer review before commit.",
       "created_at": "2026-11-09T17:01:01.314Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-10T13:53:56.207Z",
+      "summary": "Shipped path wins + manifest.json in home (2085e51): owned protects deletion only; snapshot holds shipped+manifest; manifest/VERSION pair consistent at every fault k; ARCH/TESTS/SEC pass; CI x3",
       "depends_on": [
         "E-12"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-12"
-      ],
-      "updated_at": "2026-11-09T17:01:01.315Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T13:53:56.209Z"
     },
     {
       "id": "E-14",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Remove `hooks` from the profile manager per rein D-155 r3: delete `AllowedKey::Hooks` (the closed enum becomes `EnabledPlugins | ExtraKnownMarketplaces | Attribution`), delete the code in `profiles apply` that reads the default profile's `hooks` and copies it into other profiles together with its messages and exit paths, and make apply and `--undo` operate on three keys; the app must never read a `hooks` value to copy it, never write or remove one, and write no file inside a project. Update the compile_fail doctest so writing `hooks` (like `autoMode`, `permissions`, `defaultMode`) does not compile, and the help/diff text that says \"four keys\". Per .ai/blueprints/distribution.md §Components 6, §Data Model AllowedKey, §Security trust boundary 3, D-014. Acceptance: §Test Plan \"Profile merge\" E-14 additions (a pre-existing `hooks` value in the default profile and in every other profile is byte-identical after apply and after --undo; nothing is copied between profiles) and the existing property and undo tests green in cargo test --workspace. Tier 3: security_engineer review before commit.",
       "created_at": "2026-11-09T17:01:05.312Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-10T13:53:53.121Z",
+      "summary": "AllowedKey::Hooks removed (fbbc951): three keys; profiles apply no longer reads/copies hooks; apply and --undo leave hooks untouched; compile_fail doctest for Hooks; ARCH/TESTS/SEC p …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-09T17:01:05.313Z"
+      "updated_at": "2026-11-10T13:53:53.122Z"
     },
     {
       "id": "E-15",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "DONE",
       "tier": 2,
       "description": "Align the rein-app CLI with rein D-155 r4/r5: make `rollback` run `rein install` and then `rein doctor` after the sync (lock held, same Runner path as `install`) instead of doctor only; report a failed `rein install` as exit 13 on `install`, `update` and `rollback` with rein's own exit code printed (rein exit 3 = tree mismatch or gate pin, exit 1 = Node floor or missing /bin/bash -p), keeping exit 3 for a failed `rein doctor`, with no retry and no repair; add `rein-app doctor --json`, which passes the flag to `rein doctor` and returns its stdout and exit code untouched (no parsing in phase 1). Per .ai/blueprints/distribution.md §Components 4 and 7, §API table, D-014. Acceptance: §Test Plan \"Rollback\" E-15 lines with a stubbed Process (call order install→doctor under the lock; exit 13 vs 3 for all three commands; `doctor --json` argv and passthrough) green in cargo test --workspace on all three CI targets.",
       "created_at": "2026-11-09T17:01:10.452Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-10T13:53:58.884Z",
+      "summary": "rollback runs rein install then doctor under lock; failed rein install = exit 13 (rein code printed) on install/update/rollback, doctor stays 3; doctor --json passthrough (8d4837d); ALIGN_PASS; CI x3",
       "depends_on": [
         "E-13"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-13"
-      ],
-      "updated_at": "2026-11-09T17:01:10.453Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T13:53:58.884Z"
     },
     {
       "id": "E-16",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "DONE",
       "tier": 3,
       "description": "Bake the release trust root from a committed file: copy rein's `docs/contract/release-key.pub` byte for byte into this repo, build the production minisign verifier from it instead of the `REIN_RELEASE_PUBKEY` repository variable, and change the release workflow's key guard to check the committed file (run `skill: ci_gate` first and record the change in DEVOPS.md); keep the `Rejecting` kill switch selectable by build flag and keep failing closed when no real key is present. EXTERNALLY BLOCKED: do not start until the operator has generated the minisign pair and rein has committed `docs/contract/release-key.pub` (the Architect will say so in a handoff) — never generate, guess or substitute a key, and never commit a throwaway key as the production file. Per .ai/blueprints/distribution.md §Security trust boundary 1 \"Where the baked key comes from\", D-014 decision 4. Acceptance: a release build verifies a fixture signed with the matching key and refuses one signed with another; the workflow fails when the file is absent or malformed; cargo test --workspace green. Tier 3: security_engineer review before commit.",
       "created_at": "2026-11-09T17:01:14.558Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-10T14:42:34.090Z",
+      "summary": "Trust root baked from committed docs/contract/release-key.pub (key 5C9C75A7C8FA8056) via strict from_pub_file; guards check the file; .gitattributes -text (0d573f6); T3 6 critics pass; CI x3",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-09T17:01:23.667Z"
+      "updated_at": "2026-11-10T14:42:34.090Z"
     },
     {
       "id": "E-17",
@@ -284,6 +278,118 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-09T17:01:24.069Z"
+    },
+    {
+      "id": "E-18",
+      "owner": "Engineer (Claude)",
+      "status": "DONE",
+      "tier": 2,
+      "description": "Write the operator documentation: `README.md` at the repo root (what rein-app is and is not, the status line \"no release has been published yet\", the planned install channels — Homebrew tap, .deb, Windows launcher over WSL2 — building from source and that a build without a baked key refuses every release, license) and `docs/operator-guide.md` (one table of every command, flag and exit code from the §API table; what an install touches — mirrored dirs + manifest.json + VERSION, operator data never opened; snapshots and rollback — code only, two kept; `profiles apply` — three keys, never hooks, the once-written .rein-bak, --undo by value, settings preserved by value not by byte; the refusals an operator can meet and what to do — held lock, sudo/owner mismatch, symlinked home or mirrored dir, exit 13 with rein's own code; the unsupported shared --home; Windows = WSL2 only). Document only behaviour the blueprint states, link to rein's docs/app-contract.md instead of restating the contract, and name no version, download URL or key that does not exist yet. No source change. Per .ai/blueprints/distribution.md §Components 9, §API, §Test Plan \"Operator docs\", D-015. Acceptance: every command, flag and exit code in the guide matches the §API table and the `rein-app --help` / `<command> --help` output (report any mismatch between the binary and §API to the Architect instead of documenting around it); no claim of a published release; cargo test --workspace still green.",
+      "created_at": "2026-11-10T13:58:02.825Z",
+      "completed_at": "2026-11-10T14:25:15.789Z",
+      "summary": "README + docs/operator-guide.md per revised §API (exit 1/14/64, global --home, --dry-run), scope, rollback, profiles, refusals (b82b3be); ALIGN+CLEAN pass; CI x3",
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T14:25:15.789Z"
+    },
+    {
+      "id": "E-19",
+      "owner": "Engineer (Claude)",
+      "status": "DONE",
+      "tier": 2,
+      "description": "Rehearse the release pipeline without publishing anything: run `dist plan` and confirm it succeeds for every configured target, run a local `dist build` for the host target, and check that the produced archive's binary runs `--version` and that the archive carries LICENSE and NOTICE; read `.github/workflows/release.yml` and `build-linux-packages.yml` against the plan output and list every job, secret and variable the first tag will need (HOMEBREW_TAP_TOKEN, REIN_RELEASE_PUBKEY until E-16) and every step that stays unexercised until then. Record commands, results and that list in a \"Release rehearsal\" section of .ai/DEVOPS.md. Push no tag, publish nothing, and edit no workflow — report a workflow defect to the Architect (a fix is its own task behind skill: ci_gate). Per .ai/blueprints/distribution.md §Test Plan \"Release rehearsal\", §E-## Task Breakdown E-19, D-015. Acceptance: the DEVOPS.md section exists with the plan/build results and the unexercised-steps list; `git status` shows no change outside .ai/ and no new tag exists.",
+      "created_at": "2026-11-10T13:58:07.195Z",
+      "completed_at": "2026-11-10T14:02:33.692Z",
+      "summary": "Release rehearsal in DEVOPS.md: dist plan OK x5 targets; host dist build OK, --version runs, sha OK; FINDING: NOTICE in no artifact (msi/deb lack LICENSE too); no vars/secrets set; no tag, no push",
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T14:02:33.693Z"
+    },
+    {
+      "id": "E-20",
+      "owner": "Engineer (Claude)",
+      "status": "DONE",
+      "tier": 2,
+      "description": "Fix the two exit codes of rein-app that mean two things (D-016 rulings 7–8): make `rein-app doctor` and `doctor --json` exit 14 — not 1 — when `rein doctor` cannot be started or ends without an exit code (rein's own 0, 1 and other codes still pass through unchanged, since exit 1 from rein means stdout is the JSON document with status fail), and make a usage error (unknown subcommand, unknown flag, bad value) exit 64 instead of clap's default 2, which means \"release failed verification\" on install; `--help` and `--version` stay exit 0 and usage still prints to stderr. Remove any leftover exit-6 constant or text. Per .ai/blueprints/distribution.md §API (table and the \"All commands\" paragraph), §Test Plan \"Exit codes\", D-016. Acceptance: stubbed-Process tests for doctor (not started → 14, no exit code → 14, rein 0/1/other passed through, with and without --json) and CLI tests for an unknown subcommand and an unknown flag (exit 64) and --help/--version (exit 0) green in cargo test --workspace on all three CI targets. Do this before finishing E-18 so the guide documents the final codes.",
+      "created_at": "2026-11-10T14:04:14.676Z",
+      "completed_at": "2026-11-10T14:25:13.214Z",
+      "summary": "doctor exits 14 (not 1) when rein doctor can't start/no code/out of range; usage errors exit 64, help/version 0 (dd57a63); ALIGN+CLEAN pass; hosted CI green x3",
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T14:25:13.215Z"
+    },
+    {
+      "id": "E-21",
+      "owner": "Engineer (Claude)",
+      "status": "DONE",
+      "tier": 2,
+      "description": "Ship `LICENSE` and `NOTICE` in every release artifact (E-19 finding 1; Apache-2.0 §4(d)): add `NOTICE` to the cargo-dist archives (tar.xz and zip) through dist metadata, install both files with the `.deb` under /usr/share/doc/rein-app/ through `package.metadata.deb` assets, and install both beside the binary in the `.msi` through `crates/rein-app/wix/main.wxs` (keep the EULA dialog off). Run `skill: ci_gate` first and record the change in .ai/DEVOPS.md if `release.yml` or any other workflow file has to be regenerated or edited; push no tag and publish nothing. Per .ai/blueprints/distribution.md §Test Plan \"License files\", §E-## Task Breakdown E-21, D-016 ruling 9. Acceptance: `dist plan` still succeeds for all five targets; a local host-target `dist build` archive lists both LICENSE and NOTICE; a locally built .deb (when cargo-deb is available, otherwise its asset list) carries both; main.wxs references both; the .msi build is listed in DEVOPS.md as unexercised until a tag; cargo test --workspace and hosted CI green.",
+      "created_at": "2026-11-10T14:04:14.758Z",
+      "completed_at": "2026-11-10T14:25:14.556Z",
+      "summary": "LICENSE+NOTICE in tar/zip (dist include), .deb (/usr/share/doc), .msi (wxs components; allow-dirty msi) (6bf6244); .msi unexercised until tag; hosted CI green x3",
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T14:25:14.556Z"
+    },
+    {
+      "id": "E-22",
+      "owner": "Engineer (Claude)",
+      "status": "DONE",
+      "tier": 3,
+      "description": "Harden the release-key checks around the committed trust root (D-017): (1) move the key-file guard that is pasted into `.github/build-setup.yml`, `release.yml` and `build-linux-packages.yml` into one script `.github/scripts/check-release-key.sh` (regular file, no NUL, exactly two lines, `Ed` algorithm bytes, comment id == key id) and make the three places call it — no workflow keeps its own copy; (2) add a second script that takes two file paths and exits 0 only when both exist and are byte-identical, and a release-workflow step that runs on tag pushes only, before any artifact build, fetches `docs/contract/release-key.pub` from rein's `main` over HTTPS into a temp file and runs that script against the committed copy — a 404, a fetch error or a difference fails the release, and the fetched bytes are compared and discarded, never built from; (3) add tests that run both scripts over a fixture corpus (committed key passes; symlink, NUL byte, one line, three lines, CRLF, non-Ed algorithm, comment id ≠ key id, empty, missing each fail; equal / different / absent for the comparison) in the CI matrix on Linux, macOS and Windows, with no network; (4) add `.github/CODEOWNERS` naming the operator's GitHub login for `docs/contract/**`, `.gitattributes` and `.github/**`. Run `skill: ci_gate` first and record the change in .ai/DEVOPS.md; push no tag. Per .ai/blueprints/distribution.md §Security trust boundary 1 \"Key-file guard\" and \"Tag gate\", §Test Plan \"Key-file guard and tag gate\", D-017. Acceptance: the corpus tests green on all three hosted CI targets; `dist plan` still succeeds; grep shows the guard logic in exactly one file; pull-request runs do not execute the fetch. Tier 3: security_engineer review before commit.",
+      "created_at": "2026-11-10T14:44:23.887Z",
+      "completed_at": "2026-11-10T18:49:13.435Z",
+      "summary": "One key guard script + tag gate vs rein main + CODEOWNERS + 26-case corpus green on 3 OSes (6450f22, 70c55b9 Git Bash CR fix); T3 critics pass; gate fails tags until rein commits key",
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T18:49:13.436Z"
+    },
+    {
+      "id": "E-23",
+      "owner": "Engineer (Claude)",
+      "status": "DONE",
+      "tier": 1,
+      "description": "Replace the non-ASCII characters (§, em dash) in the comment near line 106 of `crates/rein-app/wix/main.wxs` with ASCII, since the file declares encoding windows-1252 (E-21 clean-code warning); change nothing else in the file and keep its current line endings. Per .ai/blueprints/distribution.md §E-## Task Breakdown E-23, D-017 ruling 6. Acceptance: the file contains only ASCII bytes; `dist plan` still succeeds.",
+      "created_at": "2026-11-10T14:44:25.923Z",
+      "completed_at": "2026-11-10T14:45:12.953Z",
+      "summary": "Already satisfied by 6bf6244 (E-21 fix round): main.wxs comment is ASCII ('section 4(d) -'), CRLF kept, file is ASCII-only; dist plan OK. No new change.",
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T14:45:12.953Z"
+    },
+    {
+      "id": "E-24",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 1,
+      "description": "Extend `.github/CODEOWNERS` so `@Vimurai` also owns `/crates/rein-release/`, `/Cargo.toml` and `/Cargo.lock` (the crate that parses and uses the release key, the dist metadata, the lock that pins the signature library), per .ai/blueprints/distribution.md §Security trust boundary 1 and D-018 ruling 4. Update the file's comment to say the list is advisory while the repository has one human account. Change no workflow. Acceptance: the three paths are listed; hosted CI stays green.",
+      "created_at": "2026-11-10T18:50:51.729Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T18:50:51.734Z"
+    },
+    {
+      "id": "E-25",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Rehearse the release-candidate tag without pushing one: run `dist plan --tag=v0.1.0-rc.1` and `dist plan --tag=v0.1.0` against the current workspace (version 0.1.0) and record in `.ai/DEVOPS.md` whether cargo-dist 0.34.0 accepts the rc tag as is or needs the workspace version set to `0.1.0-rc.1`, whether an rc tag is published as a GitHub prerelease, whether the Homebrew publish job runs for it, and the exact command sequence the operator would use for an rc and then for the final tag, per .ai/blueprints/distribution.md §Test Plan \"Release rehearsal\" and D-018 ruling 8. Change no version, create no tag, push nothing. Acceptance: DEVOPS.md holds the two `dist plan` results and the operator sequence; if a version bump is needed, report it in the handoff instead of making it.",
+      "created_at": "2026-11-10T18:50:55.031Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T18:50:55.031Z"
     }
   ],
   "stamps": [
@@ -564,6 +670,339 @@
       "timestamp": "2026-11-09T15:55:43.632Z",
       "summary": "[TIER_3] E-11 ARCH_PASS + TESTS_PASS + SEC_PASS (after 1 fix round)",
       "sha": "f63867a55626f2404e619feac7e9c1bc52abc70f",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-12",
+      "timestamp": "2026-11-09T17:05:57.067Z",
+      "summary": "No sovereignty violations (diff touches only crates/rein-release src and tests). Implements D-155 r1/r2 per distribution.md Components 2 Member rules: header-only first pass refuses before any write (a stricter, in-scope reading); manifest-first, regular-only, duplicate and VERSION refusals; pax/GNU headers refused via raw(true); under_mirrored replaces in_layout; new ManifestNotFirst and ForbiddenMember errors are traceable to the blueprint rules; tests added per Test Plan. No orphaned work.",
+      "sha": "66e3b6dbceee0e9509cdeb8a3783b69221aa4c2d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-12",
+      "timestamp": "2026-11-09T17:06:06.003Z",
+      "summary": "[TESTS_PASSED] cargo test --workspace all green (verify_release 4/4, manifest unit tests, doctests). Every Member-rules fixture present (dir, symlink, hardlink, pax, manifest-not-first, VERSION, accounts.json, secrets/token, legacy sig) with a distinct expected error and the clean-HOME assert. Advisory P2: dir/symlink/hardlink/pax rows all match UnsupportedEntry without asserting `kind`; b64 round-trip is checked only on the one signature line (one-way).",
+      "sha": "66e3b6dbceee0e9509cdeb8a3783b69221aa4c2d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "security_engineer",
+      "task_id": "E-12",
+      "timestamp": "2026-11-09T17:11:02.941Z",
+      "summary": "[TIER_3] E-12: no P0/P1; passes read identical raw member streams; P2s fixed after: literal '0' typeflag only, pass-2 completeness count, only zero padding after end-of-archive / nothing after gzip; fixtures for NUL, GNU L, post-EOF member",
+      "sha": "66e3b6dbceee0e9509cdeb8a3783b69221aa4c2d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": "E-12",
+      "timestamp": "2026-11-09T17:11:03.939Z",
+      "summary": "[TIER_3] E-12 ARCH_PASS + TESTS_PASS + SEC_PASS",
+      "sha": "66e3b6dbceee0e9509cdeb8a3783b69221aa4c2d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-14",
+      "timestamp": "2026-11-09T17:11:34.778Z",
+      "summary": "No sovereignty violations; Hooks removed from AllowedKey (3 keys), hooks copy dropped from profiles apply, compile_fail doctest and hooks-untouched apply/undo tests match D-014 and distribution.md E-14 scope; all changes in rein-profiles/rein-app, no orphaned work.",
+      "sha": "5dad595fd934a5ffdd738eea80b3bad259b52e89",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-14",
+      "timestamp": "2026-11-09T17:11:39.423Z",
+      "summary": "[TEST_PASSED] cargo test --workspace all green (app 23+1+4, profiles 4+14+1, release 29+4+21+1+4, doctests incl. compile_fail Hooks + positive 3-key); hooks untouched after apply/undo asserted for default and other profile",
+      "sha": "5dad595fd934a5ffdd738eea80b3bad259b52e89",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "security_engineer",
+      "task_id": "E-14",
+      "timestamp": "2026-11-09T17:14:04.714Z",
+      "summary": "[TIER_3] E-14: no path reads/copies/writes/removes hooks; planted-backup, fallback, empty-backup, rogue-claude and project-dir probes resisted; P2: spec says byte-identical but rewrite is value-identical (pre-existing); stale D-008 text",
+      "sha": "5dad595fd934a5ffdd738eea80b3bad259b52e89",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": "E-14",
+      "timestamp": "2026-11-09T17:14:05.714Z",
+      "summary": "[TIER_3] E-14 ARCH_PASS + TESTS_PASS + SEC_PASS",
+      "sha": "5dad595fd934a5ffdd738eea80b3bad259b52e89",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-13",
+      "timestamp": "2026-11-09T17:16:55.224Z",
+      "summary": "[TESTS_PASS] cargo test --workspace: all suites ok, 0 failed (~115 tests). Shipped-path-wins, manifest.json in home and VERSION pair, snapshot shipped_owned, rollback manifest removal, planted-owned refusal, three-column conformance and every-k fault tests (with VERSION/manifest checks) all covered.",
+      "sha": "fbbc951895d88b76ff5327747e19cd2c1c3aba54",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-13",
+      "timestamp": "2026-11-09T17:16:56.662Z",
+      "summary": "No sovereignty violations (staged diff is crates/ only). Covers D-014 and distribution.md 3 (shipped path wins, manifest.json after hooks before VERSION, snapshot and restore/rollback of manifest, skipped_operator_owned removed, fixtures reshaped); 17:15 note honored (manifest/VERSION pair consistent on every end, no retired-MCP dir removal). P2: snapshot layout.json `shipped_owned` is not in the blueprint Data Model Snapshot; it narrows restore under D-013 snapshot-trust and is justified, but the Architect should record it in the blueprint.",
+      "sha": "fbbc951895d88b76ff5327747e19cd2c1c3aba54",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "security_engineer",
+      "task_id": "E-13",
+      "timestamp": "2026-11-09T17:21:44.391Z",
+      "summary": "[TIER_3] E-13: no P0/P1; shipped path wins, owned never pruned, manifest/VERSION pair consistent at every fault k (seeded/fresh/non-semver), symlinked manifest not followed; P2s fixed after (dir at manifest/VERSION refused, rollback cleanup, comments); P2-2 new owned shipped path lingers after restore → Architect",
+      "sha": "fbbc951895d88b76ff5327747e19cd2c1c3aba54",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": "E-13",
+      "timestamp": "2026-11-09T17:21:45.395Z",
+      "summary": "[TIER_3] E-13 ARCH_PASS + TESTS_PASS + SEC_PASS",
+      "sha": "fbbc951895d88b76ff5327747e19cd2c1c3aba54",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner",
+      "task_id": "E-15",
+      "timestamp": "2026-11-09T17:22:05.147Z",
+      "summary": "[TIER_2] Blueprint aligned — E-15 rollback runs rein install then doctor, exit 13 for a failed rein install, doctor --json passthrough (distribution.md C4/C7, §API); ORPHANED_WORK warn = files under C4/C7",
+      "sha": "2085e511d180ac84eaf58f9ce399422f304e5f0c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": "E-15",
+      "timestamp": "2026-11-09T17:22:05.994Z",
+      "summary": "[TIER_2] Blueprint aligned",
+      "sha": "2085e511d180ac84eaf58f9ce399422f304e5f0c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-20",
+      "timestamp": "2026-11-10T14:06:10.015Z",
+      "summary": "E-20: standards-checker PASS (0 errors, 0 warnings; JS-oriented checker scanned 0 Rust files) plus manual Rust review of main.rs, update_cmd.rs, tests/cli_usage.rs: named exit constants, doc comments cite D-016, files well under size limits, no secrets or tmp files, tests use tempdir. Nit only: code.unwrap_or_default() in the out-of-range arm could bind the value in the match.",
+      "sha": "ac4534efed3a54cef685d6af30ff525823186e40",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner-mcp",
+      "task_id": "E-20",
+      "timestamp": "2026-11-10T14:06:33.521Z",
+      "summary": "E-20: aligned with distribution.md §API (doctor row: rein's code or 14, never 1; All commands: usage 64, never 2) and §Test Plan \"Exit codes\"; D-016 r7-8. align_diff WARN was ORPHANED_WORK only (update_cmd.rs not named in architect.md — covered by blueprints/distribution.md). Extra: a rein exit code outside 0..=255 (Windows) also maps to 14 instead of the old 1 — consistent with \"never 1\". No exit-6 leftover in crates/. cargo test -p rein-app green.",
+      "sha": "ac4534efed3a54cef685d6af30ff525823186e40",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-20",
+      "timestamp": "2026-11-10T14:06:35.835Z",
+      "summary": "[TIER_2] E-20 Blueprint aligned + clean-code gate clear — ALIGN_PASS, CLEAN_PASS; 1 nit ignored (unwrap_or_default in out-of-range doctor arm could bind the i32 instead)",
+      "sha": "ac4534efed3a54cef685d6af30ff525823186e40",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "rein-review-tier2",
+      "task_id": "E-21",
+      "timestamp": "2026-11-10T14:10:04.907Z",
+      "summary": "E-21 aligned with distribution.md §Test Plan \"License files\" + D-016 r9: dist plan lists [misc] LICENSE, NOTICE, README.md for all 5 targets; host tar.xz carries LICENSE+NOTICE; built .deb has /usr/share/doc/rein-app/{LICENSE,NOTICE,copyright}; main.wxs License+Notice components referenced from Binaries, EULA off; .msi listed unexercised in DEVOPS.md; no workflow touched. Note: main.wxs CRLF->LF churn + non-ASCII comment under encoding=windows-1252 (cosmetic, harmless in a comment). Hosted CI pending commit.",
+      "sha": "dd57a63de053afa753618ce09563cfa8f4127b8e",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "rein-review-tier2",
+      "task_id": "E-18",
+      "timestamp": "2026-11-10T14:10:07.436Z",
+      "summary": "E-18 aligned with §Components 9, §API (incl. All commands), §Test Plan \"Operator docs\", D-016 r1-8,11: every command/flag/exit code matches §API and rebuilt --help (usage err=64, --home relative=1 verified); app-contract.md named unlinked, repo linked; no published release/URL/key claimed. P3 nits: README \"A release build has the key compiled in\" reads as if a key exists; guide \"hooks are written last\" vs VERSION last (blueprint: hooks last among mirrored dirs).",
+      "sha": "dd57a63de053afa753618ce09563cfa8f4127b8e",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_WARN",
+      "agent": "critic_clean_code",
+      "task_id": "E-21",
+      "timestamp": "2026-11-10T14:10:07.460Z",
+      "summary": "E-21: no standards-checker/blueprint in repo (rules N/A to Cargo/WiX). Real diff ~10 lines, minimal. WARN: main.wxs CRLF->LF whole-file churn; non-ASCII (§, em dash) comment on line 106 under encoding='windows-1252' (comment-only, will not break build but should be ASCII). No errors.",
+      "sha": "dd57a63de053afa753618ce09563cfa8f4127b8e",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-18",
+      "timestamp": "2026-11-10T14:10:08.405Z",
+      "summary": "E-18: no standards-checker/blueprint present; rules N/A to Markdown. README.md (31 lines) and docs/operator-guide.md (88 lines) are small, no size/secret/tmp concerns observed.",
+      "sha": "dd57a63de053afa753618ce09563cfa8f4127b8e",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-21",
+      "timestamp": "2026-11-10T14:10:17.886Z",
+      "summary": "[TIER_2] E-21 blueprint aligned + clean-code gate clear — 2 warnings (main.wxs CRLF->LF churn; non-ASCII comment under windows-1252 decl)",
+      "sha": "dd57a63de053afa753618ce09563cfa8f4127b8e",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-18",
+      "timestamp": "2026-11-10T14:10:18.868Z",
+      "summary": "[TIER_2] E-18 blueprint aligned + clean-code gate clear — 0 warnings, 2 P3 wording nits",
+      "sha": "dd57a63de053afa753618ce09563cfa8f4127b8e",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-16",
+      "timestamp": "2026-11-10T14:23:02.531Z",
+      "summary": "Round 2: no sovereignty violations; key baked via include_str from committed docs/contract/release-key.pub per distribution.md trust boundary 1 and D-014 decision 4; Rejecting kill switch kept; guard checks file in all 3 workflow copies; ci_gate change recorded in DEVOPS.md. P2 only: blueprint line 316 stale (Architect-owned).",
+      "sha": "ace0164be2b8da1df1f5c86550a300be32345fc1",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-16",
+      "timestamp": "2026-11-10T14:23:07.363Z",
+      "summary": "standards-checker PASS (0 errors, 0 warnings; nothing staged so CLI saw 0 files) + manual working-tree review: no secrets (release-key.pub is a public minisign key), no tmp files, all files <1000 lines (signature.rs 238, support/mod.rs 328, verify_release.rs 377)",
+      "sha": "ace0164be2b8da1df1f5c86550a300be32345fc1",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "critic_security",
+      "task_id": "E-16",
+      "timestamp": "2026-11-10T14:23:10.528Z",
+      "summary": "No P0/P1; key baked via include_str from committed file, strict parser + workflow guard (parity verified, guard stricter), fail-closed Rejecting on parse failure, no env/GITHUB_ENV injection left, no secrets (public key only, id matches)",
+      "sha": "ace0164be2b8da1df1f5c86550a300be32345fc1",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-16",
+      "timestamp": "2026-11-10T14:23:11.793Z",
+      "summary": "cargo test --workspace 124 passed/0 failed; rein-release green. Pub-file accept/refuse integration test + 12-row parser negatives + baked-key id test; no host dependence (include_str of committed file). P2: workflow guard shell untested.",
+      "sha": "ace0164be2b8da1df1f5c86550a300be32345fc1",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner (manual, working tree)",
+      "task_id": "E-16",
+      "timestamp": "2026-11-10T14:23:39.291Z",
+      "summary": "E-16 working tree aligns with distribution.md trust boundary 1, D-014 dec.4 + addendum 2026-11-10: key baked via include_str! from docs/contract/release-key.pub (byte-identical to ../rein copy), REIN_RELEASE_PUBKEY fully removed, kill-switch feature kept, invalid file -> Rejecting, guard checks file in build-setup/release/linux-packages (exercised: absent/malformed/wrong-id/CRLF fail), dist generate --check clean, cargo test --workspace green. Accepted gap: matching-key acceptance via test key through from_pub_file.",
+      "sha": "ace0164be2b8da1df1f5c86550a300be32345fc1",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_CLEARED",
+      "agent": "security_engineer",
+      "task_id": "E-16",
+      "timestamp": "2026-11-10T14:28:08.688Z",
+      "summary": "E-16 round 2 CLEARED: 0 P0/P1; 42-case adversarial key corpus x guard+Rust parser, all fail closed; P2-1 foreign well-formed key only caught by review/pre-tag cmp (automate in E-6, CODEOWNERS); P2-2 guard regex ^RW admits alg 'Eg' (Rust refuses -> fail closed) and Rust accepts 'ED'/lowercase id (guard refuses), DEVOPS.md:191 parity claim overstated; P2-3 commit .gitattributes with key, distribution.md:316 stale",
+      "sha": "ace0164be2b8da1df1f5c86550a300be32345fc1",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": "E-16",
+      "timestamp": "2026-11-10T14:29:03.139Z",
+      "summary": "[TIER_3] E-16 ARCH_PASS + SEC_PASS + TESTS_PASS + CLEAN_PASS + ALIGN_PASS + SEC_CLEARED (round 2, after P1 CRLF fix); P2-2 tightened after (guard checks Ed bytes, Rust id exact). Vibe audit N/A (no UI).",
+      "sha": "ace0164be2b8da1df1f5c86550a300be32345fc1",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-22",
+      "timestamp": "2026-11-10T14:48:20.855Z",
+      "summary": "Manual review (standards.mjs and blueprint absent in repo, shellcheck not installed): 0 errors, 0 warnings. 3 scripts pass bash -n; duplicated inline key check de-duplicated into check-release-key.sh across 3 workflows; no secrets, no tmp files committed.",
+      "sha": "a9556c81b7e475555c10d3864721714e7d2365c5",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-22",
+      "timestamp": "2026-11-10T14:48:23.609Z",
+      "summary": "No sovereignty violations (only .github/ touched). Guard logic in one script, called by all 3 callers; tag gate correct (plan job, after checkout, before dist install, tag-only, bytes discarded); script mirrors from_pub_file; 2 P2 notes (hand-edit re-apply list in Cargo.toml/DEVOPS.md:100 mentions only one hand fix; CODEOWNERS binds only with branch protection).",
+      "sha": "a9556c81b7e475555c10d3864721714e7d2365c5",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "critic_security",
+      "task_id": "E-22",
+      "timestamp": "2026-11-10T14:48:27.096Z",
+      "summary": "No P0/P1. Tag gate in plan job (all jobs need plan; host requires plan success); curl hardened; no ${{ }} injection; check script fails closed. P2: CODEOWNERS omits dist config/crates/rein-release/Cargo; --max-filesize unenforced w/o Content-Length; tag-pushed workflow can't be protected by CODEOWNERS.",
+      "sha": "a9556c81b7e475555c10d3864721714e7d2365c5",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "rein-review-tier3/blueprint-alignment",
+      "task_id": "E-22",
+      "timestamp": "2026-11-10T14:48:28.248Z",
+      "summary": "E-22 aligned with distribution.md TB1 Key-file guard/Tag gate/Test Plan and D-017 r1-r3: guard logic only in check-release-key.sh (3 callers use bash script); compare script takes 2 paths; tag gate in release.yml plan after checkout before dist install, tag refs only, fetched bytes compared+discarded, fails closed on 404; corpus in ci.yml 3-OS matrix, no network; CODEOWNERS covers docs/contract, .gitattributes, .github. Manual alignment (align_diff reads staged diff only; changes unstaged). Local corpus 24/0 failed/0 skipped.",
+      "sha": "a9556c81b7e475555c10d3864721714e7d2365c5",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-22",
+      "timestamp": "2026-11-10T14:48:39.060Z",
+      "summary": "Corpus 24/24 ok, 0 skipped; all spec fixtures covered; missing/always-exit-1 check script fails the 3 accept cases (not vacuous). P1: .gitattributes lacks eol=lf for .github/scripts/*.sh (Windows autocrlf could break scripts); P2: exit codes collapsed to 0/1 and no stderr-reason assertion, tag-gate curl step untested.",
+      "sha": "a9556c81b7e475555c10d3864721714e7d2365c5",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_CLEARED",
+      "agent": "security_engineer (stamp relayed by rein-review-tier3 lead: agent ran its full probe but lacks add_stamp)",
+      "task_id": "E-22",
+      "timestamp": "2026-11-10T14:52:31.959Z",
+      "summary": "E-22 security_engineer: no P0/P1; every probed path fails closed (adversarial key files, -/FIFO/symlink args, CRLF checkout, live 404 fetch). Gate cannot be bypassed in the current job graph. Open: P2 .gitattributes lacks eol=lf for .github/scripts/*.sh (Windows CI/release build break, fails closed); P3 old-commit tags skip gate (tag ruleset), dist generate drops gate (document), gate if: should mirror publishing predicate; P4 '-' arg reads stdin, max-filesize w/o Content-Length on curl 7.81.",
+      "sha": "a9556c81b7e475555c10d3864721714e7d2365c5",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": "E-22",
+      "timestamp": "2026-11-10T14:53:42.803Z",
+      "summary": "[TIER_3] E-22 ARCH_PASS + SEC_PASS + TESTS_PASS + CLEAN_PASS + ALIGN_PASS + SEC_CLEARED; P1 (CRLF .sh on Windows) fixed with *.sh eol=lf; gate if aligned with publishing; corpus asserts exit 1 + reason. Vibe audit N/A (no UI).",
+      "sha": "a9556c81b7e475555c10d3864721714e7d2365c5",
       "author": "emirkovacevic@protonmail.com"
     }
   ],

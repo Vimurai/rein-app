@@ -678,3 +678,39 @@ E-16 made a committed file the trust root. Three things around it rest on a pers
 
 ### Rollback
 Remove the gate step and restore the inline guards from 0d573f6; the baked key is unaffected.
+
+---
+
+## D-018 — E-22/E-23 accepted; CODEOWNERS widened; tag ruleset is the binding control
+
+**Date**: 2026-11-10
+**Task**: review of E-22, E-23 (Engineer handoff 2026-11-10 18:49 UTC)
+**Decision**: E-22 is accepted as built and E-23 is closed without a change; CODEOWNERS grows to the code that consumes the key and the release metadata; the operator is advised to add a tag ruleset and not to require code-owner review while there is one human account.
+
+### Why needed
+The Engineer reported two divergences from D-017 and left one question (CODEOWNERS scope) and three repository settings to rule on.
+
+### Rulings
+1. **E-22 accepted** (6450f22, 70c55b9): one guard script, a compare script, a 26-case corpus on three OSes, the gate in `plan` after checkout. E-23 needed no change — the comment was ASCII since 6bf6244.
+2. **Gate condition `!github.event.pull_request` stands.** It is the same condition as `publishing`, so every run that can publish is gated, including a future `workflow_dispatch`. Stricter than "tag pushes only"; the blueprint now says so.
+3. **The guard refuses any CR byte, on raw bytes.** Git Bash drops a CR inside `$(...)`, which let a CRLF key pass on Windows only. The blueprint's guard list now names it.
+4. **CODEOWNERS also covers `/crates/rein-release/`, `/Cargo.toml`, `/Cargo.lock`** (E-24): the crate that parses and uses the key, the dist metadata that shapes a release, and the lock that pins the signature library.
+5. **CODEOWNERS is advisory for now.** GitHub does not let an author approve their own pull request, and every commit here is made under the operator's one account, so "require code-owner review" would block every merge or be bypassed every time. Not recommended until a second maintainer exists.
+6. **A tag ruleset is recommended** (operator setting): only the operator may create `v*` tags. It also covers the one residual gap — a tag on a commit older than E-22 runs a workflow without the gate.
+7. **`--max-filesize` without Content-Length (P4) accepted.** The fetched file is only compared for byte identity and then deleted; an oversized body fails the comparison.
+8. **The rc tag is rehearsed before the operator pushes it** (E-25): whether cargo-dist accepts `v0.1.0-rc.1` with crate version `0.1.0` is unverified.
+
+### Alternatives considered
+1. **Require code-owner review now** — rejected: unsatisfiable with one account (ruling 5).
+2. **CODEOWNERS on the whole repository** — rejected: with one owner it says nothing a narrower list does not, and it hides which paths are release-critical.
+3. **Narrow list + tag ruleset** — chosen.
+
+### Constraints driving this decision
+- rein D-155 r6 / D-014: the trust root is a committed copy of rein's file; the operator alone releases.
+
+### Impact
+- Unlocks: E-24, E-25. E-6 preconditions unchanged: `HOMEBREW_TAP_TOKEN`, rein's `main` carrying the key, a signed rein release.
+- Risk if wrong: without the ruleset, anyone with push rights could tag an old commit and release ungated; today only the operator has push rights.
+
+### Rollback
+Drop the added CODEOWNERS lines; the ruleset is a repository setting the operator can delete.

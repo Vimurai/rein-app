@@ -318,13 +318,20 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   `include_str!` through a strict parser; a file that does not parse yields the `Rejecting`
   backend. The `REIN_RELEASE_PUBKEY` variable is gone. **Key-file guard (D-017):** one
   script, `.github/scripts/check-release-key.sh`, is the only implementation of the file
-  check (regular file, no NUL, two lines, `Ed` algorithm bytes, comment id == key id); the
-  release workflows call it, and CI runs it against a fixture corpus on all three OSes.
-  **Tag gate (D-017):** on a tag push, before any artifact is built, the release workflow
+  check (regular file, no NUL, no carriage return — tested on the raw bytes, because Git
+  Bash drops a CR inside `$(...)` — two lines, `Ed` algorithm bytes, comment id == key id);
+  the release workflows call it, and CI runs it against a fixture corpus on all three OSes.
+  **Tag gate (D-017, as built E-22, D-018):** on every run of the release workflow that can
+  publish (`!github.event.pull_request` — tag pushes today), before any artifact is built, it
   fetches `docs/contract/release-key.pub` from rein's `main` over HTTPS and compares it byte
   for byte with the committed copy — absent or different fails the release. The fetched
   bytes are compared and discarded, never built from. `CODEOWNERS` names the operator for
-  `docs/contract/**`, `.gitattributes`, `.github/**`. **The production key signs rein
+  `docs/contract/**`, `.gitattributes`, `.github/**`, `crates/rein-release/**`, `Cargo.toml`
+  and `Cargo.lock` (D-018). It is advisory while the repository has one human account —
+  GitHub does not let an author approve their own pull request — so the binding control is
+  a tag ruleset that lets only the operator create `v*` tags (operator setting, D-018). A
+  tag placed on a commit older than E-22 would run the workflow without the gate; the
+  ruleset and the operator being the only tagger cover that. **The production key signs rein
   releases and nothing else:** no fixture is ever signed with it; the positive proof that
   the baked key matches the operator's secret key is the first real rein release verifying
   (E-9 / the rc install). No
@@ -569,11 +576,13 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   `rein install` is exit 13 on `install`/`update`/`rollback`; `doctor --json` passthrough.
   §Components 4, 7; §API. Depends on E-13.
 - E-16, E-18..E-21 are DONE (2026-11-10), reviewed in D-017.
-- **E-22** (T3) Release-key guard in one tested script, the tag gate against rein's `main`,
-  and `CODEOWNERS` (§Security trust boundary 1 "Key-file guard", "Tag gate"; D-017).
-  `ci_gate` first; `security_engineer` before commit.
-- **E-23** (T1) Make the comment in `crates/rein-app/wix/main.wxs` ASCII-only (the file
-  declares windows-1252).
+- E-22 (guard script, tag gate, `CODEOWNERS`) is DONE and E-23 needed no change (already
+  ASCII since 6bf6244); both reviewed in D-018.
+- **E-24** (T1) Extend `.github/CODEOWNERS` to `/crates/rein-release/`, `/Cargo.toml`,
+  `/Cargo.lock` (§Security trust boundary 1; D-018).
+- **E-25** (T2) Rehearse the release-candidate tag: run `dist plan` for `v0.1.0-rc.1` and
+  `v0.1.0`, record in `.ai/DEVOPS.md` what an rc tag needs (§Test Plan "Release
+  rehearsal"; D-016 ruling on the rc tag). Changes no version.
 - **E-16** (T3, DONE) Bake the trust
   root from a committed copy of that file instead of the `REIN_RELEASE_PUBKEY` variable;
   release guard checks the file (`ci_gate` first). §Security trust boundary 1 (D-014).
