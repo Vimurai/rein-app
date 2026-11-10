@@ -3,7 +3,7 @@
 ## Triad Health
 - Stage: Executing (Phase 1 code complete; the first tag waits on rein and the operator)
 - Architect Focus: E-24/E-25 reviewed (D-019); waiting on rein's reply and the operator's rc call; then the Phase 2 blueprint (`desktop.md`) when the operator says go
-- Engineer Focus: E-26 verifier path alphabet + case-collision refusal (T3)
+- Engineer Focus: E-27 sync case-variant prune ordering + post-sync check (T3)
 
 ## Current snapshot
 - Product: rein-app — Rust shell for Rein: installs a signed `rein` release into `$HOME/.rein`, runs `rein install`/`doctor` from it, manages Claude profile settings (3 allowed keys), updates/rolls back; phase 2 wraps it in a Tauri window. Never contains Rein logic.
@@ -17,7 +17,8 @@
 - **D-019**: E-24/E-25 accepted. An rc tag needs the version set to `0.1.0-rc.1` (workspace version, two pins in `crates/rein-app/Cargo.toml`, `Cargo.lock`) — made only on the operator's go, then set back for the final. No WiX change: uninstall an rc `.msi` before the final. An rc skips Homebrew, so needs no tap token. Operator tag sequence: `.ai/DEVOPS.md` "E-25".
 - **rein's plan (rein D-156, reply 2026-11-10)**: key is on rein's remote `main` (a1c3af0); Architect verified 2026-11-10 that its git blob id equals ours (1c893ca9…), so the tag gate's comparison will pass. Order: E-417 → E-418 → E-420 (unblocks our E-9) → E-421 → E-422 (unblocks our E-17) → E-419 → signed release **v0.5.0** (rein E-424; assets `rein-0.5.0.tar.gz`, `.minisig`, `manifest.json`; operator tags, no agent signs; v0.4.0 gets no assets). rein E-425 adds a cargo step to `rein ci run`. rein's Architect will message after E-423, E-420, E-422. Operator still owes rein: GitHub environment `release` with secret `REIN_RELEASE_KEY`, a tag restriction.
 - **D-020**: mirrors rein D-155 addendum 3 — the verifier refuses non-printable-ASCII paths and ASCII-case-colliding paths (directory prefixes count) at manifest parse, exit 2 (E-26).
-- Open queue: E-26 (T3). E-6 (first tag) waits on: `HOMEBREW_TAP_TOKEN`, rein committing the public key on `main`, a signed rein release. BLOCKED externally: E-9 (rein E-417/E-418/E-420), E-17 (rein E-422).
+- **D-021**: E-26 accepted (24ed040). A case-only rename across releases deleted the shipped file on a case-insensitive home (prune after write) — E-27 removes case-variant prune entries before the writes and checks every shipped path after the sync; `operator_owned` patterns join the ASCII rule. rein D-153 addendum 2 mirrored: `accounts.json` closed shape, rein-app never writes it.
+- Open queue: E-27 (T3). E-6 (first tag) waits on: `HOMEBREW_TAP_TOKEN`, rein committing the public key on `main`, a signed rein release. BLOCKED externally: E-9 (rein E-417/E-418/E-420), E-17 (rein E-422).
 - Phase 1 ships when: rein commits the key and publishes a signed release (rein E-417..E-422), the operator sets `HOMEBREW_TAP_TOKEN`, and the first tag builds (E-6; an `-rc` tag first is recommended).
 - Known risks: no rein release exists yet; `.msi`, macOS and `.deb` release jobs unexercised until a tag; `rein ci run` has no cargo step (framework gap, not yet raised with rein — no rein session running).
 - Repo: `github.com/Vimurai/rein-app` (public, hosted CI green on 3 OSes). License Apache-2.0 (D-004) — awaiting operator confirmation.

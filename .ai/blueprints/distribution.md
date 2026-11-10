@@ -39,9 +39,11 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    path with `..`/absolute/backslash, or a `files` path that is not under a `layout.mirrored`
    directory (rein D-155 r2: nothing ships outside the mirror, so a top-level or
    owned-only path in `files` is a refusal);
-   **path alphabet and case rule (rein D-155 addendum 3, mirrored D-020; E-26):** at step
-   (a), with the manifest parse and before any signature or tarball work, every `files`
-   path and every `layout.mirrored` name must be printable ASCII (bytes 0x20–0x7E), and no
+   **path alphabet and case rule (rein D-155 addendum 3, mirrored D-020; E-26):** in the
+   manifest parse — as built, after the signature check and the header-only member scan,
+   before the member-set check, staging and any write (D-021 corrects D-020's "before
+   signature") — every `files` path, every `layout.mirrored` name and every
+   `layout.operator_owned` pattern (E-27) must be printable ASCII (bytes 0x20–0x7E), and no
    two paths may be equal after ASCII-lowercasing (A–Z only) while differing in bytes —
    every directory prefix of a path counts as a path (`shared/Lib` beside
    `shared/lib/x.mjs` collides). Either is a verification failure (exit 2) naming the path
@@ -138,6 +140,17 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
       directory → mode from the manifest → rename over the target, so a reader sees old or
       new, never half (a byte-identical file whose mode already matches MAY be skipped). Then
       remove that dir's `prune` entries and any directory left empty.
+      **Case-variant prunes go first (D-021, E-27):** a `prune` entry whose ASCII-lowercased
+      path equals the ASCII-lowercased path of a `ship` entry (or of a directory prefix of
+      one) names, on a case-insensitive home (APFS, drvfs), the same file the sync is about
+      to write — removing it after the write would delete the shipped file and still exit 0.
+      Such entries are removed **before** that directory's writes; all other prunes stay
+      after. The result is the same on both filesystem kinds: the old name is gone and the
+      new one is present. A directory that keeps its old-case name on a case-insensitive
+      home is accepted. The rule lives in the one `plan`/`apply` path, so update, rollback
+      and failure-restore all get it. **Post-sync check:** after the last directory, every
+      `ship` path must exist as a regular file of the listed size; a miss is a sync failure
+      and takes the existing failure-restore path.
    e. After `hooks`: the in-tarball `manifest.json`, byte for byte, to `$HOME/.rein/manifest.json`
       (tmp-and-rename) — it is how `rein install` recognises an artifact install (rein D-155
       r1/r4: `manifest.version == VERSION`). Then `VERSION` (one line, `manifest.version`)
@@ -587,7 +600,10 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - E-16, E-18..E-21 are DONE (2026-11-10), reviewed in D-017.
 - E-22 (guard script, tag gate, `CODEOWNERS`) is DONE and E-23 needed no change (already
   ASCII since 6bf6244); both reviewed in D-018.
-- E-24 and E-25 are DONE, reviewed in D-019.
+- E-24 and E-25 are DONE, reviewed in D-019. E-26 is DONE, reviewed in D-021.
+- **E-27** (T3) Sync removes case-variant prune entries before the writes and checks every
+  shipped path after the sync; `operator_owned` patterns join the ASCII rule (§Components 2,
+  §Components 3 step d; D-021).
 - **E-26** (T3) Verifier refuses non-printable-ASCII paths and ASCII-case-colliding paths at
   manifest parse (§Components 2 "path alphabet and case rule"; D-020).
 - **E-24** (T1, DONE) Extend `.github/CODEOWNERS` to `/crates/rein-release/`, `/Cargo.toml`,

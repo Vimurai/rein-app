@@ -394,16 +394,30 @@
     {
       "id": "E-26",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Make `rein-release`'s manifest parse refuse unsafe path sets, mirroring rein D-155 addendum 3, per .ai/blueprints/distribution.md §Components 2 \"path alphabet and case rule\" and D-020: (1) every `files` path and every `layout.mirrored` name must be printable ASCII (bytes 0x20–0x7E), else a verification failure naming the path; (2) no two paths may be equal after ASCII-lowercasing (A–Z only, no Unicode folding) while differing in bytes, where every directory prefix of a `files` path counts as a path, else a verification failure naming both paths. Both are checked in `Manifest::parse`, before signature or tarball work, and map to exit 2 through the existing verify-failure path; nothing is staged or written. Do not add a Windows-reserved-name rule. Tests extend the existing manifest/verify suites: a non-ASCII path, a control byte, two files differing only by case, a file colliding with another file's directory prefix (`shared/Lib` beside `shared/lib/x.mjs`), a mirrored name colliding by case, and a control case with distinct paths that passes; one CLI-level case shows `install` exits 2 with the home untouched. Run `security_engineer` before commit. Acceptance: `cargo test --workspace` and hosted CI green on three OSes; the operator guide's refusal list names the new refusal.",
       "created_at": "2026-11-10T22:39:18.194Z",
+      "completed_at": "2026-11-10T22:57:16.085Z",
+      "summary": "Manifest::parse refuses non-ASCII (outside 0x20-0x7E) files/mirrored paths and ASCII-case-colliding path sets incl. directory prefixes (D-020); exit 2, nothing written; linear-memory …[full in LOG.md]",
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T22:57:16.086Z"
+    },
+    {
+      "id": "E-27",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 3,
+      "description": "Fix the silent file loss on a case-only rename across releases, per .ai/blueprints/distribution.md §Components 3 step d \"Case-variant prunes go first\" / \"Post-sync check\" and D-021: (1) in `rein-release` sync, remove before a directory's writes every `prune` entry whose ASCII-lowercased path equals the ASCII-lowercased path of a `ship` entry or of a directory prefix of one; keep all other prunes after the writes; implement it in the single `plan`/`apply` path so update, rollback and failure-restore share it; (2) after the last directory, verify every `ship` path exists as a regular file of the listed size and treat a miss as a sync failure that takes the existing failure-restore path; (3) apply the printable-ASCII check of E-26 to every `layout.operator_owned` pattern in `Manifest::parse`, and escape non-printable bytes in matcher error text; (4) correct the stale comment at `crates/rein-profiles/src/profile.rs:5` — accounts.json has a closed shape and rein-app never writes it (rein D-153 addendum 2). Start with a failing test (`skill: bug-reproducer`): installed `shared/locate.sh`, new release ships `shared/Locate.sh` — on every OS the new name exists with the new bytes and the old name is gone or is the same file; add a directory-rename case (`shared/Lib/x` → `shared/lib/x`), the same through rollback, and a post-sync-check case. Run `security_engineer` before commit. Acceptance: `cargo test --workspace` and hosted CI green on three OSes (macOS and Windows runners exercise the case-insensitive path); the layout-equality expectations of existing tests are unchanged.",
+      "created_at": "2026-11-10T22:58:26.051Z",
       "completed_at": null,
       "summary": null,
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-10T22:39:18.198Z"
+      "updated_at": "2026-11-10T22:58:26.051Z"
     }
   ],
   "stamps": [
@@ -1017,6 +1031,33 @@
       "timestamp": "2026-11-10T14:53:42.803Z",
       "summary": "[TIER_3] E-22 ARCH_PASS + SEC_PASS + TESTS_PASS + CLEAN_PASS + ALIGN_PASS + SEC_CLEARED; P1 (CRLF .sh on Windows) fixed with *.sh eol=lf; gate if aligned with publishing; corpus asserts exit 1 + reason. Vibe audit N/A (no UI).",
       "sha": "a9556c81b7e475555c10d3864721714e7d2365c5",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-26",
+      "timestamp": "2026-11-10T22:41:56.779Z",
+      "summary": "[TEST_PASSED] cargo test --workspace all green, 0 failed; all 7 required cases covered at cheapest layer (paths.rs unit, manifest.rs parse table, verify_release CASES, one install_cmd CLI exit-2 case); extends existing suites, no task-named suites. P2: mirrored-name non-ASCII wiring in Manifest::parse has no direct test.",
+      "sha": "82f20730ade680fbd44abafa1208d2ad7beedc85",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-26",
+      "timestamp": "2026-11-10T22:41:58.253Z",
+      "summary": "No sovereignty violations; staged diff touches only crates/ and docs/operator-guide.md; ASCII alphabet + ASCII-fold case/prefix collision check at Manifest::parse, exit 2, matches D-020 and blueprint; tests green. Note: verify order (sig/scan before parse) pre-existing, acceptable.",
+      "sha": "82f20730ade680fbd44abafa1208d2ad7beedc85",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "critic_security",
+      "task_id": "E-26",
+      "timestamp": "2026-11-10T22:42:04.668Z",
+      "summary": "No P0/P1; ASCII alphabet and ASCII-case/prefix collision checks in Manifest::parse run before extraction, nothing under HOME written; no bypass found. P3 notes only.",
+      "sha": "82f20730ade680fbd44abafa1208d2ad7beedc85",
       "author": "emirkovacevic@protonmail.com"
     }
   ],

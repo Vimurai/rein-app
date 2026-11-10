@@ -780,3 +780,37 @@ rein's generator now refuses such path sets (`[RELEASE_CASE_COLLISION]`). On a c
 
 ### Rollback
 Remove the two checks; no stored format changes.
+
+---
+
+## D-021 — E-26 accepted; case-variant prunes run before the writes; post-sync existence check
+
+**Date**: 2026-11-10
+**Task**: review of E-26 (Engineer handoff 2026-11-10 22:57 UTC); E-27
+**Decision**: E-26 is accepted. The sync removes a prune entry that is a case variant of a shipped path before it writes, and checks every shipped path after the sync.
+
+### Why needed
+The security review of E-26 found a case D-020 does not cover: release N has `shared/locate.sh`, release N+1 ships `shared/Locate.sh`. `plan` compares names exactly, so the old name is a prune entry; `apply` writes, then prunes. On a case-insensitive home (APFS, drvfs) both names are one file, so the prune deletes the file just written and the install exits 0. Reproduced by the Engineer on drvfs. Rollback and failure-restore have the same shape.
+
+### Rulings
+1. **E-26 accepted** (24ed040). The check runs where `Manifest::parse` always ran — after the signature check and the member scan, before staging and any write. D-020 ruling 2's "before signature" was wrong wording; the code is right, and parsing after the signature check is the better order.
+2. **Case-variant prunes go first.** A prune entry whose ASCII-lowercased path equals that of a shipped path (or a directory prefix of one) is removed before that directory's writes. Other prunes stay after the writes. Same outcome on both filesystem kinds, and no dependence on probing the filesystem.
+3. **Post-sync check.** Every shipped path must exist as a regular file of the listed size; a miss is a sync failure and takes the existing failure-restore. This turns any future "exit 0 with a file missing" into a refused update.
+4. **`operator_owned` patterns join the ASCII rule**, and matcher errors escape non-printable bytes (terminal-control bytes from a manifest must not reach the terminal).
+5. **Not ruled here:** NTFS 8.3 short names (`LONGFI~1.SH`). A Rein home on NTFS is not a supported install target (Windows installs inside WSL); it is passed to rein as a note.
+
+### Alternatives considered
+1. **Never prune a case variant** (Engineer's option a) — rejected: on a case-sensitive home the old file would stay beside the new one, and the mirror would no longer equal the manifest (E-9).
+2. **Prune everything before writing** (option b in full) — rejected: every removed file would be missing for the whole write phase; today a reader sees old or new.
+3. **Post-check only** (option c) — rejected alone: it detects the loss, then restores the old release, so a case-only rename could never be installed on macOS.
+4. **Case-variant prunes first + post-check** — chosen.
+
+### Constraints driving this decision
+- In-place sync where a reader sees old or new (D-011); mirror equals manifest (rein D-155 r2).
+
+### Impact
+- Unlocks: E-27.
+- Risk if wrong: a case-renamed file is absent between its removal and its write within one directory pass; a crash there is covered by the snapshot restore.
+
+### Rollback
+Revert the prune ordering; the post-sync check is independent and can stay.
