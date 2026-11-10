@@ -105,3 +105,85 @@ Release runs only on version tags (E-6).
 **Still needed from the operator before the first tag**
 1. `HOMEBREW_TAP_TOKEN` secret in rein-app (fine-grained, contents:write on `Vimurai/homebrew-tap` only).
 2. `REIN_RELEASE_PUBKEY` repository variable once rein P-50 publishes the key.
+
+### 2026-11-10 — E-19: Release rehearsal (nothing tagged, pushed or published)
+
+Run on the operator's machine (Linux x86_64, WSL2) at commit 0864aea/df0f09f (HEAD = 8d4837d + `.ai/` only), cargo-dist 0.34.0.
+
+**Commands and results**
+| Step | Command | Result |
+|---|---|---|
+| Plan | `dist plan` | exit 0. Announces v0.1.0 (from `crates/rein-app` version 0.1.0). Artifacts: `source.tar.gz`, `rein-app-installer.sh`, `rein-app-installer.ps1`, `rein-app.rb`, `sha256.sum`, `tar.xz` for aarch64/x86_64 darwin and linux, `x86_64-pc-windows-msvc.zip` and `.msi`. Each comes with a `.sha256`. All five configured targets plan. |
+| Host build | `dist build --artifacts=local --target x86_64-unknown-linux-gnu` | exit 0, `dist` profile in 21 s; `target/distrib/rein-app-x86_64-unknown-linux-gnu.tar.xz` (2.2 MB) + `.sha256`. |
+| Checksum | `sha256sum -c rein-app-x86_64-unknown-linux-gnu.tar.xz.sha256` | OK |
+| Archive contents | `tar -tJvf …` | `rein-app` (0755, 8.7 MB), `LICENSE`. **No `NOTICE`** — see finding 1. |
+| Binary runs | extracted `rein-app --version` | `rein-app 0.1.0`, exit 0 |
+| Repo state | `git status`, `git tag` | no change outside `.ai/`; no tag exists. |
+
+The local build had no `REIN_RELEASE_PUBKEY`, so its binary carries the `Rejecting` backend (`signature.rs`: "built without REIN_RELEASE_PUBKEY"). It would refuse every release. That is the intended fail-closed behaviour for a source build, not a defect.
+
+**Findings (for the Architect — no workflow or config edited)**
+1. **NOTICE is shipped in no artifact.** The tar.xz/zip carry only `LICENSE`. The `.msi` carries neither (`[package.metadata.wix] license = false`). The `.deb` (`[package.metadata.deb] assets`) carries only the binary: no `LICENSE`, no `NOTICE`, no `copyright` file. Apache-2.0 §4(d) requires the NOTICE to travel with redistributions, and the E-19 acceptance asks for it in the archive. The likely fix is config, not workflow: `include = ["NOTICE"]` under `[workspace.metadata.dist]` (or per package), plus `LICENSE`/`NOTICE` assets in `package.metadata.deb`. It is its own task, behind `skill: ci_gate` if `release.yml` must be regenerated.
+2. **Version 0.1.0** is what the first tag announces. The tag must be `v0.1.0` (or the crate version bumped first). The trigger is `'**[0-9]+.[0-9]+.[0-9]+*'`, so a prerelease suffix (e.g. `-rc.1`) makes the tag a prerelease, and `publish-homebrew-formula` skips it (`announcement_is_prerelease`). That is a cheap way to exercise everything except the tap.
+3. **Prerequisites not yet in place** (checked with `gh`): the repository has **no variables and no secrets** set. `Vimurai/homebrew-tap` exists and holds only `README.md` (no `Formula/` yet; dist creates it on the first push).
+
+**What the first tag needs**
+| Kind | Name | Used by | Status |
+|---|---|---|---|
+| Repository variable | `REIN_RELEASE_PUBKEY` (one base64 line) | `build-local-artifacts` (build-setup step, every target), `build-linux-packages` `deb` job | NOT SET. Until E-16 moves the key to a committed file. A missing or malformed value fails the build (intended). |
+| Secret | `HOMEBREW_TAP_TOKEN` (contents:write on `Vimurai/homebrew-tap` only) | `publish-homebrew-formula` | NOT SET |
+| Secret | `GITHUB_TOKEN` | plan, build, host (release creation and upload), announce | automatic |
+| Runner | `ubuntu-22.04-arm` | `deb` arm64 | available to public repos; unexercised |
+
+**Steps that stay unexercised until the first tag**
+- `build-local-artifacts` for all five targets on hosted runners, including the macOS cross-arch builds and the Windows `.msi` via WiX (`crates/rein-app/wix/main.wxs`). Only the x86_64 Linux archive has been built (locally).
+- The `Bake the rein release public key` step with a real key (both copies: `.github/build-setup.yml` and `build-linux-packages.yml`). Only the "variable absent" refusal logic exists in the file; it has never run.
+- `custom-build-linux-packages`: `cargo install cargo-deb --version 3.8.0` and `cargo deb` on amd64 and arm64. The reusable-workflow path `./.github/workflows/build-linux-packages.yml` is the one hand fix in `release.yml` (see E-6), and it has never been resolved by Actions on a tag push.
+- `build-global-artifacts`: the shell/PowerShell installers, the Homebrew formula `rein-app.rb`, and `sha256.sum`.
+- `host`: creating the GitHub Release and attaching dist's artifacts plus `artifacts-deb-*`.
+- `publish-homebrew-formula`: the push to the tap with `HOMEBREW_TAP_TOKEN`.
+- `announce`.
+- The PR path of `release.yml` (runs `plan` only, `pr_run_mode` default) has run in hosted CI on PR #1; that is the only part exercised so far.
+
+### 2026-11-10 — E-21: LICENSE and NOTICE in every release artifact (D-016 ruling 9)
+
+No workflow file changed (`release.yml`, `build-linux-packages.yml` and `.github/build-setup.yml` are untouched), so `ci_gate` was not triggered. Only packaging metadata changed:
+- `Cargo.toml` `[workspace.metadata.dist]`: `include = ["NOTICE"]` (dist already auto-includes `LICENSE`, and now auto-includes `README.md` too, since it exists). `allow-dirty = ["ci", "msi"]`: dist treats `wix/main.wxs` as generated and refuses a hand edit; its `wix.license` key takes a single file, so NOTICE needs the hand edit.
+- `crates/rein-app/Cargo.toml` `[package.metadata.deb] assets`: `LICENSE` and `NOTICE` → `/usr/share/doc/rein-app/` (0644).
+- `crates/rein-app/wix/main.wxs`: `License` and `Notice` components (`..\..\LICENSE`, `..\..\NOTICE`, relative to the package directory) installed beside `bin\` in `APPLICATIONFOLDER`, referenced from the `Binaries` feature. The EULA dialog stays off.
+
+**Results**
+| Check | Result |
+|---|---|
+| `dist plan` | exit 0. All five targets; every tar.xz/zip lists `[misc] LICENSE, NOTICE, README.md`. |
+| `dist build --artifacts=local --target x86_64-unknown-linux-gnu` | archive contains `rein-app`, `LICENSE`, `NOTICE`, `README.md` |
+| `cargo deb -p rein-app --locked` (cargo-deb 3.8.0, the CI pin) → `dpkg-deb -c` | `/usr/bin/rein-app`, `/usr/share/doc/rein-app/{LICENSE,NOTICE,copyright}` |
+| `.msi` | **unexercised until a tag.** WiX does not run on Linux. The `Source` paths resolve against the package directory: cargo-wix 0.3.9 (`create.rs`) passes the WiX linker `-b <dir of crates/rein-app/Cargo.toml>`, so `..\..\LICENSE` is the workspace root's file. If the first tag's `build-local-artifacts` (windows) fails with a WiX "cannot find file" error, that path is the first suspect. |
+
+Rollback: revert the three files; the `.msi` loses its license files, and `allow-dirty` returns to `["ci"]`.
+
+### 2026-11-10 — E-16: release key guard reads the committed key file (ci_gate)
+
+**What changes and why (D-014 decision 4 + addendum 2026-11-10).** The trust root moves from the `REIN_RELEASE_PUBKEY` repository variable to a committed file, `docs/contract/release-key.pub`. It is a byte-for-byte copy of rein's `docs/contract/release-key.pub` (same path as in rein, so the pre-tag comparison is a plain `cmp`). The binary bakes the file at compile time (`include_str!`), so CI, release and source builds all trust the same key, and rotation is a reviewable commit. The key guard step changes from "variable set and base64" to "file present and in minisign public-key format". It runs in three places: `.github/build-setup.yml`, its inlined copy in `release.yml` `build-local-artifacts`, and `build-linux-packages.yml` `deb`. The step no longer writes anything to `GITHUB_ENV`.
+
+**Security implications.**
+- No new secret, permission or network access.
+- One fewer thing to configure: the repository variable is no longer read, and the operator need not create it.
+- An injection path is removed: the old step copied a repository variable into `GITHUB_ENV`.
+- The key is now public in git, which is its purpose. A malicious key swap would have to pass review as a commit touching `docs/contract/`.
+- Remaining guard: before the first tag (E-6), `docs/contract/release-key.pub` must equal rein's file on `main` byte for byte (D-014 addendum). A difference blocks the tag.
+- The `reject-all-signatures` cargo feature stays as the kill switch.
+
+**Rollback.** Revert the E-16 commit. The build then reads `REIN_RELEASE_PUBKEY` again, and the operator must set that variable before a tag.
+
+**Testing.** The guard steps only run on a tag push, so their shell logic is exercised locally against the real file, a missing file and malformed copies (results below). `release.yml`'s `plan` (PR mode) and `ci.yml` run on the push.
+
+**Results (E-16)**
+- Guard logic run locally (`bash` from the repo root) against: the real file → 0, printing `release key: 5C9C75A7C8FA8056`; no trailing newline → 0; missing file, symlink, extra line, key line only, CRLF, truncated key, wrong comment → 1 each.
+- All four workflow YAML files parse. `dist plan` exit 0. `grep REIN_RELEASE_PUBKEY .github crates` finds nothing.
+- `cargo test --workspace` and `cargo test -p rein-release --features reject-all-signatures` green. `cargo clippy --all-targets -D warnings` is clean in both feature sets.
+- **Still unexercised until a tag:** the guard step inside `build-local-artifacts` (five targets, Windows Git Bash included) and in `deb` (amd64/arm64).
+- **Supersedes:** E-19's "What the first tag needs" row for `REIN_RELEASE_PUBKEY`. The variable is no longer read, and the first tag instead needs `docs/contract/release-key.pub` to equal rein's `main` copy.
+- **Review round 1 fixes:**
+  - (P1) Added `.gitattributes`: `docs/contract/release-key.pub -text`. Windows runners (`core.autocrlf=true`) would otherwise check the file out with CRLF, failing the Windows tests and guard and baking a key that refuses everything.
+  - (P2) The guard now also refuses a NUL byte (`tr -d '\000' | cmp`) and a comment whose key id differs from the id inside the key (`base64 -d | od`, bytes 2..10 little-endian). Review round 2 (P2-2) tightened both sides further: the guard checks that the decoded algorithm bytes are `Ed`, and `from_pub_file` compares the key id exactly (upper case, as minisign writes it), no longer ignoring case. Known remaining difference: none found by round 2's 42-file probe after these two fixes. Re-run: wrong id → 1, NUL after the key → 1, colon comment form → 0, CRLF → 1, real file → 0.

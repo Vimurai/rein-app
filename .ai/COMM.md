@@ -639,3 +639,38 @@ What on master now contradicts the contract (none of it was wrong when written �
 - rein has not committed the public key yet; the pre-tag byte comparison is the guard.
 - rein's release tooling (E-417..E-422) is not yours and not started; nothing here can ship until it exists.
 ---
+
+---
+## Handoff — 2026-11-10 14:42 UTC
+**From**: Engineer → Architect
+**Trigger**: E-20, E-21, E-18, E-16 complete (E-19 closed earlier); queue exhausted
+
+### What was built
+- **E-20** (dd57a63): `doctor` exits 14 (never 1) when `rein doctor` can't start, ends without a code, or exits outside 0..=255. Usage errors exit 64; `--help`, `--version` and `help` exit 0. Tests: a doctor stub plus `tests/cli_usage.rs`.
+- **E-21** (6bf6244): LICENSE and NOTICE are now in the tar/zip archives (dist `include`), the .deb (`/usr/share/doc/rein-app/`) and the .msi (`main.wxs` components). `allow-dirty` gains `"msi"`, because dist regenerates `main.wxs` and `wix.license` takes only one file. README.md is now auto-included in the archives too. The .msi stays unexercised until a tag.
+- **E-18** (b82b3be): `README.md` and `docs/operator-guide.md`, against the revised §API. `app-contract.md` is named without a link.
+- **E-16** (0d573f6): `docs/contract/release-key.pub` is a byte copy of the rein checkout's file, operator key 5C9C75A7C8FA8056. It is baked in with `include_str!` through a strict `MinisignVerifier::from_pub_file`. `.gitattributes` marks the file `-text`; without it, Windows checkouts would get CRLF and every Windows release would fail. The three workflow guards check the committed file (no symlink, no NUL, two lines, "Ed" algorithm bytes, comment id == key id), and the GITHUB_ENV write is gone. README's key paragraph is updated. The `ci_gate` record and results are in DEVOPS.md.
+- **Operator file operations (confirmed by the operator directly in this pane):**
+  - `~/release-key.key` was moved, never opened, to `/mnt/c/Users/Emir/iCloudDrive/rein-release-key/release-key.key`. The drvfs mount shows it as 0777, so the original 0600 mode is not kept there.
+  - `~/release-key.pub` was copied to `~/Dev/rein/docs/contract/release-key.pub` and left uncommitted. That checkout is on branch `chore/closures-2026-11-09`, not main.
+- Hosted CI is green on ubuntu, macos and windows for b82b3be and 0d573f6. The reviews: E-20, E-18 and E-21 had Tier 2 reviews. E-16 had Tier 3: round 1 found the P1 CRLF problem, which is fixed; round 2 ran all six critics, all passing.
+
+### Decisions made
+- None of my own.
+
+### Blueprint divergence (if any)
+- `distribution.md` lines 316-317 and 555 still describe the `REIN_RELEASE_PUBKEY` variable. §Components 9 says "a source build without a baked key refuses every release", but since E-16 every build bakes the committed key. The README now says so, and names the `reject-all-signatures` feature as the way to build a binary that trusts nothing.
+- E-16 acceptance: "a release build verifies a fixture signed with the matching key" is covered by a test key going through the same `from_pub_file` path, plus key-id and parse tests of the baked file. A fixture signed with the real key would need the operator to sign one; an agent must never handle the secret.
+
+### Next action needed
+- Rule on the E-16 P2s:
+  1. Make the byte comparison against rein's `main` a scripted step that blocks the tag in E-6. rein has not committed its copy yet.
+  2. Add a CODEOWNERS rule for `docs/contract/**` and `.gitattributes`.
+  3. The guard shell is copied into three files and has no automated test. It has never run on macOS or Windows Git Bash; it fails closed if a tool is missing there.
+- Rule on whether an operator-signed fixture for the positive real-key test is wanted.
+- Engineer queue is empty. E-6 waits on the operator (`HOMEBREW_TAP_TOKEN`; the first tag). E-9 and E-17 wait on rein (E-417..E-422).
+
+### Open risks
+- rein must commit `docs/contract/release-key.pub` byte-identical to ours before the first tag.
+- The .msi license paths and the guard on Windows Git Bash and macOS stay unexercised until a tag; a `-rc` tag would exercise them.
+---
