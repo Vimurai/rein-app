@@ -9,6 +9,7 @@
 //! descends into an owned directory (rein D-155 r2).
 
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -22,8 +23,29 @@ use crate::matcher::OperatorOwnedMatcher;
 pub struct SyncPlan {
     /// Source paths to write — every one, owned or not (a shipped path wins).
     pub ship: Vec<String>,
-    /// Live files/symlinks under mirrored dirs that are neither shipped nor owned.
+    /// Live files/symlinks under mirrored dirs that are neither shipped nor owned, removed
+    /// after their directory's writes.
     pub prune: Vec<String>,
+    /// Prune entries that are a case variant of a shipped path or of a directory above one
+    /// (`shared/locate.sh` when `shared/Locate.sh` ships). Removed BEFORE their directory's
+    /// writes: on a case-insensitive home both names are one file, and a later prune would
+    /// delete the file just written (D-021).
+    pub prune_first: Vec<String>,
+}
+
+/// Every directory prefix of `path`, then `path` itself.
+fn with_prefixes(path: &str) -> impl Iterator<Item = &str> {
+    path.match_indices('/')
+        .map(|(i, _)| &path[..i])
+        .chain(std::iter::once(path))
+}
+
+/// The shipped paths and their directory prefixes, ASCII-lowercased (D-021).
+fn folded_ship(ship: &[String]) -> HashSet<String> {
+    ship.iter()
+        .flat_map(|p| with_prefixes(p))
+        .map(str::to_ascii_lowercase)
+        .collect()
 }
 
 /// Is `path`, or any directory above it, operator-owned? The last segment is tested both
@@ -49,12 +71,17 @@ pub(crate) fn owned(m: &OperatorOwnedMatcher, path: &str) -> bool {
 pub fn plan(source: &[&str], live_entries: &[String], m: &OperatorOwnedMatcher) -> SyncPlan {
     let ship: Vec<String> = source.iter().map(|p| p.to_string()).collect();
     let shipped: std::collections::HashSet<&str> = ship.iter().map(String::as_str).collect();
-    let prune = live_entries
+    let folded = folded_ship(&ship);
+    let (prune_first, prune) = live_entries
         .iter()
         .filter(|e| !shipped.contains(e.as_str()) && !owned(m, e))
         .cloned()
-        .collect();
-    SyncPlan { ship, prune }
+        .partition(|e| folded.contains(&e.to_ascii_lowercase()));
+    SyncPlan {
+        ship,
+        prune,
+        prune_first,
+    }
 }
 
 /// The live mirrored dirs, listed without opening any owned path.
@@ -213,9 +240,10 @@ impl Faults {
     }
 }
 
-/// Step d: mirrored dirs in layout order with `hooks` last; per dir, write its shipped
-/// files (temp beside the target, mode, rename), remove its prune entries, then remove
-/// directories left empty.
+/// Step d: mirrored dirs in layout order with `hooks` last; per dir, remove the case
+/// variants of shipped paths and the directories they leave empty (D-021), write its
+/// shipped files (temp beside the target, mode, rename), remove its other prune entries,
+/// then remove directories left empty. Last, every shipped path must be present (D-021).
 pub(crate) fn apply(
     live: &Path,
     mirrored: &[String],
@@ -227,20 +255,60 @@ pub(crate) fn apply(
     let mut order: Vec<&String> = mirrored.iter().filter(|m| *m != "hooks").collect();
     order.extend(mirrored.iter().filter(|m| *m == "hooks"));
     let under = |p: &str, root: &str| p.split('/').next() == Some(root);
+    let folded = folded_ship(&plan.ship);
+    let exact: HashSet<&str> = plan.ship.iter().flat_map(|p| with_prefixes(p)).collect();
+    let case_variant_dir = |d: &str| folded.contains(&d.to_ascii_lowercase()) && !exact.contains(d);
     for root in order {
+        for rel in plan.prune_first.iter().filter(|p| under(p, root)) {
+            remove(live, rel, faults)?;
+        }
+        for d in dirs
+            .iter()
+            .rev()
+            .filter(|d| under(d, root) && case_variant_dir(d))
+        {
+            let _ = fs::remove_dir(live.join(d)); // non-empty: it simply stays
+        }
         for item in items.iter().filter(|i| under(&i.rel, root)) {
             write_item(live, item, faults)?;
         }
         for rel in plan.prune.iter().filter(|p| under(p, root)) {
-            faults.tick()?;
-            match fs::remove_file(live.join(rel)) {
-                Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
-                _ => {}
-            }
+            remove(live, rel, faults)?;
         }
         // Deepest first; a non-empty directory simply stays.
         for d in dirs.iter().rev().filter(|d| under(d, root)) {
             let _ = fs::remove_dir(live.join(d));
+        }
+    }
+    check_shipped(live, items)
+}
+
+fn remove(live: &Path, rel: &str, faults: &Faults) -> io::Result<()> {
+    faults.tick()?;
+    match fs::remove_file(live.join(rel)) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
+        _ => Ok(()),
+    }
+}
+
+/// Post-sync check (D-021): every shipped path is present, a regular file of its source's
+/// size (a symlink for a symlink source). A miss fails the sync, which the callers restore,
+/// so no future ordering bug can end an update at exit 0 with a shipped file missing.
+fn check_shipped(live: &Path, items: &[ShipItem]) -> io::Result<()> {
+    for item in items {
+        let meta = fs::symlink_metadata(live.join(&item.rel));
+        let present = match (&item.src, meta) {
+            (Source::File { from, .. }, Ok(m)) => {
+                m.is_file() && m.len() == fs::metadata(from)?.len()
+            }
+            (Source::Symlink(_), Ok(m)) => m.file_type().is_symlink(),
+            (_, Err(_)) => false,
+        };
+        if !present {
+            return Err(io::Error::other(format!(
+                "{}: shipped but not present after the sync",
+                item.rel
+            )));
         }
     }
     Ok(())
@@ -426,6 +494,65 @@ mod tests {
             "every shipped path is written, owned or not (rein D-155 r2)"
         );
         assert_eq!(p.prune, ["bin/old-tool"], "owned a.js is kept");
+        assert!(p.prune_first.is_empty());
+    }
+
+    #[test]
+    fn case_variants_of_a_shipped_path_or_its_directories_are_pruned_first() {
+        let live = [
+            "shared/locate.sh".to_string(),
+            "shared/Lib/x.mjs".into(),
+            "shared/Lib".into(),
+            "shared/Lib/y.mjs".into(),
+            "shared/old.sh".into(),
+        ];
+        let p = plan(&["shared/Locate.sh", "shared/lib/x.mjs"], &live, &matcher());
+        assert_eq!(
+            p.prune_first,
+            ["shared/locate.sh", "shared/Lib/x.mjs", "shared/Lib"]
+        );
+        assert_eq!(
+            p.prune,
+            ["shared/Lib/y.mjs", "shared/old.sh"],
+            "no case variant"
+        );
+    }
+
+    /// The post-sync check catches what the D-021 ordering prevents: a plan (built by hand,
+    /// as the old ordering produced on a case-insensitive home) that prunes a shipped path.
+    #[test]
+    fn a_shipped_path_missing_after_the_sync_fails_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let (live, src) = (dir.path().join("live"), dir.path().join("src"));
+        fs::create_dir_all(src.join("bin")).unwrap();
+        fs::write(src.join("bin/rein"), "new").unwrap();
+        fs::create_dir_all(&live).unwrap();
+        let mirrored = ["bin".to_string()];
+        let items = [ShipItem {
+            rel: "bin/rein".into(),
+            src: Source::File {
+                from: src.join("bin/rein"),
+                mode: 0o755,
+            },
+        }];
+        let ok = SyncPlan {
+            ship: vec!["bin/rein".into()],
+            ..SyncPlan::default()
+        };
+        apply(&live, &mirrored, &items, &ok, &[], &Faults::none()).unwrap();
+        let bad = SyncPlan {
+            prune: vec!["bin/rein".into()],
+            ..ok
+        };
+        let err = apply(&live, &mirrored, &items, &bad, &[], &Faults::none()).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("bin/rein: shipped but not present"),
+            "{err}"
+        );
+        fs::write(live.join("bin/rein"), "longer than new").unwrap();
+        let wrong_size = check_shipped(&live, &items).unwrap_err();
+        assert!(wrong_size.to_string().contains("bin/rein"), "{wrong_size}");
     }
 
     #[test]

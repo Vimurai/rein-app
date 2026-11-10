@@ -160,6 +160,9 @@ impl Manifest {
         for d in &raw.layout.mirrored {
             check_path_alphabet(d).map_err(invalid)?;
         }
+        for p in &raw.layout.operator_owned {
+            check_path_alphabet(p).map_err(|e| invalid(format!("operator_owned {e}")))?;
+        }
         let layout = validate_layout(raw.layout).map_err(invalid)?;
         let matcher = OperatorOwnedMatcher::new(&layout.operator_owned).map_err(invalid)?;
 
@@ -349,6 +352,13 @@ mod tests {
         assert!(
             err.to_string().contains("printable ASCII"),
             "a mirrored name: {err}"
+        );
+        let owned = doc(1, BIN).replace(r#""secrets/""#, r#""secrets/\u001b[2J""#);
+        let err = Manifest::parse(owned.as_bytes()).unwrap_err();
+        assert!(
+            err.to_string().contains("operator_owned")
+                && err.to_string().contains("printable ASCII"),
+            "an operator_owned pattern: {err}"
         );
         let distinct = format!("{BIN},{}", lib("hooks/rein"));
         assert!(

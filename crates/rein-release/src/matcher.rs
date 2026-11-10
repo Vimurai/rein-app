@@ -55,7 +55,14 @@ const MAX_PATTERN_LEN: usize = 256;
 const MAX_STARS: usize = 8;
 
 fn parse(raw: &str) -> Result<Pattern, String> {
-    let bad = |why: &str| Err(format!("operator_owned pattern '{raw}': {why}"));
+    // Escaped: a pattern comes from a manifest, and its control bytes must never reach the
+    // terminal (D-021 r4).
+    let bad = |why: &str| {
+        Err(format!(
+            "operator_owned pattern '{}': {why}",
+            raw.escape_debug()
+        ))
+    };
     if raw.is_empty() {
         return bad("empty");
     }
@@ -226,5 +233,8 @@ mod tests {
         for p in ["", "/abs", "!neg", "a/[ab]", "a?", "a//b", "../x", "a\\b"] {
             assert!(OperatorOwnedMatcher::new(&[p]).is_err(), "{p:?}");
         }
+        // D-021 r4: a control byte from a manifest never reaches the terminal raw.
+        let err = OperatorOwnedMatcher::new(&["\u{1b}[2J/../x"]).unwrap_err();
+        assert!(!err.contains('\u{1b}') && err.contains("\\u{1b}"), "{err}");
     }
 }

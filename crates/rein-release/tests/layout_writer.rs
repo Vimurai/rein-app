@@ -832,3 +832,55 @@ fn a_directory_at_manifest_json_or_version_is_refused_before_any_write() {
         assert_eq!(digest(&h.rein()), before, "{top}: nothing written");
     }
 }
+
+/// The entry names in `dir` that equal `name` after ASCII-lowercasing.
+fn names_like(dir: &Path, name: &str) -> Vec<String> {
+    let mut v: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .filter(|n| n.eq_ignore_ascii_case(name))
+        .collect();
+    v.sort();
+    v
+}
+
+/// D-021, extending `rollback_restores_code_only_and_a_second_rollback_returns`: a release
+/// that renames a file (`shared/locate.sh` → `shared/Locate.sh`) or a directory
+/// (`shared/Lib/` → `shared/lib/`) only by case. On every filesystem the new name holds the
+/// new bytes and the old name is gone, and rollback reverses it. On a case-insensitive home
+/// (the macOS and Windows runners) the prune used to delete the file just written.
+#[test]
+fn a_case_only_rename_keeps_the_shipped_file_through_update_and_rollback() {
+    let h = Home::seeded();
+    let rein = h.rein();
+    write(&rein.join("shared/locate.sh"), b"old locate");
+    write(&rein.join("shared/Lib/x.mjs"), b"old x");
+    let mut files = good_files();
+    let locate = files
+        .iter_mut()
+        .find(|f| f.path == "shared/locate.sh")
+        .unwrap();
+    locate.path = "shared/Locate.sh";
+    files.push(Listed {
+        path: "shared/lib/x.mjs",
+        bytes: b"new x".to_vec(),
+        mode: "0644",
+    });
+
+    install_tree(&h.paths, &h.release(&files)).unwrap();
+    let shared = rein.join("shared");
+    assert_eq!(names_like(&shared, "locate.sh"), ["Locate.sh"]);
+    assert_eq!(
+        fs::read(shared.join("Locate.sh")).unwrap(),
+        b"rein_locate() { :; }\n"
+    );
+    assert_eq!(names_like(&shared, "lib"), ["lib"]);
+    assert_eq!(fs::read(shared.join("lib/x.mjs")).unwrap(), b"new x");
+
+    let (out, _lock) = rollback_tree(&h.paths).unwrap();
+    assert_eq!(out.restored, Version::new(0, 4, 0));
+    assert_eq!(names_like(&shared, "locate.sh"), ["locate.sh"]);
+    assert_eq!(fs::read(shared.join("locate.sh")).unwrap(), b"old locate");
+    assert_eq!(names_like(&shared, "lib"), ["Lib"]);
+    assert_eq!(fs::read(shared.join("Lib/x.mjs")).unwrap(), b"old x");
+}
