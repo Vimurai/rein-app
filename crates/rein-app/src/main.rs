@@ -79,8 +79,23 @@ fn resolve_home(flag: Option<PathBuf>) -> Option<PathBuf> {
         .filter(|p| p.is_absolute())
 }
 
+/// A usage error: unknown command or flag, bad value (D-016). Never clap's default 2,
+/// which on `install` means a release failed verification.
+const EXIT_USAGE: u8 = 64;
+
+/// clap's own exit for `--help`/`--version` (0) stays; every usage error becomes 64.
+fn usage_exit(err: &clap::Error) -> u8 {
+    if err.exit_code() == 0 { 0 } else { EXIT_USAGE }
+}
+
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(err) => {
+            let _ = err.print();
+            return ExitCode::from(usage_exit(&err));
+        }
+    };
     let Some(home) = resolve_home(cli.home) else {
         eprintln!("rein-app: cannot determine an absolute home directory; pass --home /ABS/DIR");
         return ExitCode::from(1);

@@ -17,6 +17,9 @@ use crate::runner::{Process, ReinCommand, RunOutcome, run_rein};
 pub const EXIT_CURRENT: u8 = 10;
 pub const EXIT_OFFLINE: u8 = 11;
 pub const EXIT_NO_PREVIOUS: u8 = 12;
+/// `doctor`: `rein doctor` could not be started or ended without an exit code (D-016).
+/// Never 1: for `rein doctor --json`, 1 means stdout is the document with status `fail`.
+pub const EXIT_DOCTOR_NOT_RUN: u8 = 14;
 
 /// Release notes printed before the confirmation, at most this many lines.
 const MAX_NOTE_LINES: usize = 60;
@@ -169,12 +172,22 @@ pub fn doctor(home: &Path, process: &dyn Process, json: bool) -> u8 {
     };
     match run_rein(process, home, &[cmd]) {
         RunOutcome::Ok => 0,
-        RunOutcome::Failed { code, .. } => code.and_then(|c| u8::try_from(c).ok()).unwrap_or(1),
+        RunOutcome::Failed { code, .. } => match code.map(|c| (c, u8::try_from(c))) {
+            Some((_, Ok(c))) => c,
+            Some((c, Err(_))) => {
+                eprintln!("rein-app: rein doctor exited with code {c} (outside 0..=255)");
+                EXIT_DOCTOR_NOT_RUN
+            }
+            None => {
+                eprintln!("rein-app: rein doctor ended without an exit code (killed by a signal?)");
+                EXIT_DOCTOR_NOT_RUN
+            }
+        },
         RunOutcome::NotStarted { reason, .. } => {
             eprintln!(
                 "rein-app: could not start rein doctor ({reason}) — run `rein-app install` first"
             );
-            EXIT_ERROR
+            EXIT_DOCTOR_NOT_RUN
         }
     }
 }
@@ -361,6 +374,35 @@ mod tests {
         let rein = Scripted::new(0, 0);
         assert_eq!(doctor(home.path(), &rein, false), 0);
         assert_eq!(rein.argv(), [vec!["doctor"]]);
+    }
+
+    /// `rein doctor` that cannot be started (`None`) or ends with the given result.
+    struct DoctorEnds(Option<Option<i32>>);
+
+    impl Process for DoctorEnds {
+        fn run(&self, _inv: &Invocation) -> io::Result<Option<i32>> {
+            self.0
+                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no rein"))
+        }
+        fn capture(&self, _program: &str, _args: &[&str]) -> Option<String> {
+            None
+        }
+    }
+
+    /// Extends `doctor_json_passes_the_flag_and_reins_exit_code_through` (D-016 ruling 7):
+    /// the app's own failures are 14, never rein's 1.
+    #[test]
+    fn doctor_exits_14_when_rein_does_not_run_and_passes_reins_codes_through() {
+        let home = tempfile::tempdir().unwrap();
+        for json in [false, true] {
+            assert_eq!(doctor(home.path(), &DoctorEnds(None), json), 14);
+            assert_eq!(doctor(home.path(), &DoctorEnds(Some(None)), json), 14);
+            assert_eq!(doctor(home.path(), &DoctorEnds(Some(Some(300))), json), 14);
+            for code in [0, 1, 2, 3, 13, 255] {
+                let got = doctor(home.path(), &DoctorEnds(Some(Some(code))), json);
+                assert_eq!(i32::from(got), code);
+            }
+        }
     }
 
     /// `install` (no version: newest tag) or `update --yes` with the given rein.
