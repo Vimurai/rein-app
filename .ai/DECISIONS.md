@@ -548,3 +548,44 @@ Each task reverts on its own. Reverting E-13 alone makes every artifact install 
 - **Rollback then `rein install` is guaranteed safe**: the stamp is rewritten (`source: "restored"` when the snapshot came from a clone install). D-014 decision 2 stands as written.
 - **The strict reader is backed by a writer guarantee**: no extension record, directory entry or link is ever emitted; lifting that is a schema change with a notice to us first. D-014 decision 1 stands.
 - No task changes. E-9's registered text still calls a retired server's directory an expected diff; `distribution.md` §Test Plan governs.
+
+---
+
+## D-015 — E-12..E-15 review: `shipped_owned` and two stricter refusals accepted; a newly shipped owned path may outlive a restore; settings are preserved by value, not by byte; `rein ci run` is not test evidence here
+
+**Date**: 2026-11-10
+**Task**: review of E-12..E-15 (Engineer handoff 2026-11-10 13:54 UTC; divergences 1–3; security review E-13 P2-2, E-14 P2; tests review E-12 P2) → E-18, E-19
+**Decision**: Accept E-12..E-15 as built with no code follow-up, record the three divergences in `distribution.md`, accept the two security P2s as documented behaviour, and name `cargo test --workspace` plus hosted CI as the only test evidence in this repository.
+
+### Why needed
+The Engineer shipped the D-014 corrections with three things the blueprint did not say and three P2 findings left for a ruling. Two of the findings turn on wording in the blueprint ("byte-identical", "owned paths are never deleted") that the code cannot or should not satisfy literally.
+
+### Rulings
+1. **`shipped_owned` in a snapshot's `layout.json` — accepted.** Since D-014 a snapshot may hold a path that matches an `operator_owned` pattern (the shipped lock file). Without a list, `snapshot::load` would have to accept any owned-matching path in `tree/`, and a restore could then write over operator data. The list keeps the old refusal for everything the snapshot did not record as shipped. It is not a trust boundary (D-013: the file is editable by the home's owner); it keeps an honest snapshot from being read too widely. The field is optional and defaults to empty; unknown fields are refused.
+2. **A directory at the home's `manifest.json` or `VERSION` is a `Conflict` in preflight — accepted.** Otherwise the rename fails after the whole sync and forces a restore.
+3. **Header-only first pass in the verifier — accepted.** Stricter than "before any byte reaches the home": nothing is extracted even into staging before every member rule has passed.
+4. **E-13 SEC P2-2 — accepted, no cleanup.** When a release ships, for the first time, a path that matches an owned pattern and the sync then fails (or the release is rolled back), the file stays. Related: a snapshot records an owned-matching path only when the incoming source ships it.
+5. **E-14 SEC P2 — the guarantee is value identity with key order kept.** The app parses and re-serialises `settings.json`; whitespace can change. The blueprint's "byte-identical" for `hooks` and "byte-for-byte in value" are reworded. D-008's list of restored keys reads `enabledPlugins`, `extraKnownMarketplaces`, `attribution` since D-014; its entry is left as written (append-only log).
+6. **E-12 TESTS P2 — closed, nothing to do.** The symlink, directory, hard-link, pax, NUL-typeflag and GNU long-name rows assert `kind` in the tree as committed; the one row that does not ("directory entry carrying data") is refused by the same rule as its neighbour.
+7. **`rein ci run` skips every step in a Rust repository and still reports PASS.** Evidence for DONE here is `cargo test --workspace` and the hosted matrix. The missing cargo step is a framework gap and goes to `rein · Architect` as a notice; it is not fixed in this repo.
+
+### Alternatives considered (ruling 4)
+1. **Delete the lingering file on restore** — the writer knows within one run that the path was absent before (it is shipped and not in the snapshot). Rejected: rein D-155 r2 says a path not in the installed release's `files` that matches a pattern is kept, and that rule is a contract item decided in `rein`; for the rollback case the app has no record across runs of who wrote the file, so the two paths would behave differently.
+2. **Make the snapshot hold every path the *installed* release shipped** (parse the live `manifest.json` when taking a snapshot) — closes the related gap, at the price of a second parser input from unsigned local data inside the security-reviewed writer, for a case that needs rein to change its set of shipped owned-matching paths between two releases. Today there is one such path and every release ships it. Rejected for now.
+3. **Accept and document, with the recovery (chosen)** — the worst outcome is a stale file at an owned path; if `rein install` reports a tree mismatch the app exits 13 and `rein-app install --version X` rewrites every shipped path.
+
+### Alternatives considered (ruling 5)
+1. **Edit the file textually so untouched bytes stay** — a JSON-aware splice of three keys; a new parser-level component in the trust-boundary-3 code to preserve whitespace nobody depends on. Rejected.
+2. **State the real guarantee (chosen).**
+
+### Constraints driving this decision
+- Contract items are decided in `rein` (architect.md §2); `operator_owned` semantics are one.
+- No release has shipped: no snapshot without `shipped_owned` exists that should have it.
+- E-12/E-13/E-14 carry ARCH/TESTS/SEC passes; reopening reviewed Tier 3 code needs a defect, and none was found.
+
+### Impact
+- Unlocks: E-18 (operator docs — README and guide state these behaviours), E-19 (release rehearsal without publishing). E-6, E-9, E-16, E-17 stay blocked on the operator and rein.
+- Risk if wrong: (4) a double rollback across releases that differ in shipped owned-matching paths ends in exit 13 until `install --version` is re-run. (5) a tool that diffs `settings.json` textually sees a whitespace change after `profiles apply`.
+
+### Rollback
+Rulings 1–3 describe shipped code; reverting them means reverting E-12/E-13. Ruling 4 is reversed by a task implementing alternative 2. Ruling 5 by alternative 1.

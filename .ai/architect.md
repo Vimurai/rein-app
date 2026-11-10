@@ -10,7 +10,7 @@
 ## 0. Blueprint Index (JIT — load only what the task needs)
 | Domain | File | Phase | Status |
 |---|---|---|---|
-| Distribution: installer, verifier, layout writer, profile manager, updater, WSL launcher | `.ai/blueprints/distribution.md` | 1 | ACTIVE — E-2..E-5, E-7, E-8, E-10, E-11 done; E-12..E-15 open (rein D-155 corrections); E-6 awaits the first tag; E-9, E-16, E-17 blocked on rein/operator |
+| Distribution: installer, verifier, layout writer, profile manager, updater, WSL launcher | `.ai/blueprints/distribution.md` | 1 | ACTIVE — E-2..E-5, E-7, E-8, E-10..E-15 done (E-12..E-15 reviewed, D-015); E-18 (operator docs), E-19 (release rehearsal) open; E-6 awaits the first tag; E-9, E-16, E-17 blocked on rein/operator |
 | Desktop: Tauri window, pane view, status, settings UI, bundled Node, signing | `.ai/blueprints/desktop.md` | 2 | NOT WRITTEN — authored when Phase 1 ships |
 
 ## 1. System Philosophy
@@ -126,6 +126,11 @@ Contract corrections from rein D-155 (D-014), registered 2026-11-09:
 | **E-15** | CLI: rollback runs `rein install` + `rein doctor`, exit 13, `doctor --json` | 2 | E-13 |
 | **E-16** | trust root from a committed key file — BLOCKED on the operator's key in rein | 3 | — |
 | **E-17** | vendor rein's shared fixtures — BLOCKED on rein E-422 | 2 | — |
+E-12..E-15 are DONE (2026-11-10) and accepted as built (D-015). Registered 2026-11-10:
+| Registered | Scope | Tier | Depends on |
+|---|---|---|---|
+| **E-18** | `README.md` + `docs/operator-guide.md` (distribution.md §Components 9) | 2 | — |
+| **E-19** | release rehearsal without publishing: `dist plan`, local host build, findings in DEVOPS.md | 2 | — |
 E-9 now waits on rein E-417/E-418/E-420 and follows E-13. AppImage is out of Phase 1 (D-012). Phase 1 ships when
 PR #1 is merged, rein publishes a signed release + public key (P-50), and the first tag builds.
 

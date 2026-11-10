@@ -5,6 +5,9 @@
 > Revised 2026-11-09: LayoutWriter and rollback mechanics (D-011), E-5/E-6 divergence rulings (D-012),
 > E-7 rulings — target symlinks, snapshot trust, owner guard (D-013); rein D-155 mirrored (D-014):
 > strict tarball members, shipped path wins, `manifest.json` in the home, three profile keys.
+> Revised 2026-11-10 (D-015, review of E-12..E-15): snapshot `shipped_owned`, header-only first
+> pass, top-level `Conflict`, value-identical settings, operator docs (§Components 9) and the
+> release rehearsal (E-18, E-19).
 
 ## Goal & Architecture
 Operators get Rein with one package-manager command on macOS, Linux and Windows (WSL2), and
@@ -42,7 +45,10 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    (ustar typeflag `0`) named in `files`; the member set equals `files` exactly. Refused, for
    the whole artifact and before any byte reaches the home: a directory entry, any link type,
    a pax or GNU extension header, a device/FIFO, a duplicate name, `manifest.json` anywhere
-   but first, a `VERSION` member. The beside-tarball manifest is an untrusted convenience
+   but first, a `VERSION` member. As built (E-12, accepted D-015): a **header-only first
+   pass** over the whole archive applies every member rule before pass 2 extracts anything,
+   even into staging; pass 2 re-counts what it writes; only zero padding may follow the
+   end-of-archive marker and nothing may follow the gzip stream. The beside-tarball manifest is an untrusted convenience
    copy: it may fail a run early (schema, `key_id`) but every decision that lets bytes into
    the home is taken from the in-tarball manifest after the signature has passed. The
    `SignatureVerifier` trait stays (the test suite injects a fixture key pair); the production
@@ -94,8 +100,9 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
       and snapshotted as a link (as `rsync -a --delete` does) — refusing it would let one
       stray `bin/x -> …` block restore-on-failure and rollback. Nothing is ever written
       through a symlink. Also refused: a directory where a release file goes or a file where
-      a directory is needed (`Conflict`), and a shipped name ending in the writer's own temp
-      suffix. Inside a mirrored dir an entry of ANY type at an operator-owned path — a symlink
+      a directory is needed (`Conflict`) — a directory at the home's top-level `manifest.json`
+      or `VERSION` included (D-015; a symlink there is replaced by the rename, never
+      followed) — and a shipped name ending in the writer's own temp suffix. Inside a mirrored dir an entry of ANY type at an operator-owned path — a symlink
       or file where an owned directory belongs (`mcp/x/node_modules -> store`) — is owned:
       never opened, snapshotted or pruned, unless the release ships that exact path (then it
       is a target like any other; a symlinked owned directory above a shipped path is an
@@ -106,7 +113,10 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    c. *Snapshot*: copy the non-owned content of the live mirrored dirs **plus the live file at
       every `ship` path** (so a shipped path that a pattern also matches can be restored) to
       `$HOME/.rein.prev-<oldver>/tree/`, with `VERSION`, `layout.json` (the `mirrored` +
-      `operator_owned` lists used) and the live top-level `manifest.json` when there is one
+      `operator_owned` lists used, plus `shipped_owned`: the owned-matching paths this
+      snapshot holds because they were shipped — on load, a tree path that matches a pattern
+      is accepted only when listed there, an owned directory only to reach such a path;
+      D-015) and the live top-level `manifest.json` when there is one
       beside it; built under a temp name and renamed when
       complete, mode 0700, `~N` suffix on a name clash, symlinks copied as links. This is the
       release payload only (≈9 MB), never operator data. No live tree → no snapshot. Keep the
@@ -134,7 +144,17 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
       snapshot's `manifest.json` is put back, or the live one removed when the snapshot has
       none (a clone install has no manifest) — report
       `Sync { restored }`; `VERSION` stays at the old version. On a fresh install there is
-      nothing to restore: the partial tree has no `VERSION` and a re-run completes it.
+      nothing to restore: the partial tree has no `VERSION` and a re-run completes it (and
+      no `manifest.json` is left beside an absent or invalid `VERSION`).
+      **Accepted residue (D-015):** a path the failed (or rolled-back) release shipped for
+      the first time AND that matches an `operator_owned` pattern stays on disk after the
+      restore — by rein D-155 r2 a path not in the restored release's `files` that matches a
+      pattern is kept, and the app keeps no record across runs of who wrote an owned path.
+      Likewise a snapshot holds an owned-matching path only when the *incoming* source ships
+      it. Both leave at worst a stale file at an owned path; if `rein install` then reports
+      a tree mismatch (exit 13), `rein-app install --version <that version>` rewrites every
+      shipped path. Reopen if rein ever changes the set of shipped owned-matching paths
+      between releases (today: `mcp/orchestrator-mcp/package-lock.json`, in every release).
    A temp file left by a killed run is an unshipped file and is pruned by the next run. No
    file is edited after `VERSION` is written. Disk and time are proportional to the release,
    not to the home (measured live home: 3.5 GB, of which `ci/` 3.0 GB and `mcp/*/node_modules`
@@ -179,7 +199,10 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    `ref: "stable"` as a fallback (Claude Code reconciles it at its next session start —
    D-009), plugins skipped, exit 4. The D-007 path must be idempotent over an entry the
    reconciler already registered. Every pre-existing key
-   is preserved byte-for-byte in value. Writing `autoMode`, `permissions`, `defaultMode` or
+   is preserved **by value, in its original key order** (D-015): the file is parsed and
+   re-serialised (`preserve_order`, `arbitrary_precision`), so whitespace may change but no
+   key, value, number spelling or ordering does — "byte-identical" was never the guarantee
+   for a file the app rewrites. Writing `autoMode`, `permissions`, `defaultMode` or
    `hooks` is a compile-time impossibility (the key set is a closed enum of three).
 7. **`rein-app::Updater`** — `rein-app update`: list newest `rein` tag, fetch its
    changelog/release notes, show diff vs installed `VERSION`, install on confirm (`--yes`
@@ -208,6 +231,22 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    Windows Terminal (`wt.exe`) into the project's tmux session via `wsl -e rein start`;
    refuses a project path containing `;` (the `wt.exe` command separator).
    All `wsl.exe`/`wt.exe` calls go through a `Shell` trait so tests stub them.
+9. **Operator documentation** (E-18; no code) — `README.md` at the repo root and
+   `docs/operator-guide.md`. The README says in its first screen what rein-app is (the
+   installer/updater shell for Rein) and is not (no Rein logic; it never edits a project),
+   the status line "no release has been published yet" until E-6 closes, the install
+   channels as *planned* (Homebrew tap, `.deb`, Windows launcher over WSL2), building from
+   source (and that a source build without a baked key refuses every release — fail
+   closed), and the license. The guide documents only behaviour this blueprint states:
+   every command and exit code of §API, in one table; what an install touches (the scope
+   rule: mirrored dirs + `manifest.json` + `VERSION`; operator data never opened);
+   snapshots and `rollback` (code only, two kept, second rollback returns); `profiles
+   apply` (three keys, never `hooks`, the once-written `.rein-bak`, `--undo` by value);
+   refusals an operator can meet and what to do (held lock → the named PID; `sudo` / owner
+   mismatch → run as the home's owner; symlinked home or mirrored dir; exit 13 → rein's own
+   code and message, re-run `install`); the unsupported shared `--home`; Windows = WSL2
+   only. Nothing in either file names a version, URL or key that does not exist yet, and
+   neither restates rein's contract — they link to rein's `docs/app-contract.md`.
 
 ## Data Model
 ```
@@ -226,7 +265,9 @@ DoctorJson { schema: 1, version: SemVer, status: ok|warn|fail,
              // Not a polling probe — `rein state health --short` is.
 InstalledTree { root: $HOME/.rein, version: SemVer (from VERSION), snapshots: Vec<Snapshot> /* newest first, ≤ 2 */ }
 Snapshot { root: $HOME/.rein.prev-<ver>[~N], version: SemVer (root/VERSION),
-           layout: { mirrored, operator_owned } (root/layout.json — validated like a manifest layout on read),
+           layout: { mirrored, operator_owned, shipped_owned: Vec<RelPath> /* optional; default empty; unknown fields refused */ }
+                   (root/layout.json — mirrored + operator_owned validated like a manifest layout on read; a tree path matching
+                    a pattern must be listed in shipped_owned — D-015),
            manifest: Option<root/manifest.json> /* the home's manifest.json at snapshot time; absent for a clone install */,
            tree: root/tree/<mirrored dir>/… /* release payload only: non-owned content + the files at shipped paths; nothing outside mirrored dirs */ }
 SyncPlan { ship: Vec<RelPath>, prune: Vec<RelPath> }   // pure function of (manifest | snapshot, live mirrored dirs)
@@ -411,7 +452,8 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - Profile merge: property test — for random pre-existing JSON, after `apply` every original
   key/value is intact and only allowed keys changed; attempting a forbidden key fails to compile.
   E-14 (rein D-155 r3): a pre-existing `hooks` value — in the default profile and in every
-  other — is byte-identical after `apply` and after `--undo`; nothing is copied from one
+  other — is value-identical, in the same key order, after `apply` and after `--undo`
+  (D-015; not byte-identical — the file is re-serialised); nothing is copied from one
   profile to another; the `compile_fail` doctest covers `hooks`.
 - Marketplace pin: a local `file://` git fixture with a `stable` branch;
   `claude plugin marketplace add file:///…/fixture.git#stable --scope user` must yield
@@ -420,6 +462,16 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - Undo: after `apply` then operator edits to `permissions`, `--undo` leaves `permissions`
   untouched and reverts only the three allowed keys (D-008).
 - WSL launcher: unit tests against a stubbed `Shell` covering no-WSL, WSL-no-distro, ready.
+- **Evidence of record (D-015):** `cargo test --workspace` (doctests included) locally plus
+  the hosted CI matrix on the commit. `rein ci run` has no cargo step and skips every step
+  in this repository; its PASS proves nothing here and is never cited as test evidence.
+- Operator docs (E-18): every command, flag and exit code in `docs/operator-guide.md`
+  matches the §API table and `rein-app --help` / `<command> --help` output; no statement
+  claims a published release, a download URL or a key.
+- Release rehearsal (E-19): `dist plan` succeeds for every configured target; a local
+  `dist build` for the host target yields an archive whose binary runs `--version` and
+  which carries `LICENSE` and `NOTICE`; nothing is tagged, pushed or published; the result
+  and the list of what stays unexercised until the first tag are in `.ai/DEVOPS.md`.
 
 ## E-## Task Breakdown (registered IDs)
 - **E-2** (T2) Cargo workspace `rein-app`/`rein-release`/`rein-profiles`; `git init` if absent;
@@ -482,6 +534,14 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - **E-17** (T2, BLOCKED on rein E-422) Vendor rein's shared fixtures and run them: replace the
   interim `operator-owned-cases.json`, add `profile-settings-cases.json` and `layout-v1.json`.
   §Test Plan "Operator-owned conformance", "Shared contract fixtures".
+- E-12..E-15 are DONE (2026-11-10) and reviewed (D-015): no code follow-up.
+- **E-18** (T2) Write `README.md` and `docs/operator-guide.md` per §Components 9; §Test Plan
+  "Operator docs". No source change.
+- **E-19** (T2) Rehearse the release pipeline without publishing: `dist plan` for all
+  targets, a local host-target `dist build`, archive contents checked; findings in
+  `.ai/DEVOPS.md`. No tag, no push, no workflow edit — a workflow defect found is reported
+  to the Architect (a fix is its own task behind `skill: ci_gate`). §Test Plan "Release
+  rehearsal".
 - **E-11** (T3) Make the owner guard unskippable: `owner_guard` returns a proof value with no
   public constructor, borrowed from the `InstallLock`; `install_tree_locked`,
   `install_tree_with_faults` and rollback's lock-held writer take it; `compile_fail` doctest;
