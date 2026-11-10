@@ -131,6 +131,8 @@ E-12..E-15 are DONE (2026-11-10) and accepted as built (D-015). Registered 2026-
 |---|---|---|---|
 | **E-18** | `README.md` + `docs/operator-guide.md` (distribution.md §Components 9) | 2 | — |
 | **E-19** | release rehearsal without publishing: `dist plan`, local host build, findings in DEVOPS.md | 2 | — |
+| **E-20** | `doctor` exits 14 for its own failures, usage errors exit 64 (D-016) — before E-18 finishes | 2 | — |
+| **E-21** | `LICENSE` + `NOTICE` in every release artifact (D-016) | 2 | — |
 E-9 now waits on rein E-417/E-418/E-420 and follows E-13. AppImage is out of Phase 1 (D-012). Phase 1 ships when
 PR #1 is merged, rein publishes a signed release + public key (P-50), and the first tag builds.
 

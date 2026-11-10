@@ -589,3 +589,47 @@ The Engineer shipped the D-014 corrections with three things the blueprint did n
 
 ### Rollback
 Rulings 1–3 describe shipped code; reverting them means reverting E-12/E-13. Ruling 4 is reversed by a task implementing alternative 2. Ruling 5 by alternative 1.
+
+---
+
+## D-016 — CLI surface as built is the contract for §API (exit 1, global `--home`, `--dry-run`); exit 6 retired; two exit-code collisions fixed; NOTICE ships in every artifact
+
+**Date**: 2026-11-10
+**Task**: Engineer findings on E-18 (six §API / `--help` mismatches) and E-19 (rehearsal findings 1–3) → E-20, E-21
+**Decision**: Bring the §API table in line with the binary where the binary is right, change the binary in the two places where its exit codes are ambiguous, and add the license files to every artifact before any tag.
+
+### Why needed
+E-18 documents the CLI for operators and the §API table is what Phase 2 and scripts read. The table had drifted from the binary in six places, and checking them against the source turned up two exit codes that mean two things. E-19 found that no artifact carries `NOTICE`, and the `.msi` and `.deb` carry no `LICENSE` either.
+
+### Rulings (E-18)
+1. **Exit 1 = refused before any write, or any other error, on every command** — added to §API. It was always in the code and never in the table.
+2. **`--home DIR` is global** — accepted; `profiles` needs it for `accounts.json`, and one rule is easier to document than a per-command list.
+3. **`profiles apply --dry-run`** — accepted: prints the diff, writes nothing, runs no `claude` command.
+4. **`--profile` repeatable, `--disable all`** — accepted.
+5. **`launch [DIR]` exits 4 when the distro has no `rein-app`** — accepted (4 is "runtime missing" everywhere).
+6. **Exit 6 is dropped and retired.** A forbidden key cannot be written by code that compiles, so the row described nothing. The number is not reused.
+7. **`doctor` must not exit 1 for its own failures (found in this review).** `rein doctor --json` exits 0 or 1 with a JSON document on stdout; the app returned 1 too when rein could not be started or ended without a code, so a caller could not tell "status fail" from "no document". Those cases become exit 14.
+8. **A usage error must not exit 2 (found in this review).** clap's default 2 is also "release failed verification" on `install`. Usage errors become 64.
+
+### Rulings (E-19)
+9. **`LICENSE` and `NOTICE` ship in every artifact** (Apache-2.0 §4(d)) — E-21, before the first tag.
+10. **A prerelease tag (`v0.1.0-rc.1`) as the first real exercise of the pipeline** is recommended to the operator; it publishes a public GitHub prerelease, so it is the operator's call and action, not a task. It needs the release key first — the build fails closed without one.
+11. **rein's `docs/app-contract.md` does not exist yet** (E-18 item 7): the operator docs name it in plain text, unlinked, as the file rein publishes with its first release, and may link the `Vimurai/rein` repository. Leaving the reference out would hide where the contract lives; a dead link breaks §Components 9. The link is added when rein publishes the file.
+
+### Alternatives considered
+1. **Change the binary to match the old table** (drop `--dry-run`, make `--home` install-only) — removes working, tested behaviour to protect a table. Rejected.
+2. **Keep exit 6 "for the future"** — a documented code no path can produce misleads operators and Phase 2. Rejected.
+3. **Leave `doctor`'s exit 1 and have callers test for empty stdout** — works, but the blueprint already promises "0 or 1 means stdout is the document"; one code change keeps the promise. Rejected.
+4. **Leave clap's exit 2 and document the overlap** — a script that retries on "verify failed" would retry a typo. Rejected; the fix is a few lines.
+5. **As ruled (chosen).**
+
+### Constraints driving this decision
+- No release has shipped, so no exit code is relied on by anyone yet; changing two now is free, later it is a breaking change.
+- Exit codes 0 and 1 of `doctor` belong to rein (contract); the app's own codes stay ≥ 10 or follow sysexits (64).
+
+### Impact
+- Unlocks: E-18 (documents the revised §API after E-20), E-20, E-21.
+- Risk if wrong: `rein doctor` itself could one day exit 14 or 64 — rein's contract lists 0 and 1 only for `--json`; a collision would arrive as a contract notice.
+
+### Rollback
+Revert E-20 and restore the two rows; E-21 is config and reverts on its own.

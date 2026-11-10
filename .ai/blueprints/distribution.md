@@ -246,7 +246,10 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    mismatch → run as the home's owner; symlinked home or mirrored dir; exit 13 → rein's own
    code and message, re-run `install`); the unsupported shared `--home`; Windows = WSL2
    only. Nothing in either file names a version, URL or key that does not exist yet, and
-   neither restates rein's contract — they link to rein's `docs/app-contract.md`.
+   neither restates rein's contract — they name rein's `docs/app-contract.md` in plain
+   text, without a link, as the file rein will publish with its first release (it does not
+   exist yet — D-016 ruling 11), and may link the `Vimurai/rein` repository itself; the link
+   to the file is added when rein publishes it (with E-17).
 
 ## Data Model
 ```
@@ -283,13 +286,21 @@ tree's `VERSION` and the profiles' `settings.json`. No database, no app config f
 CLI (`rein-app`):
 | Command | Input | Output | Exit |
 |---|---|---|---|
-| `install [--version X.Y.Z] [--home DIR]` | tag (default latest) | verify report, `rein install` and `rein doctor` output | 0 ok · 2 verify fail · 3 `rein doctor` failed · 4 runtime missing · 13 `rein install` failed (its own code printed) |
+| `install [--version X.Y.Z]` | tag (default latest) | verify report, `rein install` and `rein doctor` output | 0 ok · 2 verify fail · 3 `rein doctor` failed · 4 runtime missing · 13 `rein install` failed (its own code printed) |
 | `update [--yes]` | — | available version + notes, then install | as install · 10 already current · 11 offline |
 | `rollback` | — | restored version (code only — says operator data is untouched), `rein install` and `rein doctor` output | 0 · 3 · 13 as install · 12 no snapshot |
-| `doctor [--json]` | — | passthrough of `rein doctor [--json]`, stdout untouched | rein's exit code |
+| `doctor [--json]` | — | passthrough of `rein doctor [--json]`, stdout untouched | rein's exit code · 14 `rein doctor` could not be started or ended without an exit code (never 1 — E-20) |
 | `profiles list` | — | table of Profile | 0 |
-| `profiles apply [--profile NAME] [--enable LIST\|all] [--disable LIST] [--undo]` | — | per-profile diff of allowed keys, then write; `--enable/--disable` shell out to `claude plugin …` (D-005) | 0 · 4 `claude` missing · 5 parse error · 6 forbidden key attempted (bug) · 7 `claude plugin` failed |
-| `launch` (Windows) | project dir | opens terminal into tmux | 0 · 20 WSL absent and install declined |
+| `profiles apply [--profile NAME]… [--enable LIST\|all] [--disable LIST\|all] [--undo] [--dry-run]` | `--profile` repeatable (default: every profile) | per-profile diff of allowed keys, then write; `--enable/--disable` shell out to `claude plugin …` (D-005); `--dry-run` prints the diff, writes nothing and runs no `claude` command | 0 · 4 `claude` missing · 5 parse error · 7 `claude plugin` failed |
+| `launch [DIR]` (Windows; DIR default `.`) | project dir | opens terminal into tmux | 0 · 4 no `rein-app` inside the WSL distro · 20 WSL absent and install declined |
+**All commands (D-016):** `--home DIR` is a global flag (default `$HOME`; must be absolute).
+Exit **1** = refused before any write, or any other error — held lock, owner mismatch,
+symlinked home / mirrored dir / intermediate component, `Conflict`, no absolute home,
+download-directory failure, `launch` off Windows, a profiles I/O error; the message names the
+path or cause. Exit **64** = usage error (unknown command or flag; E-20) — never 2, which
+means a release failed verification. For `doctor`, 1 is rein's own code (the JSON document
+with status `fail`); the app's own failures there are 14. Exit 6 is retired and never
+reused: a forbidden settings key cannot be written by any code path that compiles.
 Library seams for phase 2: `rein_release::{fetch, verify, install}`, `rein_profiles::{enumerate, plan, apply}`,
 each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them without a second code path.
 
@@ -468,6 +479,15 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - Operator docs (E-18): every command, flag and exit code in `docs/operator-guide.md`
   matches the §API table and `rein-app --help` / `<command> --help` output; no statement
   claims a published release, a download URL or a key.
+- Exit codes (E-20): with a stubbed `Process`, `doctor` and `doctor --json` return 14 when
+  rein is not started and when it ends without a code, and rein's 0 / 1 / other codes
+  unchanged; an unknown subcommand and an unknown flag exit 64 with usage on stderr;
+  `--help` and `--version` exit 0.
+- License files (E-21): the host-target dist archive lists `LICENSE` and `NOTICE`; a locally
+  built `.deb` (when `cargo-deb` is available; otherwise by its asset list) installs both
+  under `/usr/share/doc/rein-app/`; the `.msi` source (`wix/main.wxs`) installs both beside
+  the binary — the `.msi` itself stays unexercised until a tag and is listed as such in
+  `.ai/DEVOPS.md`.
 - Release rehearsal (E-19): `dist plan` succeeds for every configured target; a local
   `dist build` for the host target yields an archive whose binary runs `--version` and
   which carries `LICENSE` and `NOTICE`; nothing is tagged, pushed or published; the result
@@ -542,6 +562,12 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   `.ai/DEVOPS.md`. No tag, no push, no workflow edit — a workflow defect found is reported
   to the Architect (a fix is its own task behind `skill: ci_gate`). §Test Plan "Release
   rehearsal".
+- **E-20** (T2) CLI exit codes that collide (D-016): `doctor` exits 14, not 1, when
+  `rein doctor` cannot be started or ends without an exit code; a usage error exits 64, not
+  clap's 2 (`--help` / `--version` stay 0). §API. Before E-18 is finished.
+- **E-21** (T2) Ship `LICENSE` and `NOTICE` in every release artifact (E-19 finding 1,
+  Apache-2.0 §4(d)): dist archives, `.msi`, `.deb`. `skill: ci_gate` first if a workflow file
+  changes. §Test Plan "License files".
 - **E-11** (T3) Make the owner guard unskippable: `owner_guard` returns a proof value with no
   public constructor, borrowed from the `InstallLock`; `install_tree_locked`,
   `install_tree_with_faults` and rollback's lock-held writer take it; `compile_fail` doctest;
