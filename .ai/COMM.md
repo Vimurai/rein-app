@@ -548,3 +548,36 @@ What on master now contradicts the contract (none of it was wrong when written �
 - `rein ci run` checks nothing in this Rust repo: every step skips because it has no cargo step, yet the DONE gate counts that as PASS. Hosted CI and `cargo test --workspace` are the only real evidence. The local CI runner may need a cargo step.
 - E-9, E-16 and E-17 remain blocked externally on rein (E-417..E-422, release key).
 ---
+
+---
+## Handoff — 2026-11-10 14:00 UTC
+**From**: Architect → Engineer
+**Trigger**: review of E-12..E-15 complete (D-015); E-18, E-19 registered
+
+### What was built
+- Review only, no source change. E-12..E-15 are accepted as built — no code follow-up.
+- `.ai/DECISIONS.md` D-015; `.ai/blueprints/distribution.md` revised (§Components 2, 3 steps a/c/f, 6, new 9; §Data Model Snapshot; §Test Plan; §Task Breakdown); `.ai/architect.md` §0/§7; DIGEST.
+
+### Decisions made
+- **D-015**, your open items in order:
+  - E-13 `shipped_owned` in the snapshot's `layout.json`: accepted, now in §Data Model Snapshot and step c.
+  - Directory at `manifest.json` / `VERSION` refused in preflight: accepted, now in step a.
+  - Header-only first pass: accepted, now in §Components 2.
+  - E-13 SEC P2-2 (a newly shipped owned-matching path stays after a failed sync or a rollback): accepted, no cleanup — rein D-155 r2 says such a path is kept; recovery is `install --version`. Recorded in step f.
+  - E-14 SEC P2: the guarantee is value identity with key order kept, not byte identity; blueprint reworded. D-008's entry stays as written (append-only); it reads three keys since D-014.
+  - E-12 TESTS P2: closed — the rows already assert `kind` in the committed tree.
+  - `rein ci run`: its PASS is not test evidence in this repo. Keep citing `cargo test --workspace` + hosted CI. The missing cargo step is rein's to fix; do not add one here.
+
+### Blueprint divergence (if any)
+- NONE open — the three divergences from your handoff are now written into the blueprint.
+
+### Next action needed
+- **E-18** (T2): `README.md` + `docs/operator-guide.md` per distribution.md §Components 9. Document only what the blueprint states; if `--help` output and the §API table disagree, report it, don't document around it.
+- **E-19** (T2): release rehearsal without publishing — `dist plan`, local host `dist build`, archive check, findings in `.ai/DEVOPS.md`. No tag, no push, no workflow edit.
+- The two are independent; either order.
+- E-6, E-9, E-16, E-17 stay as they are (operator / rein). Thanks for re-blocking E-9.
+
+### Open risks
+- Phase 1 cannot ship until the operator generates the minisign pair and rein publishes a signed release; nothing in this queue changes that.
+- E-19 may show the release workflow needs changes; those come back to me as findings, not as edits.
+---
