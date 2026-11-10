@@ -297,6 +297,25 @@ const CASES: &[Case] = &[
         build: |k| shipping(k, "secrets/token"),
         expect: |e| matches!(e, VerifyError::OutsideLayout(p) if p == "secrets/token"),
     },
+    // Path alphabet and case rule, rein D-155 addendum 3 (D-020, E-26).
+    Case {
+        label: "two `files` paths differing only by case",
+        build: |k| shipping(k, "shared/Locate.sh"),
+        expect: |e| {
+            matches!(e, VerifyError::ManifestInvalid(m)
+            if m.contains("'shared/locate.sh' and 'shared/Locate.sh'"))
+        },
+    },
+    Case {
+        label: "a `files` path colliding by case with another's directory",
+        build: |k| shipping(k, "MCP/x.json"),
+        expect: |e| matches!(e, VerifyError::ManifestInvalid(m) if m.contains("'mcp' and 'MCP'")),
+    },
+    Case {
+        label: "a non-ASCII `files` path",
+        build: |k| shipping(k, "shared/r\u{e9}in.sh"),
+        expect: |e| matches!(e, VerifyError::ManifestInvalid(m) if m.contains("printable ASCII")),
+    },
     Case {
         label: "legacy (non-prehashed) signature",
         build: |k| {

@@ -3,6 +3,9 @@
 //! A release path is relative to the Rein home, uses `/`, and never escapes it
 //! (rein D-153 r2). Anything else is rejected; nothing is normalised.
 
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+
 /// Check that `p` is a safe release path: non-empty, relative, `/`-separated, with no
 /// empty, `.` or `..` segment, no backslash, no `:` (Windows drive/ADS) and no NUL.
 pub fn check_rel_path(p: &str) -> Result<(), String> {
@@ -25,9 +28,98 @@ pub fn check_rel_path(p: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Check that `p` is printable ASCII, bytes 0x20–0x7E only (rein D-155 addendum 3, D-020).
+/// This keeps the case rule below to the 26 letters A–Z, the same fold in rein's Node and here.
+pub fn check_path_alphabet(p: &str) -> Result<(), String> {
+    if p.bytes().all(|b| (0x20..=0x7e).contains(&b)) {
+        Ok(())
+    } else {
+        Err(format!(
+            "path {p:?} has a byte outside printable ASCII (0x20-0x7E)"
+        ))
+    }
+}
+
+/// Refuse two paths that are equal after ASCII-lowercasing (A–Z only) but differ in bytes:
+/// on a case-insensitive filesystem one would overwrite the other (rein D-155 addendum 3,
+/// D-020). Every directory prefix of each path counts as a path, so `shared/Lib` collides
+/// with `shared/lib/x.mjs`. The first collision found is named, both paths in input order.
+///
+/// The paths are walked as a tree, one segment per step, so memory stays linear in the
+/// input: storing every lowercased prefix would be quadratic in one long path's length.
+pub fn check_case_collisions<'a>(paths: impl IntoIterator<Item = &'a str>) -> Result<(), String> {
+    // (parent node, lowercased segment) -> (child node, the first path seen there, the
+    // byte offset where that prefix ends in it).
+    let mut seen: HashMap<(usize, String), (usize, &'a str, usize)> = HashMap::new();
+    for path in paths {
+        let mut node = 0;
+        let mut start = 0;
+        for seg in path.split('/') {
+            let end = start + seg.len();
+            let next = seen.len() + 1;
+            match seen.entry((node, seg.to_ascii_lowercase())) {
+                Entry::Occupied(e) => {
+                    let (child, first, first_end) = *e.get();
+                    let theirs = &first[..first_end];
+                    if theirs[theirs.len() - seg.len()..] != *seg {
+                        return Err(format!("case collision: '{theirs}' and '{}'", &path[..end]));
+                    }
+                    node = child;
+                }
+                Entry::Vacant(e) => {
+                    e.insert((next, path, end));
+                    node = next;
+                }
+            }
+            start = end + 1;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::check_rel_path;
+    use super::{check_case_collisions, check_path_alphabet, check_rel_path};
+
+    #[test]
+    fn the_alphabet_is_printable_ascii() {
+        assert!(check_path_alphabet(" bin/~rein-A_z.0").is_ok());
+        for p in ["bin/r\u{e9}in", "bin/a\u{1}b", "bin/a\u{7f}b", "bin/a\tb"] {
+            let err = check_path_alphabet(p).unwrap_err();
+            assert!(err.contains(&format!("{p:?}")), "names the path: {err}");
+        }
+    }
+
+    #[test]
+    fn case_collisions_count_directory_prefixes_and_fold_ascii_only() {
+        let ok = |v: &[&str]| check_case_collisions(v.iter().copied());
+        assert!(ok(&["bin/rein", "shared/a.mjs", "shared/b.mjs", "bin"]).is_ok());
+        assert!(
+            ok(&["shared/x", "shared/x"]).is_ok(),
+            "equal bytes are not a collision"
+        );
+        for (paths, named) in [
+            (
+                &["shared/b.mjs", "shared/B.mjs"][..],
+                "'shared/b.mjs' and 'shared/B.mjs'",
+            ),
+            (
+                &["shared/lib/x.mjs", "shared/Lib"],
+                "'shared/lib' and 'shared/Lib'",
+            ),
+            (
+                &["shared/Lib/a.mjs", "shared/lib/b.mjs"],
+                "'shared/Lib' and 'shared/lib'",
+            ),
+            (&["Bin", "bin/rein"], "'Bin' and 'bin'"),
+        ] {
+            let err = ok(paths).unwrap_err();
+            assert!(err.contains(named), "{paths:?}: {err}");
+        }
+        // One very long path: linear, not quadratic, in memory (security_engineer P3).
+        let long = "a/".repeat(200_000) + "x";
+        assert!(ok(&[&long]).is_ok());
+    }
 
     #[test]
     fn accepts_plain_relative_paths() {

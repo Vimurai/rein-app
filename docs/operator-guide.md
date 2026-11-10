@@ -105,6 +105,7 @@ The first four rows exit **1** and write nothing. The message names the path inv
 | a directory where a file goes (or the reverse) | Something in the home has the wrong type for a release path, e.g. a directory named `VERSION`. | Move it aside, then re-run. |
 | exit 13 | `rein install` failed after the files were written. Its own message and exit code are printed. | Fix what rein reports, then re-run `rein-app install`. If rein reports a tree mismatch, `rein-app install --version <the installed version>` rewrites every shipped file. |
 | exit 2 | The release failed verification. Nothing was written to the home. | Do not work around it. A message ending "install a newer rein-app" means the release uses a signing key or manifest schema this rein-app does not know: update rein-app first. |
+| exit 2, `case collision: 'A' and 'B'` or a path "outside printable ASCII" | The release lists two paths that differ only by upper/lower case (a directory counts, so `shared/Lib` collides with `shared/lib/x.mjs`), or a path with a byte outside printable ASCII. On a case-insensitive filesystem one file would overwrite the other, so the release is refused on every OS. Nothing was written to the home. | rein's release tool refuses to build such a release, so report it to rein. Do not work around it. |
 
 ## Not supported
 

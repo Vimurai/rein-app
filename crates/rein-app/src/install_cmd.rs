@@ -231,7 +231,9 @@ pub(crate) mod support;
 
 #[cfg(test)]
 mod tests {
-    use super::support::{Release, TestKey, VERSION, serve};
+    use super::support::{
+        Listed, Release, TestKey, VERSION, entries_for, good_files, manifest_json, serve,
+    };
     use super::*;
     use crate::runner::Invocation;
     use rein_release::{HostPolicy, ReqwestHttp};
@@ -288,8 +290,18 @@ mod tests {
         home: &Path,
         run_uid: RunUid,
     ) -> u8 {
+        run_release(&Release::good(signer), trusted, rein, home, run_uid)
+    }
+
+    fn run_release(
+        release: &Release,
+        trusted: &TestKey,
+        rein: &FakeRein,
+        home: &Path,
+        run_uid: RunUid,
+    ) -> u8 {
         let source = ReleaseSource {
-            base_url: serve(Release::good(signer).routes()),
+            base_url: serve(release.routes()),
         };
         let http = ReqwestHttp::new(HostPolicy::loopback_only()).unwrap();
         let verifier = trusted.verifier();
@@ -343,6 +355,42 @@ mod tests {
         let rein = FakeRein::new(&[]);
         assert_eq!(run_with(&signer, &other, &rein, home.path()), EXIT_VERIFY);
         assert!(leftovers(home.path()).is_empty());
+        assert!(rein.ran.borrow().is_empty());
+    }
+
+    /// D-020 at the process boundary, extending `a_bad_signature_exits_2_and_writes_nothing`:
+    /// a correctly signed release whose paths collide by case is a verification failure.
+    #[test]
+    fn a_case_colliding_release_exits_2_with_the_home_untouched() {
+        let home = tempfile::tempdir().unwrap();
+        let live = home.path().join(".rein");
+        fs::create_dir_all(live.join("shared")).unwrap();
+        fs::write(live.join("VERSION"), "0.4.0\n").unwrap();
+        let key = TestKey::generate();
+        let mut files = good_files();
+        files.push(Listed {
+            path: "shared/Locate.sh",
+            bytes: b"x".to_vec(),
+            mode: "0644",
+        });
+        let manifest = manifest_json(&key.key_id(), &files);
+        let release = Release::signed(&key, &entries_for(&files, &manifest), manifest);
+        let rein = FakeRein::new(&[]);
+        let code = run_release(&release, &key, &rein, home.path(), InstallLock::run_uid);
+        assert_eq!(code, EXIT_VERIFY);
+        assert_eq!(
+            leftovers(home.path()),
+            [".rein"],
+            "no lock, fetch or staging dir left"
+        );
+        assert_eq!(fs::read_to_string(live.join("VERSION")).unwrap(), "0.4.0\n");
+        let mut tree: Vec<_> = fs::read_dir(&live)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        tree.sort();
+        assert_eq!(tree, ["VERSION", "shared"]);
+        assert_eq!(fs::read_dir(live.join("shared")).unwrap().count(), 0);
         assert!(rein.ran.borrow().is_empty());
     }
 

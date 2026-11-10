@@ -13,7 +13,7 @@ use serde::Deserialize;
 
 use crate::error::VerifyError;
 use crate::matcher::OperatorOwnedMatcher;
-use crate::paths::check_rel_path;
+use crate::paths::{check_case_collisions, check_path_alphabet, check_rel_path};
 
 /// The only manifest schema this build understands.
 pub const SUPPORTED_SCHEMA: u64 = 1;
@@ -155,6 +155,11 @@ impl Manifest {
         let key_id = normalise_key_id(&raw.key_id)
             .ok_or_else(|| invalid(format!("key_id '{}' is not 16 hex digits", raw.key_id)))?;
 
+        // Path alphabet and case rule (rein D-155 addendum 3, D-020): here, not in
+        // `validate_layout`, so a snapshot's `layout.json` is not re-checked (D-020 r5).
+        for d in &raw.layout.mirrored {
+            check_path_alphabet(d).map_err(invalid)?;
+        }
         let layout = validate_layout(raw.layout).map_err(invalid)?;
         let matcher = OperatorOwnedMatcher::new(&layout.operator_owned).map_err(invalid)?;
 
@@ -162,6 +167,7 @@ impl Manifest {
         let mut total: u64 = 0;
         let mut files = Vec::with_capacity(raw.files.len());
         for f in raw.files {
+            check_path_alphabet(&f.path).map_err(invalid)?;
             check_rel_path(&f.path).map_err(invalid)?;
             if f.path == "manifest.json" {
                 return Err(invalid("'manifest.json' must not list itself".into()));
@@ -194,6 +200,14 @@ impl Manifest {
                 mode,
             });
         }
+        check_case_collisions(
+            layout
+                .mirrored
+                .iter()
+                .chain(files.iter().map(|f| &f.path))
+                .map(String::as_str),
+        )
+        .map_err(invalid)?;
         if total > MAX_TOTAL_BYTES {
             return Err(invalid(format!(
                 "listed files total {total} bytes (cap {MAX_TOTAL_BYTES})"
@@ -307,6 +321,41 @@ mod tests {
             );
         }
         let outside = BIN.replace("bin/rein", "evil/rein");
+        // Path alphabet and case rule (D-020), extending the cases above: each names its path.
+        let lib = |p: &str| BIN.replace("bin/rein", p);
+        for (files, named) in [
+            (lib(r"bin/r\u00e9in"), "bin/r\u{e9}in"),
+            (lib(r"bin/a\u0001b"), r"bin/a\u{1}b"),
+            (
+                format!("{BIN},{}", lib("bin/Rein")),
+                "'bin/rein' and 'bin/Rein'",
+            ),
+            (
+                format!("{},{}", lib("hooks/lib/x.sh"), lib("hooks/Lib")),
+                "'hooks/lib' and 'hooks/Lib'",
+            ),
+        ] {
+            let err = Manifest::parse(doc(1, &files).as_bytes()).unwrap_err();
+            assert!(
+                matches!(&err, VerifyError::ManifestInvalid(m) if m.contains(named)),
+                "{files}: {err}"
+            );
+        }
+        let mirrored = doc(1, BIN).replace(r#"["bin","hooks"]"#, r#"["bin","hooks","Bin"]"#);
+        let err = Manifest::parse(mirrored.as_bytes()).unwrap_err();
+        assert!(err.to_string().contains("'bin' and 'Bin'"), "{err}");
+        let mirrored = doc(1, BIN).replace(r#"["bin","hooks"]"#, r#"["bin","hooks","h\u0001"]"#);
+        let err = Manifest::parse(mirrored.as_bytes()).unwrap_err();
+        assert!(
+            err.to_string().contains("printable ASCII"),
+            "a mirrored name: {err}"
+        );
+        let distinct = format!("{BIN},{}", lib("hooks/rein"));
+        assert!(
+            Manifest::parse(doc(1, &distinct).as_bytes()).is_ok(),
+            "distinct paths pass"
+        );
+
         assert!(matches!(
             Manifest::parse(doc(1, &outside).as_bytes()),
             Err(VerifyError::OutsideLayout(_))
