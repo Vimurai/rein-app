@@ -515,3 +515,36 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - Nothing is open with rein. rein has still built none of D-155 (its E-417..E-422), so our fixtures are ours until E-9 and E-17 unblock.
 ---
+
+---
+## Handoff — 2026-11-10 13:54 UTC
+**From**: Engineer → Architect
+**Trigger**: E-12, E-13, E-14, E-15 complete (rein D-155 / D-014 corrections)
+
+### What was built
+- **E-12** (5dad595): strict tarball reader — `crates/rein-release/src/{verify,manifest,error}.rs`, tests/support, verify_release. A header-only first pass refuses before any write. Rules: `manifest.json` comes first; members are regular files with ustar typeflag '0' only; names are unique and safe; no `VERSION` member; only zero padding after end-of-archive and nothing after the gzip stream. Pass 2 re-counts what it writes, and the member set must equal `files`. `files` paths must sit under `layout.mirrored`. Signatures stay prehashed-only. One refused fixture per rule.
+- **E-14** (fbbc951): `AllowedKey::Hooks` removed, leaving three keys. `profiles apply` neither reads nor copies `hooks`, and `apply` and `--undo` leave `hooks` as they found it. compile_fail doctest added.
+- **E-13** (2085e51): `crates/rein-release/src/{sync,snapshot,layout,rollback}.rs`, plus the conformance fixture reshaped to three columns. A shipped path wins over `operator_owned`. The snapshot holds the shipped live files and `manifest.json`. `manifest.json` is written after `hooks` and before `VERSION`, and the manifest/VERSION pair stays consistent at every fault point k.
+- **E-15** (8d4837d): `crates/rein-app/src/{install_cmd,update_cmd,runner,main}.rs`. `rollback` runs `rein install` and then `rein doctor` under the lock. A failed `rein install` is exit 13 on install, update and rollback, with rein's own code printed. `doctor --json` passes stdout and exit code through.
+- Tier-3 stamps (ARCH/TESTS/SEC) are recorded for E-12/13/14 and ALIGN_PASS for E-15. Hosted CI is green on 8d4837d on all three OSes.
+
+### Decisions made
+- None of my own. All of this implements D-014 and its addendum.
+
+### Blueprint divergence (if any)
+1. **E-13 `shipped_owned`**: the snapshot's `layout.json` records the shipped paths that match an `operator_owned` pattern. `snapshot::load` accepts a tree path matching an owned pattern only if it is listed there. This narrows restore under D-013 snapshot trust. ARCH P2 asks to record it in distribution.md §Data Model Snapshot.
+2. **E-13**: a directory found at `manifest.json` or `VERSION` is refused before any write. This is not in the blueprint.
+3. **E-12**: the "before any byte is written" requirement is met by a header-only first pass, which is stricter than required and stays in scope.
+
+### Next action needed
+- Review E-12..E-15 and rule on the open P2s:
+  - **E-13 SEC P2-2**: when a failing release newly ships a path that matches an owned pattern, failure restore leaves the file in place, because owned paths are never deleted. Accept it, or rule on cleanup.
+  - **E-14 SEC P2**: the spec says `hooks` stay byte-identical, but the settings rewrite keeps them value-identical (a pre-existing JSON re-serialisation). D-008 text still mentions `hooks` and is stale.
+  - **E-12 TESTS P2**: the dir/symlink/hardlink/pax rows match `UnsupportedEntry` without asserting `kind`.
+- Then decide what's next: E-6 needs the operator (`HOMEBREW_TAP_TOKEN` plus the minisign pair for the first tag); operator docs; or the Phase 2 desktop.md.
+- E-9 was auto-unblocked when E-13 closed. I set it back to BLOCKED, since it still waits on rein's `rein release manifest`.
+
+### Open risks
+- `rein ci run` checks nothing in this Rust repo: every step skips because it has no cargo step, yet the DONE gate counts that as PASS. Hosted CI and `cargo test --workspace` are the only real evidence. The local CI runner may need a cargo step.
+- E-9, E-16 and E-17 remain blocked externally on rein (E-417..E-422, release key).
+---
