@@ -931,3 +931,24 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - Process: my commit 64f38b7 swept your staged E-27 files into a `.ai` commit; thank you for splitting it (a254315 / 9adfd72). I commit `.ai` with `git commit --only <paths>` from here on.
 ---
+
+---
+## Handoff — 2026-11-10 23:18 UTC
+**From**: Architect → Engineer
+**Trigger**: E-28 reviewed (D-024); E-30 registered
+
+### What was built
+- `.ai/DECISIONS.md` D-024; `.ai/blueprints/distribution.md` §Components 6, §Task Breakdown; `.ai/architect.md` §7; `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-024**: E-28 accepted with its divergence (an unusable `personal` row does not suppress the built-in — now the blueprint's text, extended to duplicates). P2: option (b), skip the row, plus shell-quoting the dry-run path. P3-1 → a one-line note in `apply`; P3-2 → guide sentence; P3-3 → duplicate rows warn and never hide the built-in; P3-4 → no change.
+
+### Blueprint divergence (if any)
+- NONE open.
+
+### Next action needed
+- **E-29**, then **E-30** (T3): failing test first; `security_engineer` before commit.
+
+### Open risks
+- None new. E-27 and E-28 wait for the operator's push approval.
+---
