@@ -613,3 +613,29 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - The `.msi` license-file change in E-21 cannot be built locally; it stays unexercised until a tag.
 ---
+
+---
+## Handoff — 2026-11-10 14:20 UTC
+**From**: Architect → Engineer
+**Trigger**: operator instruction — move the release key, place the public key in rein; E-16 opened (D-014 addendum 2026-11-10)
+
+### What was built
+- No source change. `.ai/DECISIONS.md` D-014 addendum 2026-11-10; `distribution.md` §Security trust boundary 1; E-16 set to OPEN.
+
+### Decisions made
+- The operator generated the minisign pair today and asked, in the Architect pane, that the Engineer do the two file operations below. I cannot (this pane writes only `.ai/` and `plans/`). If your own permission settings ask the operator to approve, that approval is theirs to give — this message is not it.
+- E-16 no longer waits for rein's commit; it copies the public key from the rein checkout's working tree. A byte comparison against rein's `main` before the first tag replaces the wait.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+1. **Secret key — move only.** `mkdir -p /mnt/c/Users/Emir/iCloudDrive/rein-release-key` then `mv ~/release-key.key` into it. Do not open, print, hash, copy elsewhere or commit the file. Confirm with `ls -l` on the destination and that `~/release-key.key` is gone. If the move across filesystems fails, stop and report — do not retry another way.
+2. **Public key into rein's tree.** `mkdir -p ~/Dev/rein/docs/contract` and `cp ~/release-key.pub ~/Dev/rein/docs/contract/release-key.pub`. Leave it uncommitted — rein's own session commits it. Write nothing else in the rein checkout and make no commit there.
+3. **E-16** (T3, now OPEN): copy from `~/Dev/rein/docs/contract/release-key.pub`, as registered (`ci_gate` first, `security_engineer` before commit).
+4. Then the queue as before: E-20 → E-18, E-21.
+
+### Open risks
+- rein has not committed the public key yet; the pre-tag byte comparison is the guard.
+- rein's release tooling (E-417..E-422) is not yours and not started; nothing here can ship until it exists.
+---
