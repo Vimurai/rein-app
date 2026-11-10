@@ -1,5 +1,9 @@
-# D-017 (E-22): the release trust root and everything that builds or guards a release need
-# the operator's review. Binding only while branch protection requires code-owner review.
-/docs/contract/   @Vimurai
-/.gitattributes   @Vimurai
-/.github/         @Vimurai
+# D-017 / D-018 (E-22, E-24): the release trust root and everything that builds, guards or
+# consumes it need the operator's review. Advisory while the repository has one human
+# account; binding only once branch protection requires code-owner review.
+/docs/contract/         @Vimurai
+/.gitattributes         @Vimurai
+/.github/               @Vimurai
+/crates/rein-release/   @Vimurai
+/Cargo.toml             @Vimurai
+/Cargo.lock             @Vimurai
