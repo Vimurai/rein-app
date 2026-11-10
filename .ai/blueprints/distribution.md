@@ -48,7 +48,14 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    every directory prefix of a path counts as a path (`shared/Lib` beside
    `shared/lib/x.mjs` collides). Either is a verification failure (exit 2) naming the path
    or the two paths; nothing is staged or written. The tarball member set equals `files`,
-   so members need no second check. Windows-reserved names are not ruled (rein has not);
+   so members need no second check. **Case-variant of an owned path (D-023, E-29):** a
+   `files` path, or a directory prefix of one, that matches a `layout.operator_owned`
+   pattern only after both are ASCII-lowercased (it does not match as written) is refused
+   in the same place — on a case-insensitive home it would write release bytes over
+   operator data. A path that matches a pattern exactly as written is still allowed
+   (shipped-path-wins, D-015). **Error text (D-023):** every string taken from a manifest
+   — paths, patterns, `version`, `min_node`, `key_id` — is escaped before it is printed.
+   Windows-reserved names are not ruled (rein has not);
    (f) apply `mode` from the manifest (`bin/rein`, `hooks/*.sh` are `0755`).
    **Member rules (rein D-155 r1, binding — a strict reader that accepts only what rein's
    writer emits):** the FIRST member is `manifest.json`; every other member is a regular file
@@ -120,6 +127,12 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    b. *Plan (pure)*: `ship` = every manifest file (the verifier has already proven each is
       under a mirrored dir); `prune` = every
       file or symlink under a live mirrored dir that is neither in `ship` nor operator-owned.
+      **Owned matching folds ASCII case for protection (D-023, E-29):** a live path that
+      matches an `operator_owned` pattern after ASCII-lowercasing both is treated as owned
+      — never opened, snapshotted or pruned — on every filesystem. (On a case-insensitive
+      home it is the operator's file under another spelling; on a case-sensitive one the
+      cost is a stray file left alone.) A live symlink whose name is a case variant of a
+      `ship` path is a preflight `Conflict` naming it, not an `EEXIST` from the snapshot.
    c. *Snapshot*: copy the non-owned content of the live mirrored dirs **plus the live file at
       every `ship` path** (so a shipped path that a pattern also matches can be restored) to
       `$HOME/.rein.prev-<oldver>/tree/`, with `VERSION`, `layout.json` (the `mirrored` +
@@ -146,7 +159,9 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
       to write — removing it after the write would delete the shipped file and still exit 0.
       Such entries are removed **before** that directory's writes; all other prunes stay
       after. The result is the same on both filesystem kinds: the old name is gone and the
-      new one is present. A directory that keeps its old-case name on a case-insensitive
+      new one is present. An **empty** case-variant directory is also removed before the
+      writes, so the new spelling lands (as built E-27, ratified D-023). A directory that
+      still holds unshipped or owned content keeps its old-case name on a case-insensitive
       home is accepted. The rule lives in the one `plan`/`apply` path, so update, rollback
       and failure-restore all get it. **Post-sync check:** after the last directory, every
       `ship` path must exist as a regular file of the listed size; a miss is a sync failure
@@ -611,6 +626,9 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - E-22 (guard script, tag gate, `CODEOWNERS`) is DONE and E-23 needed no change (already
   ASCII since 6bf6244); both reviewed in D-018.
 - E-24 and E-25 are DONE, reviewed in D-019. E-26 is DONE, reviewed in D-021.
+- **E-29** (T3) Refuse a shipped path that is a case variant of an owned pattern; owned
+  matching folds ASCII case for protection; symlink case-variant is a preflight Conflict;
+  all manifest-derived error text escaped (§Components 2, §Components 3 step b; D-023).
 - **E-28** (T3) Profile enumeration: accounts rows before the built-in `personal`, only
   `default` reserved, terminal-safety name check, no false warning (§Components 6; D-022).
 - **E-27** (T3) Sync removes case-variant prune entries before the writes and checks every

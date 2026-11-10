@@ -432,6 +432,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-10T23:02:40.072Z"
+    },
+    {
+      "id": "E-29",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 3,
+      "description": "Close the operator-data loss on a case-insensitive home found in the E-27 security review, per .ai/blueprints/distribution.md §Components 2 \"Case-variant of an owned path\" / \"Error text\" and §Components 3 step b \"Owned matching folds ASCII case for protection\", and D-023: (1) in `Manifest::parse`, refuse a `files` path, or a directory prefix of one, that matches a `layout.operator_owned` pattern only after ASCII-lowercasing both (a path matching a pattern exactly as written stays allowed — shipped-path-wins); verification failure, exit 2, naming the path and the pattern; (2) make the owned decision used by plan, snapshot and prune fold ASCII case, so a live path that is a case variant of an owned pattern is never opened, snapshotted or pruned; the exact-match rule for shipped-path-wins is unchanged; (3) report a live symlink whose name is a case variant of a `ship` path as a preflight `Conflict` naming it; (4) escape every manifest-derived string in error text — `version`, `min_node`, `key_id`, and the path in `check_rel_path`. Start with failing tests (`skill: bug-reproducer`): release ships `shared/Toolchain.sh` with pattern `shared/toolchain.sh` → exit 2, home untouched; an operator-created `shared/Toolchain.sh` beside pattern `shared/toolchain.sh` survives an update and a rollback byte-identical; a glob pattern case; the symlink Conflict; a manifest `version` with a control byte prints no raw control byte. Run `security_engineer` before commit. Acceptance: `cargo test --workspace` and hosted CI green on three OSes; existing shipped-path-wins and layout tests unchanged; the operator guide's refusal list names the new refusal.",
+      "created_at": "2026-11-10T23:09:54.233Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-10T23:09:54.234Z"
     }
   ],
   "stamps": [
@@ -1099,6 +1113,33 @@
       "timestamp": "2026-11-10T23:02:10.433Z",
       "summary": "No sovereignty violations (no architect.md/BRIEF/blueprints in staged diff); D-021 rulings 2-4 and blueprint step d implemented in the single plan/apply path; cargo test --workspace green. P2: empty case-variant dir removal goes beyond the blueprint, which accepts the old-case name — needs Architect ratification.",
       "sha": "c4f293cdab542cf8c39f9b656084b89acee9ef34",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-28",
+      "timestamp": "2026-11-10T23:09:40.560Z",
+      "summary": "No sovereignty violations; staged diff (profile.rs, apply_and_undo.rs, operator-guide.md) matches D-022 and distribution.md §6 order, default-only reservation, terminal-safety check, no warning for listed rows. P2 notes: unusable personal row (no/relative config_dir) is dropped in account_rows before the suppress flag, so built-in is still listed (untested; guide says 'no account is named personal').",
+      "sha": "9adfd726d86752878f856839dd84910976d3d2fc",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "critic_security",
+      "task_id": "E-28",
+      "timestamp": "2026-11-10T23:09:44.033Z",
+      "summary": "No P0/P1; default reserved, names 0x21-0x7E and escaped in warnings, names never used in paths; P3 leading-dash names may need --profile=NAME",
+      "sha": "9adfd726d86752878f856839dd84910976d3d2fc",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-28",
+      "timestamp": "2026-11-10T23:09:47.363Z",
+      "summary": "[TESTS_PASSED] cargo test --workspace 132/132, 0 failed; all 5 required E-28 behaviours covered (personal row at ~/.claude-personal, row elsewhere, no row, control-byte name, valid grammar), tests name the test they extend, negative cases present",
+      "sha": "9adfd726d86752878f856839dd84910976d3d2fc",
       "author": "emirkovacevic@protonmail.com"
     }
   ],

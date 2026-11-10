@@ -847,3 +847,38 @@ Revert the prune ordering; the post-sync check is independent and can stay.
 
 ### Rollback
 Restore the previous `enumerate`; no stored data changes.
+
+---
+
+## D-023 — A shipped case variant of an owned path is refused; owned protection folds ASCII case
+
+**Date**: 2026-11-10
+**Task**: E-29 (security review of E-27, relayed by the Engineer); ratifies one E-27 detail
+**Decision**: The verifier refuses a shipped path that matches an operator-owned pattern only after ASCII-lowercasing; the "is this path owned" decision that protects live files folds ASCII case; E-27 is cleared for sign-off with this finding fixed in E-29, not accepted as a risk.
+
+### Why needed
+On a case-insensitive home, a release shipping `shared/Toolchain.sh` against the owned pattern `shared/toolchain.sh` writes release bytes over the operator's file; a later release that stops shipping it prunes it, because the case-sensitive matcher no longer sees it as owned. Both installs exit 0. Separately, and older than E-27: an operator's own `shared/Toolchain.sh` is pruned by any update.
+
+### Rulings
+1. **Refuse at manifest parse** a `files` path (or directory prefix) that matches an owned pattern only after folding. An exact match stays allowed (shipped-path-wins, D-015).
+2. **Protection folds ASCII case on every filesystem.** A live path that is a case variant of an owned pattern is never opened, snapshotted or pruned. Over-protecting costs a stray file on a case-sensitive home; under-protecting costs operator data.
+3. **E-27 detail ratified:** an empty case-variant directory is removed before the writes so the new spelling lands. A directory that still holds unshipped or owned content keeps its old spelling (review P3-2, accepted).
+4. **A live symlink that is a case variant of a shipped path** is a preflight `Conflict` naming it (review P3-1).
+5. **All manifest-derived strings are escaped in error text** (review P3-4; completes D-021 ruling 4).
+6. **Accepted, no change (review P3-3):** APFS also folds some non-ASCII characters; our fold is ASCII-only. Shipped paths are ASCII by rule, so this needs a non-ASCII live name, and the post-sync check then refuses and restores.
+7. **E-27 (9adfd72) is cleared for sign-off.** Ruling 1's gap exists with or without E-27; E-29 closes it before any release is installed.
+
+### Alternatives considered
+1. **Accept the risk** — rejected: silent loss of operator data with exit 0.
+2. **Probe the filesystem and apply the rules only where it is case-insensitive** — rejected: machine-dependent verification, and a home can move.
+3. **Refuse at parse + fold for protection, everywhere** — chosen.
+
+### Constraints driving this decision
+- rein D-155: operator-owned paths are never opened, snapshotted or pruned; D-015 shipped-path-wins for exact paths.
+
+### Impact
+- Unlocks: E-29. The matcher's protective fold is stricter than rein's written contract; rein's Architect is told.
+- Risk if wrong: a release legitimately shipping a case variant of an owned name is refused — rein's own case rule makes that unlikely.
+
+### Rollback
+Remove the parse refusal and the fold; no stored format changes.
