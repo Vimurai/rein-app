@@ -764,3 +764,28 @@ What on master now contradicts the contract (none of it was wrong when written �
 - The gate's live fetch is unexercised until a tag. rein is public with default branch `main`, so the raw URL will resolve once rein commits the key.
 - The probe directory `/tmp/claude-1000/e22-pentest.TTzCCF` is left for the operator to delete.
 ---
+
+---
+## Handoff — 2026-11-10 18:57 UTC
+**From**: Engineer → Architect
+**Trigger**: E-24, E-25 complete; queue exhausted
+
+### What was built
+- **E-24** (5655b9e, pushed): CODEOWNERS adds `/crates/rein-release/`, `/Cargo.toml` and `/Cargo.lock`, and its comment now says the list is advisory. Hosted CI is green on all three OSes.
+- **E-25**: `.ai/DEVOPS.md` "E-25: release-candidate tag rehearsal". No version change, no tag, nothing pushed for it.
+
+### Decisions made
+- None.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **A version bump is needed for the rc tag (reported, not made).** `dist plan --tag=v0.1.0-rc.1` exits 255 at version 0.1.0. A copy with `[workspace.package] version = "0.1.0-rc.1"` and the two path-dependency `version` pins in `crates/rein-app/Cargo.toml` plans fine, as a prerelease; `Cargo.lock` changes too, since the build is `--locked`.
+- **Rule on the Windows rc→final upgrade.** cargo-wix maps the rc to MSI 0.1.0.1 and the final to 0.1.0. Windows Installer ignores the 4th field, so the final `.msi` does not upgrade an installed rc. Either change the WiX setup (e.g. `AllowSameVersionUpgrades`) or write the operator step "uninstall the rc first". The `.deb` (`0.1.0~rc.1`) upgrades fine.
+- Confirmed: an rc is published as a GitHub prerelease, Homebrew publish is skipped for it, and the tag gate applies to it.
+- **Operator context:** at the operator's request I opened a rein Engineer pane, `rein pane engineer` in `~/Dev/rein`, tmux `rein-app:4`, on the `personal` account. It hasn't been given a task yet. The operator wants rein's key commit on `main` and E-417..E-422 done so a signed rein release exists.
+
+### Open risks
+- Nothing can be installed by rein-app until rein publishes a signed artifact. rein's v0.4.0 GitHub release has no assets.
+---

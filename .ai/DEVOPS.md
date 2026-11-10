@@ -220,3 +220,37 @@ Rollback: revert the three files; the `.msi` loses its license files, and `allow
   - Re-apply note: `Cargo.toml` (above `allow-dirty`) now lists both hand edits in `release.yml` that `dist generate` would drop: the `./.github` path fix and the tag-gate step.
 - **Open, for the operator (not code):** a tag ruleset, so that tags on commits from before E-22 cannot run the ungated `release.yml`; and branch protection requiring code-owner review, so CODEOWNERS binds. Also, `security_engineer` left a probe directory, `/tmp/claude-1000/e22-pentest.TTzCCF` (copies of the scripts and the public key only), which the safe-exec hook would not let it delete.
 - **Hosted CI 42875792979 (6450f22): windows-latest failed one corpus case.** "CRLF line endings" was accepted (exit 0) on Git Bash, while ubuntu and macos refused it. Cause: Git Bash's command substitution drops the CR, so `COMMENT=$(sed -n 1p …)` looked clean. The binary would still refuse such a key (fails closed), but the guard must agree on every OS. Fix: a raw-byte CR check (`tr -d '\r' | cmp`, the same technique as the NUL check, which passes on Windows), plus a corpus row with a CR in the middle of the key line. The symlink case is a recorded SKIP on windows-latest, as designed.
+
+### 2026-11-10 — E-25: release-candidate tag rehearsal (no version changed, no tag, nothing pushed; D-018 ruling 8)
+
+cargo-dist 0.34.0, workspace version 0.1.0, HEAD at b93eae7 + `.ai/`.
+
+| Command | Result |
+|---|---|
+| `dist plan --tag=v0.1.0` | exit 0: announces `v0.1.0`, `announcement_is_prerelease: false`, `publish_prereleases: false`, 18 artifacts (five targets plus installers and formula). |
+| `dist plan --tag=v0.1.0-rc.1` | **exit 255: "This workspace doesn't have anything for dist to Release! … --tag=v0.1.0 will Announce: rein-app".** dist only releases a tag that equals the package version. |
+| Same, in a throwaway copy (`git archive HEAD` in the scratchpad) with the version set to `0.1.0-rc.1` | First `cargo metadata` fails: `rein-app` pins `rein-profiles`/`rein-release` at `version = "0.1.0"`, which a prerelease doesn't match. With those pins also set to `0.1.0-rc.1`: exit 0, announces `v0.1.0-rc.1`, `announcement_is_prerelease: true`, `publish_prereleases: false`. |
+
+**Answers**
+1. **The rc tag needs a version bump. Reported, not made.** Three manifest lines change: `[workspace.package] version`, and the two path-dependency `version`s in `crates/rein-app/Cargo.toml`. `Cargo.lock` changes in three entries too, and must be committed, because the release jobs build `--locked`.
+2. **GitHub prerelease: yes.** `host` passes `--prerelease` when `announcement_is_prerelease` (release.yml `PRERELEASE_FLAG`).
+3. **Homebrew publish: no.** `publish-homebrew-formula` runs only `if !announcement_is_prerelease || publish_prereleases`, and both are against it for an rc. So an rc needs no `HOMEBREW_TAP_TOKEN`; the final tag does.
+4. **Package versions for the rc** (checked in the copy): `.deb` → `0.1.0~rc.1-1` (sorts before `0.1.0-1`, so the final `.deb` upgrades it). `.msi` → cargo-wix 0.3.9 maps `0.1.0-rc.1` to ProductVersion `0.1.0.1` and the final to `0.1.0`. **Windows Installer ignores the 4th field when comparing, so the final `.msi` does not major-upgrade an installed rc `.msi`** (two entries, or a refusal). Uninstall the rc `.msi` before installing the final one, or the Architect rules on a WiX change, e.g. `AllowSameVersionUpgrades`.
+5. **The tag gate (E-22) runs for the rc tag too**, and fails until rein commits `docs/contract/release-key.pub` on `main`.
+
+**Operator sequence** (every step is the operator's; no agent tags or pushes):
+- Preconditions:
+  - rein's `main` carries `docs/contract/release-key.pub`, byte-identical to ours; the tag gate checks this.
+  - Hosted CI is green on the commit to tag.
+  - Recommended: a tag ruleset, and branch protection with code-owner review.
+- rc:
+  1. Bump the version: `[workspace.package] version = "0.1.0-rc.1"` and the two `version =` pins in `crates/rein-app/Cargo.toml`. Run `cargo update -w`, then `cargo test --workspace`. Commit `Cargo.toml`, `crates/rein-app/Cargo.toml` and `Cargo.lock`, push, and wait for green CI.
+  2. `dist plan --tag=v0.1.0-rc.1`, which must announce `v0.1.0-rc.1` as a prerelease.
+  3. `git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1`, then watch the `Release` workflow: tag gate → plan → builds (5 targets + 2 `.deb`) → host (GitHub prerelease). The Homebrew job is skipped.
+  4. Check the prerelease: archives carry LICENSE/NOTICE, the `.msi` installs, `.deb` contents, and `rein-app --version` prints `0.1.0-rc.1`.
+- Final:
+  1. Set `HOMEBREW_TAP_TOKEN`.
+  2. Set the version back to `0.1.0` in the same three places. Run `cargo update -w`, then `cargo test --workspace`; commit, push, and wait for green CI.
+  3. `dist plan --tag=v0.1.0`, which must announce `v0.1.0`, not a prerelease.
+  4. `git tag v0.1.0 && git push origin v0.1.0`. This runs the whole pipeline, including `publish-homebrew-formula` to `Vimurai/homebrew-tap`.
+  5. On Windows, uninstall the rc `.msi` first (see answer 4).
