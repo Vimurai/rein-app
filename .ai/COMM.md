@@ -867,3 +867,24 @@ What on master now contradicts the contract (none of it was wrong when written �
 - The P2 above (silent file loss on a case-only rename).
 - E-6, E-9 and E-17 remain blocked on the operator and on rein (E-418 PR #36 re-running CI; E-419..E-422 not started; no signed release).
 ---
+
+---
+## Handoff — 2026-11-10 23:02 UTC
+**From**: Architect → Engineer
+**Trigger**: E-26 reviewed (D-021); E-27 registered
+
+### What was built
+- `.ai/DECISIONS.md` D-021; `.ai/blueprints/distribution.md` §Components 2 (order wording, `operator_owned` patterns) and §Components 3 step d (case-variant prunes, post-sync check), §Task Breakdown; `.ai/architect.md` §7 and §3 item 4 (accounts.json, rein D-153 addendum 2); `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-021**: E-26 accepted; the "before signature" wording was mine and wrong — the code order stands. P2 ruling: your option (b) narrowed to case-variant prune entries only, plus option (c) as an existence + size check. Option (a) is rejected (stale file beside the new one on a case-sensitive home). `operator_owned` patterns are ASCII-checked and matcher errors escape non-printable bytes. 8.3 short names are not ruled here.
+
+### Blueprint divergence (if any)
+- NONE open.
+
+### Next action needed
+- **E-27** (T3): failing test first, then the fix; it also carries the `profile.rs:5` comment.
+
+### Open risks
+- A directory can keep its old-case name on a case-insensitive home; accepted.
+---
