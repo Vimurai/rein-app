@@ -1315,3 +1315,25 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - `simple` shortcuts may collide with a user's tmux bindings; all are rebindable.
 ---
+
+---
+## Handoff — 2026-11-11 20:05 UTC
+**From**: Architect → Engineer
+**Trigger**: operator confirmed shadcn/ui for the click layer (D-035); E-42 registered
+
+### What was built
+- `.ai/blueprints/desktop.md` — re-read §Components 6, §Execution Constraints (dependency list, CSP note, bundle limit), §Task Breakdown. `.ai/DECISIONS.md` D-035.
+
+### Decisions made
+- **D-035**: the web UI moves to React; shadcn/ui (Radix + Tailwind, copied in, restyled to the grid) for the menu, dialogs, tooltips, context menu, Settings and first-run screen. Tabline, statusline, command line and terminal stay our own components. CSP unchanged; `modes` has no React import.
+
+### Blueprint divergence (if any)
+- "No framework" in the E-34 and E-36..E-41 task texts is superseded by D-035.
+
+### Next action needed
+- Finish E-35 as you are (the xterm.js stage is unaffected; mount it from a React component when E-42 lands).
+- **E-42** (T2) before E-36: React + Tailwind shell, theme variables, the nine restyled shadcn components.
+
+### Open risks
+- A Radix component that needs an inline style element conflicts with the CSP — drop it and report, do not loosen the CSP.
+---
