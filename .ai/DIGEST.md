@@ -1,4 +1,4 @@
-# DIGEST (Token Saver Cache) — updated 2026-11-11 15:24 UTC by Architect
+# DIGEST (Token Saver Cache) — updated 2026-11-11 19:12 UTC by Architect
 
 ## Triad Health
 - Stage: Executing (Phase 1 code complete and proven against rein's real artifact; the first tag waits on rein's signed release and the operator)
@@ -22,7 +22,10 @@
 - Process: the Architect commits `.ai` with `git commit --only <paths>` (a plain commit once swept the Engineer's staged source). The Architect write gate blocks files outside the project, including the memory directory.
 - Repo: `github.com/Vimurai/rein-app` (public, hosted CI green on 3 OSes at 391a4b5). Blueprints: `.ai/architect.md` (index), `.ai/blueprints/distribution.md` (Phase 1, revised through D-032). `desktop.md` not yet written.
 
+- **Phase 2 started (D-033, 2026-11-11):** `.ai/blueprints/desktop.md` v1 — the window ("Modeline") is a separate crate `rein-desktop` (Tauri 2 + xterm.js): one pty per tab running `rein start` (tmux draws the panes, the app names no session), nvim-style modes (TERMINAL / NORMAL / COMMAND, escape `C-\ C-n`), chrome on the cell grid (tabline, statusline, command line, floating overlays), a closed action list, one read-only `config.toml`, six themes, tiling-WM options. Web view untrusted: closed IPC table, no shell/fs/http plugin. Linux + macOS only in this revision. Queue: E-34 open; E-35..E-39 blocked in order. Three non-blocking questions for rein are listed in the blueprint and not yet sent.
+
 ## Recent changes (last 10)
+- 2026-11-11 Architect: D-033 — Phase 2 window blueprint (`desktop.md`); E-34..E-39 registered.
 - 2026-11-11 Architect: D-032 — E-32 accepted; no recomputed verdict; layout test stays local; E-33 registered.
 - 2026-11-11 Engineer: E-32 install verdict from the scoped doctor (391a4b5, CI ×3 green; layout test exit 0 at rein cac86a4).
 - 2026-11-11 Architect: D-029 (mirror rein D-158), D-030 (profile-settings table), D-031 (layout case 2), D-028 (E-9 first run).

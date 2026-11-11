@@ -1194,3 +1194,46 @@ E-32 shipped with hosted CI green and the layout test at exit 0 against rein cac
 
 ### Rollback
 Raise or drop the limit constant; wire the test into CI if a suitable runner appears.
+
+---
+
+## D-033 — Phase 2 starts: the desktop window is one terminal running `rein start`, with modal, grid-drawn chrome ("Modeline")
+
+**Date**: 2026-11-11
+**Task**: operator request (Phase 2 start); E-34..E-39
+**Decision**: The window is a new crate `rein-desktop` (Tauri 2 + xterm.js) holding one pty per project tab whose child is `rein start`; tmux draws the panes; the app adds a tabline, a statusline and a command line, driven by nvim-style modes, a closed action list and one `config.toml`.
+
+### Why needed
+The operator asked for the window to be planned now, for people who live in Linux, tmux and nvim, with the design left to the Architect. `architect.md` §6 fixed the stack and scope but not the interaction model, the process model of the pane view, or the security boundary of the web view.
+
+### Rulings
+1. **One pty, child `rein start`, cwd = project.** The app never names a tmux session, draws a split or binds a role. The operator's `tmux.conf` works unchanged. Closing a tab detaches; the session keeps running.
+2. **Modes:** TERMINAL (default; only the escape chord `C-\ C-n` is taken), NORMAL, COMMAND. Every key, click and `:` line resolves to one closed `Action` list.
+3. **Grid chrome:** three rows (tabline, statusline, command line) and floating overlays, all on the font's cell grid with box-drawing borders. No sidebar, menu, toolbar, icon set or UI framework.
+4. **The UI shows the command it ran** and `y` copies it.
+5. **Config is one text file**, read-only to the app after first creation, reloaded on save. It binds keys to action names only and cannot start a program. No settings dialog; the app does not start `$EDITOR`.
+6. **Separate binary.** The CLI crate gets no GUI dependency; `rein-app window [DIR]` starts `rein-desktop`.
+7. **Web view is untrusted:** bundled UI only, strict CSP, a closed IPC table, no `shell`/`fs`/`http`/`opener` plugin, no IPC command that takes a program or argv.
+8. **Health, release and profiles** go through the Phase 1 library seams; the verdict stays rein's (D-029, D-032); the three-key allow-list is unchanged.
+9. **This revision covers Linux and macOS.** The Windows window, bundled Node and signing/notarization are later revisions; no task is registered for them.
+10. Phase 2 work starts while E-6 (first tag) still waits on rein and the operator; no release artifact carries the window until a later task says so.
+
+### Alternatives considered
+1. **tmux control mode (`-CC`) with app-drawn panes** — rejected for now: the app would re-implement layout, copy mode and the operator's bindings, and it is Phase 3 territory (`architect.md` §6).
+2. **A conventional GUI (sidebar, buttons, settings dialog)** — rejected: it hides the terminal and the CLI from the audience that prefers them, and needs a mouse.
+3. **A native Rust UI (egui/iced + a terminal emulator crate)** — rejected: `architect.md` §5 fixes Tauri + xterm.js; a second emulator is a large surface to own.
+4. **`ratatui` TUI only** — kept as the fallback in `architect.md` §5; the grid design means most of the model (modes, actions, config) would carry over.
+5. **Keymaps that can run shell commands** — rejected: the config file would become a way to execute programs through the app.
+6. **Chosen: one pty + modal grid chrome** — smallest surface, tmux stays the multiplexer (contract §4), familiar to the audience on first sight.
+
+### Constraints driving this decision
+- Contract §3.5–3.6 and §4: `rein pane` is the only role binding; tmux stays through Phase 2; only the stable entry points are invoked.
+- D-001: no Rein logic in the app — it does not read `.ai/` files.
+
+### Impact
+- Unlocks: E-34..E-39. `.ai/blueprints/desktop.md` written.
+- Open questions sent to rein (none blocking): a machine-readable "session running" signal; `rein start` behaviour in a bare pty; a one-line project status source.
+- Risk if wrong: if `rein start` cannot run cleanly as a pty child, E-35 needs a contract answer from rein before it can finish.
+
+### Rollback
+Remove `crates/rein-desktop` and the `window` subcommand; nothing in `$HOME/.rein`, a profile or a project is changed by the window itself.

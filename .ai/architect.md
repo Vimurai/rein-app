@@ -11,7 +11,7 @@
 | Domain | File | Phase | Status |
 |---|---|---|---|
 | Distribution: installer, verifier, layout writer, profile manager, updater, WSL launcher | `.ai/blueprints/distribution.md` | 1 | ACTIVE — E-2..E-5, E-7, E-8, E-10..E-15 done (E-12..E-15 reviewed, D-015); E-18 (operator docs), E-19 (release rehearsal) open; E-6 awaits the first tag; E-9, E-16, E-17 blocked on rein/operator |
-| Desktop: Tauri window, pane view, status, settings UI, bundled Node, signing | `.ai/blueprints/desktop.md` | 2 | NOT WRITTEN — authored when Phase 1 ships |
+| Desktop: Tauri window, pane view, status, settings UI, bundled Node, signing | `.ai/blueprints/desktop.md` | 2 | ACTIVE (v1 2026-11-11, D-033) — the window: one pty running `rein start`, modal grid chrome, `config.toml`; E-34..E-39 registered. Windows window, bundled Node and signing are later revisions |
 
 ## 1. System Philosophy
 - **Concept**: rein-app is the **shell**, not a rewrite. It installs, verifies, updates,
@@ -150,6 +150,17 @@ E-16 and E-18..E-21 are DONE (2026-11-10), reviewed in D-017. Registered after t
 | **E-27** | sync: case-variant prunes before writes, post-sync existence check; `operator_owned` patterns ASCII-checked (D-021) | 3 | — |
 E-9 now waits on rein E-417/E-418/E-420 and follows E-13. AppImage is out of Phase 1 (D-012). Phase 1 ships when
 PR #1 is merged, rein publishes a signed release + public key (P-50), and the first tag builds.
+
+Phase 2 window (D-033, `desktop.md`), registered 2026-11-11 on the operator's request while
+E-6 still waits on rein:
+| Registered | Scope | Tier | Depends on |
+|---|---|---|---|
+| **E-34** | `rein-desktop` crate: Tauri 2 window, closed capabilities, CSP, grid shell, `rein-app window` | 2 | — |
+| **E-35** | `PtyHost` + xterm.js stage running `rein start` in the project directory | 3 | E-34 |
+| **E-36** | modes, default keymap, which-key, command line | 2 | E-34 |
+| **E-37** | `config.toml` + six themes + tiling-WM window options | 2 | E-36 |
+| **E-38** | project store, start screen, picker, tabs | 2 | E-35, E-36 |
+| **E-39** | `:checkhealth`, `:update`, `:rollback`, `:profiles` over the Phase 1 seams | 3 | E-38 |
 
 ## 8. Contract Rulings received from `rein` (P-50 → rein D-153, mirrored as rein-app D-003)
 All five open questions are closed; `distribution.md` carries the detail. Summary:
