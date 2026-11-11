@@ -1316,3 +1316,74 @@ Linux builds need WebKitGTK 4.1, GTK 3, libsoup 3 development packages (installe
 
 ### Rollback
 Remove `crates/rein-desktop` from the workspace members and the `window` subcommand (blueprint §Rollback Plan). `Cargo.lock` and `crates/rein-desktop/ui/package-lock.json` are committed; CI runs `--locked` / `npm ci`.
+
+---
+
+## D-036 — Terminal stage dependencies for E-35 (dependency_gate, Engineer-recorded)
+
+**Date**: 2026-11-11
+**Task**: E-35 (PtyHost, xterm.js stage)
+**Decision**: ADOPT the set below (operator, 2026-11-11). Every item is named in `.ai/blueprints/desktop.md` §Execution Constraints. Recorded by the Engineer; the Architect may revise.
+
+| Package | Version | License | Use | Kind |
+|---|---|---|---|---|
+| portable-pty (crate) | 0.9.0 | MIT | open a pty, spawn `rein start` in it, resize, reap (`rein-desktop` only) | runtime |
+| @xterm/xterm (npm) | 6.0.0 | MIT | the terminal emulator in the stage | bundled into the UI |
+| @xterm/addon-fit (npm) | 0.11.0 | MIT | size the terminal to the stage in whole cells | bundled |
+| @xterm/addon-webgl (npm) | 0.19.0 | MIT | GPU renderer; falls back to the DOM renderer when WebGL is unavailable | bundled |
+
+### Why needed
+The stage is a real terminal running `rein start` (D-033 ruling 1). A pty needs platform code (openpty/forkpty on Unix, ConPTY later); xterm.js is the terminal the architecture fixes (`architect.md` §5).
+
+### Alternatives considered
+1. **Implement the pty ourselves** with `libc`/`nix` — rejected: `unsafe_code = "forbid"` in the workspace, and portable-pty is the pty layer of WezTerm, maintained with it.
+2. **`pty-process`** — Unix-only and async (tokio); portable-pty also keeps the later Windows (ConPTY) revision open.
+3. **xterm.js DOM renderer only** (skip addon-webgl) — kept as the runtime fallback, not the default: the WebGL renderer keeps a key under the 5 ms budget on large outputs.
+
+### Size / weight
+portable-pty 0.9.0 pulls `nix` 0.28, `filedescriptor`, `serial2`, `shell-words`, `downcast-rs`, `anyhow`, `log` (all MIT/Apache-2.0, small); we never use its serial-port or shell-words paths. Also used directly: `nix` 0.28 with only the `signal` feature (the same crate portable-pty builds; `Cargo.lock` keeps one `nix`) — a safe `killpg(SIGKILL)` for reaping, because portable-pty's `ChildKiller` sends only SIGHUP and the workspace forbids `unsafe`. The three npm packages are bundled by esbuild into `app.js` (xterm ~ 300 KB minified, webgl addon ~ 100 KB); nothing is fetched at run time (CSP `default-src 'self'`). xterm's CSS is bundled into `app.css` (no inline `<style>`).
+
+### Security track record
+xterm.js: widely deployed (VS Code's terminal); past advisories concerned escape-sequence handling that apps exposed to the clipboard — we keep OSC 52 off and open no link (desktop.md §Security 3). portable-pty: no RustSec advisory known to the Engineer at recording time (cargo-audit not installed locally).
+
+### Maintenance
+xterm.js 6.0.0 (2025-12) is the current major; portable-pty 0.9.0 is the current release from the WezTerm repository.
+
+### Rollback
+The pty sits behind `PtyHost`; the terminal behind the UI's `term` module. Remove both and the stage falls back to the E-34 placeholder.
+
+---
+
+## D-035 — The window's click layer uses shadcn/ui (React + Radix + Tailwind), restyled to the grid
+
+**Date**: 2026-11-11
+**Task**: operator request, confirmed; amends D-033 ruling 3 ("no UI framework"); E-42
+**Decision**: The web UI moves to React. shadcn/ui components are copied into the repo for the menu, dialogs, tooltips, context menu, Settings and first-run screen, restyled to the terminal look; the tabline, statusline, command line and terminal stay our own grid components.
+
+### Why needed
+The operator asked for shadcn/ui. D-034 added a click layer (menu, dialogs, tooltips, context menu, Settings) whose keyboard and screen-reader behaviour is costly to write by hand and is what these components already provide.
+
+### Rulings
+1. React + Tailwind (compiled at build time) + the Radix primitives of the components actually used + `cmdk`. Each passes `dependency_gate`. No icon set, no second component library.
+2. Only the listed components are copied in; they live in the repo and are ours to change.
+3. **The look stays the grid:** monospace font, cell-multiple sizes, square or box-drawing borders, no shadows, colours only from the theme variables. shadcn's default look is not shipped.
+4. **The CSP does not loosen.** A component that needs an inline style or script element is not used.
+5. `modes` stays pure TypeScript with no React import, so the input logic is testable without a DOM.
+6. Web bundle ≤ 1.5 MiB uncompressed.
+7. E-34's static shell is rebuilt in React by E-42, before E-36.
+
+### Alternatives considered
+1. **Stay framework-free and hand-write the click layer** — rejected on the operator's choice; it also means owning focus traps, roving focus and ARIA for six widget kinds.
+2. **shadcn/ui with its default look** — rejected: the window would read as a generic web app and lose the D-033 design.
+3. **Radix primitives alone, no Tailwind** — workable, but shadcn's copied components are the faster starting point and the operator asked for it.
+4. **Chosen: shadcn/ui for the click layer, restyled.**
+
+### Constraints driving this decision
+- D-033 ruling 7 (untrusted web view, strict CSP, closed IPC table) is unchanged.
+
+### Impact
+- Unlocks: E-42; E-36..E-41 build on it. Task texts that say "no framework" are superseded here.
+- Risk if wrong: bundle size and first-paint budget (400 ms) — measured in E-42; a Radix component that conflicts with the CSP is dropped and replaced by our own.
+
+### Rollback
+The `modes` function, the IPC table and the core do not depend on React; the components directory can be replaced by hand-written equivalents without touching them.

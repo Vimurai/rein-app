@@ -163,7 +163,16 @@ sixteen colours are given to xterm.js, so the chrome and the terminal always mat
    cap and strict parse; 120-second limit) when a tab opens, after update / rollback, and on
    `health.show`. It displays the document's `status` and checks; it never recomputes a
    verdict and never branches on a check id (D-029, D-032).
-6. **Web UI (TypeScript, no framework)** — four modules: `grid` (cell metrics, box
+6. **Web UI (TypeScript + React; shadcn/ui for the click layer — D-035)** — shadcn/ui
+   components (Radix primitives + Tailwind, copied into `crates/rein-desktop/ui/components/`
+   and owned by us) are used for the menu (its Command component), dialogs and confirm
+   buttons, tooltips, the context menu, the Settings overlay and the first-run screen. They
+   are restyled to the grid: the configured monospace font, cell-multiple sizes and
+   spacing, square or box-drawing borders, no shadows, no animation longer than 80 ms,
+   colours only from the theme's sixteen-colour tokens (exposed as CSS variables, so a
+   theme change restyles them live). shadcn's default look is not shipped. The tabline,
+   statusline, command line and terminal stage are our own React components on the grid,
+   not shadcn. The `modes` function stays pure TypeScript with no React import. Four modules: `grid` (cell metrics, box
    drawing, layout of the three rows and overlays), `modes` (a pure state machine:
    `(mode, pending keys, key) → (mode, pending keys, action?)`), `overlays` (picker,
    which-key, health, profiles, confirm), `term` (xterm.js instance per tab). The web side
@@ -276,8 +285,13 @@ No secret is read, stored or shown. The window makes no network call of its own;
   revisions of this file and are not started by any task below.
 - Dependencies each pass `skill: dependency_gate`: `tauri` 2, `portable-pty`, `toml`,
   `notify`; web: `@xterm/xterm`, `@xterm/addon-fit`, `@xterm/addon-webgl`, `esbuild`,
-  `typescript`. No UI framework, no CSS framework, no icon set. The web bundle is built in
-  CI from a committed lockfile.
+  `typescript`, and (D-035) `react`, `react-dom`, `tailwindcss` (compiled at build time to
+  one static stylesheet), the `@radix-ui/*` primitives of the components actually used,
+  `cmdk`, `class-variance-authority`, `clsx`, `tailwind-merge`. Only the shadcn components
+  named in §Components 6 are copied in; no icon set (glyphs are text), no other component
+  library. The CSP is unchanged: a component that needs an inline `<style>` or script
+  element is not used. Web bundle ≤ 1.5 MiB uncompressed, xterm.js included. The web
+  bundle is built in CI from a committed lockfile.
 - Hosted CI builds and tests `rein-desktop` on Linux and macOS; the Windows job keeps
   building the CLI crates only.
 
@@ -336,6 +350,9 @@ release artifact carries the window until a task adds it to the dist configurati
 | E-39 | `HealthService` + `:checkhealth` overlay + statusline segments; `release_check` / `release_apply` with `y/N` confirm; `profiles_plan` / `profiles_apply` overlay | 3 | E-38 |
 | E-40 | Click-first layer: `simple` input style and its shortcut table, first-run choice, clickable tabline / statusline / overlays / start screen, the `[≡]` menu, labelled confirm buttons, tooltips, terminal context menu and paste guard, `project_choose` | 2 | E-38 |
 | E-41 | Settings overlay + `ui.json` (`ui_get` / `ui_set`, `config.toml` wins), font zoom, pointer-parity tests, final `ux_reviewer` pass | 2 | E-37, E-39, E-40 |
+| E-42 | Move the E-34 web shell to React + Tailwind and add the restyled shadcn/ui base (theme tokens as CSS variables, the components named in §Components 6); do it before E-36 | 2 | — |
+E-36..E-41 build on E-42: overlays, menu, tooltips, dialogs and Settings use the shadcn
+components; "no framework" in the E-34 and earlier task texts is superseded by D-035.
 Tier 3 tasks run `security_engineer` before commit. The `ux_reviewer` pass named in E-39
 is repeated at the end of E-41, which is the one that counts.
 E-34..E-39 as registered stay valid: E-34's capability test allows no plugin until E-40
