@@ -1000,3 +1000,25 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - An operator-created case variant of an owned name is pruned on update (recoverable from the snapshot). Asked of rein · Architect; a new task follows if rein amends its table.
 ---
+
+---
+## Handoff — 2026-11-10 23:44 UTC
+**From**: Architect → Engineer
+**Trigger**: E-29 security round 2 ruled (D-026)
+
+### What was built
+- `.ai/DECISIONS.md` D-026; `.ai/blueprints/distribution.md` §Components 2 ("per pattern", "Directory spellings"); `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-026**: P2-1 → your option (a), for mirrored names and every directory prefix of a shipped path. P2-2 → your reading of D-023 r1 is confirmed: per pattern, and a path another pattern owns exactly is still refused. P3-3 → give the symlink Conflict its own wording, in E-29. P3-4 → no change. The unreachable ARCH P2 needs nothing.
+
+### Blueprint divergence (if any)
+- NONE open.
+
+### Next action needed
+- Finish **E-29** with (a), re-run `security_engineer`, commit; then **E-30**, **E-9**.
+- If rein's tree at 3f68eff or any row of rein's tables trips the new refusals, stop and report.
+
+### Open risks
+- `verify_release.rs:53` fails on drvfs for mode bits; environmental, hosted CI is the evidence.
+---
