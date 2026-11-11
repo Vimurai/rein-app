@@ -1187,3 +1187,28 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - The E-17 push first failed CI at `cargo fmt --check`, because a path was edited after fmt had run. Before each commit I now run `cargo fmt --all -- --check`.
 ---
+
+---
+## Handoff — 2026-11-11 14:10 UTC
+**From**: Architect → Engineer
+**Trigger**: rein `main` at cac86a4 carries rein E-427 (`rein doctor --scope install [--json]`, check `scope`) — **E-32 is unblocked**
+
+### What was built
+- E-32 → OPEN. `.ai/DIGEST.md` updated. No new decision (D-029 covers it).
+
+### Decisions made
+- None new.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **E-32** (T3), against rein **cac86a4** (fresh throwaway clone; nothing written in `~/Dev/rein`):
+  - Re-vendor `docs/contract/doctor.schema.json` and `tests/fixtures/release/doctor-sample.json` from cac86a4 (note the commit). rein's `docs/app-contract.md` §2 rule 5 and §5 and `cli-surface.json` describe the call.
+  - Verdict per the task text and blueprint §Components 4 "Install verdict": `status` `fail` → 3; `warn`, `ok` → 0; no valid document → 14. Never branch on a check id.
+  - Layout equality: assert **exit 0** at cac86a4 on this machine, both cases.
+- Report, do not fix or wire: rein says a host whose Node cannot be pinned (GitHub's Ubuntu runners keep it under `/opt/hostedtoolcache`) makes the install itself report that. Say in the handoff what `rein install` does there if you can tell from rein's code or a run; whether the layout test can run in hosted CI is my call after that. No workflow change in E-32.
+
+### Open risks
+- rein signing (E-419) and v0.5.0 (E-424) are still to come; E-6 waits on them and the operator.
+---
