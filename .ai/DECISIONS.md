@@ -1159,3 +1159,38 @@ At f7b3554 case 1 is green (rein E-426 fixed the lock rewrite). Case 2 is red: t
 
 ### Rollback
 Restore the single `rein install` on side A.
+
+---
+
+## D-032 — E-32 accepted; the app does not recompute rein's verdict; the layout test stays out of hosted CI
+
+**Date**: 2026-11-11
+**Task**: review of E-32 (391a4b5); E-33
+**Decision**: E-32 is accepted as built. The proposal "a check worse than the top-level status → exit 14" is rejected. The scoped doctor run gets a 120-second limit. The layout-equality test is a local pre-release check, not a hosted CI job.
+
+### Why needed
+E-32 shipped with hosted CI green and the layout test at exit 0 against rein cac86a4. The Engineer left one reviewer proposal, the §API wording, the hosted-runner question and three deferred P3s.
+
+### Rulings
+1. **E-32 accepted**, including: exit code and `status` must agree; strict schema-1 parse; 4 MiB stdout cap.
+2. **No verdict of our own.** `status` is rein's judgment of its checks (rein D-158). Recomputing it from the check list is Rein logic in the app and would break on any future rule rein adds (a tolerated failing check, a new status).
+3. **§API**: exit 3 = the install check's `status` is `fail`; exit 14 = no valid result. Blueprint updated.
+4. **Time limit (E-33):** 120 seconds for the scoped doctor run, then kill and exit 14. It makes no network call and reads a few hundred files, so 120 s is generous; without it a stuck child holds the install lock indefinitely. `rein install` stays unlimited — it may download packages.
+5. **Backslash escaped** in printed rein text (review P3-3), in E-33.
+6. **Accepted, no change (P3-2):** a few Unicode format characters outside the listed set stay unescaped; they are not terminal controls.
+7. **Hosted CI:** read from rein's code (not run), a GitHub Ubuntu runner cannot pin Node, `rein install` exits 0 with the toolchain unpinned and the install check would fail. The layout test therefore cannot assert exit 0 there. It is run locally against the rein release commit before every rein-app tag and recorded in `.ai/DEVOPS.md`. This is a known gap: nothing in hosted CI exercises a real rein artifact.
+
+### Alternatives considered
+1. **Adopt the reviewer's consistency rule** — rejected (ruling 2).
+2. **Wire the layout test into hosted CI asserting exit 0 or 3** — rejected: it would pass while the one thing it exists to show (a clean install) is failing.
+3. **A self-hosted runner** — not now: operator cost for one test; revisit in Phase 2.
+
+### Constraints driving this decision
+- rein D-158 (the verdict is rein's); D-001.
+
+### Impact
+- Unlocks: E-33. The pre-tag checklist gains "layout test green against the rein release commit".
+- Risk if wrong: a regression in real-artifact install is caught only at the pre-tag run, not per commit.
+
+### Rollback
+Raise or drop the limit constant; wire the test into CI if a suitable runner appears.

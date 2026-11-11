@@ -141,7 +141,8 @@ E-16 and E-18..E-21 are DONE (2026-11-10), reviewed in D-017. Registered after t
 | **E-24** | CODEOWNERS also covers `crates/rein-release/`, `Cargo.toml`, `Cargo.lock` (D-018) | 1 | — |
 | **E-25** | DONE (D-019) — rehearse the `-rc` tag with `dist plan`; record what it needs in DEVOPS.md | 2 | — |
 | **E-26** | DONE (D-021) — verifier refuses non-ASCII and case-colliding manifest paths (rein D-155 addendum 3, D-020) | 3 | — |
-| **E-32** | install verdict from `rein doctor --scope install --json` `status` (rein D-158, D-029) | 3 | rein E-427 |
+| **E-33** | 120 s limit on the scoped doctor run; backslash escaped (D-032) | 2 | — |
+| **E-32** | DONE (D-032) — install verdict from `rein doctor --scope install --json` `status` (rein D-158, D-029) | 3 | — |
 | **E-31** | manifest size limits at parse; set lookup in `under_mirrored`; linear sync scans (D-027) | 2 | — |
 | **E-30** | profiles: `config_dir` terminal safety, shell-quoted dry-run line, duplicate-row warning (D-024) | 3 | — |
 | **E-29** | refuse shipped case-variant of an owned pattern; owned matching folds ASCII case for protection; escaped error text (D-023) | 3 | — |

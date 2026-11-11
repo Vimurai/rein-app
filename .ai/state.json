@@ -478,16 +478,30 @@
     {
       "id": "E-32",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Take the install verdict from rein's install-scope doctor document, per .ai/blueprints/distribution.md §Components 4 \"Install verdict\" and D-029 (mirrors rein D-158). EXTERNALLY BLOCKED: do not start until rein E-427 has merged `rein doctor --scope install --json` (the Architect will name the commit in a handoff). After the sync in `install`, `update` and `rollback`, run `rein install`, then `rein doctor --scope install --json` from the installed tree; parse the document against the vendored `doctor.schema.json` shape (each check has a required `scope`); exit 3 when top-level `status` is `fail`, exit 0 for `warn` and `ok`; exit 14 when the command cannot start, ends without a code, or prints a document that is not valid JSON or has no known `status` — never a pass. Print each check (name, status, message) with manifest- and document-derived text escaped; never filter or branch on a check id. Leave `rein-app doctor [--json]` as a passthrough of the full `rein doctor`. Tests with the stubbed `Process`: fail → 3, warn → 0, ok → 0, garbage → 14, a `host`-scope failure present in a document whose `status` is ok → 0, for all three commands; update `layout_equality.rs` to assert exit 0 against the rein commit named in the handoff. Update README, `docs/operator-guide.md` and the §API table wording for exit 3. Run `security_engineer` before commit. Acceptance: `cargo test --workspace` and hosted CI green on three OSes; the layout-equality test green against that rein commit.",
       "created_at": "2026-11-11T12:46:42.742Z",
+      "completed_at": "2026-11-11T15:16:11.494Z",
+      "summary": "Install/update/rollback verdict from rein doctor --scope install --json status (fail 3, warn/ok 0, else 14); strict parse, dup keys, exit/status check, escaped output, 4 MiB cap. 391a4b5, CI x3.",
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-11T15:16:11.496Z"
+    },
+    {
+      "id": "E-33",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Put a time limit on the install check and close one escaping gap, per .ai/blueprints/distribution.md §Components 4 \"Time limit\" and D-032: (1) give the `rein doctor --scope install --json` run made after `install`, `update` and `rollback` a 120-second wall-clock limit; when it passes, kill the child (and reap it), print one line saying the install check did not finish within 120 seconds and that the install lock is released, and exit 14; a grandchild that keeps stdout open must not extend the wait. Do not limit `rein install` and do not change `rein-app doctor` (the passthrough). (2) Escape the backslash in every string printed from rein's doctor document and from a manifest, so a literal `\\u{1b}` in the source cannot be mistaken for an escaped control character. Use no new dependency unless `skill: dependency_gate` passes. Tests with the stubbed `Process`: a run that never ends → exit 14 within the limit (the limit injectable so the test takes milliseconds), for all three commands; a run that ends in time is unchanged; a message containing a backslash prints it doubled. Acceptance: `cargo test --workspace` and hosted CI green on three OSes; the operator guide's exit 14 text names the time limit.",
+      "created_at": "2026-11-11T15:17:10.283Z",
       "completed_at": null,
       "summary": null,
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-11T14:35:05.525Z"
+      "updated_at": "2026-11-11T15:17:10.287Z"
     }
   ],
   "stamps": [
@@ -1236,6 +1250,33 @@
       "timestamp": "2026-11-11T12:30:42.230Z",
       "summary": "No P0/P1; config_dir control/bidi rows skipped with escape_debug warnings, dry-run path POSIX-quoted correctly, dup warning and non-.claude note emit only safe names/paths. P3: LRM/RLM/ALM not filtered.",
       "sha": "f298c5b1c12e705242c9d78768cdc7ee16d91b20",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-32",
+      "timestamp": "2026-11-11T14:43:29.524Z",
+      "summary": "No sovereignty violations; no .ai/ or blueprint files staged. Diff matches E-32/D-029: DoctorInstallJson + Process::output, strict schema parse, status-only verdict (fail 3, warn/ok 0, else 14), escaped check output, no id branching, doctor passthrough kept, layout_equality/README/operator-guide updated. §API wording left to Architect (correct: blueprint is Architect-owned); Architect must update the §API table rows for install/update/rollback exit 3.",
+      "sha": "90fb71deb4a0f88bb6d1d7706bad5c8a150c581c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "critic_security",
+      "task_id": "E-32",
+      "timestamp": "2026-11-11T14:43:30.889Z",
+      "summary": "No P0/P1; strict schema-1 parse, every non-document path is 14, no check-id branching, output escaped. P2: unbounded stdout capture and no doctor timeout; exit code 1 + status ok yields 0. P3: escape misses U+2060-2064, U+00AD, tag chars.",
+      "sha": "90fb71deb4a0f88bb6d1d7706bad5c8a150c581c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-32",
+      "timestamp": "2026-11-11T14:43:31.363Z",
+      "summary": "[TESTS_PASSED] cargo test --workspace all green, 0 failed. Verdict table covers install/update/rollback x fail/warn/ok/garbage plus 13 on failed rein install, with a failing host check in every doc. verdict.rs unit tests cover parse strictness and the vendored doctor-sample.json. layout_equality now requires exit 0 (env-gated, not run here).",
+      "sha": "90fb71deb4a0f88bb6d1d7706bad5c8a150c581c",
       "author": "emirkovacevic@protonmail.com"
     }
   ],

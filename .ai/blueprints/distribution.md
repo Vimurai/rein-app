@@ -233,7 +233,20 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    operator (name, status, message); `rein-app doctor [--json]` stays a passthrough of the
    full `rein doctor` in the operator's directory. Also from D-158: no `rein` command
    writes a path listed in `manifest.files` (rein E-426, `npm ci`), so rein's tree check
-   exempts nothing.
+   exempts nothing. **As built (E-32, accepted D-032):** stdout capped at 4 MiB, strict
+   schema-1 parse (a repeated key is invalid), the child always reaped; exit code and
+   `status` must agree (exit 1 with a status other than `fail` is exit 14). The app does
+   **not** recompute the verdict from the checks — a check worse than the top-level
+   `status` is rein's business, not grounds for exit 14. **Time limit (E-33):** the scoped
+   doctor run gets 120 seconds; past that the child is killed and the result is exit 14,
+   so a stuck child cannot hold the install lock forever. `rein install` gets no limit (it
+   may download packages). Text from rein is printed with control characters, the listed
+   bidi/format characters and the backslash escaped.
+   **Hosted CI (D-032):** on a host where rein cannot pin Node (GitHub's Ubuntu runners),
+   `rein install` exits 0 with the hook toolchain unpinned and the install check is
+   expected to fail, so the layout-equality test cannot assert exit 0 there. It stays a
+   local test, run against the rein release commit before every rein-app tag and recorded
+   in `.ai/DEVOPS.md`; it is not wired into hosted CI.
 5. **`rein-app::RuntimeCheck`** — detects Node (≥ manifest `minNode`, default 22), git,
    sqlite3, tmux, Claude Code (`claude --version`); prints a table; missing Claude Code →
    print the official installer URL, do not bundle. Does not install anything itself in phase 1.
@@ -369,9 +382,9 @@ tree's `VERSION` and the profiles' `settings.json`. No database, no app config f
 CLI (`rein-app`):
 | Command | Input | Output | Exit |
 |---|---|---|---|
-| `install [--version X.Y.Z]` | tag (default latest) | verify report, `rein install` and `rein doctor` output | 0 ok · 2 verify fail · 3 `rein doctor` failed · 4 runtime missing · 13 `rein install` failed (its own code printed) |
+| `install [--version X.Y.Z]` | tag (default latest) | verify report, `rein install` output, the install-scope checks of `rein doctor --scope install --json` | 0 ok (install check `status` ok or warn) · 2 verify fail · 3 install check `status` is fail · 4 runtime missing · 13 `rein install` failed (its own code printed) · 14 the install check gave no valid result (not started, no or unexpected exit code, invalid document, or over its time limit — E-32, E-33) |
 | `update [--yes]` | — | available version + notes, then install | as install · 10 already current · 11 offline |
-| `rollback` | — | restored version (code only — says operator data is untouched), `rein install` and `rein doctor` output | 0 · 3 · 13 as install · 12 no snapshot |
+| `rollback` | — | restored version (code only — says operator data is untouched), `rein install` output and the install-scope checks | 0 · 3 · 13 · 14 as install · 12 no snapshot |
 | `doctor [--json]` | — | passthrough of `rein doctor [--json]`, stdout untouched | rein's exit code · 14 `rein doctor` could not be started or ended without an exit code (never 1 — E-20) |
 | `profiles list` | — | table of Profile | 0 |
 | `profiles apply [--profile NAME]… [--enable LIST\|all] [--disable LIST\|all] [--undo] [--dry-run]` | `--profile` repeatable (default: every profile) | per-profile diff of allowed keys, then write; `--enable/--disable` shell out to `claude plugin …` (D-005); `--dry-run` prints the diff, writes nothing and runs no `claude` command | 0 · 4 `claude` missing · 5 parse error · 7 `claude plugin` failed |
@@ -700,7 +713,9 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - E-22 (guard script, tag gate, `CODEOWNERS`) is DONE and E-23 needed no change (already
   ASCII since 6bf6244); both reviewed in D-018.
 - E-24 and E-25 are DONE, reviewed in D-019. E-26 is DONE, reviewed in D-021.
-- **E-32** (T3, BLOCKED on rein E-427) Install verdict from `rein doctor --scope install
+- **E-33** (T2) 120-second limit on the scoped doctor run; backslash escaped in printed
+  text (§Components 4 "Time limit"; D-032).
+- **E-32** (T3, DONE — reviewed D-032) Install verdict from `rein doctor --scope install
   --json` (§Components 4 "Install verdict"; D-029).
 - **E-31** (T2) Manifest size limits and linear lookups (§Execution Constraints
   "Manifest size limits"; D-027).
