@@ -1337,3 +1337,33 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - A Radix component that needs an inline style element conflicts with the CSP — drop it and report, do not loosen the CSP.
 ---
+
+---
+## Handoff — 2026-11-11 20:45 UTC
+**From**: Architect → Engineer
+**Trigger**: Engineer request (WSLg cannot paint the window; operator wants a Windows install); D-038; E-43..E-45 registered
+
+### What was built
+- `.ai/blueprints/desktop.md` — new section **§Windows window** (W1–W7, data model, interface, security, limits, tests, rollback), §Execution Constraints (platforms, CI), §Task Breakdown. `.ai/DECISIONS.md` D-038. `.ai/blueprints/distribution.md` command table: `update --check`. `.ai/architect.md` index + task table; `.ai/DIGEST.md`.
+
+### Decisions made (your five questions)
+- **a. Pty child:** ConPTY, exactly `wsl.exe -d D --cd <linux path> -e <user's shell> -lic 'exec ~/.rein/bin/rein start'`. Distro = `wsl.distro` in `config.toml`, else WSL's default; name / home / shell from one fixed probe, validated. State detection shares Phase 1's `wsl.rs` logic (move it, do not copy). A project path on Windows **is the Linux path**: POSIX paths as is, `\\wsl.localhost\<distro>\…` and `\\wsl$\<distro>\…` mapped, drive paths refused. `.ai/` check + rein-installed check + canonical path are one fixed call inside WSL (W2).
+- **b. Environment:** remove `WSLENV` from the child — nothing crosses. `TERM` comes from WSL (`xterm-256color`); smoke-check it.
+- **c. Single instance:** a held lock file + a watched handoff directory in `%LOCALAPPDATA%\rein-app` — **no named pipe** (ACL and squatting; D-038 alternative 2). Config in `%APPDATA%\rein-app`, state in `%LOCALAPPDATA%\rein-app`.
+- **d. Health / update / profiles:** yes — the Linux `rein doctor --json` and the Linux `rein-app` inside WSL, never the Windows binary's own library writers. New additive CLI flag `rein-app update --check`.
+- **e. Distribution:** yes — a separate workflow, unsigned per-user NSIS installer as a workflow **artifact** (14 days), `contents: read`, no secret, `release.yml` untouched. `ci_gate` applies.
+
+### Blueprint divergence (if any)
+- None reported. Your stale-socket retry fix in E-35 is accepted as described; it stays Unix-only.
+- `desktop.md` no longer lists WSLg as supported.
+
+### Next action needed
+- Finish E-35, then **E-43 (T3) → E-44 (T2) before E-42**, so the operator gets an installer early (it opens the DIR given on the command line until E-38). Then E-42 → E-36 → E-37 → E-38 → E-39 → E-40 → E-41, and **E-45 (T3)** after E-39.
+- E-38, E-40, E-41 must reach projects only through the `Host` seam.
+- E-44's handoff must give the operator: run URL, `gh run download` command, SmartScreen note, how to start it.
+
+### Open risks
+- `wsl.exe` re-parses its command line: scripts are constants without double quotes; paths with `"` or `\` are refused. If the interop smoke shows `-lic` or `--cd` behaving differently from the blueprint, stop and report — do not add escaping or interpolation.
+- An interactive login shell may print rc-file output before tmux starts; harmless.
+- Not verified by me: that `$SHELL` is set under `wsl.exe -e` (fallback `/bin/sh` is specified) — the smoke settles it.
+---
