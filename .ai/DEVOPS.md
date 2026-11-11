@@ -254,3 +254,41 @@ cargo-dist 0.34.0, workspace version 0.1.0, HEAD at b93eae7 + `.ai/`.
   3. `dist plan --tag=v0.1.0`, which must announce `v0.1.0`, not a prerelease.
   4. `git tag v0.1.0 && git push origin v0.1.0`. This runs the whole pipeline, including `publish-homebrew-formula` to `Vimurai/homebrew-tap`.
   5. On Windows, uninstall the rc `.msi` first (see answer 4).
+
+---
+## E-9 — layout equality against rein's own installer (2026-11-11, D-012 r3, D-028)
+
+**Test:** `crates/rein-app/src/layout_equality.rs`. It runs only when `REIN_CHECKOUT` names a rein checkout and is skipped otherwise. There is no CI wiring yet (D-028). A run takes about 100–110 s and makes no network calls; npm works from the local cache.
+- **Clone side (A):** `install-rein.sh`, then `rein install`.
+- **rein-app side (B):**
+  - Build: `install-rein.sh --stage`, which is what `rein release stage` runs, then `release-manifest.mjs manifest <stage> --out --pubkey`, which is what `rein release manifest` runs.
+  - Sign and serve: a throwaway TestKey signs the tarball, and a loopback fixture server serves it.
+  - Install: `install_cmd::install` with `SystemProcess`, so the real `rein install` and `rein doctor` run. The binary has no test-key or test-server seam, and none was added (D-028 accepts this seam).
+- **What is asserted:**
+  - rein-app's exit code is 0 or 3.
+  - `rein doctor`, run from B in a neutral cwd, reports no `[INSTALL_TREE_MISMATCH]` and no `[INSTALL_INCOMPLETE]`.
+  - `.rein` of A and B are equal except the documented differences: `manifest.json` (only in B), `config/install-stamp.json`, `config/rein-workspace.txt` (only in A), `secrets/role-hmac.key` (a random secret) and `shared/toolchain.sh` (its `REIN_TC_RECORDED` timestamp).
+  - A second case seeds `mcp/gone-mcp/node_modules/x` in both homes before re-running.
+
+**Run at rein 3f68eff** (a throwaway clone in the scratchpad; `~/Dev/rein` was not touched; Node v26.12.1). **RED, by design until rein fixes it:**
+- Our verifier accepts rein's real artifact: 252 files, v0.4.0. None of the E-26, E-29 or D-026 refusals fires.
+- No undocumented tree difference.
+- rein-app exits 3. `rein doctor` reports `[INSTALL_TREE_MISMATCH] mcp/orchestrator-mcp/package-lock.json: size 40196, manifest says 40170`:
+  - `rein install`'s npm rewrites a shipped lock file that is also operator-owned.
+  - rein's tree check then flags it, so every artifact install fails doctor.
+  - This is with rein · Architect, together with doctor's host-check scope and doctor's dependence on the cwd. rein-app behaviour is unchanged.
+- The retired-server case is not reached while the first case is red.
+
+**Real generator counts (input to E-31):**
+
+| | rein at 3f68eff | E-31 limit | margin |
+|---|---|---|---|
+| mirrored | 10 | 128 | 12.8× |
+| operator_owned | 14 | 256 | 18× |
+| files | 252 | 100000 | 397× |
+| longest path | 55 B | 1024 B | 18.6× |
+| deepest path | 4 segments | 64 | 16× |
+
+The longest pattern is 25 B. The manifest is 47 KB and the tarball 1.28 MB.
+
+**Re-run:** `REIN_CHECKOUT=<rein checkout> cargo test -p rein-app --bin rein-app layout_equality -- --nocapture`. Run it from a neutral cwd to keep doctor's project checks out of the console output; the assertion itself already uses a neutral cwd.
