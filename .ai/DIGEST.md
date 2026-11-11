@@ -3,7 +3,7 @@
 ## Triad Health
 - Stage: Executing (Phase 1 code complete; the first tag waits on rein and the operator)
 - Architect Focus: E-24/E-25 reviewed (D-019); waiting on rein's reply and the operator's rc call; then the Phase 2 blueprint (`desktop.md`) when the operator says go
-- Engineer Focus: idle — queue empty; E-32 blocked on rein E-427
+- Engineer Focus: E-32 install verdict from `rein doctor --scope install --json` (T3), against rein cac86a4
 
 ## Current snapshot
 - Product: rein-app — Rust shell for Rein: installs a signed `rein` release into `$HOME/.rein`, runs `rein install`/`doctor` from it, manages Claude profile settings (3 allowed keys), updates/rolls back; phase 2 wraps it in a Tauri window. Never contains Rein logic.
@@ -31,10 +31,11 @@
 - **D-029 (mirrors rein D-158)**: rein fixes the E-9 findings itself — rein E-426 (`npm ci`, no rein command writes a shipped path) and E-427 (doctor check `scope`, `rein doctor --scope install --json`). rein-app's change is E-32: the install verdict is that document's `status` (fail → 3; warn/ok → 0; no valid document → 14). rein order: E-425 → E-426 → E-427 → E-419 → E-424 (v0.5.0).
 - **rein `main` at f7b3554** carries rein E-426 (`npm ci` for a shipped lock) and E-425. E-9 re-run there: case 1 (fresh install) GREEN — no integrity token, no undocumented diff. Case 2 (retired server) red as first written; **D-031**: side A re-runs `install-rein.sh` (clone-mode `rein install` alone does not remove a retired mirror). Exit 0 on a clean machine still needs rein E-427.
 - **E-9 DONE (be06b2e): layout equality green at rein f7b3554, both cases** (accepted by the Architect 2026-11-11). E-17 DONE (9c4a0d0, e039391; CI ×3 green), E-31 DONE (7273f32; CI ×3 green). The layout test is still skipped in CI (needs a rein checkout); wiring is planned with E-32.
-- **Engineer queue empty.** Waiting on: rein E-427 commit → E-32; operator → E-6 (rc tag, `HOMEBREW_TAP_TOKEN`), rein v0.5.0 signed release.
+- **rein `main` at cac86a4** carries rein E-427 (`rein doctor --scope install [--json]`, required check `scope`; scoped run reads no cwd, makes no network call) — **E-32 unblocked 2026-11-11**. Caveat from rein: on a host whose Node cannot be pinned (GitHub Ubuntu runners, `/opt/hostedtoolcache`) the install itself reports that — bears on wiring the layout test into hosted CI (undecided).
+- Open queue: E-32 (T3). Waiting on: rein E-419 (signing) → E-424 (v0.5.0); operator → E-6 (rc tag, `HOMEBREW_TAP_TOKEN`).
 - **rein `main` at d84dd17** carries rein E-422 (`docs/app-contract.md`, three schemas, shared fixtures with the corrected operator-owned table, generator case rules) — **E-17 unblocked 2026-11-11**.
 - **D-030**: rein's `profile-settings-cases.json` states what an app *may* write — E-17's harness asserts every `refuse` row unreachable and every `accept` row reachable except a self-checking list (one row: "remove an allowed key", shown via `--undo`). E-17 results so far: operator-owned 27/27, glob 7/7, layout-v1 equal, profile-settings 12/13 + that row.
-- E-27..E-30 DONE, hosted CI green ×3 on df2bcb6; E-31 committed and pushed (7273f32, CI running). Open queue: E-17 (T2), E-9 (T2, red until rein E-426/E-427). BLOCKED: E-32 (rein E-427). E-27 (9adfd72) and E-28 (7df5c73) are committed locally, awaiting the operator's push approval. E-6 (first tag) waits on: `HOMEBREW_TAP_TOKEN`, rein committing the public key on `main`, a signed rein release. BLOCKED externally: E-32 (rein E-427).
+- E-27..E-30 DONE, hosted CI green ×3 on df2bcb6; E-31 committed and pushed (7273f32, CI running). Open queue: E-17 (T2), E-9 (T2, red until rein E-426/E-427). BLOCKED: E-32 (rein E-427). E-27 (9adfd72) and E-28 (7df5c73) are committed locally, awaiting the operator's push approval. E-6 (first tag) waits on: `HOMEBREW_TAP_TOKEN`, rein committing the public key on `main`, a signed rein release. BLOCKED externally: none.
 - Phase 1 ships when: rein commits the key and publishes a signed release (rein E-417..E-422), the operator sets `HOMEBREW_TAP_TOKEN`, and the first tag builds (E-6; an `-rc` tag first is recommended).
 - Known risks: no rein release exists yet; `.msi`, macOS and `.deb` release jobs unexercised until a tag; `rein ci run` has no cargo step (framework gap, not yet raised with rein — no rein session running).
 - Repo: `github.com/Vimurai/rein-app` (public, hosted CI green on 3 OSes). License Apache-2.0 (D-004) — awaiting operator confirmation.

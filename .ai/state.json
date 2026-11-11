@@ -148,18 +148,18 @@
     {
       "id": "E-9",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Write the layout-equality test against install-rein.sh: from a rein checkout at tag T run install-rein.sh into temp HOME A, build the artifact with rein's own generator `rein release manifest`, sign it with our throwaway test minisign key, run `rein-app install --version T` from the fixture server into temp HOME B, and assert `diff -r A B` is empty except the documented exceptions (a retired MCP server's directory is the one expected until rein rules who removes it — report any other diff to the Architect rather than adjusting the writer). EXTERNALLY BLOCKED: do not start until rein P-50 ships `rein release manifest` (the Architect will say so in a handoff) — if this task auto-opens after E-7 while rein still lacks the generator, leave it OPEN and skip it. Per .ai/blueprints/distribution.md §Test Plan \"Layout equality\" and §E-## Task Breakdown E-9 (D-012 ruling 3). Acceptance: the test runs in CI when a rein checkout is available (gated on an env var naming it) and is green.",
       "created_at": "2026-11-09T14:52:14.751Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-11T13:54:15.100Z",
+      "summary": "Layout-equality test vs rein's clone install (REIN_CHECKOUT-gated): green at rein f7b3554 after E-426 and D-031; 1e1657f+be06b2e. No CI wiring yet (comes with E-32).",
       "depends_on": [
         "E-13"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-11T08:26:14.940Z"
+      "updated_at": "2026-11-11T13:54:15.100Z"
     },
     {
       "id": "E-10",
@@ -268,16 +268,16 @@
     {
       "id": "E-17",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Vendor rein's shared contract fixtures from rein `tests/fixtures/release/` and run them: replace the interim `operator-owned-cases.json` with rein's (path, shipped, expected kept/replaced/deleted) and assert every row against the sync plan; add `profile-settings-cases.json` (settings before, the write attempted, accept/refuse) and assert every row against rein-profiles; add `layout-v1.json` and assert it equals the layout our fixture manifests carry; note in each test the rein commit the copy was taken from. EXTERNALLY BLOCKED: do not start until rein E-422 has published the fixtures (the Architect will say so in a handoff); report a row our code fails to the Architect instead of editing the fixture. Per .ai/blueprints/distribution.md §Test Plan \"Operator-owned conformance\" and \"Shared contract fixtures\", D-014. Acceptance: all three fixture suites green in cargo test --workspace on all three CI targets.",
       "created_at": "2026-11-09T17:01:18.951Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-11T13:50:25.608Z",
+      "summary": "Vendored rein d84dd17 fixtures + schemas; operator-owned 27/27, glob 7/7, layout-v1 equals fixture manifests, profile-settings 13/13 (remove-key via UNDO_ONLY + file-level undo, D-03 …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-11T12:46:46.923Z"
+      "updated_at": "2026-11-11T13:50:25.609Z"
     },
     {
       "id": "E-18",
@@ -464,21 +464,21 @@
     {
       "id": "E-31",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Bound the cost of reading a signed manifest in `rein-release`, per .ai/blueprints/distribution.md §Execution Constraints \"Manifest size limits\" and D-027: (1) in `Manifest::parse`, refuse (verification failure, exit 2, naming the limit) a manifest with more than 64 `layout.mirrored` names, more than 256 `layout.operator_owned` patterns, more than 100000 `files`, a path or pattern longer than 1024 bytes, or a path deeper than 32 segments — after first recording in `.ai/DEVOPS.md` the real counts from rein's generator at commit 3f68eff (mirrored, patterns, files, longest path, deepest path) and confirming each limit is at least 10 times the real value; if one is not, stop and report instead of choosing a new number; (2) replace the linear scan in `Manifest::under_mirrored` with a set lookup; (3) make `sync::folded_ship` and the preflight case-variant symlink scan linear in the input (no per-prefix copies, no all-pairs comparison per directory). Behaviour for every manifest inside the limits is unchanged. Tests extend the manifest suite: one row per limit (at the limit passes, one over is refused naming the limit) and a timing-free structural test that a 100000-file manifest parses. Acceptance: `cargo test --workspace` and hosted CI green on three OSes; the operator guide's refusal list names the limits.",
       "created_at": "2026-11-11T12:30:20.970Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-11T13:45:44.422Z",
+      "summary": "Manifest limits at parse (128 mirrored/256 patterns/100000 files/1024 B/64 segs, named refusal, exit 2); under_mirrored by set; folded_ship and symlink scan linear. 7273f32, CI x3.",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-11T12:42:00.319Z"
+      "updated_at": "2026-11-11T13:45:44.424Z"
     },
     {
       "id": "E-32",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 3,
       "description": "Take the install verdict from rein's install-scope doctor document, per .ai/blueprints/distribution.md §Components 4 \"Install verdict\" and D-029 (mirrors rein D-158). EXTERNALLY BLOCKED: do not start until rein E-427 has merged `rein doctor --scope install --json` (the Architect will name the commit in a handoff). After the sync in `install`, `update` and `rollback`, run `rein install`, then `rein doctor --scope install --json` from the installed tree; parse the document against the vendored `doctor.schema.json` shape (each check has a required `scope`); exit 3 when top-level `status` is `fail`, exit 0 for `warn` and `ok`; exit 14 when the command cannot start, ends without a code, or prints a document that is not valid JSON or has no known `status` — never a pass. Print each check (name, status, message) with manifest- and document-derived text escaped; never filter or branch on a check id. Leave `rein-app doctor [--json]` as a passthrough of the full `rein doctor`. Tests with the stubbed `Process`: fail → 3, warn → 0, ok → 0, garbage → 14, a `host`-scope failure present in a document whose `status` is ok → 0, for all three commands; update `layout_equality.rs` to assert exit 0 against the rein commit named in the handoff. Update README, `docs/operator-guide.md` and the §API table wording for exit 3. Run `security_engineer` before commit. Acceptance: `cargo test --workspace` and hosted CI green on three OSes; the layout-equality test green against that rein commit.",
       "created_at": "2026-11-11T12:46:42.742Z",
@@ -487,7 +487,7 @@
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-11T12:46:46.439Z"
+      "updated_at": "2026-11-11T14:35:05.525Z"
     }
   ],
   "stamps": [
