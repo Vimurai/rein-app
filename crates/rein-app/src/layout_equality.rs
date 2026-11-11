@@ -13,14 +13,16 @@
 //! `manifest.json` only in B, `config/install-stamp.json` differs,
 //! `config/rein-workspace.txt` only in A, and two per-install values differ (D-028):
 //! `secrets/role-hmac.key` (a random secret) and `shared/toolchain.sh` (its recorded
-//! timestamp). A second case seeds both homes with a retired server directory before
-//! re-running; `rein install` removes it on both sides.
+//! timestamp). A second case seeds both homes with a retired server directory and updates
+//! each the way its operator would (D-031): A re-runs `install-rein.sh` (in clone mode only
+//! the installer script removes a retired mirror, not `rein install`), B re-runs rein-app's
+//! install; the directory is gone on both sides.
 //!
 //! `rein doctor` also checks the host (Claude, Chromium, gh copilot, the cwd as a project),
 //! which a sterile HOME never passes, so install may end 3 (D-028): the exit must be 0 or 3,
 //! and doctor run from the installed tree must not report `[INSTALL_TREE_MISMATCH]` or
-//! `[INSTALL_INCOMPLETE]`. At rein 3f68eff it does (rein `rein install` rewrites a shipped
-//! lock file): the test is red there by design until rein fixes it.
+//! `[INSTALL_INCOMPLETE]`. At rein 3f68eff it did (`rein install` rewrote a shipped lock
+//! file); rein E-426 fixed that, and the test is green at rein f7b3554.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -278,13 +280,14 @@ fn rein_app_installs_the_same_tree_as_reins_clone_install() {
     let code = install_b(&b, &built, &key);
     check(code, &a, &b, &cwd, "fresh install");
 
-    // Second case: a retired server directory in both homes; `rein install` removes it.
+    // Second case: a retired server directory in both homes; each side updates as its
+    // operator would (D-031) and the directory is gone on both.
     for home in [&a, &b] {
         let gone = home.join(".rein/mcp/gone-mcp/node_modules");
         fs::create_dir_all(&gone).unwrap();
         fs::write(gone.join("x"), "retired").unwrap();
     }
-    rein_install(&a);
+    clone_install(&checkout, &a);
     let code = install_b(&b, &built, &key);
     check(code, &a, &b, &cwd, "retired server");
 }
