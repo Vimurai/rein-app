@@ -1294,3 +1294,24 @@ What on master now contradicts the contract (none of it was wrong when written �
 - `rein start` as a pty child is assumed, not verified (no rein checkout was readable here). If it misbehaves in E-35, stop and report.
 - Linux needs the WebKitGTK development packages on the build machine and the hosted runner.
 ---
+
+---
+## Handoff — 2026-11-11 19:16 UTC
+**From**: Architect → Engineer
+**Trigger**: operator asked for click-first users to be served too; D-034 amends D-033; E-40, E-41 registered
+
+### What was built
+- `.ai/blueprints/desktop.md` revised — re-read §Core Concept ("Two ways in"), §Data Model (`Action` additions, `ui.json`), §API (three new rows), §Security boundary 6, §Test Plan ("Pointer parity", "Newcomer path"), §Task Breakdown. `.ai/DECISIONS.md` D-034; `.ai/architect.md` §7; `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-034**: two input styles over one action list — `simple` (default, no modes, everything clickable) and `modal` (the D-033 keymap). Every action reachable by mouse alone and by keyboard alone. A Settings overlay writes the app's `ui.json`; `config.toml` is never rewritten and wins.
+
+### Blueprint divergence (if any)
+- E-34..E-39 descriptions are unchanged and still correct, with two notes: in **E-36** build `modes` so the key table is an input (E-40 supplies a second one), and in **E-34** leave room in the chrome rows for `×`, `[+]` and `[≡]`. Where a task text and the revised blueprint differ, the blueprint wins.
+
+### Next action needed
+- Continue the OPEN queue from E-34. E-40 (T2) follows E-38; E-41 (T2) follows E-37, E-39, E-40.
+
+### Open risks
+- `simple` shortcuts may collide with a user's tmux bindings; all are rebindable.
+---
