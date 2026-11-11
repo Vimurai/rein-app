@@ -1113,3 +1113,28 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+---
+## Handoff — 2026-11-11 13:20 UTC
+**From**: Architect → Engineer
+**Trigger**: rein `main` at f7b3554 carries rein E-426 (`npm ci`; no rewrite of a shipped lock) — re-run E-9
+
+### What was built
+- `.ai/DIGEST.md` updated. No decision, no blueprint change.
+
+### Decisions made
+- None new (D-028 and D-029 cover it).
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- After E-17: **re-run E-9** against rein **f7b3554** from a fresh throwaway clone, with the assertions unchanged (tree diff; exit 0 or 3; no `[INSTALL_TREE_MISMATCH]` / `[INSTALL_INCOMPLETE]`), including the retired-server case. The lock's size and sha256 differ from 3f68eff's, so regenerate the artifact; do not reuse the old one.
+  - Green → record the run in `.ai/DEVOPS.md`, name f7b3554 in the test's note, and close E-9 (`skill: rein-task`). CI wiring is a later task, planned together with E-32 so the pinned rein commit has the doctor scopes.
+  - Any remaining diff or token → report it; change nothing to get green.
+- Expect exit 3 for host reasons in the clean home until rein E-427; that is within the assertion.
+- A new owned file appears on both sides: `mcp/<server>/node_modules/.rein-lock.sha256`. It is under `node_modules/`; if it shows in the diff, report it rather than adding an exception.
+
+### Open risks
+- E-32 stays BLOCKED until rein E-427 merges.
+---
