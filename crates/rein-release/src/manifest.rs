@@ -21,6 +21,13 @@ pub const SUPPORTED_SCHEMA: u64 = 1;
 pub const MAX_MANIFEST_BYTES: u64 = 16 * 1024 * 1024;
 /// Upper bound on the sum of all listed file sizes.
 pub const MAX_TOTAL_BYTES: u64 = 1024 * 1024 * 1024;
+/// Manifest size limits (D-027 and addendum): each at least 10x what rein's generator
+/// emitted at 3f68eff (10 mirrored, 14 patterns, 252 files, 55-byte and 4-segment paths).
+pub const MAX_MIRRORED: usize = 128;
+pub const MAX_OWNED_PATTERNS: usize = 256;
+pub const MAX_FILES: usize = 100_000;
+pub const MAX_PATH_BYTES: usize = 1024;
+pub const MAX_PATH_SEGMENTS: usize = 64;
 
 /// File permission the manifest may request. Anything else is rejected (fail closed).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +75,54 @@ pub struct Manifest {
     pub layout: Layout,
     pub files: Vec<FileEntry>,
     matcher: OperatorOwnedMatcher,
+    /// `layout.mirrored` as a set, for `under_mirrored` (E-31).
+    mirrored_set: std::collections::HashSet<String>,
+}
+
+/// Refuse a manifest over the D-027 size limits, naming the limit; before any other work.
+fn check_limits(raw: &RawManifest) -> Result<(), String> {
+    let over = |what: &str, n: usize, max: usize| {
+        (n > max).then(|| format!("{n} {what}, over the limit of {max}"))
+    };
+    let checks = [
+        over(
+            "layout.mirrored names",
+            raw.layout.mirrored.len(),
+            MAX_MIRRORED,
+        ),
+        over(
+            "layout.operator_owned patterns",
+            raw.layout.operator_owned.len(),
+            MAX_OWNED_PATTERNS,
+        ),
+        over("files", raw.files.len(), MAX_FILES),
+    ];
+    if let Some(e) = checks.into_iter().flatten().next() {
+        return Err(e);
+    }
+    let strings = raw
+        .layout
+        .mirrored
+        .iter()
+        .chain(&raw.layout.operator_owned)
+        .chain(raw.files.iter().map(|f| &f.path));
+    for s in strings {
+        if s.len() > MAX_PATH_BYTES {
+            return Err(format!(
+                "a path or pattern of {} bytes, over the limit of {MAX_PATH_BYTES}",
+                s.len()
+            ));
+        }
+    }
+    for f in &raw.files {
+        let depth = f.path.split('/').count();
+        if depth > MAX_PATH_SEGMENTS {
+            return Err(format!(
+                "a path of {depth} segments, over the limit of {MAX_PATH_SEGMENTS}"
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -147,6 +202,7 @@ impl Manifest {
         }
         let raw: RawManifest = serde_json::from_value(value).map_err(|e| invalid(e.to_string()))?;
         debug_assert_eq!(raw.schema, SUPPORTED_SCHEMA);
+        check_limits(&raw).map_err(invalid)?;
 
         let version = Version::parse(&raw.version)
             .map_err(|e| invalid(format!("version '{}': {e}", raw.version)))?;
@@ -221,6 +277,7 @@ impl Manifest {
             version,
             min_node,
             key_id,
+            mirrored_set: layout.mirrored.iter().cloned().collect(),
             layout,
             files,
             matcher,
@@ -272,7 +329,7 @@ impl Manifest {
     pub fn under_mirrored(&self, path: &str) -> bool {
         let mut segs = path.split('/');
         let first = segs.next().unwrap_or_default();
-        self.layout.mirrored.iter().any(|m| m == first) && segs.next().is_some()
+        self.mirrored_set.contains(first) && segs.next().is_some()
     }
 
     /// The operator-owned matcher built from `layout.operator_owned`.
@@ -365,6 +422,90 @@ mod tests {
         assert!(!fetch.to_string().bytes().any(|b| b < 0x20), "{fetch}");
         let err = crate::paths::check_rel_path("/\u{1b}[2J").unwrap_err();
         assert!(!err.bytes().any(|b| b < 0x20), "{err:?}");
+    }
+
+    fn sized(mirrored: &[String], owned: &[String], files: &[String]) -> String {
+        let rows: Vec<serde_json::Value> = files
+            .iter()
+            .map(|p| serde_json::json!({"path": p, "sha256": "ab".repeat(32), "size": 1, "mode": "0644"}))
+            .collect();
+        serde_json::json!({
+            "schema": 1, "version": "0.5.0", "min_node": "22.5.0", "key_id": "0123456789abcdef",
+            "layout": {"mirrored": mirrored, "operator_owned": owned},
+            "files": rows,
+        })
+        .to_string()
+    }
+
+    fn names(prefix: &str, n: usize) -> Vec<String> {
+        (0..n).map(|i| format!("{prefix}{i}")).collect()
+    }
+
+    /// D-027 (E-31): each limit passes at the limit and is refused, named, one over it.
+    #[test]
+    fn each_size_limit_passes_at_the_limit_and_refuses_one_over() {
+        let m = || vec!["m0".to_string()];
+        let one = || vec!["m0/x".to_string()];
+        let deep = |n: usize| format!("m0/{}f", "a/".repeat(n - 2));
+        let long = |n: usize| format!("m0/{}", "a".repeat(n - 3));
+        type Case = (&'static str, usize, Box<dyn Fn(usize) -> String>);
+        let cases: Vec<Case> = vec![
+            (
+                "mirrored",
+                MAX_MIRRORED,
+                Box::new(move |n| sized(&names("m", n), &[], &one())),
+            ),
+            (
+                "patterns",
+                MAX_OWNED_PATTERNS,
+                Box::new(move |n| sized(&m(), &names("p", n), &one())),
+            ),
+            (
+                "path bytes",
+                MAX_PATH_BYTES,
+                Box::new(move |n| sized(&m(), &[], &[long(n)])),
+            ),
+            (
+                "path segments",
+                MAX_PATH_SEGMENTS,
+                Box::new(move |n| sized(&m(), &[], &[deep(n)])),
+            ),
+        ];
+        for (what, max, doc) in &cases {
+            assert!(
+                Manifest::parse(doc(*max).as_bytes()).is_ok(),
+                "{what} at {max}"
+            );
+            let err = Manifest::parse(doc(*max + 1).as_bytes()).unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains(&format!("over the limit of {max}")),
+                "{what}: {err}"
+            );
+        }
+        let pattern = sized(&m(), &["p".repeat(MAX_PATH_BYTES + 1)], &one());
+        let err = Manifest::parse(pattern.as_bytes()).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains(&format!("over the limit of {MAX_PATH_BYTES}")),
+            "{err}"
+        );
+    }
+
+    /// D-027 (E-31), structural: a manifest at the file limit parses, and one over does not.
+    #[test]
+    fn a_manifest_at_the_file_limit_parses() {
+        let m = vec!["m0".to_string()];
+        let ok = Manifest::parse(sized(&m, &[], &names("m0/f", MAX_FILES)).as_bytes()).unwrap();
+        assert_eq!(ok.files.len(), MAX_FILES);
+        assert!(ok.under_mirrored("m0/f99999"));
+        let err =
+            Manifest::parse(sized(&m, &[], &names("m0/f", MAX_FILES + 1)).as_bytes()).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains(&format!("over the limit of {MAX_FILES}")),
+            "{err}"
+        );
     }
 
     #[test]

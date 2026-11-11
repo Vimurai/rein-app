@@ -40,12 +40,15 @@ fn with_prefixes(path: &str) -> impl Iterator<Item = &str> {
         .chain(std::iter::once(path))
 }
 
-/// The shipped paths and their directory prefixes, ASCII-lowercased (D-021).
-fn folded_ship(ship: &[String]) -> HashSet<String> {
-    ship.iter()
-        .flat_map(|p| with_prefixes(p))
-        .map(str::to_ascii_lowercase)
-        .collect()
+/// The shipped paths, ASCII-lowercased once each (D-021); [`folded_set`] borrows from it.
+fn folded_ship(ship: &[String]) -> Vec<String> {
+    ship.iter().map(|p| p.to_ascii_lowercase()).collect()
+}
+
+/// Every lowercased shipped path and its directory prefixes, as slices of `lower`: no
+/// per-prefix copies, so memory is linear in the input (E-31).
+fn folded_set(lower: &[String]) -> HashSet<&str> {
+    lower.iter().flat_map(|p| with_prefixes(p)).collect()
 }
 
 /// Is `path`, or any directory above it, operator-owned? The last segment is tested both
@@ -60,12 +63,13 @@ pub(crate) fn owned(m: &OperatorOwnedMatcher, path: &str) -> bool {
 pub fn plan(source: &[&str], live_entries: &[String], m: &OperatorOwnedMatcher) -> SyncPlan {
     let ship: Vec<String> = source.iter().map(|p| p.to_string()).collect();
     let shipped: std::collections::HashSet<&str> = ship.iter().map(String::as_str).collect();
-    let folded = folded_ship(&ship);
+    let lower = folded_ship(&ship);
+    let folded = folded_set(&lower);
     let (prune_first, prune) = live_entries
         .iter()
         .filter(|e| !shipped.contains(e.as_str()) && !owned(m, e))
         .cloned()
-        .partition(|e| folded.contains(&e.to_ascii_lowercase()));
+        .partition(|e| folded.contains(e.to_ascii_lowercase().as_str()));
     SyncPlan {
         ship,
         prune,
@@ -173,10 +177,19 @@ pub(crate) fn preflight(
     // D-023: a symlink named as a case variant of a shipped path IS that path on a
     // case-insensitive home (and would make the snapshot fail later); refused on every
     // filesystem, naming the link.
-    let mut by_parent: std::collections::HashMap<&str, Vec<&str>> = Default::default();
+    // Per directory: the shipped names as written and lowercased, so each live entry is two
+    // set lookups, not a comparison with every shipped name (E-31).
+    #[derive(Default)]
+    struct Names<'a> {
+        exact: HashSet<&'a str>,
+        lower: HashSet<String>,
+    }
+    let mut by_parent: std::collections::HashMap<&str, Names<'_>> = Default::default();
     for rel in ship {
         if let Some((dir, name)) = rel.rsplit_once('/') {
-            by_parent.entry(dir).or_default().push(name);
+            let names = by_parent.entry(dir).or_default();
+            names.exact.insert(name);
+            names.lower.insert(name.to_ascii_lowercase());
         }
     }
     for (dir, names) in by_parent {
@@ -187,9 +200,8 @@ pub(crate) fn preflight(
             let Ok(found) = entry.file_name().into_string() else {
                 continue;
             };
-            let variant = names
-                .iter()
-                .any(|n| *n != found && n.eq_ignore_ascii_case(&found));
+            let variant = !names.exact.contains(found.as_str())
+                && names.lower.contains(&found.to_ascii_lowercase());
             if variant && entry.file_type().is_ok_and(|t| t.is_symlink()) {
                 return Err(LayoutError::CaseVariantSymlink(live.join(dir).join(found)));
             }
@@ -269,9 +281,11 @@ pub(crate) fn apply(
     let mut order: Vec<&String> = mirrored.iter().filter(|m| *m != "hooks").collect();
     order.extend(mirrored.iter().filter(|m| *m == "hooks"));
     let under = |p: &str, root: &str| p.split('/').next() == Some(root);
-    let folded = folded_ship(&plan.ship);
+    let lower = folded_ship(&plan.ship);
+    let folded = folded_set(&lower);
     let exact: HashSet<&str> = plan.ship.iter().flat_map(|p| with_prefixes(p)).collect();
-    let case_variant_dir = |d: &str| folded.contains(&d.to_ascii_lowercase()) && !exact.contains(d);
+    let case_variant_dir =
+        |d: &str| folded.contains(d.to_ascii_lowercase().as_str()) && !exact.contains(d);
     for root in order {
         for rel in plan.prune_first.iter().filter(|p| under(p, root)) {
             remove(live, rel, faults)?;
