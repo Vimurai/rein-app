@@ -161,6 +161,8 @@ E-6 still waits on rein:
 | **E-37** | `config.toml` + six themes + tiling-WM window options | 2 | E-36 |
 | **E-38** | project store, start screen, picker, tabs | 2 | E-35, E-36 |
 | **E-39** | `:checkhealth`, `:update`, `:rollback`, `:profiles` over the Phase 1 seams | 3 | E-38 |
+| **E-40** | click-first layer: `simple` input style (default), first-run choice, clickable chrome, menu, buttons, folder dialog (D-034) | 2 | E-38 |
+| **E-41** | Settings overlay + `ui.json` (`config.toml` wins), font zoom, pointer-parity tests, final UX pass (D-034) | 2 | E-37, E-39, E-40 |
 
 ## 8. Contract Rulings received from `rein` (P-50 → rein D-153, mirrored as rein-app D-003)
 All five open questions are closed; `distribution.md` carries the detail. Summary:

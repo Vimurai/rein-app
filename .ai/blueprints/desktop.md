@@ -8,8 +8,9 @@
 Give a Rein operator one window that opens a project's Architect and Engineer panes, shows
 install health, and runs install / update / rollback / profiles — without hiding the terminal.
 Users are people who live in tmux and nvim. One sentence: **a window that behaves like a
-terminal program — modal, keyboard-first, drawn on the character grid, configured by one
-text file — wrapped around the user's own tmux session.**
+terminal program — drawn on the character grid, fully usable by keyboard (modal for those
+who want it) and equally by mouse — wrapped around the user's own tmux session.** Users are
+both people who live in tmux and nvim and people who expect to click (D-034).
 
 Stack (fixed by `architect.md` §5): Tauri 2 (Rust core, system webview), xterm.js for the
 terminal. New workspace crate `rein-desktop` (bin). The `rein-app` CLI crate gains no GUI
@@ -30,13 +31,16 @@ Everything else follows five design rules:
 2. **Modes, as in nvim.** `TERMINAL` (keys go to the pty — the default once a project is
    open), `NORMAL` (keys drive the app), `COMMAND` (the `:` line). The mode is the first
    statusline segment and sets its colour.
-3. **Every action is a named command.** A key, a mouse click and a `:` line all resolve to
-   the same closed list of actions. There is no action reachable only by mouse.
+3. **Every action is a named command, reachable both ways (D-034).** A key, a click and a
+   `:` line all resolve to the same closed list of actions. No action is reachable only by
+   mouse and none only by keyboard. See "Two ways in" below.
 4. **The UI teaches the CLI.** When an action runs a `rein` or `rein-app` command, the
    command line row shows the exact command; `y` in NORMAL copies it.
 5. **One text file.** `config.toml` holds font, theme, keymap and window options and is
-   reloaded on save. There is no settings dialog; `:config` shows and copies the file's
-   path, and the operator edits it in their own editor.
+   reloaded on save; `:config` shows and copies the file's path, and the operator edits it
+   in their own editor. The app never rewrites it. A small Settings overlay exists for
+   people who prefer to click; it saves to the app's own `ui.json`, and the text file wins
+   (D-034).
 
 ### Screen
 ```
@@ -82,6 +86,52 @@ numbered 1–9, and five key hints (`p` projects, `o` open directory, `h` checkh
 The app binds nothing in TERMINAL mode except the escape chord, so no tmux or shell binding
 is ever shadowed. The chord is configurable.
 
+### Two ways in: click-first and modal (D-034)
+The same window serves someone who has never used vim. Nothing is hidden behind a key.
+
+**Input style** — `simple` (the default) or `modal`, chosen on the first-run screen ("How do
+you like to work?" — two large choices, each with a three-line preview) and changeable any
+time in Settings.
+- `simple`: there are no modes to learn. Keys always go to the terminal. App shortcuts are
+  the ones common terminals use: `Ctrl+Shift+P` menu, `Ctrl+Shift+O` open project,
+  `Ctrl+Shift+T` project picker, `Ctrl+Tab` / `Ctrl+Shift+Tab` and `Alt+1`–`9` tabs,
+  `Ctrl+Shift+W` close tab, `Ctrl+Shift+C` / `Ctrl+Shift+V` copy / paste, `Ctrl+=` / `Ctrl+-`
+  / `Ctrl+0` font size, `F1` help. The statusline shows no mode segment.
+- `modal`: the keymap table above. The `simple` shortcuts keep working in every mode except
+  where the user rebinds them.
+Both are tables for the one `modes` function; switching style swaps the table.
+
+**Everything in the chrome is a button.** Still drawn on the grid, with a hover highlight,
+a pointer cursor and a tooltip naming the action and its shortcut in the current style:
+```
+ 1:rein-app* ×  2:energy-api ×  3:docs ×   [+]                 rein 0.5.0  [≡]
+```
+- Tabline: click a tab to switch, `×` to close (detach), `[+]` to open a project through
+  the system folder dialog, the version to open Update, `[≡]` to open the **menu**.
+- **Menu** (`[≡]`, `Ctrl+Shift+P`, `:` in modal): one searchable list of every action in
+  plain words ("Open a project…", "Check installation health", "Update Rein", "Undo last
+  update", "Profiles", "Settings", "Help") with its shortcut at the right. Click or Enter
+  runs it. This is the only place a newcomer needs to know.
+- Statusline: each segment is a button — health opens the health view, profiles opens
+  Profiles, the branch segment copies the branch name.
+- Overlays: rows are clickable, the wheel scrolls, a click outside or `×` closes. Anything
+  that changes the machine (update, rollback, apply profiles) ends in two labelled buttons,
+  the safe one focused — `[ Cancel ]  [ Update to 0.5.1 ]` — and `y` / `n` still answer.
+- Start screen: a large `[ Open a project… ]` button, the recent projects as a clickable
+  list, and a `[ Check installation ]` button; the key hints stay beside them.
+- Terminal: drag selects, right-click opens Copy / Paste / Select all, `Ctrl`+wheel changes
+  the font size. The mouse is passed to tmux when tmux has mouse mode on (Shift bypasses,
+  as in every terminal).
+- **Plain words first.** Labels and messages say what happens ("Undo last update"), with
+  the command shown beneath in dim text — rule 4 becomes how a clicker learns the CLI.
+  Error lines keep rein's own text unchanged.
+
+**Settings** (menu → Settings, `:settings`): a small overlay with input style, theme (live
+preview), font size, title bar on/off, and a `[ Open config file location ]` button. Choices
+made here are saved in the app's own `ui.json`; `config.toml` stays the operator's and is
+never rewritten. A key set in `config.toml` wins, and Settings shows that row as "set in
+config.toml" and read-only.
+
 ### For tiling window managers
 `decorations = false` removes the title bar; the window class / app id is `rein-app` so
 i3, sway and Hyprland rules can match it; `opacity` (0.6–1.0) is honoured where the
@@ -124,6 +174,8 @@ Action        = closed enum (Rust and TS generated from one list):
                 | tab.next | tab.prev | tab.goto(n) | tab.detach | app.quit | health.show
                 | release.update | release.rollback | profiles.show | profiles.apply
                 | cmd.yank | config.open | config.reload | theme.set(name)
+                | menu.show | settings.show | help.show | input.style(simple | modal)
+                | font.bigger | font.smaller | font.reset | term.copy | term.paste
 Tab           = { id: u32, project: ProjectPath, pty: PtyId | none, title: String }
 ProjectPath   = canonical absolute path; printable, no control or bidi characters (D-024 rule)
 ProjectsFile  = { schema: 1, recent: [{ path, last_opened }] }      (at most 64 entries)
@@ -138,6 +190,10 @@ Support/rein-app` only when the XDG variables are unset):
 - `$XDG_CONFIG_HOME/rein-app/config.toml` — the operator's; created with commented defaults
   on first run, never rewritten by the app afterwards.
 - `$XDG_STATE_HOME/rein-app/projects.json` — the app's; temp file + rename.
+- `$XDG_STATE_HOME/rein-app/ui.json` — the app's (D-034):
+  `{ schema: 1, input_style: "simple" | "modal", theme?, font_size?, decorations?, first_run_done }`;
+  temp file + rename; an unreadable file is ignored and the defaults apply.
+  Effective setting = `config.toml` value if set, else `ui.json`, else the default.
 Nothing new is written under `$HOME/.rein` or inside a project.
 
 ## API / Interface Contracts
@@ -156,6 +212,9 @@ else (no `shell`, `fs`, `http` or `opener` plugin).
 | `release_apply` | `update` \| `rollback` | progress lines (channel), then the Phase 1 exit code | lock held · every Phase 1 refusal, text unchanged |
 | `profiles_plan` / `profiles_apply` | profile names | per-profile diff of the three allowed keys / result | Phase 1 errors, text unchanged |
 | `clipboard_write` | text (≤ 64 KiB) | — | — |
+| `clipboard_read` | — (only on a paste action started by the user) | text (≤ 1 MiB) | — |
+| `project_choose` | — | a directory picked in the system folder dialog, then validated exactly as `tab_open` validates | cancelled · same as `tab_open` |
+| `ui_get` / `ui_set` | — / one field of `ui.json`, value checked against its type | effective settings, each marked `config` \| `ui` \| `default` | field set in `config.toml` (read-only) |
 Events (core → web): `config_changed`, `health_changed`, `pty_exit { id, code }`.
 
 CLI: `rein-app window [DIR]` starts `rein-desktop` (found beside the `rein-app` binary,
@@ -191,6 +250,11 @@ Trust boundaries added by the window:
    nothing else, so the three-key allow-list and the compile-time ban on `hooks`,
    `permissions`, `autoMode`, `defaultMode` hold unchanged. `release_apply` takes the same
    install lock and owner guard as the CLI.
+6. **Pointer layer (D-034).** A click resolves to an `Action` through the same table as a
+   key, so it gains no new power. The capability file gains exactly one plugin permission,
+   the folder-open dialog; its result is a path and passes the `tab_open` validation. Paste
+   is sent to the pty only from a user gesture, and a paste containing a newline asks once
+   ("Paste 3 lines?") before it is sent. `ui_set` accepts only the listed fields.
 No secret is read, stored or shown. The window makes no network call of its own; only
 `release_check` / `release_apply` reach the network, through the Phase 1 verifier.
 
@@ -236,6 +300,13 @@ release artifact carries the window until a task adds it to the dist configurati
   cannot be handed a key name (it takes profile names only).
 - **Capabilities:** a test reads the Tauri capability file and fails if any plugin
   permission beyond the IPC table and window basics is present; the CSP string is asserted.
+- **Pointer parity (D-034):** a test walks the `Action` list and fails if an action has no
+  menu entry, or no binding in either the `simple` or the `modal` table; `simple` style
+  forwards every key that is not one of its shortcuts; every chrome button has a tooltip
+  and an accessible name; multi-line paste asks first; a field set in `config.toml` is
+  refused by `ui_set`; an unreadable `ui.json` yields the defaults.
+- **Newcomer path:** with a fresh state directory, opening a project, checking health and
+  starting an update can each be done with the mouse alone, and with the keyboard alone.
 - **Screens:** `ux_reviewer` on the start screen, a project tab, each overlay, in
   `gruvbox-dark` and `github-light`, at 80×24 and 200×60 cells — contrast ≥ 4.5:1 for text.
 
@@ -257,4 +328,10 @@ release artifact carries the window until a task adds it to the dist configurati
 | E-37 | `Config`: `config.toml` load / validate / watch, six themes shared with xterm.js, `decorations`, `opacity`, window class | 2 | E-36 |
 | E-38 | `ProjectStore`, start screen, project picker overlay, tabs (`gt`, `gT`, `1`–`9`, `ZZ`, `:q`, `:qa`) | 2 | E-35, E-36 |
 | E-39 | `HealthService` + `:checkhealth` overlay + statusline segments; `release_check` / `release_apply` with `y/N` confirm; `profiles_plan` / `profiles_apply` overlay | 3 | E-38 |
-Tier 3 tasks run `security_engineer` before commit. E-39 closes with a `ux_reviewer` pass.
+| E-40 | Click-first layer: `simple` input style and its shortcut table, first-run choice, clickable tabline / statusline / overlays / start screen, the `[≡]` menu, labelled confirm buttons, tooltips, terminal context menu and paste guard, `project_choose` | 2 | E-38 |
+| E-41 | Settings overlay + `ui.json` (`ui_get` / `ui_set`, `config.toml` wins), font zoom, pointer-parity tests, final `ux_reviewer` pass | 2 | E-37, E-39, E-40 |
+Tier 3 tasks run `security_engineer` before commit. The `ux_reviewer` pass named in E-39
+is repeated at the end of E-41, which is the one that counts.
+E-34..E-39 as registered stay valid: E-34's capability test allows no plugin until E-40
+adds the folder dialog and updates that test; E-36 builds `modes` so a second key table can
+be supplied.

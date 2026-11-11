@@ -1237,3 +1237,40 @@ The operator asked for the window to be planned now, for people who live in Linu
 
 ### Rollback
 Remove `crates/rein-desktop` and the `window` subcommand; nothing in `$HOME/.rein`, a profile or a project is changed by the window itself.
+
+---
+
+## D-034 — The window is click-first by default and modal by choice; every action is reachable both ways
+
+**Date**: 2026-11-11
+**Task**: operator request (amends D-033); E-40, E-41
+**Decision**: The window ships two input styles over one action list — `simple` (default: no modes, common terminal shortcuts, everything clickable) and `modal` (the D-033 keymap) — and every action must be reachable by mouse alone and by keyboard alone.
+
+### Why needed
+The operator pointed out that D-033 served only power users. People who are used to clicking must be able to open a project, check health and update without learning a mode or a command.
+
+### Rulings
+1. **Two input styles, one `modes` function, two key tables.** `simple` is the default; the first-run screen offers the choice; Settings changes it. The `simple` shortcuts also work in `modal`. This replaces D-033 ruling 2's "TERMINAL default with only the escape chord taken" for the `simple` style, where the listed `Ctrl+Shift` shortcuts are taken instead.
+2. **All chrome is clickable** — tabs, `×`, `[+]`, version, `[≡]` menu, statusline segments, overlay rows — still drawn on the cell grid, with hover, tooltip (action + shortcut) and accessible name.
+3. **One menu lists every action in plain words** with its shortcut. It is the single place a newcomer needs.
+4. **Machine-changing actions end in two labelled buttons**, the safe one focused.
+5. **Plain words first, the command beneath.** rein's own error text is never reworded.
+6. **A Settings overlay exists** (amends D-033 ruling 5, "no settings dialog"). It writes the app's own `ui.json`. `config.toml` is still never rewritten and wins when it sets a key; Settings shows such a row read-only.
+7. **One plugin permission is added:** the system folder-open dialog. Its result passes the `tab_open` validation. A multi-line paste asks once before it is sent.
+8. A test enforces parity: an action with no menu entry, or no binding in either table, fails the build.
+
+### Alternatives considered
+1. **Keep modal as the default with a "beginner" switch** — rejected: the first minute decides whether a clicker stays; a vim user finds the switch at once.
+2. **Two separate UIs (a GUI and a "pro" skin)** — rejected: two code paths and two sets of bugs; one action list with two input tables gives both.
+3. **Let Settings write `config.toml`** — rejected: rewriting a hand-edited file loses comments and ordering, and breaks the promise that the file is the operator's.
+4. **Chosen: same grid design, click-first default, modal opt-in.**
+
+### Constraints driving this decision
+- D-033 rulings 3, 5 and 7 (closed action list, config cannot run programs, untrusted web view) stay in force.
+
+### Impact
+- Unlocks: E-40, E-41. E-34..E-39 as registered stay valid (E-36 must take the key table as input; E-34's capability test is updated by E-40).
+- Risk if wrong: the `simple` shortcuts collide with a user's tmux or shell bindings — every one is rebindable in `config.toml`.
+
+### Rollback
+Set the default style back to `modal`; the click layer and Settings are additive and can be removed without touching the action list.
