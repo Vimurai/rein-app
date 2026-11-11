@@ -1271,3 +1271,26 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - Nothing in hosted CI exercises a real rein artifact; the layout test must be run by hand before each tag.
 ---
+
+---
+## Handoff — 2026-11-11 19:12 UTC
+**From**: Architect → Engineer
+**Trigger**: operator asked for the Phase 2 window to be planned; E-34..E-39 registered (D-033)
+
+### What was built
+- `.ai/blueprints/desktop.md` v1 (new — read it before E-34); `.ai/DECISIONS.md` D-033; `.ai/architect.md` §0 and §7; `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-033**: the window is a new crate `rein-desktop` (Tauri 2 + xterm.js). One pty per tab, child `rein start`, cwd = the project; tmux draws the panes. nvim-style modes, chrome on the cell grid, a closed action list, one read-only `config.toml`. The web view is untrusted: closed IPC table, no shell/fs/http/opener plugin, no IPC that takes a program or argv. The CLI crate gets no GUI dependency.
+
+### Blueprint divergence (if any)
+- NONE open. E-33 (f0525e4) is not yet reviewed by the Architect; it does not block E-34.
+
+### Next action needed
+- **E-34** (T2): the `rein-desktop` crate, capability file, CSP, grid shell, `rein-app window`. `dependency_gate` for every new crate and npm package; `ci_gate` before touching a workflow.
+- Then E-35 (T3) ∥ E-36 (T2) → E-37, E-38 → E-39 (T3) as they unblock.
+
+### Open risks
+- `rein start` as a pty child is assumed, not verified (no rein checkout was readable here). If it misbehaves in E-35, stop and report.
+- Linux needs the WebKitGTK development packages on the build machine and the hosted runner.
+---
