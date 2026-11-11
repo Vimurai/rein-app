@@ -24,7 +24,10 @@
 
 - **Phase 2 started (D-033, 2026-11-11):** `.ai/blueprints/desktop.md` v1 — the window ("Modeline") is a separate crate `rein-desktop` (Tauri 2 + xterm.js): one pty per tab running `rein start` (tmux draws the panes, the app names no session), nvim-style modes (TERMINAL / NORMAL / COMMAND, escape `C-\ C-n`), chrome on the cell grid (tabline, statusline, command line, floating overlays), a closed action list, one read-only `config.toml`, six themes, tiling-WM options. Web view untrusted: closed IPC table, no shell/fs/http plugin. Linux + macOS only in this revision. **D-034:** click-first by default — `simple` input style (no modes, common terminal shortcuts), all chrome clickable, one plain-word menu, labelled confirm buttons, a Settings overlay saving to the app's `ui.json` (`config.toml` never rewritten and wins); `modal` is opt-in; every action reachable by mouse alone and by keyboard alone (tested). Queue: E-34 open; E-35..E-41 blocked in order. Three non-blocking questions for rein are listed in the blueprint and not yet sent.
 
+- **Windows window (D-038, 2026-11-11):** WSLg cannot paint the Linux build, so `rein-desktop` is also built natively for Windows (WebView2). Rein stays in WSL2: the only program started is `wsl.exe` (fixed argv, constant scripts, `WSLENV` removed); project paths are Linux paths (`\\wsl.localhost\<distro>\…` mapped, drive paths refused); health / update / profiles run the Linux `rein` / `rein-app` inside WSL (`rein-app update --check` added); lock-file single instance; unsigned NSIS installer as a CI workflow artifact, not a release asset. Queue: E-43 (T3, after E-35, before E-42) → E-44 (T2); E-45 (T3) after E-39.
+
 ## Recent changes (last 10)
+- 2026-11-11 Architect: D-038 — Windows window over WSL2; E-43..E-45 registered.
 - 2026-11-11 Architect: D-034 — click-first default, modal opt-in; E-40, E-41 registered.
 - 2026-11-11 Architect: D-033 — Phase 2 window blueprint (`desktop.md`); E-34..E-39 registered.
 - 2026-11-11 Architect: D-032 — E-32 accepted; no recomputed verdict; layout test stays local; E-33 registered.

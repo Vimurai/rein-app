@@ -1387,3 +1387,88 @@ The operator asked for shadcn/ui. D-034 added a click layer (menu, dialogs, tool
 
 ### Rollback
 The `modes` function, the IPC table and the core do not depend on React; the components directory can be replaced by hand-written equivalents without touching them.
+
+## D-038 — React + Tailwind + shadcn/ui base dependencies for E-42 (dependency_gate, Engineer-recorded)
+
+**Date**: 2026-11-11
+**Task**: E-42 (React shell, theme variables, restyled shadcn/ui components) — D-037
+**Decision**: ADOPT the set below (operator, 2026-11-11: "finish everything … don't ask me for permissions, just build it"). Every item is named in `.ai/blueprints/desktop.md` §Execution Constraints. Recorded by the Engineer; the Architect may revise.
+
+| Package | Version | Published | License | Use | Kind |
+|---|---|---|---|---|---|
+| react, react-dom | 19.3.1 | 2026-10-14 | MIT | UI components | bundled |
+| @types/react, @types/react-dom | 19.3.0 | 2026-09-09 | MIT | types | dev |
+| tailwindcss, @tailwindcss/cli | 4.3.3 | 2026-07-16 | MIT | compile one static stylesheet at build time | dev (build) |
+| @radix-ui/react-dialog | 1.3.1 | 2026-10-12 | MIT | Dialog, Command dialog | bundled |
+| @radix-ui/react-tooltip | 1.4.1 | 2026-10-12 | MIT | Tooltip | bundled |
+| @radix-ui/react-context-menu | 2.4.1 | 2026-10-12 | MIT | terminal Copy / Paste menu | bundled |
+| @radix-ui/react-select | 2.4.1 | 2026-10-12 | MIT | Settings selects | bundled |
+| @radix-ui/react-switch | 1.4.1 | 2026-10-12 | MIT | Settings toggles | bundled |
+| @radix-ui/react-scroll-area | 1.4.0 | 2026-10-12 | MIT | overlay scrolling | bundled |
+| @radix-ui/react-slot | 1.5.0 | 2026-10-12 | MIT | Button `asChild` | bundled |
+| cmdk | 1.1.1 | 2025-03-14 | MIT | menu (Command) | bundled |
+| class-variance-authority | 0.7.1 | 2024-11-26 | Apache-2.0 | component variants | bundled |
+| clsx | 2.1.1 | 2024-04-23 | MIT | class joining | bundled |
+| tailwind-merge | 3.7.0 | 2026-09-12 | MIT | class merging (`cn`) | bundled |
+
+Tailwind 4.3.4 / 4.3.5 are days old at recording; 4.3.3 is pinned until a newer release has aged two weeks.
+
+### Why needed
+D-037: the click layer (menu, dialogs, tooltips, context menu, Settings, first-run screen) uses shadcn/ui on Radix primitives, which are React components; Tailwind is how shadcn components are styled.
+
+### Alternatives considered
+1. **Hand-written components in plain TypeScript** (E-34's approach) — rejected by D-037 (operator): focus trapping, keyboard navigation and accessible names for menus and dialogs are what Radix provides.
+2. **Preact + compat** — smaller, but Radix and cmdk target React 19; a compat layer is a second source of bugs.
+3. **Tailwind at run time (Play CDN)** — impossible under CSP `default-src 'self'` and not wanted: the stylesheet is compiled at build time.
+
+### Size / weight
+React + react-dom ~ 190 KB minified; Radix primitives used ~ 60–90 KB together; cmdk ~ 15 KB; cva/clsx/tailwind-merge ~ 25 KB. The E-42 acceptance caps the whole bundle (xterm.js included) at 1.5 MiB uncompressed; a test asserts it. Tailwind runs only at build time; its output is one static CSS file.
+
+### Security track record
+No advisory known to the Engineer for these versions. Radix components that inject a `<style>` element (Scroll Area's and Select's scrollbar hiding, `react-remove-scroll`) are checked against the CSP in E-42; per D-037 a component that needs inline style or script elements is dropped, the CSP is never loosened.
+
+### Maintenance
+React 19 is current; Radix primitives and Tailwind 4 had releases in the last month; cmdk, cva and clsx are small and stable.
+
+### Rollback
+`modes`, the IPC table and the core have no React import; the `ui/components/` directory can be replaced by hand-written equivalents without touching them. Removing React means restoring E-34's `grid.ts` rendering in `main.ts`.
+
+## D-038 — The Windows window is a native WebView2 build whose every process is `wsl.exe`; installer as a CI artifact
+
+**Date**: 2026-11-11
+**Task**: operator wants to install the window on Windows; Engineer finding that the Linux build cannot paint under WSLg (MESA "ZINK: failed to choose pdev"; three WebKit/GL switches do not help; the same binary renders on Xvfb). Revises `desktop.md` ("Windows window" was a later revision). E-43, E-44, E-45.
+**Decision**: `rein-desktop` is built for Windows (Tauri 2 / WebView2). Rein, the projects and the profiles stay inside WSL2; the Windows program starts only `wsl.exe`, with fixed argv shapes, and learns everything about a project by asking inside WSL.
+
+### Why needed
+On Windows the operator's only way to see the window was WSLg, and WebKitGTK does not paint there. Contract non-goal "native Windows without WSL2" is unchanged — this is a Windows window over WSL2, as Phase 1's launcher is.
+
+### Rulings
+1. **`Host` seam.** Project validation, the pty child, doctor, release / profile actions and directories sit behind one trait: `LocalHost` (today's behaviour) and `WslHost`.
+2. **Pty child (ConPTY):** `wsl.exe -d D --cd <linux path> -e <user's shell> -lic 'exec ~/.rein/bin/rein start'`. Login + interactive so `PATH` matches the operator's terminal. The script is a constant; the path is only the `--cd` argument.
+3. **Distro:** `wsl.distro` in `config.toml`, else WSL's default; name, home and shell learned once by a fixed probe and validated; one distro per window. State detection reuses the Phase 1 `wsl.rs` logic (shared, not copied).
+4. **Project path on Windows = the Linux path.** Accepted: a POSIX absolute path, or `\\wsl.localhost\<distro>\…` / `\\wsl$\<distro>\…` mapped to it. Drive paths (`/mnt/c`) are refused in this revision. The `.ai/` check, the "rein installed" check and canonicalisation are one fixed call inside WSL. Paths with `"` or `\` are refused on Windows rather than escaped.
+5. **Environment:** `WSLENV` is removed from the child, so nothing crosses; WSL supplies `TERM=xterm-256color`.
+6. **Single instance:** an exclusively held lock file plus a watched handoff directory under `%LOCALAPPDATA%\rein-app` — no named pipe.
+7. **Directories:** config in `%APPDATA%\rein-app`, state in `%LOCALAPPDATA%\rein-app`.
+8. **Health / update / rollback / profiles run the Linux programs inside WSL** (`rein doctor --json`, `rein-app update --check | update --yes | rollback | profiles apply …`). The Windows binary never touches a Rein tree or a settings file. The CLI gains the additive `update --check`.
+9. **Distribution now:** a separate hosted workflow builds an unsigned per-user NSIS installer and uploads it as a workflow artifact (14 days). It is not a release asset; `release.yml` and the dist configuration are untouched (D-033's "no release artifact carries the window" still holds).
+10. The window never installs WSL and never elevates; it shows the command to run.
+
+### Alternatives considered
+1. **Fix WSLg rendering** — rejected: three switches tried, the fault is in the WSLg GL stack, not ours.
+2. **Named pipe for single instance** — rejected: the default pipe ACL lets other users connect and a pipe name can be squatted; securing it needs raw Win32 security attributes (`unsafe` or a new dependency). A lock file in the user's private profile directory needs neither.
+3. **Run the Windows `rein_release` / `rein_profiles` against `\\wsl.localhost` paths** — rejected: POSIX modes, locks and the owner guard do not hold over the 9P share; it would be a second settings writer outside the Linux security model.
+4. **`wsl.exe -e <home>/.rein/bin/rein start` with no shell** — rejected: `PATH` would lack nvm / Homebrew, which the operator's terminal has.
+5. **Allow `/mnt/c` projects** — deferred: slow, and Windows processes can rewrite files the Rein gate trusts.
+6. **MSI or a release asset now** — rejected: the CLI owns the `.msi`; nothing unsigned goes on a release.
+
+### Constraints driving this decision
+- `architect.md` §2 non-goal (no native Windows Rein); D-033 ruling 7 (closed process list, no interpolated command line); the Tier 3 settings boundary (`distribution.md`).
+- No Windows Rust toolchain on the operator's machine — the build must come from hosted CI.
+
+### Impact
+- Unlocks: E-43 → E-44 give the operator an installable window (opens the DIR from the command line until E-38); E-45 completes parity.
+- Risk if wrong: `wsl.exe` re-parses its command line — mitigated by constant scripts without double quotes and by refusing `"` and `\` in paths; the interactive login shell may print rc-file noise before tmux starts (harmless, tmux repaints); an unsigned installer triggers SmartScreen; any signed-in GitHub user can download a public repository's workflow artifacts (it is a test build of public source).
+
+### Rollback
+Remove `desktop-windows.yml` and `WslHost`; `LocalHost` behind the seam is the previous behaviour. Nothing inside WSL is changed by the window.

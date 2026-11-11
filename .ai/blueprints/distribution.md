@@ -384,6 +384,7 @@ CLI (`rein-app`):
 |---|---|---|---|
 | `install [--version X.Y.Z]` | tag (default latest) | verify report, `rein install` output, the install-scope checks of `rein doctor --scope install --json` | 0 ok (install check `status` ok or warn) · 2 verify fail · 3 install check `status` is fail · 4 runtime missing · 13 `rein install` failed (its own code printed) · 14 the install check gave no valid result (not started, no or unexpected exit code, invalid document, or over its time limit — E-32, E-33) |
 | `update [--yes]` | — | available version + notes, then install | as install · 10 already current · 11 offline |
+| `update --check` (D-038) | — | installed version, newest version + notes; installs nothing | 0 newer available · 10 already current · 11 offline |
 | `rollback` | — | restored version (code only — says operator data is untouched), `rein install` output and the install-scope checks | 0 · 3 · 13 · 14 as install · 12 no snapshot |
 | `doctor [--json]` | — | passthrough of `rein doctor [--json]`, stdout untouched | rein's exit code · 14 `rein doctor` could not be started or ended without an exit code (never 1 — E-20) |
 | `profiles list` | — | table of Profile | 0 |

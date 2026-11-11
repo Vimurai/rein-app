@@ -280,9 +280,11 @@ No secret is read, stored or shown. The window makes no network call of its own;
 - At most 16 tabs; scrollback is tmux's (xterm.js keeps 1 000 lines).
 - One window per user session (single instance lock in `$XDG_RUNTIME_DIR`, falling back to
   the state directory).
-- Platforms for this revision: Linux (X11 and Wayland, WSLg included) and macOS. The Windows
-  window (pty child `wsl.exe`), the bundled Node, and notarization / code signing are later
-  revisions of this file and are not started by any task below.
+- Platforms: Linux (X11 and Wayland) and macOS, and Windows 10/11 x64 as a native WebView2
+  window over WSL2 (§Windows window, D-038). WSLg is **not** a supported way to run the
+  Linux build (WebKitGTK paints nothing there — Engineer finding 2026-11-11). The bundled
+  Node and notarization / code signing are later revisions and are not started by any task
+  below.
 - Dependencies each pass `skill: dependency_gate`: `tauri` 2, `portable-pty`, `toml`,
   `notify`; web: `@xterm/xterm`, `@xterm/addon-fit`, `@xterm/addon-webgl`, `esbuild`,
   `typescript`, and (D-037) `react`, `react-dom`, `tailwindcss` (compiled at build time to
@@ -292,8 +294,157 @@ No secret is read, stored or shown. The window makes no network call of its own;
   library. The CSP is unchanged: a component that needs an inline `<style>` or script
   element is not used. Web bundle ≤ 1.5 MiB uncompressed, xterm.js included. The web
   bundle is built in CI from a committed lockfile.
-- Hosted CI builds and tests `rein-desktop` on Linux and macOS; the Windows job keeps
-  building the CLI crates only.
+- Hosted CI builds and tests `rein-desktop` on Linux, macOS and (from E-43) Windows.
+
+## Windows window (revision 2026-11-11, D-038)
+**Core concept: Rein stays inside WSL; only the window is Windows.** `rein-desktop.exe` is
+the same crate built for Windows (Tauri 2 on WebView2). It holds no Rein tree, no profile
+file and no project file on the Windows side. Every process it starts is `wsl.exe` with a
+fixed argv shape, and everything it knows about a project it learns by asking inside WSL.
+The web UI, the IPC table, the `Action` list and the pty flow control are unchanged.
+
+### Components (Windows)
+W1. **`Host` seam** — one trait in `rein-desktop` behind which sit all the things that
+   differ by platform: validate a project, build the pty child, run doctor, run the
+   release / profile actions, name the app's directories. `LocalHost` is today's behaviour
+   (Linux, macOS) moved behind it unchanged. `WslHost` is the Windows one. No `cfg(windows)`
+   outside the two implementations, `dirs` and `single_instance`.
+W2. **`WslHost`** — owns the distro and every `wsl.exe` call.
+   - Program: `%SystemRoot%\System32\wsl.exe` by absolute path, never a `PATH` search.
+   - **State probe** at start and on `health.show`: `wsl.exe --status`, then
+     `wsl.exe --list --quiet` (UTF-16LE decode — reuse the Phase 1 `wsl.rs` logic by moving
+     `decode` / `detect` to a place both crates can use; do not copy it). Result:
+     `Absent` | `NoDistro` | `Ready`.
+   - **Distro**: `wsl.distro` from `config.toml` if set (must be in the list), else WSL's
+     default. Its name, the Linux home and the login shell are learned once by
+     `wsl.exe [-d D] -e sh -c 'printf %s\\n $WSL_DISTRO_NAME $HOME $SHELL'` and validated
+     (name `[A-Za-z0-9._-]{1,64}`; home and shell absolute POSIX paths, printable ASCII, no
+     space; shell falls back to `/bin/sh`). From then on every call passes `-d <name>`.
+     One distro per window in this revision.
+   - **Project validation** (replaces the local `.ai/` check): one call
+     `wsl.exe -d D --cd <linux path> -e sh -c '[ -d .ai ] || exit 3; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P'`.
+     Exit 0 → stdout is the canonical path (re-validated as a `ProjectPath`); 3 → no `.ai/`;
+     4 → rein not installed in WSL; anything else → not a directory. 30-second limit,
+     64 KiB output cap.
+   - **Pty child** (ConPTY through `portable-pty`): exactly
+     `wsl.exe -d D --cd <linux path> -e <shell> -lic 'exec ~/.rein/bin/rein start'`.
+     The user's own shell, login and interactive, so `PATH` is what their terminal has
+     (nvm, Homebrew). The script is one constant; the project path appears only as the
+     `--cd` argument.
+   - **Environment**: the child gets the Windows environment with `WSLENV` removed, so no
+     Windows variable (`CLAUDECODE`, `TMUX`, anything else) crosses into WSL. `TERM` is not
+     forwarded; WSL sets `xterm-256color` itself — a smoke check asserts that.
+   - **Detach**: closing the ConPTY ends `wsl.exe`, which hangs up the tmux client; the
+     session keeps running. `wsl.exe` is always reaped.
+W3. **Windows paths → `ProjectPath`** — a pure function. A `ProjectPath` on Windows is the
+   **Linux** absolute path inside the distro. Accepted inputs (argv, `:open`, folder
+   dialog, single-instance handoff):
+   - a POSIX absolute path (`/home/me/proj`) — used as is;
+   - `\\wsl.localhost\<distro>\…` or `\\wsl$\<distro>\…` — mapped to `/…`; the distro must
+     equal the window's distro (case-insensitive), else refused naming both.
+   - Anything else (a drive path such as `C:\…`, a relative path, another UNC host) is
+     refused with: "Rein projects live inside WSL — choose a folder under
+     \\wsl.localhost\<distro>". `/mnt/c` projects are not supported in this revision.
+   On `WslHost` a path containing `"`, `\`, a control or bidi character is refused before
+   any call (`wsl.exe` re-parses its command line; we do not rely on escaping).
+   The folder dialog opens at `\\wsl.localhost\<distro>\home\<user>`.
+W4. **Health, release, profiles on Windows** — never the Windows binary's own
+   `rein_release` / `rein_profiles` against a Windows home. All run inside WSL through the
+   login shell with a constant script per action:
+   | Action | Script (after `wsl.exe -d D -e <shell> -lc`) | Shown as |
+   |---|---|---|
+   | `health_get` | `exec ~/.rein/bin/rein doctor --json` | parsed on the Windows side by the Phase 1 parser (4 MiB, strict, 120 s) |
+   | `release_check` | `exec rein-app update --check` | the CLI's lines, escaped, unchanged |
+   | `release_apply update` / `rollback` | `exec rein-app update --yes` / `exec rein-app rollback` | lines streamed; the CLI's exit code |
+   | `profiles_plan` / `profiles_apply` | `exec rein-app profiles apply --dry-run --profile N…` / without `--dry-run` | the CLI's lines; exit code |
+   Profile names are checked against `[A-Za-z0-9._-]{1,64}` and against the list from
+   `rein-app profiles list` before they are placed in an argv. If `rein-app` is missing
+   inside WSL (exit 127), the overlay says "rein-app is not installed inside WSL — install
+   the Linux package there" and health still works. The CLI gains one additive flag,
+   `rein-app update --check`: print the installed version, the newest version and its
+   notes; install nothing; exit 0 newer available · 10 current · 11 offline.
+W5. **Single instance (Windows)** — no named pipe. A lock file
+   `%LOCALAPPDATA%\rein-app\instance.lock` held open without sharing for the window's
+   life. A second start that cannot take it writes its DIR to
+   `%LOCALAPPDATA%\rein-app\handoff\<random>.txt` (temp name + rename, ≤ 4 KiB) and waits
+   up to 5 s for the window to delete it — deleted → exit 0; not → exit 1 with one line.
+   The window watches the directory (`notify`, already a dependency), validates the text as
+   in W3 and opens a tab. The directory is private to the user by profile ACL; no listener
+   is exposed to other users or the network.
+W6. **Directories (Windows)** — config: `%APPDATA%\rein-app\config.toml`; state
+   (`projects.json`, `ui.json`, lock, handoff): `%LOCALAPPDATA%\rein-app\`. XDG variables
+   are ignored on Windows. Default font family on Windows: `Cascadia Mono, Consolas,
+   monospace`.
+W7. **Installer build** — a separate hosted workflow (`desktop-windows.yml`) on
+   `windows-latest`: `workflow_dispatch` and pushes to `master` that touch
+   `crates/rein-desktop/**`, `Cargo.lock` or the workflow. `permissions: contents: read`,
+   no secret, actions pinned as in `ci.yml`. It builds the UI from the lockfile, runs
+   `cargo test -p rein-desktop`, builds the Tauri **NSIS** bundle only (per-user install,
+   WebView2 bootstrapper, no MSI — the CLI owns the `.msi`), and uploads it as workflow
+   artifact `rein-desktop-windows-x64-setup` (14-day retention). It is **not** a release
+   asset: `release.yml` and the dist configuration are untouched, the installer is
+   unsigned (SmartScreen will warn) and is a test build for the operator. Passes
+   `skill: ci_gate`.
+
+### Data model changes (Windows only)
+```
+WslState     = Absent | NoDistro | Ready { distro, home, shell }
+ProjectsFile.recent[] gains  distro?: String      (written on Windows; ignored elsewhere)
+ConfigFile gains             wsl?: { distro?: String }   (accepted everywhere, used on Windows)
+```
+On Windows a recent project is not probed for existence when listed (no `wsl.exe` call per
+row); a missing one fails when opened.
+
+### Interface changes
+- `tab_open` / `project_choose` errors gain: WSL not installed · no distro · project is in
+  another distro · not a WSL path. The first two are shown on the start screen as one
+  message with the command to run (`wsl --install`, `wsl --install -d Ubuntu`) and a
+  `[ Check again ]` button. The window never installs WSL and never asks for elevation.
+- `rein-desktop.exe [DIR]`: DIR in any form W3 accepts.
+- `rein-app window` is unchanged on Linux/macOS; on Windows it starts `rein-desktop.exe`
+  found beside it or on `PATH`.
+
+### Security (Windows)
+- The process list stays closed: `wsl.exe` only, by absolute path, with the argv shapes in
+  W2 and W4. Scripts are compile-time constants with no interpolation; the only variable
+  argv elements are the validated distro name, the validated shell path, the validated
+  project path (as `--cd`) and validated profile names. No IPC command carries a program,
+  a script or a distro name.
+- Nothing crosses the environment boundary (`WSLENV` removed).
+- The Windows binary never writes a Claude settings file or a Rein tree: the Tier 3
+  settings boundary stays inside the Linux `rein-app`, with its lock and allow-list.
+- CLI text returned from WSL is untrusted display text: capped, escaped by the Phase 1
+  rule, never parsed for a decision except the doctor document and exit codes.
+- The handoff directory accepts only a path string; the window validates it like any other.
+- The unsigned installer is a known gap until the signing revision; it is published only
+  as a workflow artifact, never on a release.
+
+### Limits
+Every non-pty `wsl.exe` call: 30-second limit (a cold WSL VM takes several seconds), 64 KiB
+output cap, except doctor (120 s, 4 MiB) and release / profile runs (streamed, the Phase 1
+limits apply inside WSL). The state probe runs off the UI thread; first paint does not wait
+for WSL.
+
+### Tests (Windows revision)
+- `WslHost` against a stubbed process runner: the exact argv of every call (program path,
+  `-d`, `--cd`, constant script); `Absent` / `NoDistro` / `Ready`; UTF-16 list output; a
+  bad distro name, home or shell from the probe is refused; validation exits 0 / 3 / 4 /
+  other map to the four errors.
+- Path mapping, table-driven: POSIX path, both UNC forms, wrong distro, drive path,
+  relative path, a path with `"` or a control character.
+- The pty child spec on Windows has no `WSLENV` and the constant script.
+- Single instance: second start hands over and exits 0; no window → takes the lock; a
+  stale handoff file is ignored; an oversized or unsafe handoff is dropped.
+- Windows CI job compiles and runs these (none needs a distro).
+- Engineer smoke from inside WSL through interop (`/mnt/c/Windows/System32/wsl.exe` with
+  the same argv): the probe, the validation call and `-lic 'exec ~/.rein/bin/rein start'`
+  behave as specified. Reported in the handoff; the operator's install is the final check.
+
+### Rollback (Windows)
+Delete `desktop-windows.yml` and `WslHost`; `LocalHost` behind the seam is the previous
+behaviour. The operator uninstalls from Windows Settings and deletes
+`%APPDATA%\rein-app` and `%LOCALAPPDATA%\rein-app`. Nothing inside WSL was changed by the
+window; tmux sessions are unaffected.
 
 ## Rollback Plan
 The window is additive: a separate crate and binary, no change to the CLI's behaviour, to
@@ -351,6 +502,13 @@ release artifact carries the window until a task adds it to the dist configurati
 | E-40 | Click-first layer: `simple` input style and its shortcut table, first-run choice, clickable tabline / statusline / overlays / start screen, the `[≡]` menu, labelled confirm buttons, tooltips, terminal context menu and paste guard, `project_choose` | 2 | E-38 |
 | E-41 | Settings overlay + `ui.json` (`ui_get` / `ui_set`, `config.toml` wins), font zoom, pointer-parity tests, final `ux_reviewer` pass | 2 | E-37, E-39, E-40 |
 | E-42 | Move the E-34 web shell to React + Tailwind and add the restyled shadcn/ui base (theme tokens as CSS variables, the components named in §Components 6); do it before E-36 | 2 | — |
+| E-43 | Windows window core: `Host` seam (`LocalHost` unchanged), `WslHost` (state probe, distro, project validation, ConPTY child), Windows path mapping, Windows directories, lock-file single instance; `rein-desktop` builds and tests on the Windows CI job | 3 | E-35 |
+| E-44 | `desktop-windows.yml`: NSIS installer as a workflow artifact (`ci_gate`) | 2 | E-43 |
+| E-45 | Windows health / release / profiles through WSL (W4), `rein-app update --check`, WSL-absent start screen, folder dialog start directory, `wsl.distro` config key | 3 | E-39, E-43 |
+E-43 and E-44 depend only on E-35: do them **before E-42** so the operator has an
+installable window (it opens the DIR given on the command line until E-38 lands). E-38,
+E-40 and E-41 reach projects only through the `Host` seam, so they work on Windows without
+their own Windows code.
 E-36..E-41 build on E-42: overlays, menu, tooltips, dialogs and Settings use the shadcn
 components; "no framework" in the E-34 and earlier task texts is superseded by D-037.
 Tier 3 tasks run `security_engineer` before commit. The `ux_reviewer` pass named in E-39

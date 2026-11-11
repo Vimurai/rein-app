@@ -11,7 +11,7 @@
 | Domain | File | Phase | Status |
 |---|---|---|---|
 | Distribution: installer, verifier, layout writer, profile manager, updater, WSL launcher | `.ai/blueprints/distribution.md` | 1 | ACTIVE — E-2..E-5, E-7, E-8, E-10..E-15 done (E-12..E-15 reviewed, D-015); E-18 (operator docs), E-19 (release rehearsal) open; E-6 awaits the first tag; E-9, E-16, E-17 blocked on rein/operator |
-| Desktop: Tauri window, pane view, status, settings UI, bundled Node, signing | `.ai/blueprints/desktop.md` | 2 | ACTIVE (v1 2026-11-11, D-033) — the window: one pty running `rein start`, modal grid chrome, `config.toml`; E-34..E-39 registered. Windows window, bundled Node and signing are later revisions |
+| Desktop: Tauri window, pane view, status, settings UI, bundled Node, signing | `.ai/blueprints/desktop.md` | 2 | ACTIVE (v1 2026-11-11, D-033) — the window: one pty running `rein start`, modal grid chrome, `config.toml`; E-34..E-39 registered. **Windows window added 2026-11-11 (D-038): native WebView2 build, every process is `wsl.exe`, E-43..E-45.** Bundled Node and signing are later revisions |
 
 ## 1. System Philosophy
 - **Concept**: rein-app is the **shell**, not a rewrite. It installs, verifies, updates,
@@ -163,6 +163,9 @@ E-6 still waits on rein:
 | **E-39** | `:checkhealth`, `:update`, `:rollback`, `:profiles` over the Phase 1 seams | 3 | E-38 |
 | **E-40** | click-first layer: `simple` input style (default), first-run choice, clickable chrome, menu, buttons, folder dialog (D-034) | 2 | E-38 |
 | **E-41** | Settings overlay + `ui.json` (`config.toml` wins), font zoom, pointer-parity tests, final UX pass (D-034) | 2 | E-37, E-39, E-40 |
+| **E-43** | Windows window core: `Host` seam, `WslHost`, ConPTY child, path mapping, Windows dirs, lock-file single instance (D-038) | 3 | E-35 |
+| **E-44** | `desktop-windows.yml`: NSIS installer as a workflow artifact (D-038) | 2 | E-43 |
+| **E-45** | Windows health / release / profiles through WSL, `rein-app update --check` (D-038) | 3 | E-39, E-43 |
 
 ## 8. Contract Rulings received from `rein` (P-50 → rein D-153, mirrored as rein-app D-003)
 All five open questions are closed; `distribution.md` carries the detail. Summary:
