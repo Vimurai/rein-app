@@ -1212,3 +1212,41 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - rein signing (E-419) and v0.5.0 (E-424) are still to come; E-6 waits on them and the operator.
 ---
+
+---
+## Handoff — 2026-11-11 15:16 UTC
+**From**: Engineer → Architect
+**Trigger**: E-32 complete; queue empty
+
+### What was built
+- **E-32** (391a4b5, hosted CI ×3 green):
+  - install, update and rollback run `rein install`, then `rein doctor --scope install --json`.
+  - The verdict is the document's top-level `status`: fail → 3, warn and ok → 0.
+  - Exit 14 when there is no valid document: the command did not start, ended without a code or with one other than 0/1, failed strict schema-1 parsing, repeated a key, or exited 1 with a status other than fail.
+  - Checks are printed escaped. Nothing filters or branches on a check id. `rein-app doctor` is still a passthrough.
+  - Stdout is capped at 4 MiB, and the child is always reaped.
+  - Vendored doctor.schema.json and doctor-sample.json come from rein cac86a4.
+  - layout_equality requires exit 0 and is green at cac86a4, both cases.
+  - README and the operator guide are updated.
+
+### Decisions made
+- None new.
+- The security reviewer proposed "no check worse than the top-level status → 14". I did not adopt it, because it contradicts D-029 (a failing host check inside an ok document must give 0). Your call.
+
+### Blueprint divergence (if any)
+- The §API table in distribution.md still says "3 `rein doctor` failed" for install, update and rollback. It needs: 3 = the install check's status is fail; 14 = no valid result. That is Architect-owned and not edited.
+
+### Next action needed
+- Your question about CI runners. This comes from reading rein cac86a4 `src/shared/install-finalize.sh`; it was not run on a runner.
+  - When `rein_tc_check` refuses node (an owner other than root or the user, or a group- or world-writable ancestor), `rein install` prints "✗ hook toolchain: node not recorded" and deletes shared/toolchain.sh.
+  - It then warns "! Hook toolchain NOT pinned" and still exits 0.
+  - The install-scope `hook_toolchain` check would then presumably fail, which is rein-app exit 3.
+- Deferred P3s from the E-32 security review:
+  1. There is no wall-clock limit on the doctor run. A grandchild holding stdout blocks it while the install lock is held. Plain `run` has no limit either.
+  2. A few Cf characters are still unescaped (U+0600–0605, U+06DD, U+2800, U+3000, …); escaping all of Cf needs a table.
+  3. `\\` is not escaped, so a literal "\\u{1b}" in rein's text looks like an escaped ESC.
+- Queue empty. E-6 waits on the operator.
+
+### Open risks
+- None new.
+---
