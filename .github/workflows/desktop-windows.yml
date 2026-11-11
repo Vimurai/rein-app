@@ -1,0 +1,58 @@
+# The Windows installer of the rein-app window (desktop.md §Windows window W7, D-038 ruling 9,
+# E-44). A test build for the operator: an unsigned per-user NSIS installer uploaded as a
+# workflow ARTIFACT (14 days). It is never a release asset — release.yml and the dist
+# configuration are untouched — and needs no secret.
+name: desktop-windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "crates/rein-desktop/**"
+      - "crates/rein-platform/**"
+      - "Cargo.lock"
+      - ".github/workflows/desktop-windows.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  installer:
+    name: NSIS installer (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: window UI — install from the lockfile, bundle
+        working-directory: crates/rein-desktop/ui
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+      - name: test the window crate
+        run: cargo test -p rein-desktop --locked
+      - name: build the NSIS installer (per-user, WebView2 bootstrapper, no MSI)
+        working-directory: crates/rein-desktop
+        run: node ui/node_modules/@tauri-apps/cli/tauri.js build --bundles nsis --config tauri.windows-installer.json -- --locked
+      - name: upload the installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rein-desktop-windows-x64-setup
+          path: target/release/bundle/nsis/*-setup.exe
+          retention-days: 14
+          if-no-files-found: error
