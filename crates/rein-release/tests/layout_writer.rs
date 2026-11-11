@@ -541,7 +541,7 @@ fn symlinks_and_conflicts_are_refused_before_any_write() {
     use std::os::unix::fs::symlink;
     let elsewhere = tempfile::tempdir().unwrap();
     type Setup = fn(&Path, &Path);
-    let setups: [(&str, Setup); 3] = [
+    let setups: [(&str, Setup); 4] = [
         ("symlinked mirrored dir", |rein, other| {
             fs::remove_dir_all(rein.join("shared")).unwrap();
             symlink(other, rein.join("shared")).unwrap();
@@ -556,6 +556,14 @@ fn symlinks_and_conflicts_are_refused_before_any_write() {
             fs::remove_file(rein.join("bin/rein")).unwrap();
             fs::create_dir(rein.join("bin/rein")).unwrap();
         }),
+        // D-023: on a case-insensitive home `bin/REIN` IS `bin/rein`; refused on every OS.
+        (
+            "symlink at a case variant of a target (CaseVariantSymlink)",
+            |rein, other| {
+                fs::remove_file(rein.join("bin/rein")).unwrap();
+                symlink(other.join("x"), rein.join("bin/REIN")).unwrap();
+            },
+        ),
     ];
     for (name, setup) in setups {
         let h = Home::seeded();
@@ -563,7 +571,12 @@ fn symlinks_and_conflicts_are_refused_before_any_write() {
         let before = digest(&h.rein());
         let err = install_tree(&h.paths, &h.release(&good_files())).unwrap_err();
         assert!(
-            matches!(err, LayoutError::Symlink(_) | LayoutError::Conflict(_)),
+            matches!(
+                err,
+                LayoutError::Symlink(_)
+                    | LayoutError::Conflict(_)
+                    | LayoutError::CaseVariantSymlink(_)
+            ),
             "{name}: {err}"
         );
         assert_eq!(digest(&h.rein()), before, "{name}: nothing written");
@@ -883,4 +896,33 @@ fn a_case_only_rename_keeps_the_shipped_file_through_update_and_rollback() {
     assert_eq!(fs::read(shared.join("locate.sh")).unwrap(), b"old locate");
     assert_eq!(names_like(&shared, "lib"), ["Lib"]);
     assert_eq!(fs::read(shared.join("Lib/x.mjs")).unwrap(), b"old x");
+}
+
+/// D-025, extending `a_case_only_rename_keeps_the_shipped_file_through_update_and_rollback`:
+/// owned matching is case-sensitive (rein's case table), so an operator file whose name is
+/// a case variant of an owned pattern (`shared/Toolchain.sh` beside `shared/toolchain.sh`)
+/// is an ordinary file: an update prunes it, and the snapshot holds it, so rollback returns
+/// it byte-identical. This pins today's contract until rein rules on folding protection.
+#[test]
+fn an_owned_path_in_another_case_is_pruned_and_kept_in_the_snapshot() {
+    let h = Home::seeded();
+    let shared = h.rein().join("shared");
+    fs::remove_file(shared.join("toolchain.sh")).unwrap();
+    write(&shared.join("Toolchain.sh"), b"node=/opt/node\n");
+    install_tree(&h.paths, &h.release(&good_files())).unwrap();
+    assert!(names_like(&shared, "toolchain.sh").is_empty(), "pruned");
+    let snap = h.paths.prev("0.4.0").join("tree/shared");
+    assert_eq!(names_like(&snap, "toolchain.sh"), ["Toolchain.sh"]);
+    assert_eq!(
+        fs::read(snap.join("Toolchain.sh")).unwrap(),
+        b"node=/opt/node\n",
+        "snapshotted"
+    );
+
+    rollback_tree(&h.paths).unwrap();
+    assert_eq!(names_like(&shared, "toolchain.sh"), ["Toolchain.sh"]);
+    assert_eq!(
+        fs::read(shared.join("Toolchain.sh")).unwrap(),
+        b"node=/opt/node\n"
+    );
 }

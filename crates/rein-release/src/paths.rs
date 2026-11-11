@@ -6,22 +6,53 @@
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
+/// `s` with control characters (C0, DEL, C1) and bidi overrides escaped (`\u{1b}`), for error
+/// text built from manifest, tarball or snapshot strings (D-023 r4).
+pub(crate) fn printable(s: &str) -> std::borrow::Cow<'_, str> {
+    // Control characters, bidi marks/overrides/isolates, zero-width and line separators.
+    let unsafe_char = |c: char| {
+        c.is_control()
+            || matches!(
+                c,
+                '\u{061c}'
+                    | '\u{200b}'..='\u{200f}'
+                    | '\u{2028}'..='\u{202e}'
+                    | '\u{2066}'..='\u{2069}'
+                    | '\u{feff}'
+            )
+    };
+    if !s.chars().any(unsafe_char) {
+        return s.into();
+    }
+    s.chars()
+        .map(|c| {
+            if unsafe_char(c) {
+                c.escape_unicode().to_string()
+            } else {
+                c.to_string()
+            }
+        })
+        .collect::<String>()
+        .into()
+}
+
 /// Check that `p` is a safe release path: non-empty, relative, `/`-separated, with no
 /// empty, `.` or `..` segment, no backslash, no `:` (Windows drive/ADS) and no NUL.
 pub fn check_rel_path(p: &str) -> Result<(), String> {
+    let shown = printable(p);
     if p.is_empty() {
         return Err("empty path".into());
     }
     if p.starts_with('/') {
-        return Err(format!("absolute path '{p}'"));
+        return Err(format!("absolute path '{shown}'"));
     }
     if let Some(c) = p.chars().find(|c| matches!(c, '\\' | ':' | '\0')) {
-        return Err(format!("forbidden character {c:?} in '{p}'"));
+        return Err(format!("forbidden character {c:?} in '{shown}'"));
     }
     for seg in p.split('/') {
         match seg {
-            "" => return Err(format!("empty segment in '{p}'")),
-            "." | ".." => return Err(format!("'{seg}' segment in '{p}'")),
+            "" => return Err(format!("empty segment in '{shown}'")),
+            "." | ".." => return Err(format!("'{seg}' segment in '{shown}'")),
             _ => {}
         }
     }

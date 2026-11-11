@@ -225,6 +225,38 @@ impl Manifest {
             files,
             matcher,
         };
+        // D-023: a shipped path owned only in another case would overwrite operator data on
+        // a case-insensitive home; owned exactly as written, it is shipped (D-155 r2).
+        // D-026: a mirrored name or a directory of a shipped path that is the start of an
+        // owned pattern in another case makes the live owned file look unowned to the scan.
+        // One pass per parent directory covers every directory above it (E-29 P1-1).
+        let dirs: std::collections::BTreeSet<&str> = manifest
+            .layout
+            .mirrored
+            .iter()
+            .map(String::as_str)
+            .chain(
+                manifest
+                    .files
+                    .iter()
+                    .filter_map(|f| f.path.rsplit_once('/').map(|(dir, _)| dir)),
+            )
+            .collect();
+        for d in dirs {
+            if let Some((d, pat)) = manifest.matcher.folded_only_dir(d) {
+                return Err(invalid(format!(
+                    "directory '{d}' is a case variant of the start of operator_owned pattern '{pat}'"
+                )));
+            }
+        }
+        for f in &manifest.files {
+            if let Some(pat) = manifest.matcher.folded_only_pattern(&f.path) {
+                return Err(invalid(format!(
+                    "'{}' is a case variant of operator_owned pattern '{pat}'",
+                    f.path
+                )));
+            }
+        }
         if let Some(f) = manifest
             .files
             .iter()
@@ -299,6 +331,40 @@ mod tests {
         );
         assert!(!m.under_mirrored("bin"));
         assert!(!m.under_mirrored("other/x"));
+    }
+
+    /// D-023 r4: manifest strings reach error text escaped, never as raw control bytes.
+    #[test]
+    fn manifest_strings_in_error_text_are_escaped() {
+        let raw = |e: &VerifyError| e.to_string().bytes().any(|b| b < 0x20 || b == 0x7f);
+        for (from, to) in [
+            ("\"version\":\"0.5.0\"", r#""version":"0.5.0\u001b[2J""#),
+            ("\"min_node\":\"22.5.0\"", r#""min_node":"22\u001b[2J""#),
+            ("\"key_id\":\"0123456789abcdef\"", r#""key_id":"\u001b[2J""#),
+        ] {
+            let bad = doc(1, BIN).replacen(from, to, 1);
+            assert_ne!(bad, doc(1, BIN), "{from}");
+            let err = Manifest::parse(bad.as_bytes()).unwrap_err();
+            assert!(!raw(&err), "{err:?}");
+            if let Err(e) = ManifestHeader::peek(bad.as_bytes()) {
+                assert!(!raw(&e), "{e:?}");
+            }
+        }
+        let marks = doc(1, BIN).replacen(
+            "\"version\":\"0.5.0\"",
+            "\"version\":\"\u{200f}\u{2028}x\"",
+            1,
+        );
+        let text = Manifest::parse(marks.as_bytes()).unwrap_err().to_string();
+        assert!(
+            !text.contains('\u{200f}') && !text.contains('\u{2028}'),
+            "{text:?}"
+        );
+        let fetch =
+            crate::latest::parse_latest(br#"{"tag_name":"v\u001b]0;x\u0007"}"#).unwrap_err();
+        assert!(!fetch.to_string().bytes().any(|b| b < 0x20), "{fetch}");
+        let err = crate::paths::check_rel_path("/\u{1b}[2J").unwrap_err();
+        assert!(!err.bytes().any(|b| b < 0x20), "{err:?}");
     }
 
     #[test]

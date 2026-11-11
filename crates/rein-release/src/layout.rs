@@ -124,6 +124,9 @@ pub enum LayoutError {
     /// A directory where a release file goes, or a file where a directory is needed
     /// (nothing was written).
     Conflict(PathBuf),
+    /// A symlink named as an upper/lower-case variant of a release path; on a case-insensitive
+    /// home it is that path (nothing was written; D-023 r3, D-026).
+    CaseVariantSymlink(PathBuf),
     /// A snapshot could not be taken or read.
     Snapshot(String),
     /// The sync failed. `snapshot` was synced back when `restored`; `VERSION` is unchanged.
@@ -142,9 +145,19 @@ pub enum LayoutError {
     Io(String),
 }
 
+/// Local file names reach this text; their control bytes never reach the terminal (D-023 r4,
+/// E-29 security review P2).
 impl fmt::Display for LayoutError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
+        f.write_str(&crate::paths::printable(&Unescaped(self).to_string()))
+    }
+}
+
+struct Unescaped<'a>(&'a LayoutError);
+
+impl fmt::Display for Unescaped<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
             LayoutError::Locked(p) => write!(
                 f,
                 "layout: {} exists — another rein-app install/update/rollback is running; it holds that run's PID — remove the file only if no such process is alive",
@@ -165,6 +178,11 @@ impl fmt::Display for LayoutError {
             LayoutError::Conflict(p) => write!(
                 f,
                 "layout: {} is in the way of the release layout (file vs directory) — nothing was changed",
+                p.display()
+            ),
+            LayoutError::CaseVariantSymlink(p) => write!(
+                f,
+                "layout: {} is a symlink whose name differs only by upper/lower case from a release path; remove or rename it — nothing was changed",
                 p.display()
             ),
             LayoutError::Snapshot(m) => write!(f, "layout: snapshot: {m}"),
@@ -571,6 +589,16 @@ pub(crate) fn sync_loaded(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_local_name_with_control_bytes_is_escaped_in_error_text() {
+        let e = LayoutError::Conflict(PathBuf::from("/h/.rein/bin/\u{1b}[2J"));
+        let text = e.to_string();
+        assert!(
+            !text.contains('\u{1b}') && text.contains("\\u{1b}"),
+            "{text}"
+        );
+    }
 
     #[test]
     fn paths_are_siblings_of_the_rein_home() {

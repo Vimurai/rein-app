@@ -52,18 +52,7 @@ fn folded_ship(ship: &[String]) -> HashSet<String> {
 /// as a file and as a directory: a symlink at a directory-only pattern
 /// (`mcp/x/node_modules -> /shared/store`) is owned too (E-7 security review P1-1).
 pub(crate) fn owned(m: &OperatorOwnedMatcher, path: &str) -> bool {
-    if m.matches(path, false) || m.matches(path, true) {
-        return true;
-    }
-    let mut end = 0;
-    while let Some(i) = path[end..].find('/') {
-        end += i;
-        if m.matches(&path[..end], true) {
-            return true;
-        }
-        end += 1;
-    }
-    false
+    m.owned_pattern(path, false).is_some()
 }
 
 /// Step b (pure). Every source path is shipped — a shipped path wins over an
@@ -178,6 +167,31 @@ pub(crate) fn preflight(
                 Ok(meta) if last && meta.is_dir() => return Err(LayoutError::Conflict(p)),
                 Ok(meta) if !last && !meta.is_dir() => return Err(LayoutError::Conflict(p)),
                 Ok(_) => {}
+            }
+        }
+    }
+    // D-023: a symlink named as a case variant of a shipped path IS that path on a
+    // case-insensitive home (and would make the snapshot fail later); refused on every
+    // filesystem, naming the link.
+    let mut by_parent: std::collections::HashMap<&str, Vec<&str>> = Default::default();
+    for rel in ship {
+        if let Some((dir, name)) = rel.rsplit_once('/') {
+            by_parent.entry(dir).or_default().push(name);
+        }
+    }
+    for (dir, names) in by_parent {
+        let Ok(entries) = fs::read_dir(live.join(dir)) else {
+            continue; // absent: nothing there yet
+        };
+        for entry in entries.flatten() {
+            let Ok(found) = entry.file_name().into_string() else {
+                continue;
+            };
+            let variant = names
+                .iter()
+                .any(|n| *n != found && n.eq_ignore_ascii_case(&found));
+            if variant && entry.file_type().is_ok_and(|t| t.is_symlink()) {
+                return Err(LayoutError::CaseVariantSymlink(live.join(dir).join(found)));
             }
         }
     }

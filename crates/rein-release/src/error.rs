@@ -62,10 +62,20 @@ pub enum VerifyError {
     Io(String),
 }
 
+/// Every string a manifest or tarball supplies is escaped on display: its control bytes
+/// never reach the terminal (D-023 r4).
 impl fmt::Display for VerifyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&crate::paths::printable(&Unescaped(self).to_string()))
+    }
+}
+
+struct Unescaped<'a>(&'a VerifyError);
+
+impl fmt::Display for Unescaped<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use VerifyError::*;
-        match self {
+        match self.0 {
             ManifestInvalid(m) => write!(f, "manifest: invalid ({m})"),
             VersionMismatch { requested, found } => write!(
                 f,
@@ -142,10 +152,19 @@ pub enum FetchError {
     Io(String),
 }
 
+/// Release metadata from the network reaches this text: escaped like VerifyError (E-29 P3-1).
 impl fmt::Display for FetchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&crate::paths::printable(&UnescapedFetch(self).to_string()))
+    }
+}
+
+struct UnescapedFetch<'a>(&'a FetchError);
+
+impl fmt::Display for UnescapedFetch<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use FetchError::*;
-        match self {
+        match self.0 {
             HostNotAllowed(u) => write!(f, "fetch: host not allowed: {u}"),
             Status { url, status } => write!(f, "fetch: {url} answered HTTP {status}"),
             TooLarge { url, cap } => write!(f, "fetch: {url} exceeds the {cap}-byte cap"),

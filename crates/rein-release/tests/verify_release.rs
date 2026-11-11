@@ -316,6 +316,66 @@ const CASES: &[Case] = &[
         build: |k| shipping(k, "shared/r\u{e9}in.sh"),
         expect: |e| matches!(e, VerifyError::ManifestInvalid(m) if m.contains("printable ASCII")),
     },
+    // A shipped case variant of an owned path (D-023, E-29); exact still wins (D-155 r2).
+    Case {
+        label: "a `files` path that is an owned path in another case",
+        build: |k| shipping(k, "shared/Toolchain.sh"),
+        expect: |e| {
+            matches!(e, VerifyError::ManifestInvalid(m)
+            if m.contains("shared/Toolchain.sh") && m.contains("shared/toolchain.sh"))
+        },
+    },
+    Case {
+        label: "a `files` path matching an owned glob only in another case",
+        build: |k| shipping(k, "mcp/x/Package-Lock.json"),
+        expect: |e| {
+            matches!(e, VerifyError::ManifestInvalid(m)
+            if m.contains("mcp/x/Package-Lock.json") && m.contains("mcp/*/package-lock.json"))
+        },
+    },
+    Case {
+        label: "a `files` path under an owned directory in another case",
+        build: |k| shipping(k, "mcp/x/Node_Modules/a.js"),
+        expect: |e| matches!(e, VerifyError::ManifestInvalid(m) if m.contains("mcp/*/node_modules/")),
+    },
+    Case {
+        label: "an owned path in another case, even when another pattern owns it exactly",
+        build: |k| {
+            with_manifest_edit(k, |m| {
+                m.replacen(
+                    "\"shared/toolchain.sh\"",
+                    "\"shared/toolchain.sh\",\"shared/T*\"",
+                    1,
+                )
+                .replace("\"shared/locate.sh\"", "\"shared/Toolchain.sh\"")
+            })
+        },
+        expect: |e| matches!(e, VerifyError::ManifestInvalid(m) if m.contains("'shared/toolchain.sh'")),
+    },
+    Case {
+        label: "a mirrored name that starts an owned pattern in another case (D-026)",
+        build: |k| {
+            with_manifest_edit(k, |m| {
+                m.replacen("\"shared\",", "\"Shared\",", 1)
+                    .replace("\"shared/locate.sh\"", "\"Shared/locate.sh\"")
+            })
+        },
+        expect: |e| {
+            matches!(e, VerifyError::ManifestInvalid(m)
+            if m.contains("directory 'Shared'") && m.contains("'shared/toolchain.sh'"))
+        },
+    },
+    Case {
+        label: "a mirrored name equal to an owned directory pattern in another case",
+        build: |k| {
+            with_manifest_edit(k, |m| {
+                m.replacen("\"shared\",", "\"Shared\",", 1)
+                    .replace("\"shared/locate.sh\"", "\"Shared/locate.sh\"")
+                    .replace("\"shared/toolchain.sh\"", "\"**/shared/\"")
+            })
+        },
+        expect: |e| matches!(e, VerifyError::ManifestInvalid(m) if m.contains("'**/shared/'")),
+    },
     Case {
         label: "legacy (non-prehashed) signature",
         build: |k| {
