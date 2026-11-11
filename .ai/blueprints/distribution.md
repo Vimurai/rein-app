@@ -129,12 +129,16 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
       file or symlink under a live mirrored dir that is neither in `ship` nor operator-owned.
       **Owned matching is case-sensitive (rein's contract; D-025 withdraws D-023 ruling
       2):** rein's conformance table `tests/fixtures/release/operator-owned-cases.json`
-      rules that `insights.md` against the pattern `INSIGHTS.md` is *deleted*, and
-      `install-rein.sh` behaves the same, so a protective case fold here would break both
-      the shared fixtures (E-17) and layout equality (E-9). A live file that is a case
-      variant of an owned pattern is therefore an ordinary unshipped file: snapshotted,
-      then pruned. Whether protection should fold case is asked of rein; this text
-      follows rein's answer. A live symlink whose name is a case variant of a
+      confirmed by rein D-155 addendum 3 r9, 2026-11-10 — every protected name is written
+      by a tool under its exact spelling, so no fold. A live file **inside a mirrored
+      directory** that is a case variant of an owned pattern is an ordinary unshipped file:
+      snapshotted, then pruned. **Top-level entries are out of scope (rein addendum 3
+      r10, rule 1 of the installer rule):** the sync writes and deletes only inside the
+      mirrored directories, plus `manifest.json` and `VERSION`; every other top-level
+      entry (`ci/`, `trash/`, anything later) is left alone, matched or not. As built, the
+      scan walks only mirrored roots, so this holds; the pure `plan` function must give
+      the same answer for a path outside the mirrored directories when rein's corrected
+      table arrives (E-17). A live symlink whose name is a case variant of a
       `ship` path is a preflight `Conflict` naming it, not an `EEXIST` from the snapshot.
    c. *Snapshot*: copy the non-owned content of the live mirrored dirs **plus the live file at
       every `ship` path** (so a shipped path that a pattern also matches can be restored) to
@@ -539,7 +543,12 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   vendored and refreshed when rein bumps the manifest schema (interim copy until rein E-422).
 - Shared contract fixtures (E-17, blocked on rein E-422): `profile-settings-cases.json`
   (settings before, the write attempted, accept / refuse) against `rein-profiles`;
-  `layout-v1.json` equals the layout our fixture manifests carry.
+  `layout-v1.json` equals the layout our fixture manifests carry. rein's corrected
+  `operator-owned-cases.json` (addendum 3 r10) changes the two top-level unshipped rows
+  (`runner.json`, `insights.md`) from `deleted` to `kept`, moves their pattern facts to
+  `glob_cases`, and adds `shared/Toolchain.sh` unshipped → `deleted` and `ci/x.json`
+  unshipped → `kept`; the conformance test must then decide "kept" for any path outside
+  the mirrored directories without consulting the matcher.
 - Profile merge: property test — for random pre-existing JSON, after `apply` every original
   key/value is intact and only allowed keys changed; attempting a forbidden key fails to compile.
   E-14 (rein D-155 r3): a pre-existing `hooks` value — in the default profile and in every
