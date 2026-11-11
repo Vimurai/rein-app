@@ -387,7 +387,7 @@ W6. **Directories (Windows)** — config: `%APPDATA%\rein-app\config.toml`; stat
    monospace`.
 W7. **Installer build** — a separate hosted workflow (`desktop-windows.yml`) on
    `windows-latest`: `workflow_dispatch` and pushes to `master` that touch
-   `crates/rein-desktop/**`, `Cargo.lock` or the workflow. `permissions: contents: read`,
+   `crates/rein-desktop/**`, `crates/rein-platform/**`, `Cargo.lock` or the workflow. `permissions: contents: read`,
    no secret, actions pinned as in `ci.yml`. It builds the UI from the lockfile, runs
    `cargo test -p rein-desktop`, builds the Tauri **NSIS** bundle only (per-user install,
    WebView2 bootstrapper, no MSI — the CLI owns the `.msi`), and uploads it as workflow
@@ -426,6 +426,21 @@ row); a missing one fails when opened.
 - CLI text returned from WSL is untrusted display text: capped, escaped by the Phase 1
   rule, never parsed for a decision except the doctor document and exit codes.
 - The handoff directory accepts only a path string; the window validates it like any other.
+- `%SystemRoot%` is used only when drive-absolute, else `C:\Windows` (a relative value
+  would make the pty layer search `PATH` for `wsl.exe`). A UNC `%LOCALAPPDATA%` is refused:
+  the lock and handoff directory must sit under the profile ACL. The handoff read is
+  bounded. (E-43 `security_engineer`, PASS.)
+- **Accepted residual risks (E-43 review):**
+  1. The pty start script has no `/` guard (it runs in the user's shell, which may be
+     fish). A project directory removed between validation and spawn makes `rein start`
+     run in `/`, where it exits 2 ("no .ai"). It would open a session only if `/.ai`
+     existed, which needs root inside the distro — someone who already owns the distro.
+  2. "Nothing crosses" covers variables only. WSL's default `appendWindowsPath=true` puts
+     Windows directories on the login shell's Linux `PATH`, so a Windows-side program (an
+     npm shim, say) can be found by name inside WSL. This is WSL's behaviour for every
+     terminal, not something the window adds; the operator can turn it off with
+     `[interop] appendWindowsPath=false` in `/etc/wsl.conf`. The Windows operator docs
+     must say so when they are written.
 - The unsigned installer is a known gap until the signing revision; it is published only
   as a workflow artifact, never on a release.
 
