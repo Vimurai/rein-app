@@ -583,7 +583,15 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   expected `kept` / `replaced` / `deleted`) holds for our plan function; the fixture is
   vendored and refreshed when rein bumps the manifest schema (interim copy until rein E-422).
 - Shared contract fixtures (E-17, blocked on rein E-422): `profile-settings-cases.json`
-  (settings before, the write attempted, accept / refuse) against `rein-profiles`;
+  (settings before, the write attempted, accept / refuse) against `rein-profiles`. The
+  table states what an app **may** write, not what it must be able to write (D-030), so
+  the harness asserts two things: every `refuse` row is unreachable by our writer (the
+  safety half — no exception), and every `accept` row is reachable by `plan` with a
+  `Patch`, except rows named in an explicit list with a reason, each asserted to be
+  unreachable by `plan` so the list cannot go stale. Today the list has one row, "remove
+  an allowed key": `apply` never removes a key; only `apply --undo` does, when the backup
+  lacked it, and a file-level undo test produces exactly that row's `after`. No "remove
+  key" operation is added to `Patch`;
   `layout-v1.json` equals the layout our fixture manifests carry. rein's corrected
   `operator-owned-cases.json` (addendum 3 r10) changes the two top-level unshipped rows
   (`runner.json`, `insights.md`) from `deleted` to `kept`, moves their pattern facts to

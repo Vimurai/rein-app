@@ -1094,3 +1094,36 @@ E-9's first run showed every install exits 3: partly a rein defect (lock-file re
 
 ### Rollback
 Return to exit-code propagation of the full `rein doctor`.
+
+---
+
+## D-030 — rein's profile-settings table states what an app may write; E-17's harness tests it that way
+
+**Date**: 2026-11-11
+**Task**: E-17 (one row blocked, relayed by the Engineer)
+**Decision**: The `accept` rows of `profile-settings-cases.json` are permissions, not requirements. Our harness asserts that no `refuse` row is reachable, and that every `accept` row is reachable except rows on an explicit, self-checking list. The one such row, "remove an allowed key", is shown through `profiles apply --undo`.
+
+### Why needed
+12 of 13 rows pass a harness that demanded "accept ⇔ our writer can produce `after`". The row before `{"attribution":{"commit":""}}`, after `{}` is `accept`, but `rein_profiles::plan` only sets or merges allowed keys. rein-app removes an allowed key only in `--undo`, when the backup lacked it.
+
+### Rulings
+1. `refuse` rows: unreachable by our writer, no exceptions. This is the half that protects operator settings.
+2. `accept` rows: reachable by `plan`, or named on a list with a reason; the harness asserts each listed row is in fact unreachable by `plan`.
+3. "Remove an allowed key" is covered by a file-level undo test that ends with exactly the row's `after` (Engineer's option a).
+4. No "remove key" `Patch` operation is added: no command would use it, and unused write power over settings is risk without benefit.
+5. The fixture is not edited. rein's Architect is told how we read the table.
+
+### Alternatives considered
+1. **Add `Patch::Remove`** (option b) — rejected (ruling 4).
+2. **Ask rein to reword the row** (option c) — not needed: "accept" already means "allowed".
+3. **Harness reads the table as permissions + undo test** — chosen.
+
+### Constraints driving this decision
+- rein D-155 r3: three allowed keys, never `hooks`; rein owns the table.
+
+### Impact
+- Unblocks E-17.
+- Risk if wrong: rein meant "must be able to"; then one operation is added later.
+
+### Rollback
+Tighten the harness back to a biconditional.
