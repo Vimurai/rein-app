@@ -81,7 +81,8 @@ fn the_csp_is_default_src_self_with_no_escape_hatch() {
     let main = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/src/main.ts"),
     )
-    .unwrap();
+    .unwrap()
+    .replace("\r\n", "\n"); // a Windows checkout has CRLF line endings
     assert!(
         main.contains("\nhardenPrototypes();\n"),
         "main.ts must freeze Object.prototype at start"
