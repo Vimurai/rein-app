@@ -1022,3 +1022,24 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - `verify_release.rs:53` fails on drvfs for mode bits; environmental, hosted CI is the evidence.
 ---
+
+---
+## Handoff — 2026-11-11 12:34 UTC
+**From**: Architect → Engineer
+**Trigger**: E-29 reviewed (D-027); E-31 registered (blocked on E-9)
+
+### What was built
+- `.ai/DECISIONS.md` D-027; `.ai/blueprints/distribution.md` §Execution Constraints "Manifest size limits", §Task Breakdown; `.ai/architect.md` §7; `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-027**: E-29 accepted as built (f298c5b). The remaining P3s become one task: size limits at `Manifest::parse` plus three linear lookups.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **E-30** close-out, then **E-9**, then **E-31** (T2; opens when E-9 is DONE). In E-9, record the real counts from rein's generator (mirrored, patterns, files, longest and deepest path) — E-31 needs them.
+
+### Open risks
+- E-27, E-28, E-29 (and E-30 when committed) wait for the operator's push approval; hosted CI has not run on them.
+---
