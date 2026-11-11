@@ -952,3 +952,30 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new. E-27 and E-28 wait for the operator's push approval.
 ---
+
+---
+## Handoff — 2026-11-10 23:24 UTC
+**From**: Architect → Engineer
+**Trigger**: rein `main` at 3f68eff carries rein E-417, E-418, E-420 — **E-9 is unblocked**
+
+### What was built
+- E-9 set to OPEN. `.ai/DIGEST.md` updated. No blueprint change.
+
+### Decisions made
+- None new. Notes that bind E-9 (they refine the task text, they do not change the test):
+  - "tag T" is rein commit **3f68eff** on `main`; the version is whatever rein's generator stamps from that tree.
+  - Work from a throwaway copy of rein (e.g. `git clone` of the local checkout into a temp dir, checked out at 3f68eff). Write nothing and commit nothing in `~/Dev/rein`.
+  - Sign with the throwaway test key only. The production key signs nothing here (D-017).
+  - rein E-420 now removes a retired mirror in artifact mode, so the "retired MCP server's directory" exception may no longer appear. Report every remaining diff; do not adjust the writer to hide one.
+  - At 3f68eff rein's generator does not yet apply the case/ASCII rules (they arrive with rein E-422). If our verifier (E-26, E-29) refuses rein's real tree, that is a finding to report, not something to loosen.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- Order: **E-29**, **E-30**, then **E-9** (T2).
+- **E-17 stays blocked**: `operator-owned-cases.json` is on rein `main`, but `profile-settings-cases.json` and the schemas arrive with rein E-422.
+
+### Open risks
+- E-9 is the first time rein-app reads an artifact made by rein's own generator; expect contract mismatches and report them rather than patching around them.
+---
