@@ -20,6 +20,14 @@ workspace = true
 # D-035. No Tauri plugin: the capability file is closed (desktop.md §Security 1).
 [dependencies]
 serde_json = "1.0.154"
+# The master fd duplicated for writing without portable-pty's drop behaviour (pty.rs); the
+# same filedescriptor portable-pty already builds (D-036).
+filedescriptor = "0.8.3"
+# Safe killpg for reaping (pty.rs) and flock for the single-instance takeover; the same nix
+# portable-pty already builds (D-036).
+nix = { version = "0.28.0", default-features = false, features = ["signal", "fs"] }
+portable-pty = "0.9.0"
+serde = { version = "1.0.229", features = ["derive"] }
 tauri = { version = "2.11.6", default-features = false, features = ["wry", "x11", "compression"] }
 
 # WM_CLASS / Wayland app id `rein-app` (main.rs). Already in tauri's tree at this version.

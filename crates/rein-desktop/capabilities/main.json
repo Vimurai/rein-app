@@ -1,6 +1,14 @@
 {
   "identifier": "main",
-  "description": "The only capability: the main window may listen for core events (open_dir; later config_changed, health_changed, pty_exit). The IPC command table is added by the tasks that implement it (desktop.md §API). No shell, fs, http or opener plugin.",
+  "description": "The only capability. The main window may call the IPC command table (desktop.md §API) and listen for core events. No shell, fs, http or opener plugin.",
   "windows": ["main"],
-  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-tab-open",
+    "allow-pty-write",
+    "allow-pty-resize",
+    "allow-pty-ack",
+    "allow-tab-detach"
+  ]
 }

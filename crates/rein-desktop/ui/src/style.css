@@ -26,3 +26,14 @@ html, body {
 .v { display: inline-block; transform: scaleY(var(--line-height)); }
 .ok { color: var(--ok); }
 .mode-terminal { background: var(--green); color: var(--bg); font-weight: bold; }
+
+/* The terminal sits over the stage rows, sized in whole cells (main.ts sets the variables). */
+#term {
+  position: absolute;
+  left: 0;
+  top: var(--stage-top);
+  width: var(--stage-w);
+  height: var(--stage-h);
+}
+.hidden { display: none; }
+.fatal { position: absolute; z-index: 10; margin: 1em; color: #fb4934; background: #282828; white-space: pre-wrap; }

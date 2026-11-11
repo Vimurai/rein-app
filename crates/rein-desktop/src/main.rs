@@ -6,7 +6,11 @@
 
 #[cfg(unix)]
 mod dirs;
+#[cfg(unix)]
+mod ipc;
 mod project_path;
+#[cfg(unix)]
+mod pty;
 mod security;
 #[cfg(unix)]
 mod single_instance;
@@ -87,7 +91,20 @@ fn main() -> ExitCode {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     glib::set_prgname(Some("rein-app"));
 
-    let result = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(unix)]
+    let builder = builder
+        .manage(ipc::Desktop::new(
+            dirs::process_env("HOME").map(std::path::PathBuf::from),
+        ))
+        .invoke_handler(tauri::generate_handler![
+            ipc::tab_open,
+            ipc::pty_write,
+            ipc::pty_resize,
+            ipc::pty_ack,
+            ipc::tab_detach
+        ]);
+    let result = builder
         .setup(move |app| {
             let window =
                 WebviewWindowBuilder::new(app, MAIN_WINDOW, WebviewUrl::App("index.html".into()))
@@ -100,6 +117,12 @@ fn main() -> ExitCode {
                     // start instead of racing an event (see `start_dir_script`).
                     .initialization_script(start_dir_script(dir.as_deref()))
                     .build()?;
+            // Debug builds only: `REIN_DEVTOOLS=1` opens the web inspector.
+            #[cfg(debug_assertions)]
+            if std::env::var_os("REIN_DEVTOOLS").is_some() {
+                window.open_devtools();
+            }
+            #[cfg(not(debug_assertions))]
             let _ = window;
             #[cfg(unix)]
             {
@@ -117,7 +140,19 @@ fn main() -> ExitCode {
             }
             Ok(())
         })
-        .run(tauri::generate_context!());
+        .build(tauri::generate_context!());
+    let result = result.map(|app| {
+        app.run(|_app, event| {
+            // Closing the window detaches every tab: the tmux sessions keep running, and
+            // every pty child is reaped before the process ends (desktop.md §Components 2).
+            #[cfg(unix)]
+            if let tauri::RunEvent::Exit = event {
+                _app.state::<ipc::Desktop>().detach_all();
+            }
+            #[cfg(not(unix))]
+            let _ = (_app, event);
+        })
+    });
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

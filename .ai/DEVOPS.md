@@ -10,7 +10,7 @@
 | Lint | `cargo clippy --workspace --all-targets --locked -- -D warnings` |
 | Test | `cargo test --workspace --locked` |
 | Release build | `cargo build --profile dist` (cargo-dist profile) |
-| Window UI (in `crates/rein-desktop/ui`) | `npm ci --ignore-scripts && npm run check && npm test && npm run build` — before any cargo command that builds `rein-desktop` |
+| Window UI (in `crates/rein-desktop/ui`) | `npm ci --ignore-scripts && npm run check && npm test && npm run build` — before building `rein-desktop` for use; without it the crate still compiles and tests (a placeholder page, with a cargo warning) |
 | Windows (CLI crates only) | `cargo clippy/test --workspace --exclude rein-desktop --locked` |
 
 Order (hosted equivalent of the ci_gate step order): `fmt → clippy → test → build → release`.

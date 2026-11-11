@@ -1352,6 +1352,11 @@ xterm.js 6.0.0 (2025-12) is the current major; portable-pty 0.9.0 is the current
 ### Rollback
 The pty sits behind `PtyHost`; the terminal behind the UI's `term` module. Remove both and the stage falls back to the E-34 placeholder.
 
+### Addendum (2026-11-11, E-35 security review)
+- `filedescriptor` 0.8.3 (MIT) is now a direct dependency: the master fd is duplicated with `FileDescriptor::dup` (close-on-exec) for writing, because portable-pty's `take_writer` types a newline and EOF into the pty when dropped. It is the same crate and version portable-pty already builds.
+- `nix` 0.28 also enables the `fs` feature: `fcntl::Flock` serialises the single-instance takeover (`single_instance.rs`). No new crate.
+- `COLORTERM=truecolor` is set for the child beside `TERM=xterm-256color`: xterm.js renders 24-bit colour, and tmux uses it to pass true colour through.
+
 ---
 
 ## D-037 — The window's click layer uses shadcn/ui (React + Radix + Tailwind), restyled to the grid
@@ -1388,7 +1393,9 @@ The operator asked for shadcn/ui. D-034 added a click layer (menu, dialogs, tool
 ### Rollback
 The `modes` function, the IPC table and the core do not depend on React; the components directory can be replaced by hand-written equivalents without touching them.
 
-## D-038 — React + Tailwind + shadcn/ui base dependencies for E-42 (dependency_gate, Engineer-recorded)
+## D-039 — React + Tailwind + shadcn/ui base dependencies for E-42 (dependency_gate, Engineer-recorded)
+
+> Numbered D-038 until 2026-11-11 21:45 UTC; renumbered because the Architect's Windows-window decision took D-038 in the same commit (d14c209).
 
 **Date**: 2026-11-11
 **Task**: E-42 (React shell, theme variables, restyled shadcn/ui components) — D-037
@@ -1472,3 +1479,23 @@ On Windows the operator's only way to see the window was WSLg, and WebKitGTK doe
 
 ### Rollback
 Remove `desktop-windows.yml` and `WslHost`; `LocalHost` behind the seam is the previous behaviour. Nothing inside WSL is changed by the window.
+
+## D-040 — Object.prototype is frozen by the UI after its libraries load, not by Tauri's `freezePrototype` (Engineer-recorded)
+
+**Date**: 2026-11-11
+**Task**: E-35 (security review P2: `freezePrototype` removed from `tauri.conf.json`)
+**Decision**: Keep Tauri's `freezePrototype` off and freeze `Object.prototype` in `ui/src/harden.ts`, called from `main.ts` right after the imports, before any pty output, IPC reply or event is handled. The Architect may revise.
+
+### Why
+With `freezePrototype: true` the window fails at start: `TypeError: Attempted to assign to readonly property` (seen under Xvfb, E-35). xterm.js 6.0.0 bundles VS Code's `KeyCodeUtils` namespace, which assigns `toString` on a plain object while its module loads; under a frozen `Object.prototype` that assignment throws in strict mode (the "override mistake").
+
+### Alternatives considered
+1. **Patch xterm's bundle at build time** — rejected: a string rewrite of a dependency breaks silently on the next upgrade.
+2. **Leave the prototype unfrozen** — rejected: the review's point stands; the IPC bridge and the pty data path should not be pollutable.
+
+### Effect
+Same scope as Tauri's option (`Object.prototype` only). The difference is when: Tauri freezes before any script; we freeze after the bundled modules have evaluated and before the first untrusted input. Tests: `ui/test/harden.test.mjs` (a `obj["__proto__"][k] = v` gadget throws and pollutes nothing), `tests/capabilities.rs` (no `freezePrototype` in the config, `main.ts` calls `hardenPrototypes()`).
+
+### Rollback
+Re-enable `freezePrototype` once xterm.js no longer assigns over prototype properties at load; delete `harden.ts`.
+

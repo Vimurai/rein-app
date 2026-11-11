@@ -3,9 +3,18 @@
 
 use std::path::Path;
 
-/// Permissions a capability may grant. The window basics: listening for core events.
-/// Each task that adds an IPC command adds its `allow-<command>` permission here.
-const ALLOWED: &[&str] = &["core:event:allow-listen", "core:event:allow-unlisten"];
+/// Permissions a capability may grant: the window basics (listening for core events) and
+/// the IPC command table. Each task that adds an IPC command adds its permission here.
+const ALLOWED: &[&str] = &[
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    // E-35 — desktop.md §API
+    "allow-tab-open",
+    "allow-pty-write",
+    "allow-pty-resize",
+    "allow-pty-ack",
+    "allow-tab-detach",
+];
 
 fn json(rel: &str) -> serde_json::Value {
     let p = Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
@@ -65,6 +74,18 @@ fn the_csp_is_default_src_self_with_no_escape_hatch() {
         assert!(sec.get(hatch).is_none(), "{hatch} must not be set");
     }
     assert_eq!(conf["app"]["withGlobalTauri"], false);
+    // Object.prototype is frozen by the UI itself once its libraries have loaded (ui/src/
+    // harden.ts): Tauri's `freezePrototype` freezes it before xterm.js loads, which breaks
+    // xterm (security review of E-35). Either way it is frozen before untrusted data arrives.
+    assert!(sec.get("freezePrototype").is_none());
+    let main = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/src/main.ts"),
+    )
+    .unwrap();
+    assert!(
+        main.contains("\nhardenPrototypes();\n"),
+        "main.ts must freeze Object.prototype at start"
+    );
     assert_eq!(
         conf["app"]["windows"],
         serde_json::json!([]),

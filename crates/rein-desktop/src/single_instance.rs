@@ -11,9 +11,12 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use nix::fcntl::{Flock, FlockArg};
+
 use crate::project_path;
 
 const SOCKET_NAME: &str = "desktop.sock";
+const LOCK_NAME: &str = "desktop.lock";
 /// A handoff line: one path plus the newline. Anything longer is dropped.
 const MAX_LINE: u64 = project_path::MAX_PATH_BYTES as u64 + 1;
 /// A peer that connects and sends nothing cannot hold the accept loop.
@@ -52,13 +55,50 @@ pub fn acquire(dir: &Path, handoff: Option<&str>) -> std::io::Result<Instance> {
         )));
     }
     let sock = dir.join(SOCKET_NAME);
+    // Serialise starts: without it two starts that both find a stale socket can each remove
+    // the other's fresh one and both become the window. Released when this returns.
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(dir.join(LOCK_NAME))?;
+    let _held =
+        Flock::lock(lock, FlockArg::LockExclusive).map_err(|(_, e)| std::io::Error::from(e))?;
+    let mut attempt = 1;
+    loop {
+        match try_acquire(&sock, handoff) {
+            // The window was closing: it accepted nothing or exited before replying. Try
+            // again; the next attempt finds the socket refused and takes over.
+            Err(e) if vanished(&e) && attempt < ATTEMPTS => {
+                attempt += 1;
+                std::thread::sleep(RETRY_PAUSE);
+            }
+            r => return r,
+        }
+    }
+}
+
+/// How often a start retries when the running window goes away mid-handoff.
+const ATTEMPTS: u32 = 5;
+const RETRY_PAUSE: Duration = Duration::from_millis(100);
+
+/// The peer closed the connection without replying: the window exited, it did not hang.
+fn vanished(e: &std::io::Error) -> bool {
+    use std::io::ErrorKind::*;
+    matches!(
+        e.kind(),
+        ConnectionReset | ConnectionAborted | BrokenPipe | UnexpectedEof
+    )
+}
+
+fn try_acquire(sock: &Path, handoff: Option<&str>) -> std::io::Result<Instance> {
     // Bind first: two simultaneous starts cannot both win a bind.
-    match UnixListener::bind(&sock) {
+    match UnixListener::bind(sock) {
         Ok(l) => return Ok(Instance::Primary(l)),
         Err(e) if e.kind() != std::io::ErrorKind::AddrInUse => return Err(e),
         Err(_) => {}
     }
-    match UnixStream::connect(&sock) {
+    match UnixStream::connect(sock) {
         Ok(mut s) => {
             s.write_all(format!("{}\n", handoff.unwrap_or("")).as_bytes())?;
             // Wait for the window's one-byte reply before closing. A client that closes
@@ -69,10 +109,14 @@ pub fn acquire(dir: &Path, handoff: Option<&str>) -> std::io::Result<Instance> {
             s.read_exact(&mut ack)?;
             Ok(Instance::HandedOff)
         }
-        // A socket file with nobody listening: left by a window that crashed.
+        // A socket file with nobody listening: left by a window that crashed or closed.
+        // Removing it can race another start doing the same; a missing file is fine.
         Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
-            std::fs::remove_file(&sock)?;
-            Ok(Instance::Primary(UnixListener::bind(&sock)?))
+            match std::fs::remove_file(sock) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+                _ => {}
+            }
+            Ok(Instance::Primary(UnixListener::bind(sock)?))
         }
         Err(e) => Err(e),
     }
@@ -143,6 +187,26 @@ mod tests {
         drop(first); // the listener closes; the socket file stays, as after a crash
         assert!(d.join(SOCKET_NAME).exists());
         assert!(matches!(acquire(&d, None).unwrap(), Instance::Primary(_)));
+    }
+
+    #[test]
+    fn a_window_that_exits_mid_handoff_is_taken_over() {
+        // The window is closing: its listener is still bound, so connect succeeds, but it
+        // accepts and drops the connection without replying, then goes away.
+        let (_t, d) = dir();
+        let Instance::Primary(l) = acquire(&d, None).unwrap() else {
+            panic!("first start must be primary")
+        };
+        let closing = std::thread::spawn(move || {
+            let (s, _) = l.accept().unwrap();
+            drop(s);
+            drop(l);
+        });
+        assert!(matches!(
+            acquire(&d, Some("/home/u/proj")).unwrap(),
+            Instance::Primary(_)
+        ));
+        closing.join().unwrap();
     }
 
     #[test]

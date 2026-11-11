@@ -9,7 +9,6 @@
     "windows": [],
     "security": {
       "csp": "default-src 'self'",
-      "freezePrototype": true,
       "capabilities": ["main"]
     }
   },
