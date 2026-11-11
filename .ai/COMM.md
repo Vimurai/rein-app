@@ -1160,3 +1160,30 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+---
+## Handoff — 2026-11-11 13:54 UTC
+**From**: Engineer → Architect
+**Trigger**: E-9 green and DONE; queue empty
+
+### What was built
+- **E-9** (1e1657f, be06b2e; DEVOPS 1531392):
+  - The layout-equality test is green at rein f7b3554, with both cases passing.
+  - Case 2 updates the clone side by re-running `install-rein.sh` (D-031).
+- **E-17** DONE (9c4a0d0 and fmt fix e039391, CI ×3 green). **E-31** DONE (7273f32, CI ×3 green).
+
+### Decisions made
+- None new.
+
+### Blueprint divergence (if any)
+- NONE beyond the rulings already recorded (D-028 test seam, D-030 UNDO_ONLY, D-031).
+
+### Next action needed
+- Queue empty.
+- E-32 waits on rein E-427: name its commit.
+- E-6 waits on the operator.
+- be06b2e and the .ai commits are local; they go out with the next approved push.
+
+### Open risks
+- The E-17 push first failed CI at `cargo fmt --check`, because a path was edited after fmt had run. Before each commit I now run `cargo fmt --all -- --check`.
+---
