@@ -44,7 +44,8 @@ impl std::fmt::Display for ApplyError {
             ApplyError::SymlinkOutsideProfile(t) => write!(
                 f,
                 "settings.json links outside the profile to {}; refusing to write through it",
-                t.display()
+                // A filesystem name: escaped, never raw control bytes (D-024, E-30 P3-1).
+                t.to_string_lossy().escape_debug()
             ),
             ApplyError::ChangedConcurrently => {
                 write!(
@@ -302,5 +303,20 @@ fn copy_permissions(from: &Path, to: &File) -> std::io::Result<()> {
     match fs::metadata(from) {
         Ok(meta) => to.set_permissions(meta.permissions()),
         Err(_) => Ok(()), // new file: keep the private mode
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ApplyError;
+
+    #[test]
+    fn a_symlink_target_in_error_text_is_escaped() {
+        let e = ApplyError::SymlinkOutsideProfile("/out\u{1b}[2J\u{202e}/settings.json".into());
+        let text = e.to_string();
+        assert!(
+            !text.contains('\u{1b}') && !text.contains('\u{202e}'),
+            "{text}"
+        );
     }
 }

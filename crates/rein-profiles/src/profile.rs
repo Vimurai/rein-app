@@ -45,18 +45,23 @@ pub struct Enumeration {
 /// once. accounts.json problems are warnings, never fatal, and never about a listed row.
 pub fn enumerate(home: &Path) -> Enumeration {
     let mut out = Enumeration::default();
-    let add = |out: &mut Enumeration, p: Profile| {
-        if !out
+    // Lists `p` unless its directory is already listed; returns the name holding it then.
+    let add = |out: &mut Enumeration, p: Profile| -> Option<String> {
+        match out
             .profiles
             .iter()
-            .any(|q| same_dir(&q.config_dir, &p.config_dir))
+            .find(|q| same_dir(&q.config_dir, &p.config_dir))
         {
-            out.profiles.push(p);
+            Some(holder) => Some(holder.name.clone()),
+            None => {
+                out.profiles.push(p);
+                None
+            }
         }
     };
 
     let claude = home.join(".claude");
-    add(&mut out, Profile::new("default", claude.clone()));
+    let _ = add(&mut out, Profile::new("default", claude.clone()));
     let mut personal_row = false;
     for (name, dir) in account_rows(home, &mut out.warnings) {
         if name == "default" {
@@ -69,12 +74,17 @@ pub fn enumerate(home: &Path) -> Enumeration {
             }
             continue;
         }
-        personal_row |= name == "personal";
-        add(&mut out, Profile::new(&name, dir));
+        // A row that is not listed never suppresses the built-in (D-024).
+        match add(&mut out, Profile::new(&name, dir)) {
+            None => personal_row |= name == "personal",
+            Some(holder) => out.warnings.push(format!(
+                "account \"{name}\": its config_dir is already listed as \"{holder}\"; skipped"
+            )),
+        }
     }
     let personal = home.join(".claude-personal");
     if !personal_row && personal.is_dir() {
-        add(&mut out, Profile::new("personal", personal));
+        let _ = add(&mut out, Profile::new("personal", personal));
     }
     out
 }
@@ -111,6 +121,12 @@ fn account_rows(home: &Path, warnings: &mut Vec<String>) -> Vec<(String, PathBuf
             continue;
         }
         match entry.get("config_dir").and_then(|d| d.as_str()) {
+            // The path reaches the table, the settings-path line, errors and a command line
+            // (D-024): a control or bidi character in it skips the row.
+            Some(dir) if dir.chars().any(terminal_unsafe) => warnings.push(format!(
+                "account \"{shown}\": config_dir \"{}\" contains a control or bidirectional character; skipped",
+                dir.escape_debug()
+            )),
             Some(dir) if Path::new(dir).is_absolute() => {
                 rows.push((name.clone(), PathBuf::from(dir)))
             }
@@ -124,6 +140,20 @@ fn account_rows(home: &Path, warnings: &mut Vec<String>) -> Vec<(String, PathBuf
     rows
 }
 
+/// C0, DEL, C1, a bidi mark, override or isolate, a zero-width character or a line
+/// separator (the set rein-release escapes in its error text).
+fn terminal_unsafe(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{061c}'
+                | '\u{200b}'..='\u{200f}'
+                | '\u{2028}'..='\u{202e}'
+                | '\u{2066}'..='\u{2069}'
+                | '\u{feff}'
+        )
+}
+
 /// Printable ASCII without space (0x21–0x7E), 1 to 64 bytes.
 fn is_terminal_safe(name: &str) -> bool {
     (1..=64).contains(&name.len()) && name.bytes().all(|b| (0x21..=0x7e).contains(&b))
@@ -133,5 +163,25 @@ fn same_dir(a: &Path, b: &Path) -> bool {
     match (fs::canonicalize(a), fs::canonicalize(b)) {
         (Ok(x), Ok(y)) => x == y,
         _ => a == b,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::terminal_unsafe;
+
+    /// D-024 (1), the character classes the CLI test does not reach: C1 and every bidi
+    /// override/isolate; printable non-ASCII and plain ASCII are allowed in a path.
+    #[test]
+    fn config_dir_terminal_safety_covers_c1_and_bidi_controls() {
+        for c in [
+            '\u{1b}', '\u{7f}', '\u{85}', '\u{9b}', '\u{202a}', '\u{202e}', '\u{2066}', '\u{2069}',
+            '\u{200e}', '\u{200f}', '\u{061c}', '\u{2028}', '\u{feff}',
+        ] {
+            assert!(terminal_unsafe(c), "{c:?}");
+        }
+        for c in ['a', ' ', '\'', '$', 'é', '\u{2070}'] {
+            assert!(!terminal_unsafe(c), "{c:?}");
+        }
     }
 }

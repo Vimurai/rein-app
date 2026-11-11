@@ -74,6 +74,11 @@ pub fn run(home: &Path, cmd: ProfilesCommand) -> ExitCode {
     }
 }
 
+/// POSIX single-quoting, so the printed command line can be pasted as is.
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
 fn parse_plugins(list: &Option<String>) -> Result<Vec<String>, PluginError> {
     let Some(list) = list else {
         return Ok(Vec::new());
@@ -169,6 +174,18 @@ fn apply_one(
         eprintln!("{}: {e}", profile.name);
         code
     };
+    // D-024: rein-app writes wherever accounts.json points; say so when it is not a Claude dir.
+    if !profile
+        .config_dir
+        .file_name()
+        .is_some_and(|n| n.to_string_lossy().starts_with(".claude"))
+    {
+        println!(
+            "{}: note: config dir {} is not a .claude* directory",
+            profile.name,
+            profile.config_dir.display()
+        );
+    }
     let verb = if opts.dry_run {
         "would change"
     } else {
@@ -206,7 +223,7 @@ fn apply_one(
             println!(
                 "{}: would run CLAUDE_CONFIG_DIR={} claude {}",
                 profile.name,
-                profile.config_dir.display(),
+                shell_quote(&profile.config_dir.to_string_lossy()),
                 argv.join(" ")
             );
         }

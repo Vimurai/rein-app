@@ -59,7 +59,8 @@ fn enumerate_lists_default_personal_and_valid_accounts_once() {
         ["default", "work", "personal"],
         "rows before the built-in (D-022)"
     );
-    assert_eq!(e.warnings.len(), 4, "{:?}", e.warnings);
+    // rel, none, bad name, reserved default, and the duplicate `dup` (D-024).
+    assert_eq!(e.warnings.len(), 5, "{:?}", e.warnings);
 }
 
 /// D-022, extending `enumerate_lists_default_personal_and_valid_accounts_once`: the report

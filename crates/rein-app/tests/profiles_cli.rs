@@ -137,3 +137,107 @@ fn unknown_plugin_is_refused_before_anything_runs() {
     assert_eq!(out.status.code(), Some(1));
     assert!(!home.path().join(".claude/settings.json").exists());
 }
+
+fn accounts(home: &Path, rows: Value) {
+    fs::create_dir_all(home.join(".rein")).unwrap();
+    fs::write(
+        home.join(".rein/accounts.json"),
+        json!({ "accounts": rows }).to_string(),
+    )
+    .unwrap();
+}
+
+fn text(out: &Output) -> String {
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
+}
+
+/// D-024, extending `without_claude_the_fallback_marketplace_is_written_exit_4_hooks_untouched_and_undo_restores`:
+/// a config_dir carrying a terminal escape is skipped, and no raw ESC reaches either stream
+/// of `profiles list` or `profiles apply --dry-run`.
+#[test]
+fn a_config_dir_with_control_bytes_is_skipped_and_never_printed_raw() {
+    let home = tempfile::tempdir().unwrap();
+    let h = home.path();
+    accounts(
+        h,
+        json!({"evil": {"config_dir": "/h/\u{1b}[2J; rm -rf ~ #"}}),
+    );
+    for args in [
+        &["profiles", "list"][..],
+        &["profiles", "apply", "--dry-run"],
+    ] {
+        let out = rein_app(h, args);
+        let all = [&out.stdout[..], &out.stderr[..]].concat();
+        assert!(
+            !all.contains(&0x1b),
+            "{args:?}: raw ESC in {:?}",
+            text(&out)
+        );
+        assert!(
+            text(&out).contains("\\u{1b}"),
+            "{args:?}: the warning shows it escaped"
+        );
+        assert!(
+            !String::from_utf8_lossy(&out.stdout).contains("evil"),
+            "{args:?}: not listed"
+        );
+    }
+}
+
+#[test]
+fn the_dry_run_command_line_shell_quotes_the_config_dir() {
+    let home = tempfile::tempdir().unwrap();
+    let h = home.path();
+    let odd = h.join("it's a dir");
+    fs::create_dir_all(&odd).unwrap();
+    accounts(h, json!({"odd": {"config_dir": odd}}));
+    let out = rein_app(h, &["profiles", "apply", "--dry-run", "--profile", "odd"]);
+    let quoted = format!(
+        "CLAUDE_CONFIG_DIR='{}' claude ",
+        odd.display().to_string().replace('\'', r"'\''")
+    );
+    assert!(text(&out).contains(&quoted), "{}", text(&out));
+}
+
+/// D-024: a row dropped as a duplicate is named, and does not hide the built-in `personal`.
+#[test]
+fn a_duplicate_row_warns_and_never_suppresses_the_built_in() {
+    let home = tempfile::tempdir().unwrap();
+    let h = home.path();
+    fs::create_dir_all(h.join(".claude")).unwrap();
+    fs::create_dir_all(h.join(".claude-personal")).unwrap();
+    accounts(h, json!({"personal": {"config_dir": h.join(".claude")}}));
+    let out = rein_app(h, &["profiles", "list"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("\"personal\"") && stderr.contains("default"),
+        "names the profile holding the dir: {stderr}"
+    );
+    let listed = String::from_utf8_lossy(&out.stdout);
+    let personal = listed.lines().find(|l| l.starts_with("personal ")).unwrap();
+    assert!(personal.ends_with(".claude-personal"), "{listed}");
+}
+
+/// D-024: `apply` notes a config dir that does not look like a Claude profile.
+#[test]
+fn apply_notes_a_config_dir_that_is_not_a_claude_dir() {
+    let home = tempfile::tempdir().unwrap();
+    let h = home.path();
+    fs::create_dir_all(h.join(".ssh")).unwrap();
+    accounts(h, json!({"keys": {"config_dir": h.join(".ssh")}}));
+    let out = rein_app(h, &["profiles", "apply", "--dry-run"]);
+    let notes: Vec<_> = text(&out)
+        .lines()
+        .filter(|l| l.contains("note:"))
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(notes.len(), 1, "one note, for keys only: {notes:?}");
+    assert!(
+        notes[0].contains("keys") && notes[0].contains(".ssh"),
+        "{notes:?}"
+    );
+}

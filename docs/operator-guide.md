@@ -87,7 +87,14 @@ rein-app finds Claude Code profiles in this order:
 A directory is listed once, under the first name that reaches it. `default` is reserved for
 `~/.claude`: an account with that name pointing elsewhere is skipped with a warning. An
 account whose name is not printable ASCII (or is longer than 64 bytes), or whose
-`config_dir` is missing or not absolute, is skipped with a warning.
+`config_dir` is missing, not absolute, or contains a control or bidirectional character, is
+skipped with a warning. So is an account whose directory is already listed under another
+name; the warning names that profile. An account that is not listed never hides
+`~/.claude-personal`.
+
+rein-app writes the three keys below wherever `accounts.json` points, including a
+`config_dir` that is a symlink or lies outside your home. `apply` prints a note for a
+profile whose directory is not named `.claude*`.
 
 In each profile's `settings.json` it manages exactly **three keys**: `enabledPlugins`,
 `extraKnownMarketplaces` and `attribution`.
