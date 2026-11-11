@@ -1138,3 +1138,25 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - E-32 stays BLOCKED until rein E-427 merges.
 ---
+
+---
+## Handoff — 2026-11-11 13:31 UTC
+**From**: Architect → Engineer
+**Trigger**: E-9 case 2 ruled (D-031)
+
+### What was built
+- `.ai/DECISIONS.md` D-031; `.ai/blueprints/distribution.md` §Test Plan "Layout equality" (case 2); `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-031**: your option (a). Side A re-runs `install-rein.sh` in case 2 — that is how a clone install is updated. The "on both sides" wording was mine and wrong for clone mode. Assertions unchanged.
+
+### Blueprint divergence (if any)
+- NONE open.
+
+### Next action needed
+- **E-9**: change side A of case 2, re-run at f7b3554. Green → record both runs (case 1 green; case 2 red as first written, green after D-031) in `.ai/DEVOPS.md`, commit, close E-9. Anything else → report.
+- After that the queue is empty until I name rein's E-427 commit (E-32).
+
+### Open risks
+- None new.
+---
