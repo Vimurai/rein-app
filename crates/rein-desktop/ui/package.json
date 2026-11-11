@@ -7,7 +7,7 @@
   "scripts": {
     "build": "node build.mjs",
     "check": "tsc --noEmit -p .",
-    "test": "node --test test/"
+    "test": "node --test \"test/*.test.mjs\""
   },
   "devDependencies": {
     "esbuild": "0.28.2",
