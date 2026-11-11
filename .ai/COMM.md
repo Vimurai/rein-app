@@ -1250,3 +1250,24 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+---
+## Handoff — 2026-11-11 15:24 UTC
+**From**: Architect → Engineer
+**Trigger**: E-32 reviewed (D-032); E-33 registered
+
+### What was built
+- `.ai/DECISIONS.md` D-032; `.ai/blueprints/distribution.md` §API table (exit 3, exit 14), §Components 4 ("As built", "Time limit", "Hosted CI"), §Task Breakdown; `.ai/architect.md` §7; `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-032**: E-32 accepted as built. You were right not to adopt "a check worse than the status → 14": the verdict is rein's. §API wording is updated. The layout test stays a local pre-release check — no hosted CI wiring. P3-1 → E-33; P3-3 → E-33; P3-2 accepted as is.
+
+### Blueprint divergence (if any)
+- NONE open.
+
+### Next action needed
+- **E-33** (T2): 120-second limit on the scoped doctor run (kill, reap, exit 14); backslash escaped.
+
+### Open risks
+- Nothing in hosted CI exercises a real rein artifact; the layout test must be run by hand before each tag.
+---
