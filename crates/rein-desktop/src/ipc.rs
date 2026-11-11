@@ -6,7 +6,7 @@
 //! child is `rein start` (§Security 2).
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -14,10 +14,10 @@ use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, State};
 
-use crate::project_path;
+use crate::host::Host;
 use crate::pty::{ChildSpec, Events, PtyError, PtyHost, PtyId, Size};
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod commands {
     include!("ipc_commands.rs");
 }
@@ -36,7 +36,7 @@ pub struct IpcError {
     pub message: String,
 }
 
-fn err(kind: &'static str, message: impl Into<String>) -> IpcError {
+pub fn err(kind: &'static str, message: impl Into<String>) -> IpcError {
     IpcError {
         kind,
         message: message.into(),
@@ -53,33 +53,6 @@ impl From<PtyError> for IpcError {
         };
         err(kind, e.to_string())
     }
-}
-
-/// A project directory as `tab_open` accepts it: the text rule, canonical, a directory, and
-/// containing `.ai/`. Nothing inside `.ai/` is read.
-///
-/// Residual risk (security review of E-35, P3): the check and the child's `chdir` are
-/// separate steps, so a process that can write to a parent directory could swap a path
-/// component in between. Such a process already runs as the user (the window starts only the
-/// user's own `rein`), so the swap gains it nothing it could not do directly.
-pub fn validate_project(s: &str) -> Result<PathBuf, IpcError> {
-    let unsafe_path = |why: &str| err("unsafe_path", why);
-    let p = project_path::check(s).map_err(unsafe_path)?;
-    let canon = p
-        .canonicalize()
-        .map_err(|_| err("not_a_directory", "not a directory"))?;
-    // The canonical form (symlinks resolved) must satisfy the same rule.
-    project_path::check(&canon.to_string_lossy()).map_err(unsafe_path)?;
-    if !canon.is_dir() {
-        return Err(err("not_a_directory", "not a directory"));
-    }
-    if !canon.join(".ai").is_dir() {
-        return Err(err(
-            "no_ai",
-            "not a Rein project (no .ai/ directory) — run `rein init` there first",
-        ));
-    }
-    Ok(canon)
 }
 
 pub fn validate_size(cols: u32, rows: u32) -> Result<Size, IpcError> {
@@ -103,19 +76,6 @@ pub fn validate_write(data: &str) -> Result<&[u8], IpcError> {
     Ok(data.as_bytes())
 }
 
-/// The installed `rein` launcher, if it is an executable file.
-pub fn installed_rein(home: &Path) -> Result<PathBuf, IpcError> {
-    use std::os::unix::fs::PermissionsExt;
-    let bin = crate::pty::rein_bin(home);
-    match std::fs::metadata(&bin) {
-        Ok(m) if m.is_file() && m.permissions().mode() & 0o111 != 0 => Ok(bin),
-        _ => Err(err(
-            "rein_missing",
-            "rein is not installed — install it with `rein-app install`",
-        )),
-    }
-}
-
 /// A tab as the web side sees it.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Tab {
@@ -127,16 +87,18 @@ pub struct Tab {
 
 /// The window core's state for the terminal stage.
 pub struct Desktop {
-    home: Option<PathBuf>,
+    /// Linux / macOS (`LocalHost`) or Windows (`WslHost`): how a project is validated and
+    /// what the pty child is.
+    platform: Box<dyn Host>,
     pub host: PtyHost,
     tabs: Mutex<HashMap<u32, Tab>>,
     next_tab: AtomicU32,
 }
 
 impl Desktop {
-    pub fn new(home: Option<PathBuf>) -> Self {
+    pub fn new(platform: Box<dyn Host>) -> Self {
         Self {
-            home: home.filter(|h| h.is_absolute()),
+            platform,
             host: PtyHost::default(),
             tabs: Mutex::new(HashMap::new()),
             next_tab: AtomicU32::new(0),
@@ -156,18 +118,9 @@ impl Desktop {
         events: Arc<dyn Events>,
     ) -> Result<Tab, IpcError> {
         let size = validate_size(cols, rows)?;
-        let project = validate_project(project)?;
-        let home = self
-            .home
-            .as_deref()
-            .ok_or_else(|| err("rein_missing", "HOME is not set to an absolute path"))?;
-        installed_rein(home)?;
-        self.open_spec(
-            &ChildSpec::rein_start(home, &project),
-            &project,
-            size,
-            events,
-        )
+        let project = self.platform.project(project)?;
+        let spec = self.platform.rein_start(&project)?;
+        self.open_spec(&spec, &project, size, events)
     }
 
     /// The part of [`open`](Self::open) after validation; tests pass stub children here.
@@ -289,9 +242,10 @@ pub fn tab_detach(state: State<'_, Desktop>, tab: u32) {
     state.detach(tab);
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use crate::local_host::{LocalHost, validate_project};
     use std::sync::mpsc;
     use std::time::Duration;
 
@@ -317,7 +271,7 @@ mod tests {
 
     #[test]
     fn tab_open_refuses_bad_projects() {
-        let d = Desktop::new(Some("/nonexistent-home".into()));
+        let d = Desktop::new(Box::new(LocalHost::new(Some("/nonexistent-home".into()))));
         let q = || -> Arc<dyn Events> { Arc::new(Quiet(Mutex::new(None))) };
         let plain = tempfile::tempdir().unwrap();
         let p = plain.path().to_str().unwrap();
@@ -381,7 +335,7 @@ mod tests {
 
     #[test]
     fn unknown_ptys_and_oversized_acks_are_refused() {
-        let d = Desktop::new(None);
+        let d = Desktop::new(Box::new(LocalHost::new(None)));
         assert_eq!(kind(d.write(42, "x")), "unknown_pty");
         assert_eq!(kind(d.resize(42, 80, 24)), "unknown_pty");
         assert_eq!(kind(d.ack(42, 1)), "unknown_pty");
@@ -392,7 +346,9 @@ mod tests {
         let spec = ChildSpec {
             program: "/bin/sh".into(),
             args: vec!["-c".into(), "cat".into()],
-            cwd: proj.path().into(),
+            cwd: Some(proj.path().into()),
+            env_remove: crate::local_host::ENV_REMOVED,
+            env_set: crate::local_host::ENV_SET,
         };
         let tab = d
             .open_spec(
@@ -421,12 +377,14 @@ mod tests {
 
     #[test]
     fn at_most_sixteen_tabs_even_when_opened_concurrently() {
-        let d = Arc::new(Desktop::new(None));
+        let d = Arc::new(Desktop::new(Box::new(LocalHost::new(None))));
         let proj = project();
         let spec = ChildSpec {
             program: "/bin/sh".into(),
             args: vec!["-c".into(), "cat".into()],
-            cwd: proj.path().into(),
+            cwd: Some(proj.path().into()),
+            env_remove: crate::local_host::ENV_REMOVED,
+            env_set: crate::local_host::ENV_SET,
         };
         let handles: Vec<_> = (0..24)
             .map(|_| {

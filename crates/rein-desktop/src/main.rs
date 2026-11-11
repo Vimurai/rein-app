@@ -4,16 +4,28 @@
 //! terminal stage (E-35), modes (E-36), config (E-37), projects and tabs (E-38) and the
 //! health / release / profile actions (E-39) build on this.
 
-#[cfg(unix)]
 mod dirs;
-#[cfg(unix)]
+#[cfg_attr(not(windows), allow(dead_code))]
+mod handoff_dir;
+mod host;
 mod ipc;
-mod project_path;
 #[cfg(unix)]
+mod local_host;
+mod project_path;
 mod pty;
+mod pty_sys;
 mod security;
 #[cfg(unix)]
 mod single_instance;
+#[cfg(windows)]
+#[path = "single_instance_windows.rs"]
+mod single_instance;
+// The Windows host: plain Rust everywhere, so its tests run on every platform; only the
+// Windows build starts it.
+#[cfg_attr(not(windows), allow(dead_code))]
+mod wsl_host;
+#[cfg_attr(not(windows), allow(dead_code))]
+mod wsl_path;
 
 use std::process::ExitCode;
 
@@ -21,8 +33,9 @@ use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// The window label the capability file names.
 const MAIN_WINDOW: &str = "main";
-/// Event carrying a DIR handed over by a second start (escaped by construction: the path
-/// passed `project_path::check`).
+/// Event carrying a DIR handed over by a second start: on Linux / macOS it passed
+/// `project_path::check`, on Windows `check_text` (printable, bounded); either way `tab_open`
+/// validates it again through the host before anything runs.
 const EVENT_OPEN_DIR: &str = "open_dir";
 
 fn usage() -> ExitCode {
@@ -30,8 +43,10 @@ fn usage() -> ExitCode {
     ExitCode::from(64)
 }
 
-/// The DIR argument as an absolute path string, or `None` when no DIR was given.
-fn parse_args(args: &[String]) -> Result<Option<String>, ExitCode> {
+/// The DIR argument, or `None` when no DIR was given. On Linux / macOS it is made absolute
+/// and must pass the path rule; on Windows it is kept as typed (a `\\wsl.localhost\…` or a
+/// Linux path) after the text rule, and mapped into WSL when the tab opens (W3).
+fn parse_args(args: &[String], windows: bool) -> Result<Option<String>, ExitCode> {
     match args {
         [] => Ok(None),
         [a] if a == "-h" || a == "--help" => {
@@ -41,6 +56,13 @@ fn parse_args(args: &[String]) -> Result<Option<String>, ExitCode> {
             Err(ExitCode::SUCCESS)
         }
         [a] if a.starts_with('-') => Err(usage()),
+        [a] if windows => {
+            project_path::check_text(a).map_err(|why| {
+                eprintln!("rein-desktop: {why}");
+                ExitCode::from(1)
+            })?;
+            Ok(Some(a.clone()))
+        }
         [a] => {
             let abs = std::path::absolute(a).map_err(|_| usage())?;
             let s = abs.to_string_lossy().into_owned();
@@ -63,20 +85,30 @@ fn start_dir_script(dir: Option<&str>) -> String {
     )
 }
 
+/// Linux / macOS: projects are local directories (`LocalHost`). Windows: Rein lives inside
+/// WSL and every process is `wsl.exe` (`WslHost`, §Windows window W1–W2).
+fn platform_host() -> Box<dyn host::Host> {
+    #[cfg(unix)]
+    return Box::new(local_host::LocalHost::new(
+        dirs::process_env("HOME").map(std::path::PathBuf::from),
+    ));
+    #[cfg(windows)]
+    return Box::new(wsl_host::WslHost::system(None));
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let dir = match parse_args(&args) {
+    let dir = match parse_args(&args, cfg!(windows)) {
         Ok(d) => d,
         Err(code) => return code,
     };
 
-    #[cfg(unix)]
     let listener = {
-        let Some(sock_dir) = single_instance::socket_dir(&dirs::process_env) else {
+        let Some(inst_dir) = single_instance::instance_dir(&dirs::process_env) else {
             eprintln!("rein-desktop: cannot determine a runtime or state directory (set HOME)");
             return ExitCode::from(1);
         };
-        match single_instance::acquire(&sock_dir, dir.as_deref()) {
+        match single_instance::acquire(&inst_dir, dir.as_deref()) {
             Ok(single_instance::Instance::HandedOff) => return ExitCode::SUCCESS,
             Ok(single_instance::Instance::Primary(l)) => l,
             Err(e) => {
@@ -91,12 +123,8 @@ fn main() -> ExitCode {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     glib::set_prgname(Some("rein-app"));
 
-    let builder = tauri::Builder::default();
-    #[cfg(unix)]
-    let builder = builder
-        .manage(ipc::Desktop::new(
-            dirs::process_env("HOME").map(std::path::PathBuf::from),
-        ))
+    let builder = tauri::Builder::default()
+        .manage(ipc::Desktop::new(platform_host()))
         .invoke_handler(tauri::generate_handler![
             ipc::tab_open,
             ipc::pty_write,
@@ -124,20 +152,17 @@ fn main() -> ExitCode {
             }
             #[cfg(not(debug_assertions))]
             let _ = window;
-            #[cfg(unix)]
-            {
-                let handle = app.handle().clone();
-                single_instance::serve(listener, move |req| {
-                    let Some(w) = handle.get_webview_window(MAIN_WINDOW) else {
-                        return;
-                    };
-                    let _ = w.unminimize();
-                    let _ = w.set_focus();
-                    if let Some(p) = req {
-                        let _ = w.emit(EVENT_OPEN_DIR, p.to_string_lossy());
-                    }
-                });
-            }
+            let handle = app.handle().clone();
+            single_instance::serve(listener, move |req| {
+                let Some(w) = handle.get_webview_window(MAIN_WINDOW) else {
+                    return;
+                };
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+                if let Some(p) = req {
+                    let _ = w.emit(EVENT_OPEN_DIR, p);
+                }
+            });
             Ok(())
         })
         .build(tauri::generate_context!());
@@ -145,12 +170,9 @@ fn main() -> ExitCode {
         app.run(|_app, event| {
             // Closing the window detaches every tab: the tmux sessions keep running, and
             // every pty child is reaped before the process ends (desktop.md §Components 2).
-            #[cfg(unix)]
             if let tauri::RunEvent::Exit = event {
                 _app.state::<ipc::Desktop>().detach_all();
             }
-            #[cfg(not(unix))]
-            let _ = (_app, event);
         })
     });
     match result {
@@ -181,16 +203,31 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)] // the Linux / macOS rule; Windows keeps the DIR as typed (below)
     fn args_take_at_most_one_dir() {
-        assert_eq!(parse_args(&[]).unwrap(), None);
-        assert_eq!(parse_args(&s(&["/tmp/p"])).unwrap(), Some("/tmp/p".into()));
-        let rel = parse_args(&s(&["p"])).unwrap().unwrap();
+        assert_eq!(parse_args(&[], false).unwrap(), None);
+        assert_eq!(
+            parse_args(&s(&["/tmp/p"]), false).unwrap(),
+            Some("/tmp/p".into())
+        );
+        let rel = parse_args(&s(&["p"]), false).unwrap().unwrap();
         assert!(
             std::path::Path::new(&rel).is_absolute(),
             "a relative DIR is made absolute"
         );
-        assert!(parse_args(&s(&["/a", "/b"])).is_err());
-        assert!(parse_args(&s(&["--bogus"])).is_err());
-        assert!(parse_args(&s(&["/a\u{1b}b"])).is_err());
+        assert!(parse_args(&s(&["/a", "/b"]), false).is_err());
+        assert!(parse_args(&s(&["--bogus"]), false).is_err());
+        assert!(parse_args(&s(&["/a\u{1b}b"]), false).is_err());
+    }
+
+    #[test]
+    fn on_windows_the_dir_is_kept_as_typed_after_the_text_rule() {
+        let unc = "\\\\wsl.localhost\\Ubuntu\\home\\me\\p";
+        assert_eq!(parse_args(&s(&[unc]), true).unwrap(), Some(unc.into()));
+        assert_eq!(
+            parse_args(&s(&["/home/me/p"]), true).unwrap(),
+            Some("/home/me/p".into())
+        );
+        assert!(parse_args(&s(&["/a\u{1b}b"]), true).is_err());
     }
 }

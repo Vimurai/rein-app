@@ -17,23 +17,8 @@ const EXIT_ERROR: u8 = 1;
 /// Linux rein-app missing inside the distro (runtime missing, as `install`).
 const EXIT_RUNTIME: u8 = 4;
 
-/// One finished process.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ShellOut {
-    pub code: Option<i32>,
-    pub stdout: Vec<u8>,
-}
-
-impl ShellOut {
-    fn ok(&self) -> bool {
-        self.code == Some(0)
-    }
-}
-
-/// Runs Windows programs. `Err` means the program could not be started (absent).
-pub trait Shell {
-    fn run(&self, program: &str, args: &[OsString]) -> io::Result<ShellOut>;
-}
+use rein_platform::wsl::args;
+pub use rein_platform::wsl::{Shell, ShellOut, WslState};
 
 /// The real [`Shell`]: stdin/stderr inherited, stdout captured.
 pub struct SystemShell;
@@ -51,49 +36,9 @@ impl Shell for SystemShell {
     }
 }
 
-/// What `wsl.exe` reports.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WslState {
-    Absent,
-    NoDistro,
-    Ready,
-}
-
-fn args(list: &[&str]) -> Vec<OsString> {
-    list.iter().map(OsString::from).collect()
-}
-
-/// `wsl.exe --list --quiet` prints UTF-16LE; decode either that or UTF-8.
-fn decode(bytes: &[u8]) -> String {
-    if bytes.len() >= 2 && bytes.iter().skip(1).step_by(2).all(|&b| b == 0) {
-        let units: Vec<u16> = bytes
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|c| u16::from_le_bytes(*c))
-            .collect();
-        String::from_utf16_lossy(&units)
-    } else {
-        String::from_utf8_lossy(bytes).into_owned()
-    }
-}
-
+/// WSL state as the CLI sees it: `wsl.exe` found on `PATH` (the shared logic, D-038).
 pub fn detect(shell: &dyn Shell) -> WslState {
-    match shell.run("wsl.exe", &args(&["--status"])) {
-        Ok(o) if o.ok() => {}
-        _ => return WslState::Absent,
-    }
-    match shell.run("wsl.exe", &args(&["--list", "--quiet"])) {
-        Ok(o) if o.ok() => {
-            let names = decode(&o.stdout).replace(['\u{feff}', '\0'], "");
-            if names.trim().is_empty() {
-                WslState::NoDistro
-            } else {
-                WslState::Ready
-            }
-        }
-        _ => WslState::NoDistro,
-    }
+    rein_platform::wsl::detect(shell, "wsl.exe")
 }
 
 fn ask(input: &mut dyn BufRead, question: &str) -> bool {

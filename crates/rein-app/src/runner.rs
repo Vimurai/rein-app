@@ -9,8 +9,7 @@ use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use semver::Version;
 
@@ -40,7 +39,7 @@ pub trait Process {
 }
 
 /// How a captured run ended: its exit code (`None`: a signal) and its stdout.
-pub type Output = (Option<i32>, Vec<u8>);
+pub use rein_platform::process::Output;
 
 /// The most stdout [`Process::output`] keeps: 4 MiB, far above a doctor document (rein's
 /// sample is under 10 KiB).
@@ -66,55 +65,16 @@ impl Process for SystemProcess {
     }
 
     fn output(&self, inv: &Invocation, limit: Duration) -> io::Result<Option<Output>> {
-        let deadline = Instant::now() + limit;
         let mut cmd = Command::new(&inv.program);
-        cmd.args(&inv.args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit());
+        cmd.args(&inv.args).stderr(Stdio::inherit());
         for k in &inv.remove {
             cmd.env_remove(k);
         }
         for (k, v) in &inv.set {
             cmd.env(k, v);
         }
-        let mut child = cmd.spawn()?;
-        // stdout is read on its own thread, bounded: a document larger than the cap is not one
-        // (the verdict then says 14), and the pipe is closed after the cap so a runaway writer
-        // ends. The thread finishes when every holder of the pipe has closed it; a grandchild
-        // that keeps it open is not waited for past the deadline (D-032).
-        let (tx, rx) = mpsc::channel();
-        if let Some(out) = child.stdout.take() {
-            std::thread::spawn(move || {
-                let mut buf = Vec::new();
-                let read =
-                    io::Read::read_to_end(&mut io::Read::take(out, OUTPUT_CAP + 1), &mut buf);
-                let _ = tx.send(read.map(|_| buf));
-            });
-        } else {
-            let _ = tx.send(Ok(Vec::new()));
-        }
-        let code = loop {
-            if let Some(status) = child.try_wait()? {
-                break status.code();
-            }
-            if Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Ok(None);
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        };
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        let mut stdout = match rx.recv_timeout(remaining) {
-            Ok(read) => read?,
-            Err(_) => return Ok(None), // the child is reaped; a holder of its stdout is not waited for
-        };
-        if stdout.len() as u64 > OUTPUT_CAP {
-            stdout.clear();
-            stdout.extend_from_slice(b"(output over the size cap)");
-        }
-        Ok(Some((code, stdout)))
+        // The bounded run lives in rein-platform, shared with the window (D-032, D-038).
+        rein_platform::process::output(&mut cmd, limit, OUTPUT_CAP)
     }
 
     fn capture(&self, program: &str, args: &[&str]) -> Option<String> {
@@ -365,7 +325,7 @@ mod tests {
         };
         let limit = Duration::from_millis(300);
         for script in ["sleep 30", "(sleep 30) & echo started"] {
-            let t = Instant::now();
+            let t = std::time::Instant::now();
             assert_eq!(
                 SystemProcess.output(&sh(script), limit).unwrap(),
                 None,

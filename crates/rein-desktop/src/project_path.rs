@@ -18,8 +18,9 @@ pub fn is_unsafe_char(c: char) -> bool {
         )
 }
 
-/// `Ok(path)` when `s` satisfies the text rule; otherwise the reason, in plain words.
-pub fn check(s: &str) -> Result<PathBuf, &'static str> {
+/// The text rule without the absolute-path part: non-empty, bounded, printable. What a
+/// Windows start may hand over before it is mapped into WSL (§Windows window W3).
+pub fn check_text(s: &str) -> Result<&str, &'static str> {
     if s.is_empty() {
         return Err("empty path");
     }
@@ -29,11 +30,18 @@ pub fn check(s: &str) -> Result<PathBuf, &'static str> {
     if s.chars().any(is_unsafe_char) {
         return Err("path contains a control or bidi character");
     }
-    let p = Path::new(s);
-    if !p.is_absolute() {
+    Ok(s)
+}
+
+/// `Ok(path)` when `s` satisfies the text rule and is a POSIX absolute path; otherwise the
+/// reason, in plain words. POSIX on every platform: on Windows a project path is the Linux
+/// path inside WSL (§Windows window W3).
+pub fn check(s: &str) -> Result<PathBuf, &'static str> {
+    let s = check_text(s)?;
+    if !s.starts_with('/') {
         return Err("path is not absolute");
     }
-    Ok(p.to_path_buf())
+    Ok(Path::new(s).to_path_buf())
 }
 
 #[cfg(test)]

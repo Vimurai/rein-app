@@ -9,7 +9,10 @@ import { TermTab } from "./term.ts";
 import { GRUVBOX_DARK, cssVariables } from "./theme.ts";
 import { hardenPrototypes } from "./harden.ts";
 
-const FONT_FAMILY = `"JetBrains Mono", "DejaVu Sans Mono", Menlo, monospace`;
+// Windows has neither JetBrains Mono nor DejaVu by default (desktop.md §Windows window W6).
+const FONT_FAMILY = navigator.userAgent.includes("Windows")
+  ? `"Cascadia Mono", Consolas, monospace`
+  : `"JetBrains Mono", "DejaVu Sans Mono", Menlo, monospace`;
 const FONT_SIZE_PX = 14;
 const LINE_HEIGHT = 1.25;
 

@@ -19,6 +19,7 @@ workspace = true
 
 [dependencies]
 clap = { version = "4.6.7", features = ["derive"] }
+rein-platform = { version = "0.1.0", path = "../rein-platform" }
 rein-profiles = { version = "0.1.0", path = "../rein-profiles" }
 rein-release = { version = "0.1.0", path = "../rein-release" }
 semver = "1.0.28"

@@ -11,7 +11,7 @@
 | Test | `cargo test --workspace --locked` |
 | Release build | `cargo build --profile dist` (cargo-dist profile) |
 | Window UI (in `crates/rein-desktop/ui`) | `npm ci --ignore-scripts && npm run check && npm test && npm run build` — before building `rein-desktop` for use; without it the crate still compiles and tests (a placeholder page, with a cargo warning) |
-| Windows (CLI crates only) | `cargo clippy/test --workspace --exclude rein-desktop --locked` |
+| Windows | the same commands, whole workspace (E-43: `rein-desktop` builds and tests on Windows) |
 
 Order (hosted equivalent of the ci_gate step order): `fmt → clippy → test → build → release`.
 Release runs only on version tags (E-6).
@@ -293,6 +293,31 @@ cargo-dist 0.34.0, workspace version 0.1.0, HEAD at b93eae7 + `.ai/`.
 - Local (Linux x86_64, WSL2): fmt, clippy `-D warnings`, `cargo test --workspace`, the UI
   check/test/build from a clean `npm ci --ignore-scripts`; `dist plan` shows release
   `rein-app` only. Hosted: the push run (recorded below once green).
+
+### 2026-11-11 — E-43: build and test the window crate on Windows too (ci_gate, D-038)
+
+**What changes**: `ci.yml`'s `windows-latest` matrix entry sets `desktop: true`, so the Windows job installs Node 24, builds and tests the window UI from the lockfile, and runs fmt / clippy / test over the whole workspace (the `--exclude rein-desktop` is gone). Why: E-43 makes `rein-desktop` a Windows program (WebView2 + `WslHost`); its Windows-only code (single instance via lock file + handoff directory, the ConPTY pty path, `CREATE_NO_WINDOW`) is only compiled and tested there. Before the push it was cross-checked locally: `cargo clippy -p rein-desktop --all-targets --target x86_64-pc-windows-msvc -- -D warnings` clean (with a check-only `llvm-rc` stand-in; nothing linked).
+
+**Security**: no new secret, permission or network access; `permissions: contents: read` unchanged; actions unchanged and pinned. WebView2 is preinstalled on the hosted runner; nothing is downloaded at test time beyond the existing `npm ci` and cargo fetch from lockfiles.
+
+**Rollback**: set `desktop: false` on the `windows-latest` entry again (one line); the CLI crates keep building on Windows either way.
+
+**Proof**: hosted CI on the E-43 commit, three OSes green (recorded in the E-43 handoff).
+
+### 2026-11-11 — E-44: Windows installer of the window as a workflow artifact (ci_gate, D-038 ruling 9)
+
+**What changes**: new `.github/workflows/desktop-windows.yml` on `windows-latest`, triggered by `workflow_dispatch` and by pushes to `master` touching `crates/rein-desktop/**`, `crates/rein-platform/**` (the window's shared crate, added beside the blueprint's list), `Cargo.lock` or the workflow. Steps: build the UI from the lockfile, `cargo test -p rein-desktop --locked`, then the pinned Tauri CLI (D-041, `@tauri-apps/cli` 2.11.5 from `ui/package-lock.json`) builds the NSIS bundle only, with `crates/rein-desktop/tauri.windows-installer.json` merged over `tauri.conf.json` (`bundle.active`, `targets: ["nsis"]`, per-user install, WebView2 download bootstrapper). The setup `.exe` is uploaded as artifact `rein-desktop-windows-x64-setup`, 14-day retention. `tauri.conf.json` itself keeps `bundle.active: false`.
+
+**Security**: `permissions: contents: read`, no secret, checkout without persisted credentials, actions pinned to the same SHAs as `ci.yml` / `release.yml`. The installer is **unsigned** (SmartScreen warns) and is a test build: it is never attached to a release; `release.yml` and the cargo-dist configuration are untouched. The WebView2 bootstrapper downloads WebView2 from Microsoft at install time only if it is missing.
+
+**Rollback**: delete `desktop-windows.yml` and `tauri.windows-installer.json`; drop `@tauri-apps/cli` from `ui/package.json`. Nothing else depends on them. The operator uninstalls from Windows Settings → Apps.
+
+**Operator — getting the installer** (filled in with the run URL once green):
+```
+gh run list --workflow desktop-windows.yml -L 1
+gh run download <run-id> -n rein-desktop-windows-x64-setup
+```
+Run the setup `.exe` (SmartScreen: More info → Run anyway). Then start `rein-desktop.exe \\wsl.localhost\<distro>\home\<you>\<project>` (or a Linux path such as `/home/<you>/<project>`) until E-38 adds the start screen.
 
 ## E-9 — layout equality against rein's own installer (2026-11-11, D-012 r3, D-028)
 

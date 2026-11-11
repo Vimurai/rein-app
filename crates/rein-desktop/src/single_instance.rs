@@ -24,7 +24,7 @@ const READ_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// The directory holding the socket: `$XDG_RUNTIME_DIR/rein-app` when that variable is an
 /// absolute path, else the app's state directory.
-pub fn socket_dir(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+pub fn instance_dir(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     let abs = |k: &str| env(k).map(PathBuf::from).filter(|p| p.is_absolute());
     abs("XDG_RUNTIME_DIR")
         .map(|d| d.join("rein-app"))
@@ -140,12 +140,13 @@ pub fn read_handoff(mut stream: UnixStream) -> Option<Option<PathBuf>> {
     project_path::check(line).ok().map(Some)
 }
 
-/// Serve handoffs until the listener fails; `on_handoff` runs once per valid request.
-pub fn serve(listener: UnixListener, on_handoff: impl Fn(Option<PathBuf>) + Send + 'static) {
+/// Serve handoffs until the listener fails; `on_handoff` runs once per valid request with the
+/// DIR (`None`: only raise the window) — the same call as on Windows.
+pub fn serve(listener: UnixListener, on_handoff: impl Fn(Option<String>) + Send + 'static) {
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
             if let Some(req) = read_handoff(stream) {
-                on_handoff(req);
+                on_handoff(req.map(|p| p.to_string_lossy().into_owned()));
             }
         }
     });
@@ -175,7 +176,7 @@ mod tests {
             Instance::HandedOff
         ));
         let got = rx.recv_timeout(Duration::from_secs(5)).unwrap();
-        assert_eq!(got, Some(PathBuf::from("/home/u/proj")));
+        assert_eq!(got, Some("/home/u/proj".to_string()));
         assert!(matches!(acquire(&d, None).unwrap(), Instance::HandedOff));
         assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), None);
     }
@@ -210,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn the_socket_dir_is_private_and_a_shared_one_is_refused() {
+    fn the_instance_dir_is_private_and_a_shared_one_is_refused() {
         let (_t, d) = dir();
         acquire(&d, None).unwrap();
         assert_eq!(
@@ -239,14 +240,14 @@ mod tests {
     }
 
     #[test]
-    fn socket_dir_prefers_an_absolute_runtime_dir() {
+    fn instance_dir_prefers_an_absolute_runtime_dir() {
         let env = |k: &str| match k {
             "XDG_RUNTIME_DIR" => Some("/run/user/1000".into()),
             "HOME" => Some("/home/u".into()),
             _ => None,
         };
         assert_eq!(
-            socket_dir(&env),
+            instance_dir(&env),
             Some(PathBuf::from("/run/user/1000/rein-app"))
         );
         let rel = |k: &str| match k {
@@ -254,6 +255,6 @@ mod tests {
             "HOME" => Some("/home/u".into()),
             _ => None,
         };
-        assert_eq!(socket_dir(&rel), crate::dirs::state_dir(&rel));
+        assert_eq!(instance_dir(&rel), crate::dirs::state_dir(&rel));
     }
 }

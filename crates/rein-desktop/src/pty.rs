@@ -1,29 +1,28 @@
 //! `PtyHost` (desktop.md §Components 2, §Security 2, D-033 ruling 1): one pty per tab whose
-//! child is exactly `<home>/.rein/bin/rein start`, cwd = the project directory.
+//! child is what the platform's `Host` builds — `<home>/.rein/bin/rein start` in the project
+//! directory, or on Windows `wsl.exe` running it (§Windows window W2).
 //!
 //! Output is read in chunks of at most [`MAX_CHUNK`] and handed to a sink (the Tauri channel).
 //! Back-pressure: the web side acknowledges what it has written into xterm.js (`pty_ack`); while
 //! more than [`MAX_UNACKED`] bytes are unacknowledged the reader stops reading the pty, so the
 //! child blocks on its own writes instead of the window buffering without bound.
 //!
-//! `detach` closes the pty and sends the child's process group SIGHUP, as a closing terminal
-//! does — the tmux client exits, the tmux session keeps running — and the child is always
-//! reaped: killed if it outlives [`REAP_GRACE`]. Nothing is written to the pty on detach
-//! (portable-pty's own writer types Enter and EOF when dropped, so it is not used).
+//! `detach` closes the pty and hangs up the child, as a closing terminal does — the tmux
+//! client exits, the tmux session keeps running — and the child is always reaped: killed if
+//! it outlives [`REAP_GRACE`]. Nothing is written to the pty on detach. The platform part
+//! (writer, hangup, kill) is in `pty_sys`.
 
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io::{Read, Write};
-use std::os::fd::{AsRawFd, RawFd};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-use filedescriptor::FileDescriptor;
-use nix::sys::signal::{Signal, killpg};
-use nix::unistd::Pid;
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+
+use crate::pty_sys::{self, Killer};
 
 /// Largest chunk sent to the web side at once.
 pub const MAX_CHUNK: usize = 64 * 1024;
@@ -34,50 +33,36 @@ pub const REAP_GRACE: Duration = Duration::from_secs(2);
 /// How long the exit report waits for the child's remaining output.
 const DRAIN_WAIT: Duration = Duration::from_secs(1);
 
-/// Variables removed from the child's environment. `CLAUDECODE` marks a Claude Code
-/// session (desktop.md §Components 2); `TMUX`/`TMUX_PANE` would make `rein start` run
-/// `tmux switch-client` on an outer client instead of attaching inside this pty.
-pub const ENV_REMOVED: &[&str] = &["CLAUDECODE", "TMUX", "TMUX_PANE"];
-/// Variables set in the child's environment.
-pub const ENV_SET: &[(&str, &str)] = &[("TERM", "xterm-256color"), ("COLORTERM", "truecolor")];
-
-/// What runs in a pty. Built only by [`ChildSpec::rein_start`] in production; tests build
-/// stub children. No IPC input ever becomes a program or an argument.
+/// What runs in a pty. Built only by a `Host` in production (`LocalHost`: `rein start`;
+/// `WslHost`: `wsl.exe`); tests build stub children. No IPC input ever becomes a program or
+/// an argument.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChildSpec {
     pub program: PathBuf,
     pub args: Vec<OsString>,
-    pub cwd: PathBuf,
+    /// The working directory; `None` keeps the window's (the WSL child is given its project
+    /// as `--cd` instead).
+    pub cwd: Option<PathBuf>,
+    pub env_remove: &'static [&'static str],
+    pub env_set: &'static [(&'static str, &'static str)],
 }
 
 impl ChildSpec {
-    /// `<home>/.rein/bin/rein start` in `project` — the only child the window starts here.
-    pub fn rein_start(home: &Path, project: &Path) -> Self {
-        Self {
-            program: rein_bin(home),
-            args: vec!["start".into()],
-            cwd: project.to_path_buf(),
-        }
-    }
-
-    fn command(&self) -> CommandBuilder {
+    pub(crate) fn command(&self) -> CommandBuilder {
         let mut cmd = CommandBuilder::new(&self.program);
         cmd.args(&self.args);
-        // The project path is the cwd, never part of a command line (§Security 2).
-        cmd.cwd(&self.cwd);
-        for k in ENV_REMOVED {
+        // The project path is the cwd (or `--cd`), never part of a script (§Security 2).
+        if let Some(cwd) = &self.cwd {
+            cmd.cwd(cwd);
+        }
+        for k in self.env_remove {
             cmd.env_remove(k);
         }
-        for (k, v) in ENV_SET {
+        for (k, v) in self.env_set {
             cmd.env(k, v);
         }
         cmd
     }
-}
-
-/// The installed `rein` launcher.
-pub fn rein_bin(home: &Path) -> PathBuf {
-    home.join(".rein/bin/rein")
 }
 
 pub type PtyId = u32;
@@ -152,7 +137,7 @@ impl Flow {
         Ok(())
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     fn unacked(&self) -> u64 {
         *self.unacked.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -167,10 +152,9 @@ struct Session {
     master: Box<dyn MasterPty + Send>,
     /// Its own lock: a write that blocks (a child not reading its input) must not hold the
     /// session map, or `pty_ack` / `tab_detach` on every tab would wait behind it.
-    writer: Arc<Mutex<FileDescriptor>>,
-    /// The child's pid, which is also its process group: portable-pty makes it a session
-    /// leader. `None` if the platform did not report one.
-    pgid: Option<Pid>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    /// Hangs up and, if need be, kills the child (`pty_sys`).
+    killer: Killer,
     exited: Arc<AtomicBool>,
     flow: Arc<Flow>,
 }
@@ -206,7 +190,7 @@ impl PtyHost {
             .master
             .try_clone_reader()
             .map_err(|e| PtyError::Io(e.to_string()))?;
-        let writer = master_writer(&*pair.master)?;
+        let writer = pty_sys::writer(&*pair.master)?;
         let mut child = pair
             .slave
             .spawn_command(spec.command())
@@ -215,10 +199,7 @@ impl PtyHost {
         let id = self.next.fetch_add(1, Ordering::Relaxed) + 1;
         let flow = Arc::new(Flow::default());
         let exited = Arc::new(AtomicBool::new(false));
-        let pgid = child
-            .process_id()
-            .and_then(|p| i32::try_from(p).ok())
-            .map(Pid::from_raw);
+        let killer = Killer::of(&*child);
 
         let drained = spawn_reader(id, reader, Arc::clone(&flow), Arc::clone(&events));
         {
@@ -240,7 +221,7 @@ impl PtyHost {
             Session {
                 master: pair.master,
                 writer: Arc::new(Mutex::new(writer)),
-                pgid,
+                killer,
                 exited,
                 flow,
             },
@@ -276,7 +257,7 @@ impl PtyHost {
     }
 
     /// Bytes sent to the web side and not yet acknowledged.
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub fn unacked(&self, id: PtyId) -> Result<u64, PtyError> {
         let s = self.lock();
         Ok(s.get(&id).ok_or(PtyError::UnknownPty)?.flow.unacked())
@@ -298,29 +279,10 @@ impl PtyHost {
     }
 
     /// Whether `id` is an open pty.
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub fn contains(&self, id: PtyId) -> bool {
         self.lock().contains_key(&id)
     }
-}
-
-/// A borrowed master fd, so [`FileDescriptor::dup`] can duplicate it without `unsafe`.
-struct Raw(RawFd);
-
-impl AsRawFd for Raw {
-    fn as_raw_fd(&self) -> RawFd {
-        self.0
-    }
-}
-
-/// Our own duplicate of the master fd for writing. Dropping it only closes it — unlike
-/// portable-pty's `take_writer`, whose drop writes a newline and the EOF character, which
-/// tmux would pass to the user's pane on every detach.
-fn master_writer(master: &dyn MasterPty) -> Result<FileDescriptor, PtyError> {
-    let fd = master
-        .as_raw_fd()
-        .ok_or_else(|| PtyError::Io("the pty has no file descriptor".into()))?;
-    FileDescriptor::dup(&Raw(fd)).map_err(|e| PtyError::Io(e.to_string()))
 }
 
 /// A host that goes away takes its children with it: every pty is detached and every child
@@ -334,31 +296,27 @@ impl Drop for PtyHost {
 
 /// What is left of a session after its pty is closed: enough to make sure the child ends.
 struct Reaper {
-    pgid: Option<Pid>,
+    killer: Killer,
     exited: Arc<AtomicBool>,
 }
 
 /// Close a session's pty: the master and the writer go (a write blocked on it fails once the
-/// child is gone), the reader stops waiting for acks, and the child's group gets SIGHUP.
-/// The reader's own copy of the master keeps the pty open until the child exits, so closing
-/// the master alone is no hangup: the signal is what a closing terminal would deliver.
+/// child is gone), the reader stops waiting for acks, and the child is hung up.
 fn close(s: Session) -> Reaper {
     let Session {
         master,
         writer,
-        pgid,
+        killer,
         exited,
         flow,
     } = s;
     drop(writer);
     drop(master);
     flow.close();
-    if !exited.load(Ordering::Acquire)
-        && let Some(pg) = pgid
-    {
-        let _ = killpg(pg, Signal::SIGHUP);
+    if !exited.load(Ordering::Acquire) {
+        killer.hangup();
     }
-    Reaper { pgid, exited }
+    Reaper { killer, exited }
 }
 
 /// Wait up to `grace` for the children to exit on the hangup, then SIGKILL the rest.
@@ -375,13 +333,8 @@ fn reap(reapers: &[Reaper], grace: Duration) {
         waited += step;
     }
     for r in reapers {
-        // portable-pty's own killer sends only SIGHUP, which a child may ignore. SIGKILL to
-        // the group also ends the `tmux attach` client under `rein start`; the tmux server
-        // runs in its own session and is untouched.
-        if !r.exited.load(Ordering::Acquire)
-            && let Some(pg) = r.pgid
-        {
-            let _ = killpg(pg, Signal::SIGKILL); // the waiter thread then reaps it
+        if !r.exited.load(Ordering::Acquire) {
+            r.killer.kill(); // the waiter thread then reaps it
         }
     }
 }
@@ -414,6 +367,7 @@ fn spawn_reader(
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use crate::local_host::{ENV_REMOVED, ENV_SET};
     use std::sync::mpsc;
     use std::time::Instant;
 
@@ -447,7 +401,9 @@ mod tests {
         ChildSpec {
             program: "/bin/sh".into(),
             args: vec!["-c".into(), script.into()],
-            cwd: std::env::temp_dir(),
+            cwd: Some(std::env::temp_dir()),
+            env_remove: ENV_REMOVED,
+            env_set: ENV_SET,
         }
     }
 
@@ -462,31 +418,6 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         false
-    }
-
-    #[test]
-    fn the_production_child_is_exactly_rein_start_in_the_project() {
-        let spec = ChildSpec::rein_start(Path::new("/home/u"), Path::new("/home/u/Dev/p"));
-        assert_eq!(spec.program, PathBuf::from("/home/u/.rein/bin/rein"));
-        assert_eq!(spec.args, vec![OsString::from("start")]);
-        assert_eq!(spec.cwd, PathBuf::from("/home/u/Dev/p"));
-        let argv = spec.command().get_argv().clone();
-        assert_eq!(
-            argv,
-            vec![OsString::from("/home/u/.rein/bin/rein"), "start".into()]
-        );
-        let cmd = spec.command();
-        assert_eq!(
-            cmd.get_cwd().map(PathBuf::from),
-            Some(PathBuf::from("/home/u/Dev/p"))
-        );
-        for k in ENV_REMOVED {
-            assert_eq!(cmd.get_env(k), None, "{k} must be unset");
-        }
-        assert_eq!(
-            cmd.get_env("TERM"),
-            Some(std::ffi::OsStr::new("xterm-256color"))
-        );
     }
 
     #[test]
@@ -508,7 +439,7 @@ mod tests {
         let (c, rx) = capture();
         let host = PtyHost::default();
         let spec = ChildSpec {
-            cwd: canon.clone(),
+            cwd: Some(canon.clone()),
             ..sh("pwd -P")
         };
         host.open(&spec, SIZE, c.clone()).unwrap();

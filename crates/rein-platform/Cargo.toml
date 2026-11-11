@@ -1,0 +1,14 @@
+[package]
+name = "rein-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Process and WSL helpers shared by the rein-app CLI and the rein-desktop window"
+
+[lints]
+workspace = true
+
+[dependencies]

@@ -20,15 +20,19 @@ workspace = true
 # D-035. No Tauri plugin: the capability file is closed (desktop.md §Security 1).
 [dependencies]
 serde_json = "1.0.154"
-# The master fd duplicated for writing without portable-pty's drop behaviour (pty.rs); the
-# same filedescriptor portable-pty already builds (D-036).
-filedescriptor = "0.8.3"
-# Safe killpg for reaping (pty.rs) and flock for the single-instance takeover; the same nix
-# portable-pty already builds (D-036).
-nix = { version = "0.28.0", default-features = false, features = ["signal", "fs"] }
 portable-pty = "0.9.0"
+# The bounded process run and WSL detection, shared with the CLI (D-038).
+rein-platform = { version = "0.1.0", path = "../rein-platform" }
 serde = { version = "1.0.229", features = ["derive"] }
 tauri = { version = "2.11.6", default-features = false, features = ["wry", "x11", "compression"] }
+
+[target.'cfg(unix)'.dependencies]
+# The master fd duplicated for writing without portable-pty's drop behaviour (pty_sys.rs);
+# the same filedescriptor portable-pty already builds (D-036).
+filedescriptor = "0.8.3"
+# Safe killpg for reaping (pty_sys.rs) and flock for the single-instance takeover; the same
+# nix portable-pty already builds (D-036).
+nix = { version = "0.28.0", default-features = false, features = ["signal", "fs"] }
 
 # WM_CLASS / Wayland app id `rein-app` (main.rs). Already in tauri's tree at this version.
 [target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]

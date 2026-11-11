@@ -1,0 +1,21 @@
+//! The `Host` seam (desktop.md §Windows window W1, D-038): everything that differs between
+//! the window on Linux / macOS and the window on Windows. `LocalHost` is the Linux and macOS
+//! behaviour; `WslHost` runs every project through `wsl.exe`. The IPC table, the pty flow
+//! control and the web UI are the same on both. Doctor, release and profile actions join
+//! the seam with E-39 / E-45.
+
+use std::path::{Path, PathBuf};
+
+use crate::ipc::IpcError;
+use crate::pty::ChildSpec;
+
+pub trait Host: Send + Sync {
+    /// A project as the user gave it (argv, `:open`, the folder dialog, a second start) →
+    /// the validated, canonical path the pty child runs in. May start processes (on Windows
+    /// it asks inside WSL); call it off the UI thread.
+    fn project(&self, input: &str) -> Result<PathBuf, IpcError>;
+
+    /// The pty child that runs `rein start` in `project`, which [`project`](Self::project)
+    /// returned.
+    fn rein_start(&self, project: &Path) -> Result<ChildSpec, IpcError>;
+}

@@ -23,14 +23,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # E-34: the window crate builds on Linux and macOS only; Windows keeps the CLI crates.
+        # E-34: the window crate on Linux and macOS; E-43 (D-038): on Windows too (WebView2,
+        # WslHost) — every OS now builds and tests the whole workspace.
         include:
           - os: ubuntu-latest
             desktop: true
           - os: macos-latest
             desktop: true
           - os: windows-latest
-            desktop: false
+            desktop: true
     env:
       CRATES: ${{ matrix.desktop && '--workspace' || '--workspace --exclude rein-desktop' }}
     steps:
