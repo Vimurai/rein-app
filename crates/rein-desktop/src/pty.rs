@@ -539,8 +539,9 @@ mod tests {
     #[test]
     fn the_exit_code_is_reported_after_the_last_output() {
         let (c, rx) = capture();
-        PtyHost::default()
-            .open(&sh("printf 'last words'; exit 3"), SIZE, c.clone())
+        // Held: dropping the host would hang the child up (Drop reaps).
+        let host = PtyHost::default();
+        host.open(&sh("printf 'last words'; exit 3"), SIZE, c.clone())
             .unwrap();
         assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), 3);
         // Captured at the moment of the exit event: the output is already complete.
