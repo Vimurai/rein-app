@@ -52,8 +52,15 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    `files` path, or a directory prefix of one, that matches a `layout.operator_owned`
    pattern only after both are ASCII-lowercased (it does not match as written) is refused
    in the same place — on a case-insensitive home it would write release bytes over
-   operator data. A path that matches a pattern exactly as written is still allowed
-   (shipped-path-wins, D-015). **Error text (D-023):** every string taken from a manifest
+   operator data. The test is **per pattern** (D-026): a path that some pattern matches
+   only after folding is refused even when another pattern matches it exactly. A path
+   that no pattern matches fold-only, and that a pattern matches exactly as written, is
+   still allowed (shipped-path-wins, D-015). **Directory spellings (D-026):** a
+   `layout.mirrored` name, or any directory prefix of a `files` path, that is equal after
+   ASCII-lowercasing to the leading literal segments of an owned pattern but differs from
+   them in bytes is refused the same way — the scan builds live paths from the manifest's
+   spelling, so `mirrored: ["Shared"]` beside the pattern `shared/toolchain.sh` would make
+   the exactly-owned file look unowned on a case-insensitive home and prune it. **Error text (D-023):** every string taken from a manifest
    — paths, patterns, `version`, `min_node`, `key_id` — is escaped before it is printed.
    Windows-reserved names are not ruled (rein has not);
    (f) apply `mode` from the manifest (`bin/rein`, `hooks/*.sh` are `0755`).

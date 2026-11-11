@@ -948,3 +948,35 @@ rein's published table (`tests/fixtures/release/operator-owned-cases.json` at 3f
 
 ### Rollback
 If rein amends its table, restore the fold from the Engineer's E-29 working tree in a new task.
+
+---
+
+## D-026 — Directory spellings that are case variants of an owned pattern's leading segments are refused at parse
+
+**Date**: 2026-11-10
+**Task**: E-29 (security review round 2, relayed by the Engineer)
+**Decision**: `Manifest::parse` also refuses a `layout.mirrored` name, or a directory prefix of a shipped path, that is ASCII-case-equal to but byte-different from the leading literal segments of an operator-owned pattern. The fold-only test of D-023 ruling 1 is per pattern.
+
+### Why needed
+Release with `mirrored: ["bin","Shared"]`, `operator_owned: ["shared/toolchain.sh"]`, files `bin/rein`, `Shared/x.sh` passes parse and verify. On a case-insensitive home the scan lists the operator's file as `Shared/toolchain.sh`, the case-sensitive owned test misses, and the file is pruned — a file that matches its pattern exactly. Reproduced by the Engineer on drvfs. This is not the residual accepted in D-025.
+
+### Rulings
+1. Refuse at parse (Engineer's option a), applied to mirrored names and to every directory prefix of a shipped path. Exit 2, naming the spelling and the pattern.
+2. D-023 ruling 1 is per pattern: a shipped path that any one pattern matches only after folding is refused, even when another pattern matches it exactly — the file the first pattern protects would be overwritten.
+3. In E-29 as well: the case-variant symlink `Conflict` gets its own wording (it is not "file vs directory"). The refusal that names the shipped spelling rather than the link's (review P3-4) stays as it is.
+4. If rein's real tree at 3f68eff or any row of rein's tables trips ruling 1 or 2, stop and report — do not loosen.
+
+### Alternatives considered
+1. **Scan with each root's on-disk spelling** (option b) — rejected: reads the filesystem to decide ownership, covers roots but not deeper prefixes, and behaves differently per machine.
+2. **Accept** — rejected: loss of an exactly-owned operator file with a success exit.
+3. **Refuse at parse** — chosen: same model as D-020 and D-023 ruling 1.
+
+### Constraints driving this decision
+- rein D-155 r1 (strict reader); rein addendum 3 r9 keeps matching case-sensitive, so the spellings must be unambiguous instead.
+
+### Impact
+- Unblocks E-29. Stricter than rein's generator rule r8 (which compares shipped paths with patterns); rein's Architect is told.
+- Risk if wrong: a legitimate manifest is refused; rein's mirrored names and owned patterns are fixed lowercase spellings today.
+
+### Rollback
+Remove the check; no stored format changes.
