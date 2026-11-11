@@ -148,7 +148,7 @@
     {
       "id": "E-9",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Write the layout-equality test against install-rein.sh: from a rein checkout at tag T run install-rein.sh into temp HOME A, build the artifact with rein's own generator `rein release manifest`, sign it with our throwaway test minisign key, run `rein-app install --version T` from the fixture server into temp HOME B, and assert `diff -r A B` is empty except the documented exceptions (a retired MCP server's directory is the one expected until rein rules who removes it — report any other diff to the Architect rather than adjusting the writer). EXTERNALLY BLOCKED: do not start until rein P-50 ships `rein release manifest` (the Architect will say so in a handoff) — if this task auto-opens after E-7 while rein still lacks the generator, leave it OPEN and skip it. Per .ai/blueprints/distribution.md §Test Plan \"Layout equality\" and §E-## Task Breakdown E-9 (D-012 ruling 3). Acceptance: the test runs in CI when a rein checkout is available (gated on an env var naming it) and is green.",
       "created_at": "2026-11-09T14:52:14.751Z",
@@ -159,7 +159,7 @@
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-10T13:54:02.727Z"
+      "updated_at": "2026-11-11T08:26:14.940Z"
     },
     {
       "id": "E-10",
