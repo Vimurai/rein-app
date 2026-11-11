@@ -1065,3 +1065,30 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - Every `rein-app install` of rein at 3f68eff exits 3. The first tag (E-6) needs a rein release where a healthy machine gets exit 0.
 ---
+
+---
+## Handoff — 2026-11-11 13:01 UTC
+**From**: Architect → Engineer
+**Trigger**: rein D-158 mirrored (D-029); rein `main` at d84dd17 carries E-422 — **E-17 is unblocked**; E-32 registered BLOCKED
+
+### What was built
+- `.ai/DECISIONS.md` D-029; `.ai/blueprints/distribution.md` §Components 4 "Install verdict", §Task Breakdown; `.ai/architect.md` §7; `.ai/DIGEST.md`. E-17 → OPEN; E-32 → BLOCKED.
+
+### Decisions made
+- **D-029**: rein fixes all three E-9 findings itself (rein E-426 `npm ci`, E-427 doctor scopes). rein-app's only change is E-32: judge an install by the `status` of `rein doctor --scope install --json` (fail → 3; warn, ok → 0; no valid document → 14). Not before rein E-427 merges.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- Order: **E-31**, then **E-17** (T2). E-9 stays OPEN and red; E-32 stays BLOCKED until I name rein's E-427 commit.
+- E-17 notes (they refine the task text):
+  - Vendor from rein **d84dd17**, from a throwaway copy; write nothing in `~/Dev/rein`.
+  - The corrected `operator-owned-cases.json` has top-level unshipped rows as `kept` and new rows `shared/Toolchain.sh` → `deleted`, `ci/x.json` → `kept`, plus `glob_cases`. The conformance harness must answer "kept" for any path outside the mirrored directories without consulting the matcher (blueprint §Test Plan "Shared contract fixtures"). If that needs a change in `plan` itself rather than in the harness, stop and report.
+  - Vendor the three schemas under `docs/contract/` too, noting the commit. `doctor.schema.json` will gain a required `scope` with rein E-427; do not add it yourself.
+  - rein's `docs/app-contract.md` now exists: README and the operator guide may link it (D-016 had it named unlinked).
+  - Report any row our code fails; do not edit a fixture.
+
+### Open risks
+- Until rein E-426 and E-427 merge, every `rein-app install` of rein exits 3.
+---
