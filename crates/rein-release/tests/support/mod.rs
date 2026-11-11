@@ -132,8 +132,7 @@ pub fn manifest_json(key_id: &str, files: &[Listed]) -> String {
         .collect();
     // rein's layout-v1.json (vendored from rein d84dd17, E-17): the layout every fixture
     // manifest carries.
-    let layout: serde_json::Value =
-        serde_json::from_str(include_str!("layout-v1.json")).unwrap();
+    let layout: serde_json::Value = serde_json::from_str(include_str!("layout-v1.json")).unwrap();
     format!(
         r#"{{"schema":1,"version":"{VERSION}","min_node":"22.5.0","key_id":"{key_id}",
 "layout":{layout},
