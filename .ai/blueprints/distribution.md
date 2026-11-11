@@ -555,6 +555,18 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   retired server directory (`mcp/gone-mcp/node_modules/x`): our writer keeps it, `rein
   install` removes it on both sides, and the diff stays empty — no expected difference is
   left for retired servers.
+  **As run against rein 3f68eff (D-028):** the test drives `install_cmd::install` with the
+  real process runner — the `rein-app` binary has, and gets, no seam for a test key or a
+  test server; everything after key and source selection is the production path. Two more
+  documented differences, both per-install values in owned files: `secrets/role-hmac.key`
+  (random) and `shared/toolchain.sh` (the `REIN_TC_RECORDED=` timestamp). Assertions: the
+  tree diff; `install` exits 0 or 3; and the output of `rein doctor` contains neither
+  `[INSTALL_TREE_MISMATCH]` nor `[INSTALL_INCOMPLETE]` — exit 3 for host reasons (no
+  `~/.claude`, no Chromium) is tolerated in a sterile home, an install-integrity failure
+  is not. The test is gated on `REIN_CHECKOUT`, and is **red at 3f68eff** because
+  `rein install` rewrites the shipped `mcp/orchestrator-mcp/package-lock.json` and rein's
+  own tree check then reports a mismatch (raised with rein). It is not weakened to pass,
+  E-9 stays open until a rein commit makes it green, and CI wiring follows that.
 - Operator-owned conformance: every row of rein's `operator-owned-cases.json` (path, shipped,
   expected `kept` / `replaced` / `deleted`) holds for our plan function; the fixture is
   vendored and refreshed when rein bumps the manifest schema (interim copy until rein E-422).

@@ -3,7 +3,7 @@
 ## Triad Health
 - Stage: Executing (Phase 1 code complete; the first tag waits on rein and the operator)
 - Architect Focus: E-24/E-25 reviewed (D-019); waiting on rein's reply and the operator's rc call; then the Phase 2 blueprint (`desktop.md`) when the operator says go
-- Engineer Focus: E-27 sync case-variant prune ordering + post-sync check (T3)
+- Engineer Focus: E-9 layout-equality test (committed red vs rein 3f68eff, stays open); E-31 manifest size limits (T2)
 
 ## Current snapshot
 - Product: rein-app — Rust shell for Rein: installs a signed `rein` release into `$HOME/.rein`, runs `rein install`/`doctor` from it, manages Claude profile settings (3 allowed keys), updates/rolls back; phase 2 wraps it in a Tauri window. Never contains Rein logic.
@@ -27,7 +27,8 @@
 - **D-024**: E-28 (7df5c73) accepted. Control bytes in an accounts.json `config_dir` reached the terminal raw since E-4 — E-30 skips such rows, shell-quotes the dry-run command line, warns on duplicate rows, and notes an unusual target directory.
 - **rein `main` at 3f68eff** holds rein E-417/E-418/E-420 (staged tree as artifact source, `rein release manifest` + keyless `rein release verify`, `rein install` finishing an unpacked artifact) — **E-9 unblocked 2026-11-10**, run against that commit from a throwaway copy of rein. Not yet on rein `main`: E-421 (`doctor --json`), E-422 (contract docs, schemas, `profile-settings-cases.json`, case rules in the generator), E-419 (signing). E-17 stays blocked on E-422.
 - **D-027** (2026-11-11): E-29 (f298c5b) accepted after five security rounds. E-31 adds manifest size limits at parse (128 mirrored, 256 patterns, 100000 files, 1024-byte paths, 64 segments — addendum raised the first two; rein today: 10 mirrored, 13 patterns, 246 files, depth 5, longest path 59 bytes; rein accepted a duty to warn before passing half of a limit) and linear lookups.
-- Open queue: E-30 (T3, in review), E-9 (T2), E-31 (T2, opens after E-9). Committed locally, awaiting push approval: E-27, E-28, E-29. E-27 (9adfd72) and E-28 (7df5c73) are committed locally, awaiting the operator's push approval. E-6 (first tag) waits on: `HOMEBREW_TAP_TOKEN`, rein committing the public key on `main`, a signed rein release. BLOCKED externally: E-17 (rein E-422).
+- **D-028 — E-9 first run vs rein 3f68eff**: rein's real artifact (252 files, v0.4.0) passes our verifier and the trees match (two more documented per-install differences). **But `rein-app install` exits 3 every time**: `rein install` rewrites the shipped `mcp/orchestrator-mcp/package-lock.json` and rein's own tree check reports `[INSTALL_TREE_MISMATCH]`. Also raised with rein: doctor fails for host reasons in a sterile home, and judges the operator's cwd. The test is committed strict and red; E-9 stays OPEN; no CI wiring yet; no rein-app behaviour change until rein rules.
+- E-27..E-30 DONE, hosted CI green ×3 on df2bcb6. Open queue: E-9 (T2, waits on rein), E-31 (T2). E-27 (9adfd72) and E-28 (7df5c73) are committed locally, awaiting the operator's push approval. E-6 (first tag) waits on: `HOMEBREW_TAP_TOKEN`, rein committing the public key on `main`, a signed rein release. BLOCKED externally: E-17 (rein E-422).
 - Phase 1 ships when: rein commits the key and publishes a signed release (rein E-417..E-422), the operator sets `HOMEBREW_TAP_TOKEN`, and the first tag builds (E-6; an `-rc` tag first is recommended).
 - Known risks: no rein release exists yet; `.msi`, macOS and `.deb` release jobs unexercised until a tag; `rein ci run` has no cargo step (framework gap, not yet raised with rein — no rein session running).
 - Repo: `github.com/Vimurai/rein-app` (public, hosted CI green on 3 OSes). License Apache-2.0 (D-004) — awaiting operator confirmation.

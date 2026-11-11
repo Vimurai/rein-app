@@ -1021,3 +1021,38 @@ rein's Architect reported today's numbers (tracked tree, an approximation of the
 - **`layout.mirrored`: 128 names. Path depth: 64 segments.** The other three stand (256 patterns, 100000 files, 1024 bytes).
 - The E-31 task text still carries 64 and 32; this addendum and the blueprint override it. The Engineer still measures the generator's real output in E-9 and stops if any limit is under 10×.
 - rein accepted the notice duty: growth past about half of a limit is told to rein-app before the release (to be recorded as a rein D-153 addendum). rein's generator does not enforce these limits.
+
+---
+
+## D-028 — E-9 first run: what the layout-equality test asserts; the rein-side findings go to rein
+
+**Date**: 2026-11-11
+**Task**: E-9 (first real run against rein 3f68eff, reported by the Engineer)
+**Decision**: The test asserts the tree diff, `install` exit 0 or 3, and no install-integrity token in `rein doctor`'s output. It is committed as written, red at 3f68eff, and not weakened. Three findings are rein's to rule; rein-app changes no behaviour meanwhile.
+
+### Why needed
+rein's real artifact (252 files, v0.4.0) passes our verifier and the trees match, but `rein-app install` exits 3 every time: `rein install` rewrites the shipped `mcp/orchestrator-mcp/package-lock.json`, and rein's own tree check then reports `[INSTALL_TREE_MISMATCH]`. `rein doctor` also fails in a sterile home for host reasons, and it judges whatever directory the operator ran `rein-app` from.
+
+### Rulings
+1. **Test seam:** driving `install_cmd::install` with the real process runner is accepted. The binary gets no way to trust a test key or a test server.
+2. **Two more documented differences:** `secrets/role-hmac.key` and `shared/toolchain.sh` (timestamp line) — per-install values in owned files.
+3. **Assertions:** tree diff; exit ∈ {0, 3}; doctor output has neither `[INSTALL_TREE_MISMATCH]` nor `[INSTALL_INCOMPLETE]`.
+4. **Red is the right result at 3f68eff.** The test is committed (it is skipped without `REIN_CHECKOUT`), the result is recorded in `.ai/DEVOPS.md`, E-9 stays open, and CI wiring waits until a rein commit makes it green.
+5. **To rein, not decided here:** (a) the lock-file rewrite versus the tree check; (b) whether `rein doctor` can tell install integrity from host checks (its `--json`, rein E-421); (c) which directory an app should run `rein doctor` in after install/update/rollback, since project checks judge the operator's current directory.
+6. **No interim change in rein-app:** exit 3 keeps meaning "`rein doctor` failed" (D-012: doctor judges), and the working directory is unchanged until rein answers 5c.
+7. **E-31 is unblocked from E-9:** the generator's real counts are known (mirrored 10, patterns 14, files 252, longest path 55 bytes, depth 4); every limit is ≥ 12.8×.
+
+### Alternatives considered
+1. **Make the test pass by ignoring doctor's result** — rejected: it would hide the one finding that makes every install exit 3.
+2. **Change rein-app to run doctor in `$HOME` now** — rejected: how the app invokes doctor is contract (rein D-153); a guess here could be wrong in the other direction.
+3. **Commit strict, report, wait** — chosen.
+
+### Constraints driving this decision
+- Contract direction (D-001); D-012 (doctor judges).
+
+### Impact
+- E-6 gains a precondition: a rein release on which `rein-app install` can exit 0 on a healthy machine.
+- Risk if wrong: none in shipped behaviour; the test stays red longer.
+
+### Rollback
+Not applicable — no behaviour change.
