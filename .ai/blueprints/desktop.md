@@ -307,8 +307,11 @@ The web UI, the IPC table, the `Action` list and the pty flow control are unchan
 W1. **`Host` seam** — one trait in `rein-desktop` behind which sit all the things that
    differ by platform: validate a project, build the pty child, run doctor, run the
    release / profile actions, name the app's directories. `LocalHost` is today's behaviour
-   (Linux, macOS) moved behind it unchanged. `WslHost` is the Windows one. No `cfg(windows)`
-   outside the two implementations, `dirs` and `single_instance`.
+   (Linux, macOS) moved behind it unchanged. `WslHost` is the Windows one. Platform `cfg`
+   is confined to the two implementations, `dirs`, `single_instance`, `pty_sys` (pty
+   writer / hangup / kill) and the one `platform_host()` constructor in `main.rs`. Process
+   running and WSL detect / decode live in the shared crate `rein-platform`, used by both
+   `rein-app` and `rein-desktop` (accepted from E-43).
 W2. **`WslHost`** — owns the distro and every `wsl.exe` call.
    - Program: `%SystemRoot%\System32\wsl.exe` by absolute path, never a `PATH` search.
    - **State probe** at start and on `health.show`: `wsl.exe --status`, then
@@ -322,10 +325,17 @@ W2. **`WslHost`** — owns the distro and every `wsl.exe` call.
      space; shell falls back to `/bin/sh`). From then on every call passes `-d <name>`.
      One distro per window in this revision.
    - **Project validation** (replaces the local `.ai/` check): one call
-     `wsl.exe -d D --cd <linux path> -e sh -c '[ -d .ai ] || exit 3; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P'`.
+     `wsl.exe -d D --cd <linux path> -e sh -c 'case $PWD in /) exit 5;; esac; [ -d .ai ] || exit 3; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P'`.
      Exit 0 → stdout is the canonical path (re-validated as a `ProjectPath`); 3 → no `.ai/`;
-     4 → rein not installed in WSL; anything else → not a directory. 30-second limit,
+     4 → rein not installed in WSL; 5 or anything else → not a directory. 30-second limit,
      64 KiB output cap.
+     **`--cd` does not fail** (E-43 smoke, 2026-11-11): for a missing directory, a file or
+     an unreadable directory `wsl.exe` prints `chdir(...) failed`, runs the command in `/`
+     and exits 0. Hence the `case` guard (no quotes needed — a `case` word is not split),
+     and the path `/` itself is refused as a project before any call. The pty child keeps
+     its script unchanged (it runs in the user's shell, which may be fish — no `case`): if
+     the directory vanishes between validation and spawn, `rein start` runs in `/` and
+     fails with its own message, which the stage shows with the exit code as for any exit.
    - **Pty child** (ConPTY through `portable-pty`): exactly
      `wsl.exe -d D --cd <linux path> -e <shell> -lic 'exec ~/.rein/bin/rein start'`.
      The user's own shell, login and interactive, so `PATH` is what their terminal has
@@ -368,8 +378,8 @@ W5. **Single instance (Windows)** — no named pipe. A lock file
    life. A second start that cannot take it writes its DIR to
    `%LOCALAPPDATA%\rein-app\handoff\<random>.txt` (temp name + rename, ≤ 4 KiB) and waits
    up to 5 s for the window to delete it — deleted → exit 0; not → exit 1 with one line.
-   The window watches the directory (`notify`, already a dependency), validates the text as
-   in W3 and opens a tab. The directory is private to the user by profile ACL; no listener
+   The window polls the directory every 200 ms (accepted as the design — no watcher
+   needed for one small private directory), validates the text as in W3 and opens a tab. The directory is private to the user by profile ACL; no listener
    is exposed to other users or the network.
 W6. **Directories (Windows)** — config: `%APPDATA%\rein-app\config.toml`; state
    (`projects.json`, `ui.json`, lock, handoff): `%LOCALAPPDATA%\rein-app\`. XDG variables
@@ -429,7 +439,8 @@ for WSL.
 - `WslHost` against a stubbed process runner: the exact argv of every call (program path,
   `-d`, `--cd`, constant script); `Absent` / `NoDistro` / `Ready`; UTF-16 list output; a
   bad distro name, home or shell from the probe is refused; validation exits 0 / 3 / 4 /
-  other map to the four errors.
+  5 / other map to the errors (5 and other → not a directory); `/` is refused before any
+  call.
 - Path mapping, table-driven: POSIX path, both UNC forms, wrong distro, drive path,
   relative path, a path with `"` or a control character.
 - The pty child spec on Windows has no `WSLENV` and the constant script.

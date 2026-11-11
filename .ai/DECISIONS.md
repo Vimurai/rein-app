@@ -1499,3 +1499,31 @@ Same scope as Tauri's option (`Object.prototype` only). The difference is when: 
 ### Rollback
 Re-enable `freezePrototype` once xterm.js no longer assigns over prototype properties at load; delete `harden.ts`.
 
+
+## D-041 — Tauri CLI for the Windows installer build (E-44, dependency_gate, Engineer-recorded)
+
+**Date**: 2026-11-11
+**Task**: E-44 (`desktop-windows.yml`, NSIS installer as a workflow artifact) — D-038 ruling 9
+**Decision**: ADOPT `@tauri-apps/cli` 2.11.5 (published 2026-09-20; Apache-2.0 OR MIT) as a dev dependency of `crates/rein-desktop/ui`, pinned exactly in the committed `package-lock.json` (operator, 2026-11-11: "don't ask me for permissions, just build it"). The Architect may revise.
+
+### Why needed
+Only the Tauri CLI produces the NSIS bundle (installer script, WebView2 bootstrapper, per-user install) from `tauri.conf.json`; `cargo build` makes the bare executable.
+
+### Alternatives considered
+1. **`cargo install tauri-cli --locked`** in the workflow — compiles the CLI from source on every run (minutes) and its version lives in the workflow, not in a lockfile.
+2. **Hand-written NSIS script** — re-implements what the bundler maintains (WebView2 bootstrap, uninstaller, per-user registry keys).
+
+### Size / weight
+The npm package downloads one prebuilt native binary for the running platform (an optional dependency per OS, ~10 MB). It runs only at build time; nothing of it ships in the installer.
+
+### Security track record
+Maintained by the Tauri project; no advisory known to the Engineer for 2.11.x. Installed with `npm ci --ignore-scripts` from the lockfile (integrity hashes).
+
+### Maintenance
+Same minor (2.11) as the `tauri` crate (2.11.6), as Tauri recommends.
+
+### Rollback
+Remove the dev dependency and `desktop-windows.yml`; nothing else uses it.
+
+### D-038 addendum 1 (2026-11-11) — `wsl.exe --cd` never fails; validation guards against the `/` fallback
+E-43's interop smoke showed `wsl.exe --cd <missing | file | unreadable>` prints `chdir(...) failed`, runs the command in `/` and exits 0. Rulings: (1) the validation script starts with `case $PWD in /) exit 5;; esac` (constant, no quotes); exit 5 means "not a directory"; (2) `/` is refused as a project path before any call; (3) the pty start script is unchanged — it runs in the user's shell (possibly fish), and a directory that vanishes after validation ends in `rein start`'s own error shown in the stage; (4) passing the path as a positional parameter was rejected (needs double quotes through `wsl.exe`'s re-parsing). Also accepted from E-43: the shared crate `rein-platform`; platform `cfg` in `pty_sys` and one `platform_host()`; the handoff directory is polled every 200 ms (no watcher — final, not a stopgap). Smoke confirmed: `$SHELL` is set under `-e`, `WSLENV` is the only crossing path, `TERM=xterm-256color`.
