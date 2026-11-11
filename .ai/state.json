@@ -408,30 +408,30 @@
     {
       "id": "E-27",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Fix the silent file loss on a case-only rename across releases, per .ai/blueprints/distribution.md §Components 3 step d \"Case-variant prunes go first\" / \"Post-sync check\" and D-021: (1) in `rein-release` sync, remove before a directory's writes every `prune` entry whose ASCII-lowercased path equals the ASCII-lowercased path of a `ship` entry or of a directory prefix of one; keep all other prunes after the writes; implement it in the single `plan`/`apply` path so update, rollback and failure-restore share it; (2) after the last directory, verify every `ship` path exists as a regular file of the listed size and treat a miss as a sync failure that takes the existing failure-restore path; (3) apply the printable-ASCII check of E-26 to every `layout.operator_owned` pattern in `Manifest::parse`, and escape non-printable bytes in matcher error text; (4) correct the stale comment at `crates/rein-profiles/src/profile.rs:5` — accounts.json has a closed shape and rein-app never writes it (rein D-153 addendum 2). Start with a failing test (`skill: bug-reproducer`): installed `shared/locate.sh`, new release ships `shared/Locate.sh` — on every OS the new name exists with the new bytes and the old name is gone or is the same file; add a directory-rename case (`shared/Lib/x` → `shared/lib/x`), the same through rollback, and a post-sync-check case. Run `security_engineer` before commit. Acceptance: `cargo test --workspace` and hosted CI green on three OSes (macOS and Windows runners exercise the case-insensitive path); the layout-equality expectations of existing tests are unchanged.",
       "created_at": "2026-11-10T22:58:26.051Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-11T12:02:06.421Z",
+      "summary": "Case-variant prunes (and empty case-variant dirs) removed before writes; post-sync existence+size check takes failure-restore; operator_owned ASCII check; matcher errors escaped. 9adfd72, CI green x3.",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-10T22:58:26.051Z"
+      "updated_at": "2026-11-11T12:02:06.425Z"
     },
     {
       "id": "E-28",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Fix profile enumeration in `crates/rein-profiles/src/profile.rs` `enumerate`, per .ai/blueprints/distribution.md §Components 6 \"Enumeration order and names\" and D-022: (1) list `default` (`~/.claude`), then every `accounts.json` row with the row's `config_dir` authoritative for its name, then the built-in `~/.claude-personal` as `personal` only when no row has that name and the directory is not already listed; a directory is listed once; (2) reserve only `default` — a row named `default` is silent when it points at `~/.claude`, otherwise skipped with a warning that says the name is reserved for `~/.claude`; (3) replace the `[A-Za-z0-9._-]{1,64}` name grammar with a terminal-safety check (printable ASCII 0x21–0x7E, at most 64 bytes); a failing row is skipped with a warning showing the name escaped; (4) never print a warning for a row that is then listed. Start with a failing test reproducing the report: a `personal` row pointing at `~/.claude-personal` yields one `personal` profile and no warning. Add: a `personal` row pointing elsewhere is listed with the row's directory and `~/.claude-personal` is not listed under that name; no row and the directory present lists the built-in; a row name with a control byte is skipped and the warning contains no raw control byte; a rein-grammar name passes. Run `security_engineer` before commit (the allowed-key writes follow this list). Acceptance: `cargo test --workspace` and hosted CI green on three OSes; `docs/operator-guide.md` profile text matches.",
       "created_at": "2026-11-10T23:02:40.072Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-11T12:02:07.656Z",
+      "summary": "Profiles: accounts rows before built-in personal, row config_dir authoritative; only default reserved; terminal-safety name check; escaped warnings; guide updated. 7df5c73, CI green x3.",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-10T23:02:40.072Z"
+      "updated_at": "2026-11-11T12:02:07.657Z"
     },
     {
       "id": "E-29",
@@ -460,6 +460,24 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-10T23:12:15.485Z"
+    },
+    {
+      "id": "E-31",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Bound the cost of reading a signed manifest in `rein-release`, per .ai/blueprints/distribution.md §Execution Constraints \"Manifest size limits\" and D-027: (1) in `Manifest::parse`, refuse (verification failure, exit 2, naming the limit) a manifest with more than 64 `layout.mirrored` names, more than 256 `layout.operator_owned` patterns, more than 100000 `files`, a path or pattern longer than 1024 bytes, or a path deeper than 32 segments — after first recording in `.ai/DEVOPS.md` the real counts from rein's generator at commit 3f68eff (mirrored, patterns, files, longest path, deepest path) and confirming each limit is at least 10 times the real value; if one is not, stop and report instead of choosing a new number; (2) replace the linear scan in `Manifest::under_mirrored` with a set lookup; (3) make `sync::folded_ship` and the preflight case-variant symlink scan linear in the input (no per-prefix copies, no all-pairs comparison per directory). Behaviour for every manifest inside the limits is unchanged. Tests extend the manifest suite: one row per limit (at the limit passes, one over is refused naming the limit) and a timing-free structural test that a 100000-file manifest parses. Acceptance: `cargo test --workspace` and hosted CI green on three OSes; the operator guide's refusal list names the limits.",
+      "created_at": "2026-11-11T12:30:20.970Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-9"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-9"
+      ],
+      "updated_at": "2026-11-11T12:30:20.973Z"
     }
   ],
   "stamps": [
@@ -1154,6 +1172,60 @@
       "timestamp": "2026-11-10T23:09:47.363Z",
       "summary": "[TESTS_PASSED] cargo test --workspace 132/132, 0 failed; all 5 required E-28 behaviours covered (personal row at ~/.claude-personal, row elsewhere, no row, control-byte name, valid grammar), tests name the test they extend, negative cases present",
       "sha": "9adfd726d86752878f856839dd84910976d3d2fc",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-29",
+      "timestamp": "2026-11-11T12:03:14.673Z",
+      "summary": "[TESTS_PASS] cargo test --workspace all green, 0 failures; covers shipped case-variant/glob/dir refusal, D-025 prune+snapshot+rollback pin, symlink case-variant Conflict row, control-byte escaping unit test; existing tests only extended",
+      "sha": "503e438860cf55f4b68f988e28c6d1cf12e4c99c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-29",
+      "timestamp": "2026-11-11T12:03:15.149Z",
+      "summary": "No sovereignty violations (staged diff touches only crates/rein-release, docs/operator-guide.md; no architect.md/BRIEF/blueprints). r1 parse refusal, r3 symlink Conflict, r4 central escaping via paths::printable match D-023; item 2 correctly omitted per D-025 (matching stays case-sensitive, folded lookup used only for the parse refusal). Operator guide row added. P2 note: the r3 preflight scan skips ship paths with no '/' (no parent dir), so a root-level case-variant symlink is not caught.",
+      "sha": "503e438860cf55f4b68f988e28c6d1cf12e4c99c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "critic_security",
+      "task_id": "E-29",
+      "timestamp": "2026-11-11T12:03:31.091Z",
+      "summary": "No P0/P1; parse refusal covers globs/**/dir-only/ancestors, preflight scan does not follow symlinked dirs; P2: LayoutError Display still prints local paths raw (not escaped); P3 notes",
+      "sha": "64949796f0937d8e380aaf9b91a64ce8b659b4d4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-30",
+      "timestamp": "2026-11-11T12:30:37.496Z",
+      "summary": "No sovereignty violations; staged diff matches E-30/D-024 items 1-5 (skip unsafe config_dir at source, shell-quoted dry-run, duplicate warning naming holder with unlisted rows never hiding built-in, non-.claude* apply note, guide text); same_dir untouched; no orphaned files.",
+      "sha": "f298c5b1c12e705242c9d78768cdc7ee16d91b20",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-30",
+      "timestamp": "2026-11-11T12:30:38.034Z",
+      "summary": "[TESTS_PASSED] cargo test --workspace: all suites ok, 0 failed; 4 new CLI tests cover ESC skip (list+dry-run, both streams), shell-quoting with space/quote, personal duplicate warn + built-in listed, .ssh note; enumerate count 4->5 justified by D-024",
+      "sha": "f298c5b1c12e705242c9d78768cdc7ee16d91b20",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "critic_security",
+      "task_id": "E-30",
+      "timestamp": "2026-11-11T12:30:42.230Z",
+      "summary": "No P0/P1; config_dir control/bidi rows skipped with escape_debug warnings, dry-run path POSIX-quoted correctly, dup warning and non-.claude note emit only safe names/paths. P3: LRM/RLM/ALM not filtered.",
+      "sha": "f298c5b1c12e705242c9d78768cdc7ee16d91b20",
       "author": "emirkovacevic@protonmail.com"
     }
   ],

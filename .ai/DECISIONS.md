@@ -980,3 +980,36 @@ Release with `mirrored: ["bin","Shared"]`, `operator_owned: ["shared/toolchain.s
 
 ### Rollback
 Remove the check; no stored format changes.
+
+---
+
+## D-027 — E-29 accepted; manifests get size limits at parse
+
+**Date**: 2026-11-11
+**Task**: review of E-29 (f298c5b); E-31
+**Decision**: E-29 is accepted as built after five security rounds. The remaining cost findings are closed by refusing oversized manifests at parse and by making three lookups linear, in one Tier 2 task after E-9.
+
+### Why needed
+The E-29 review left four performance findings: pattern × file × depth cost with no cap, `under_mirrored` quadratic in mirrored × files, `folded_ship` memory quadratic in one path's length, and an all-pairs symlink scan per directory. All need a manifest signed with the release key.
+
+### Rulings
+1. **E-29 accepted**: parse refusals as table passes (linear in pattern × depth), `CaseVariantSymlink` with its own wording, item (2) of the task void per D-025.
+2. **Limits at parse**: 64 mirrored names, 256 owned patterns, 100000 files, 1024 bytes per path or pattern, 32 segments. Each must be ≥ 10× what rein's generator emits at 3f68eff; the Engineer measures first and stops if one is not.
+3. **Linear lookups**: `under_mirrored` by set; no per-prefix copies in `folded_ship`; no all-pairs comparison in the symlink scan.
+4. **Tier 2, after E-9**: no trust decision changes, and E-9 supplies the real numbers.
+5. rein's Architect is told the limits, since they bound what a future rein release may ship.
+
+### Alternatives considered
+1. **Leave as is** — rejected: a 10-second parse from a mistaken manifest is cheap to prevent.
+2. **Only fix the algorithms** — rejected: limits make every future check bounded without re-auditing each.
+3. **Limits + linear lookups** — chosen.
+
+### Constraints driving this decision
+- §Execution Constraints: install under 10 s, memory under 100 MB.
+
+### Impact
+- Unlocks: E-31 (after E-9).
+- Risk if wrong: a real rein release outgrows a limit and is refused; the 10× margin and rein's notice make that a planned change.
+
+### Rollback
+Raise or remove a limit constant.

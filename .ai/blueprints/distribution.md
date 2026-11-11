@@ -453,6 +453,15 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - Install end-to-end (excluding download) < 10 s on a laptop; sha256 of the full tarball
   streamed, not buffered. Memory < 100 MB. Install I/O is bounded by the release payload,
   never by the size of the home; extra disk is at most two payload-sized snapshots.
+- **Manifest size limits (D-027, E-31):** a manifest is refused at parse (exit 2, naming the
+  limit) above 64 `layout.mirrored` names, 256 `layout.operator_owned` patterns, 100000
+  `files`, 1024 bytes per path or pattern, or 32 path segments. Each limit is at least ten
+  times what rein's generator emits (measured at rein 3f68eff, recorded in `.ai/DEVOPS.md`).
+  With them, every parse-time and plan-time check is linear or near-linear in the manifest:
+  the case and owned checks are table passes (E-29), `under_mirrored` is a set lookup, and
+  the sync's folded-path and symlink scans keep no per-prefix copies. Only a manifest
+  signed with the release key reaches these checks, so this bounds a mistake or a stolen
+  key's nuisance value, not an anonymous attacker.
 - Single-writer: a lock file `$HOME/.rein.lock` prevents concurrent `install`/`update`/`rollback`
   and is held through `rein install` / `rein doctor`. A lock left by a killed run is cleared
   by the operator (the message names the PID); a liveness check is deferred to Phase 2 (D-012).
@@ -655,6 +664,8 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - E-22 (guard script, tag gate, `CODEOWNERS`) is DONE and E-23 needed no change (already
   ASCII since 6bf6244); both reviewed in D-018.
 - E-24 and E-25 are DONE, reviewed in D-019. E-26 is DONE, reviewed in D-021.
+- **E-31** (T2, after E-9) Manifest size limits and linear lookups (§Execution Constraints
+  "Manifest size limits"; D-027).
 - **E-30** (T3) `config_dir` terminal safety, shell-quoted dry-run line, duplicate-row
   warning, unlisted row never suppresses the built-in, note for an unusual `config_dir`
   (§Components 6; D-024).
