@@ -163,7 +163,7 @@ sixteen colours are given to xterm.js, so the chrome and the terminal always mat
    cap and strict parse; 120-second limit) when a tab opens, after update / rollback, and on
    `health.show`. It displays the document's `status` and checks; it never recomputes a
    verdict and never branches on a check id (D-029, D-032).
-6. **Web UI (TypeScript + React; shadcn/ui for the click layer — D-035)** — shadcn/ui
+6. **Web UI (TypeScript + React; shadcn/ui for the click layer — D-037)** — shadcn/ui
    components (Radix primitives + Tailwind, copied into `crates/rein-desktop/ui/components/`
    and owned by us) are used for the menu (its Command component), dialogs and confirm
    buttons, tooltips, the context menu, the Settings overlay and the first-run screen. They
@@ -285,7 +285,7 @@ No secret is read, stored or shown. The window makes no network call of its own;
   revisions of this file and are not started by any task below.
 - Dependencies each pass `skill: dependency_gate`: `tauri` 2, `portable-pty`, `toml`,
   `notify`; web: `@xterm/xterm`, `@xterm/addon-fit`, `@xterm/addon-webgl`, `esbuild`,
-  `typescript`, and (D-035) `react`, `react-dom`, `tailwindcss` (compiled at build time to
+  `typescript`, and (D-037) `react`, `react-dom`, `tailwindcss` (compiled at build time to
   one static stylesheet), the `@radix-ui/*` primitives of the components actually used,
   `cmdk`, `class-variance-authority`, `clsx`, `tailwind-merge`. Only the shadcn components
   named in §Components 6 are copied in; no icon set (glyphs are text), no other component
@@ -352,7 +352,7 @@ release artifact carries the window until a task adds it to the dist configurati
 | E-41 | Settings overlay + `ui.json` (`ui_get` / `ui_set`, `config.toml` wins), font zoom, pointer-parity tests, final `ux_reviewer` pass | 2 | E-37, E-39, E-40 |
 | E-42 | Move the E-34 web shell to React + Tailwind and add the restyled shadcn/ui base (theme tokens as CSS variables, the components named in §Components 6); do it before E-36 | 2 | — |
 E-36..E-41 build on E-42: overlays, menu, tooltips, dialogs and Settings use the shadcn
-components; "no framework" in the E-34 and earlier task texts is superseded by D-035.
+components; "no framework" in the E-34 and earlier task texts is superseded by D-037.
 Tier 3 tasks run `security_engineer` before commit. The `ux_reviewer` pass named in E-39
 is repeated at the end of E-41, which is the one that counts.
 E-34..E-39 as registered stay valid: E-34's capability test allows no plugin until E-40

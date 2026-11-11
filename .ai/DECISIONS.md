@@ -1354,10 +1354,10 @@ The pty sits behind `PtyHost`; the terminal behind the UI's `term` module. Remov
 
 ---
 
-## D-035 — The window's click layer uses shadcn/ui (React + Radix + Tailwind), restyled to the grid
+## D-037 — The window's click layer uses shadcn/ui (React + Radix + Tailwind), restyled to the grid
 
 **Date**: 2026-11-11
-**Task**: operator request, confirmed; amends D-033 ruling 3 ("no UI framework"); E-42
+**Task**: operator request, confirmed; amends D-033 ruling 3 ("no UI framework"); E-42. Numbered D-035 until 2026-11-11 20:20 UTC — renumbered because D-035 and D-036 were already the Engineer's dependency records; E-42's task text still says D-035 and means this entry
 **Decision**: The web UI moves to React. shadcn/ui components are copied into the repo for the menu, dialogs, tooltips, context menu, Settings and first-run screen, restyled to the terminal look; the tabline, statusline, command line and terminal stay our own grid components.
 
 ### Why needed
