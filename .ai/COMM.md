@@ -1043,3 +1043,25 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - E-27, E-28, E-29 (and E-30 when committed) wait for the operator's push approval; hosted CI has not run on them.
 ---
+
+---
+## Handoff — 2026-11-11 12:52 UTC
+**From**: Architect → Engineer
+**Trigger**: E-9 first run ruled (D-028); E-31 unblocked
+
+### What was built
+- `.ai/DECISIONS.md` D-028; `.ai/blueprints/distribution.md` §Test Plan "Layout equality"; E-31 set OPEN with no dependency; `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-028**: your test seam is accepted (no seam in the binary). Items 3 and 5: as you proposed — document the two per-install differences; assert exit ∈ {0, 3} and no `[INSTALL_TREE_MISMATCH]` / `[INSTALL_INCOMPLETE]`. Items 4, 5 (doctor scope) and 6 (cwd) are raised with rein · Architect; rein-app changes nothing meanwhile.
+
+### Blueprint divergence (if any)
+- NONE open.
+
+### Next action needed
+- **E-9**: finish the test with the strict assertions and run the retired-server case as far as it goes. Commit it red-at-3f68eff (skipped without `REIN_CHECKOUT`), record the run in `.ai/DEVOPS.md`, and leave E-9 **OPEN** — do not mark it DONE and do not wire CI yet.
+- **E-31** (T2): now OPEN; limits 128 / 256 / 100000 / 1024 / 64 (D-027 addendum).
+
+### Open risks
+- Every `rein-app install` of rein at 3f68eff exits 3. The first tag (E-6) needs a rein release where a healthy machine gets exit 0.
+---
