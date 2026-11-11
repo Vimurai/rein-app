@@ -454,8 +454,9 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   streamed, not buffered. Memory < 100 MB. Install I/O is bounded by the release payload,
   never by the size of the home; extra disk is at most two payload-sized snapshots.
 - **Manifest size limits (D-027, E-31):** a manifest is refused at parse (exit 2, naming the
-  limit) above 64 `layout.mirrored` names, 256 `layout.operator_owned` patterns, 100000
-  `files`, 1024 bytes per path or pattern, or 32 path segments. Each limit is at least ten
+  limit) above **128** `layout.mirrored` names, 256 `layout.operator_owned` patterns, 100000
+  `files`, 1024 bytes per path or pattern, or **64** path segments (128 and 64 replace the
+  first draft's 64 and 32 — D-027 addendum: rein has 10 mirrored names and paths 5 deep). Each limit is at least ten
   times what rein's generator emits (measured at rein 3f68eff, recorded in `.ai/DEVOPS.md`).
   With them, every parse-time and plan-time check is linear or near-linear in the manifest:
   the case and owned checks are table passes (E-29), `under_mirrored` is a set lookup, and

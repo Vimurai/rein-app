@@ -1013,3 +1013,11 @@ The E-29 review left four performance findings: pattern × file × depth cost wi
 
 ### Rollback
 Raise or remove a limit constant.
+
+### D-027 Addendum — 2026-11-11: two limits raised to keep the 10× margin
+
+rein's Architect reported today's numbers (tracked tree, an approximation of the generator's output): 246 files, deepest path 5 segments, longest path 59 bytes, 10 `layout.mirrored` names, 13 `layout.operator_owned` patterns; a path can never exceed 255 bytes (ustar split). Against ruling 2's own "≥ 10×" test, two first-draft limits fail: 64 mirrored names (6.4×) and 32 segments (6.4×).
+
+- **`layout.mirrored`: 128 names. Path depth: 64 segments.** The other three stand (256 patterns, 100000 files, 1024 bytes).
+- The E-31 task text still carries 64 and 32; this addendum and the blueprint override it. The Engineer still measures the generator's real output in E-9 and stops if any limit is under 10×.
+- rein accepted the notice duty: growth past about half of a limit is told to rein-app before the release (to be recorded as a rein D-153 addendum). rein's generator does not enforce these limits.
