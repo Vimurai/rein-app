@@ -196,12 +196,13 @@ pub fn doctor(home: &Path, process: &dyn Process, json: bool) -> u8 {
 mod tests {
     use super::*;
     use crate::install_cmd::support::{Release, TestKey, VERSION};
-    use crate::runner::Invocation;
+    use crate::runner::{Invocation, Output};
     use rein_release::{Http, InstallLock, ReleaseSource};
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::fs;
     use std::io;
+    use std::time::Duration;
 
     /// In-memory HTTP: URL → body; anything else is a network error.
     struct MemHttp(HashMap<String, Vec<u8>>);
@@ -244,9 +245,12 @@ mod tests {
             self.0.borrow_mut().push(inv.args.clone());
             Ok(Some(0))
         }
-        fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)> {
+        fn output(&self, inv: &Invocation, _limit: Duration) -> io::Result<Option<Output>> {
             self.0.borrow_mut().push(inv.args.clone());
-            Ok((Some(0), crate::verdict::tests::doc("ok", &[]).into_bytes()))
+            Ok(Some((
+                Some(0),
+                crate::verdict::tests::doc("ok", &[]).into_bytes(),
+            )))
         }
         fn capture(&self, program: &str, _args: &[&str]) -> Option<String> {
             Some(if program == "node" {
@@ -295,17 +299,18 @@ mod tests {
                 self.doctor
             }))
         }
-        fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)> {
+        fn output(&self, inv: &Invocation, _limit: Duration) -> io::Result<Option<Output>> {
             let home = &inv.set.iter().find(|(k, _)| *k == "HOME").unwrap().1;
             let locked = Path::new(home).join(".rein.lock").exists();
             self.ran.borrow_mut().push((inv.args.clone(), locked));
             Ok(match self.doc {
-                "garbage" => (Some(0), b"not a document".to_vec()),
-                status => (
+                "hang" => None, // did not finish within the limit (D-032)
+                "garbage" => Some((Some(0), b"not a document".to_vec())),
+                status => Some((
                     Some(i32::from(status == "fail")),
                     crate::verdict::tests::doc(status, &[("host", "fail"), ("install", "ok")])
                         .into_bytes(),
-                ),
+                )),
             })
         }
         fn capture(&self, program: &str, _args: &[&str]) -> Option<String> {
@@ -353,13 +358,14 @@ mod tests {
     #[test]
     fn the_install_verdict_is_the_documents_status_on_every_command() {
         use crate::install_cmd::{EXIT_DOCTOR, EXIT_REIN_INSTALL};
-        let rows: [(i32, &str, u8); 6] = [
+        let rows: [(i32, &str, u8); 7] = [
             (3, "ok", EXIT_REIN_INSTALL),
             (1, "ok", EXIT_REIN_INSTALL),
             (0, "fail", EXIT_DOCTOR),
             (0, "warn", 0),
             (0, "ok", 0),
             (0, "garbage", EXIT_DOCTOR_NOT_RUN),
+            (0, "hang", EXIT_DOCTOR_NOT_RUN),
         ];
         let key = TestKey::generate();
         for (install, doc, want) in rows {
@@ -409,8 +415,8 @@ mod tests {
             self.0
                 .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no rein"))
         }
-        fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)> {
-            Ok((self.run(inv)?, Vec::new()))
+        fn output(&self, inv: &Invocation, _limit: Duration) -> io::Result<Option<Output>> {
+            Ok(Some((self.run(inv)?, Vec::new())))
         }
         fn capture(&self, _program: &str, _args: &[&str]) -> Option<String> {
             None

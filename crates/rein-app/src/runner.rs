@@ -9,6 +9,8 @@ use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 use semver::Version;
 
@@ -31,9 +33,14 @@ pub struct Invocation {
 pub trait Process {
     fn run(&self, inv: &Invocation) -> io::Result<Option<i32>>;
     /// Like `run`, but stdout is captured and returned; stderr stays on the terminal.
-    fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)>;
+    /// `Ok(None)`: it did not finish (exit and stdout closed) within `limit`; the child was
+    /// killed and reaped (D-032).
+    fn output(&self, inv: &Invocation, limit: Duration) -> io::Result<Option<Output>>;
     fn capture(&self, program: &str, args: &[&str]) -> Option<String>;
 }
+
+/// How a captured run ended: its exit code (`None`: a signal) and its stdout.
+pub type Output = (Option<i32>, Vec<u8>);
 
 /// The most stdout [`Process::output`] keeps: 4 MiB, far above a doctor document (rein's
 /// sample is under 10 KiB).
@@ -58,7 +65,8 @@ impl Process for SystemProcess {
         Ok(cmd.status()?.code())
     }
 
-    fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)> {
+    fn output(&self, inv: &Invocation, limit: Duration) -> io::Result<Option<Output>> {
+        let deadline = Instant::now() + limit;
         let mut cmd = Command::new(&inv.program);
         cmd.args(&inv.args)
             .stdin(Stdio::null())
@@ -71,22 +79,42 @@ impl Process for SystemProcess {
             cmd.env(k, v);
         }
         let mut child = cmd.spawn()?;
-        // Bounded: a document larger than the cap is not one (the verdict then says 14). The
-        // pipe is closed after the cap, so a runaway writer ends instead of blocking.
-        let mut stdout = Vec::new();
-        let read = match child.stdout.take() {
-            Some(out) => {
-                io::Read::read_to_end(&mut io::Read::take(out, OUTPUT_CAP + 1), &mut stdout)
+        // stdout is read on its own thread, bounded: a document larger than the cap is not one
+        // (the verdict then says 14), and the pipe is closed after the cap so a runaway writer
+        // ends. The thread finishes when every holder of the pipe has closed it; a grandchild
+        // that keeps it open is not waited for past the deadline (D-032).
+        let (tx, rx) = mpsc::channel();
+        if let Some(out) = child.stdout.take() {
+            std::thread::spawn(move || {
+                let mut buf = Vec::new();
+                let read =
+                    io::Read::read_to_end(&mut io::Read::take(out, OUTPUT_CAP + 1), &mut buf);
+                let _ = tx.send(read.map(|_| buf));
+            });
+        } else {
+            let _ = tx.send(Ok(Vec::new()));
+        }
+        let code = loop {
+            if let Some(status) = child.try_wait()? {
+                break status.code();
             }
-            None => Ok(0),
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Ok(None);
+            }
+            std::thread::sleep(Duration::from_millis(10));
         };
-        let code = child.wait()?.code(); // reaped even when the read failed
-        read?;
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let mut stdout = match rx.recv_timeout(remaining) {
+            Ok(read) => read?,
+            Err(_) => return Ok(None), // the child is reaped; a holder of its stdout is not waited for
+        };
         if stdout.len() as u64 > OUTPUT_CAP {
             stdout.clear();
             stdout.extend_from_slice(b"(output over the size cap)");
         }
-        Ok((code, stdout))
+        Ok(Some((code, stdout)))
     }
 
     fn capture(&self, program: &str, args: &[&str]) -> Option<String> {
@@ -279,8 +307,8 @@ mod tests {
             self.ran.borrow_mut().push(inv.clone());
             self.exits.borrow_mut().remove(0)
         }
-        fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)> {
-            Ok((self.run(inv)?, Vec::new()))
+        fn output(&self, inv: &Invocation, _limit: Duration) -> io::Result<Option<Output>> {
+            Ok(Some((self.run(inv)?, Vec::new())))
         }
         fn capture(&self, program: &str, _args: &[&str]) -> Option<String> {
             self.tools.get(program).map(|s| s.to_string())
@@ -316,9 +344,41 @@ mod tests {
             set: vec![],
             remove: vec![],
         };
-        let (_, out) = SystemProcess.output(&inv).unwrap();
+        let (_, out) = SystemProcess
+            .output(&inv, Duration::from_secs(10))
+            .unwrap()
+            .unwrap();
         assert!(out.len() as u64 <= OUTPUT_CAP, "{}", out.len());
         assert!(crate::verdict::parse(&out).is_err());
+    }
+
+    /// D-032: a run that does not end is killed at the limit; so is the wait for a grandchild
+    /// that keeps stdout open after the child itself has exited; a quick run is unchanged.
+    #[cfg(unix)]
+    #[test]
+    fn output_ends_at_the_limit_even_when_a_grandchild_holds_stdout() {
+        let sh = |script: &'static str| Invocation {
+            program: PathBuf::from("/bin/sh"),
+            args: vec!["-c", script],
+            set: vec![],
+            remove: vec![],
+        };
+        let limit = Duration::from_millis(300);
+        for script in ["sleep 30", "(sleep 30) & echo started"] {
+            let t = Instant::now();
+            assert_eq!(
+                SystemProcess.output(&sh(script), limit).unwrap(),
+                None,
+                "{script}"
+            );
+            assert!(
+                t.elapsed() < Duration::from_secs(5),
+                "{script}: {:?}",
+                t.elapsed()
+            );
+        }
+        let quick = SystemProcess.output(&sh("echo ok"), limit).unwrap();
+        assert_eq!(quick, Some((Some(0), b"ok\n".to_vec())));
     }
 
     #[test]

@@ -267,10 +267,17 @@ mod tests {
             self.ran.borrow_mut().push(inv.clone());
             Ok(Some(self.exits.borrow_mut().remove(0)))
         }
-        fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)> {
+        fn output(
+            &self,
+            inv: &Invocation,
+            _limit: std::time::Duration,
+        ) -> io::Result<Option<crate::runner::Output>> {
             let code = self.run(inv)?;
             let status = if code == Some(0) { "ok" } else { "fail" };
-            Ok((code, crate::verdict::tests::doc(status, &[]).into_bytes()))
+            Ok(Some((
+                code,
+                crate::verdict::tests::doc(status, &[]).into_bytes(),
+            )))
         }
         fn capture(&self, program: &str, _args: &[&str]) -> Option<String> {
             match program {

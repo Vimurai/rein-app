@@ -224,7 +224,9 @@ fn escape(s: &str) -> String {
     };
     s.chars()
         .map(|c| {
-            if unsafe_char(c) {
+            if c == '\\' {
+                "\\\\".to_string() // so a literal `\u{1b}` never reads as an escape (D-032)
+            } else if unsafe_char(c) {
                 c.escape_unicode().to_string()
             } else {
                 c.to_string()
@@ -312,6 +314,9 @@ pub fn judge(code: Option<i32>, stdout: &[u8]) -> u8 {
     }
 }
 
+/// The wall-clock limit on the install check (D-032). `rein install` has none.
+pub const INSTALL_CHECK_LIMIT: std::time::Duration = std::time::Duration::from_secs(120);
+
 /// `rein install`, then the install verdict, from the installed tree under `home`.
 pub fn install_then_verdict(proc: &dyn Process, home: &Path) -> u8 {
     match run_rein(proc, home, &[ReinCommand::Install]) {
@@ -323,8 +328,15 @@ pub fn install_then_verdict(proc: &dyn Process, home: &Path) -> u8 {
         ReinCommand::DoctorInstallJson,
         std::env::var_os("PATH"),
     );
-    match proc.output(&inv) {
-        Ok((code, stdout)) => judge(code, &stdout),
+    match proc.output(&inv, INSTALL_CHECK_LIMIT) {
+        Ok(Some((code, stdout))) => judge(code, &stdout),
+        Ok(None) => {
+            eprintln!(
+                "rein-app: the install check (rein doctor --scope install) did not finish within {} seconds; it was stopped and the install lock is released",
+                INSTALL_CHECK_LIMIT.as_secs()
+            );
+            EXIT_DOCTOR_NOT_RUN
+        }
         Err(e) => {
             eprintln!(
                 "rein-app: could not start rein doctor ({}); not judged a pass",
@@ -447,5 +459,10 @@ pub(crate) mod tests {
             !lines.contains('\u{1b}') && !lines.contains('\u{202e}'),
             "{lines}"
         );
+        // D-032: a literal backslash prints doubled, so text that spells `\u{1b}` cannot pass
+        // for an escaped ESC.
+        evil.checks[0].line = "spelled \\u{1b}, real \u{1b}".into();
+        let lines = check_lines(&evil).join("\n");
+        assert!(lines.contains(r"spelled \\u{1b}, real \u{1b}"), "{lines}");
     }
 }

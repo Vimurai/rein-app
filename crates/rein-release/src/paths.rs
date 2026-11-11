@@ -8,7 +8,19 @@ use std::collections::hash_map::Entry;
 
 /// `s` with control characters (C0, DEL, C1) and bidi overrides escaped (`\u{1b}`), for error
 /// text built from manifest, tarball or snapshot strings (D-023 r4).
+/// A backslash is doubled, so a literal `\u{1b}` in the source cannot pass for an escaped
+/// control character (D-032).
 pub(crate) fn printable(s: &str) -> std::borrow::Cow<'_, str> {
+    escaped(s, true)
+}
+
+/// [`printable`] for text built from LOCAL paths (layout errors): control characters are
+/// escaped, but a backslash is kept as is, so a Windows path stays readable.
+pub(crate) fn printable_path(s: &str) -> std::borrow::Cow<'_, str> {
+    escaped(s, false)
+}
+
+fn escaped(s: &str, double_backslash: bool) -> std::borrow::Cow<'_, str> {
     // Control characters, bidi marks/overrides/isolates, zero-width and line separators.
     let unsafe_char = |c: char| {
         c.is_control()
@@ -21,12 +33,17 @@ pub(crate) fn printable(s: &str) -> std::borrow::Cow<'_, str> {
                     | '\u{feff}'
             )
     };
-    if !s.chars().any(unsafe_char) {
+    if !s
+        .chars()
+        .any(|c| (double_backslash && c == '\\') || unsafe_char(c))
+    {
         return s.into();
     }
     s.chars()
         .map(|c| {
-            if unsafe_char(c) {
+            if double_backslash && c == '\\' {
+                "\\\\".to_string() // so a literal `\u{1b}` never reads as an escape (D-032)
+            } else if unsafe_char(c) {
                 c.escape_unicode().to_string()
             } else {
                 c.to_string()
@@ -111,6 +128,20 @@ pub fn check_case_collisions<'a>(paths: impl IntoIterator<Item = &'a str>) -> Re
 #[cfg(test)]
 mod tests {
     use super::{check_case_collisions, check_path_alphabet, check_rel_path};
+
+    /// D-032: a backslash is doubled, so a literal `\u{1b}` differs from an escaped ESC.
+    #[test]
+    fn printable_doubles_a_backslash_and_escapes_control_characters() {
+        assert_eq!(super::printable(r"a\u{1b}b"), r"a\\u{1b}b");
+        assert_eq!(super::printable("a\u{1b}b"), r"a\u{1b}b");
+        assert_eq!(super::printable("plain"), "plain");
+        assert_eq!(
+            super::printable_path(r"C:\h\.rein"),
+            r"C:\h\.rein",
+            "a local path keeps it"
+        );
+        assert_eq!(super::printable_path("a\u{1b}b"), r"a\u{1b}b");
+    }
 
     #[test]
     fn the_alphabet_is_printable_ascii() {

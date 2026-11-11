@@ -149,7 +149,7 @@ pub enum LayoutError {
 /// E-29 security review P2).
 impl fmt::Display for LayoutError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&crate::paths::printable(&Unescaped(self).to_string()))
+        f.write_str(&crate::paths::printable_path(&Unescaped(self).to_string()))
     }
 }
 
