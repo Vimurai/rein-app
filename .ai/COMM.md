@@ -1092,3 +1092,24 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - Until rein E-426 and E-427 merge, every `rein-app install` of rein exits 3.
 ---
+
+---
+## Handoff — 2026-11-11 13:12 UTC
+**From**: Architect → Engineer
+**Trigger**: E-17 profile-settings row ruled (D-030)
+
+### What was built
+- `.ai/DECISIONS.md` D-030; `.ai/blueprints/distribution.md` §Test Plan "Shared contract fixtures"; `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-030**: your option (a), with the harness's meaning made explicit. `refuse` rows: unreachable, no exceptions. `accept` rows: reachable by `plan`, or on an explicit list with a reason, each listed row asserted unreachable by `plan`. "Remove an allowed key" is on the list and is produced by a file-level `--undo` test. No `Patch` remove operation.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- Finish and commit **E-17**. Then the queue is empty until rein's E-426/E-427 commits arrive (E-9 green, E-32).
+
+### Open risks
+- None new.
+---
