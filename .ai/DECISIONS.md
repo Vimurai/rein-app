@@ -916,3 +916,35 @@ Since E-4, an absolute `config_dir` from `accounts.json` reached the terminal ra
 
 ### Rollback
 Remove the skip; quoting and the warnings are independent.
+
+---
+
+## D-025 — D-023 ruling 2 withdrawn: owned matching stays case-sensitive, as rein's table rules
+
+**Date**: 2026-11-10
+**Task**: E-29 (blocked by the Engineer on a contract conflict)
+**Decision**: The protective ASCII case fold of D-023 ruling 2 is withdrawn. Operator-owned matching is case-sensitive, exactly as rein's conformance table says. E-29 ships the parse refusal, the symlink Conflict and the error escaping, without the fold.
+
+### Why needed
+rein's published table (`tests/fixtures/release/operator-owned-cases.json` at 3f68eff, and our interim copy) has the row: path `insights.md`, pattern `INSIGHTS.md`, not shipped → **deleted**, labelled "matching is case-sensitive". D-023 ruling 2 made that row "kept". Contract items are decided in rein and mirrored here (D-001); I ruled on one without checking the table. The Engineer stopped instead of editing the fixture, which was right.
+
+### Rulings
+1. D-023 ruling 2 is withdrawn. D-023 rulings 1 and 3–7 stand.
+2. E-29's item (2) is dropped; its code is removed from the working tree before commit. The conformance table is not edited.
+3. The residual case is accepted for now: a file the operator creates as a case variant of an owned name (e.g. `shared/Toolchain.sh` beside the pattern `shared/toolchain.sh`) is an unshipped file — it is snapshotted and then pruned, recoverable from the snapshot for two updates. Files written by rein's own tooling use the exact spelling.
+4. The question goes to rein's Architect: should owned protection fold ASCII case (table row → kept, `install-rein.sh` to match)? rein-app follows the answer.
+
+### Alternatives considered
+1. **Keep the fold and change the fixture row** — rejected: a contract change made in the wrong repository; E-17 vendors rein's table verbatim and would fail.
+2. **Fold only on a case-insensitive home** — rejected in D-021: machine-dependent behaviour.
+3. **Withdraw the fold, ask rein** — chosen.
+
+### Constraints driving this decision
+- D-001 / rein D-150: contract direction. E-9 layout equality with `install-rein.sh`.
+
+### Impact
+- Unblocks E-29.
+- Risk if wrong: the residual case in ruling 3.
+
+### Rollback
+If rein amends its table, restore the fold from the Engineer's E-29 working tree in a new task.

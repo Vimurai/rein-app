@@ -127,11 +127,14 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    b. *Plan (pure)*: `ship` = every manifest file (the verifier has already proven each is
       under a mirrored dir); `prune` = every
       file or symlink under a live mirrored dir that is neither in `ship` nor operator-owned.
-      **Owned matching folds ASCII case for protection (D-023, E-29):** a live path that
-      matches an `operator_owned` pattern after ASCII-lowercasing both is treated as owned
-      — never opened, snapshotted or pruned — on every filesystem. (On a case-insensitive
-      home it is the operator's file under another spelling; on a case-sensitive one the
-      cost is a stray file left alone.) A live symlink whose name is a case variant of a
+      **Owned matching is case-sensitive (rein's contract; D-025 withdraws D-023 ruling
+      2):** rein's conformance table `tests/fixtures/release/operator-owned-cases.json`
+      rules that `insights.md` against the pattern `INSIGHTS.md` is *deleted*, and
+      `install-rein.sh` behaves the same, so a protective case fold here would break both
+      the shared fixtures (E-17) and layout equality (E-9). A live file that is a case
+      variant of an owned pattern is therefore an ordinary unshipped file: snapshotted,
+      then pruned. Whether protection should fold case is asked of rein; this text
+      follows rein's answer. A live symlink whose name is a case variant of a
       `ship` path is a preflight `Conflict` naming it, not an `EEXIST` from the snapshot.
    c. *Snapshot*: copy the non-owned content of the live mirrored dirs **plus the live file at
       every `ship` path** (so a shipped path that a pattern also matches can be restored) to
@@ -639,8 +642,8 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - **E-30** (T3) `config_dir` terminal safety, shell-quoted dry-run line, duplicate-row
   warning, unlisted row never suppresses the built-in, note for an unusual `config_dir`
   (§Components 6; D-024).
-- **E-29** (T3) Refuse a shipped path that is a case variant of an owned pattern; owned
-  matching folds ASCII case for protection; symlink case-variant is a preflight Conflict;
+- **E-29** (T3) Refuse a shipped path that is a case variant of an owned pattern (the
+  protective fold of the task text is withdrawn, D-025); symlink case-variant is a preflight Conflict;
   all manifest-derived error text escaped (§Components 2, §Components 3 step b; D-023).
 - **E-28** (T3) Profile enumeration: accounts rows before the built-in `personal`, only
   `default` reserved, terminal-safety name check, no false warning (§Components 6; D-022).
