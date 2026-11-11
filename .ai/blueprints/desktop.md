@@ -145,7 +145,9 @@ sixteen colours are given to xterm.js, so the chrome and the terminal always mat
    three services below. Calls `rein_release` and `rein_profiles` through the existing
    library seams; adds no second implementation of anything in Phase 1.
 2. **`PtyHost`** — one pty per tab. Spawns exactly `<home>/.rein/bin/rein start` with
-   cwd = the project directory, a clean environment (`CLAUDECODE` unset, `TERM=xterm-256color`),
+   cwd = the project directory, a clean environment (`CLAUDECODE`, `TMUX` and `TMUX_PANE`
+   unset — with `TMUX` set `rein start` switches the outer tmux client instead of attaching
+   in our pty; `TERM=xterm-256color`),
    and the pty size in cells. Streams output to the web side over a Tauri channel in chunks
    of at most 64 KiB; takes input bytes and resize events back. `detach` closes the pty
    master, which detaches the tmux client; the child is always reaped. A pty whose child
@@ -204,6 +206,7 @@ else (no `shell`, `fs`, `http` or `opener` plugin).
 | `tab_open` | project path | `Tab` + output channel | not a directory · no `.ai/` · rein not installed (offers `release.update`) · unsafe path |
 | `pty_write` | pty id, bytes (≤ 64 KiB) | — | unknown pty |
 | `pty_resize` | pty id, cols 2–500, rows 2–200 | — | out of range |
+| `pty_ack` | pty id, bytes (u32) the web side has written into xterm.js since its last ack | — | unknown pty · more bytes than are outstanding (refused, the counter is unchanged) |
 | `tab_detach` | tab id | — | — |
 | `projects_list` / `projects_forget` | — / path | `ProjectsFile.recent` | — |
 | `config_get` | — | `ConfigFile` + source path + last error | — |
@@ -262,6 +265,9 @@ No secret is read, stored or shown. The window makes no network call of its own;
 - First paint ≤ 400 ms on a warm start; a key in TERMINAL mode reaches the pty in ≤ 5 ms of
   app time; pty output is batched per animation frame, with back-pressure — when the web
   side is more than 4 MiB behind, the core stops reading the pty until it catches up.
+  "Behind" = bytes sent on the channel minus bytes acknowledged through `pty_ack`; the core
+  keeps the counter and never trusts an ack above what is outstanding (E-35, accepted
+  2026-11-11).
 - At most 16 tabs; scrollback is tmux's (xterm.js keeps 1 000 lines).
 - One window per user session (single instance lock in `$XDG_RUNTIME_DIR`, falling back to
   the state directory).
