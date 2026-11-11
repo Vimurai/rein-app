@@ -292,3 +292,12 @@ cargo-dist 0.34.0, workspace version 0.1.0, HEAD at b93eae7 + `.ai/`.
 The longest pattern is 25 B. The manifest is 47 KB and the tarball 1.28 MB.
 
 **Re-run:** `REIN_CHECKOUT=<rein checkout> cargo test -p rein-app --bin rein-app layout_equality -- --nocapture`. Run it from a neutral cwd to keep doctor's project checks out of the console output; the assertion itself already uses a neutral cwd.
+
+### E-9 runs at rein f7b3554 (2026-11-11, rein E-426 `npm ci`)
+A fresh throwaway clone with the artifact regenerated; the assertions are unchanged.
+- **Run 1, as first written: case 1 GREEN, case 2 RED.**
+  - Case 1 has no doctor tree findings and no undocumented difference. The new `mcp/<server>/node_modules/.rein-lock.sha256` is identical on both sides.
+  - Case 2: `mcp/gone-mcp/**` is only in A. Side A ran only `rein install`, which in clone mode does not remove a retired mirror; re-running `install-rein.sh` does. I checked this by hand on a separate clone home.
+- **D-031:** side A re-runs `install-rein.sh`, as a clone operator updates.
+- **Run 2: GREEN, 1 passed, 157 s.** rein-app's install exited 0 in case 2.
+- E-9 is closed. CI wiring comes later, with E-32 (D-028, D-029).
