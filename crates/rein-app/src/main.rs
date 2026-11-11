@@ -9,6 +9,7 @@ mod layout_equality;
 mod profiles_cmd;
 mod runner;
 mod update_cmd;
+mod verdict;
 mod wsl;
 
 use std::path::{Path, PathBuf};

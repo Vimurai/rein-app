@@ -12,7 +12,7 @@ use rein_release::{
 };
 use semver::Version;
 
-use crate::runner::{Process, ReinCommand, RunOutcome, RuntimeReport, install_then_doctor};
+use crate::runner::{Process, ReinCommand, RunOutcome, RuntimeReport};
 
 /// Exit codes (blueprint §API).
 pub const EXIT_ERROR: u8 = 1;
@@ -174,9 +174,9 @@ pub fn install(home: &Path, version: &Version, deps: &Deps<'_>) -> u8 {
     // The lock is held through `rein install`/`rein doctor`: they write into the tree
     // (install-stamp, mcp node_modules), so no other install or rollback may sync it
     // meanwhile (E-5 security review P1-2). rein itself never reads the lock file.
-    let result = install_then_doctor(deps.process, home);
+    let code = crate::verdict::install_then_verdict(deps.process, home);
     drop(lock);
-    exit_for(result)
+    code
 }
 
 /// A failed `rein install` (exit 13).
@@ -239,7 +239,8 @@ mod tests {
     use rein_release::{HostPolicy, ReqwestHttp};
     use std::cell::RefCell;
 
-    /// rein itself is stubbed: every tool is present; `rein` exits with the queued codes.
+    /// rein itself is stubbed: every tool is present; `rein` exits with the queued codes. The
+    /// install document's status follows its code: 0 → `ok`, otherwise `fail` (D-029).
     struct FakeRein {
         node: Option<&'static str>,
         exits: RefCell<Vec<i32>>,
@@ -265,6 +266,11 @@ mod tests {
             );
             self.ran.borrow_mut().push(inv.clone());
             Ok(Some(self.exits.borrow_mut().remove(0)))
+        }
+        fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)> {
+            let code = self.run(inv)?;
+            let status = if code == Some(0) { "ok" } else { "fail" };
+            Ok((code, crate::verdict::tests::doc(status, &[]).into_bytes()))
         }
         fn capture(&self, program: &str, _args: &[&str]) -> Option<String> {
             match program {
@@ -344,7 +350,10 @@ mod tests {
         assert_eq!(ran[0].program, home.path().join(".rein/bin/rein"));
         assert_eq!(
             (ran[0].args.clone(), ran[1].args.clone()),
-            (vec!["install"], vec!["doctor"])
+            (
+                vec!["install"],
+                vec!["doctor", "--scope", "install", "--json"]
+            )
         );
     }
 

@@ -30,8 +30,14 @@ pub struct Invocation {
 /// signal); `capture` returns stdout, or `None` if the program is absent or failed.
 pub trait Process {
     fn run(&self, inv: &Invocation) -> io::Result<Option<i32>>;
+    /// Like `run`, but stdout is captured and returned; stderr stays on the terminal.
+    fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)>;
     fn capture(&self, program: &str, args: &[&str]) -> Option<String>;
 }
+
+/// The most stdout [`Process::output`] keeps: 4 MiB, far above a doctor document (rein's
+/// sample is under 10 KiB).
+pub const OUTPUT_CAP: u64 = 4 * 1024 * 1024;
 
 /// The real [`Process`].
 pub struct SystemProcess;
@@ -52,6 +58,37 @@ impl Process for SystemProcess {
         Ok(cmd.status()?.code())
     }
 
+    fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)> {
+        let mut cmd = Command::new(&inv.program);
+        cmd.args(&inv.args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit());
+        for k in &inv.remove {
+            cmd.env_remove(k);
+        }
+        for (k, v) in &inv.set {
+            cmd.env(k, v);
+        }
+        let mut child = cmd.spawn()?;
+        // Bounded: a document larger than the cap is not one (the verdict then says 14). The
+        // pipe is closed after the cap, so a runaway writer ends instead of blocking.
+        let mut stdout = Vec::new();
+        let read = match child.stdout.take() {
+            Some(out) => {
+                io::Read::read_to_end(&mut io::Read::take(out, OUTPUT_CAP + 1), &mut stdout)
+            }
+            None => Ok(0),
+        };
+        let code = child.wait()?.code(); // reaped even when the read failed
+        read?;
+        if stdout.len() as u64 > OUTPUT_CAP {
+            stdout.clear();
+            stdout.extend_from_slice(b"(output over the size cap)");
+        }
+        Ok((code, stdout))
+    }
+
     fn capture(&self, program: &str, args: &[&str]) -> Option<String> {
         let out = Command::new(program)
             .args(args)
@@ -70,8 +107,10 @@ impl Process for SystemProcess {
 pub enum ReinCommand {
     Install,
     Doctor,
-    /// `rein doctor --json`: stdout passed through untouched (no parsing in phase 1).
+    /// `rein doctor --json`: stdout passed through untouched (`rein-app doctor --json`).
     DoctorJson,
+    /// `rein doctor --scope install --json`: the install verdict's document (D-029).
+    DoctorInstallJson,
 }
 
 impl ReinCommand {
@@ -80,6 +119,7 @@ impl ReinCommand {
             ReinCommand::Install => vec!["install"],
             ReinCommand::Doctor => vec!["doctor"],
             ReinCommand::DoctorJson => vec!["doctor", "--json"],
+            ReinCommand::DoctorInstallJson => vec!["doctor", "--scope", "install", "--json"],
         }
     }
 }
@@ -118,11 +158,6 @@ pub enum RunOutcome {
         cmd: ReinCommand,
         reason: String,
     },
-}
-
-/// `rein install` then `rein doctor`; stops at the first failure.
-pub fn install_then_doctor(proc: &dyn Process, home: &Path) -> RunOutcome {
-    run_rein(proc, home, &[ReinCommand::Install, ReinCommand::Doctor])
 }
 
 /// Run `cmds` in order from the installed tree; stops at the first failure.
@@ -244,6 +279,9 @@ mod tests {
             self.ran.borrow_mut().push(inv.clone());
             self.exits.borrow_mut().remove(0)
         }
+        fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)> {
+            Ok((self.run(inv)?, Vec::new()))
+        }
         fn capture(&self, program: &str, _args: &[&str]) -> Option<String> {
             self.tools.get(program).map(|s| s.to_string())
         }
@@ -268,8 +306,25 @@ mod tests {
         assert!(inv.set.contains(&("HOME", OsString::from("/h"))));
     }
 
+    /// E-32 security review P2: captured stdout is bounded; a writer past the cap ends.
+    #[cfg(unix)]
     #[test]
-    fn runs_install_then_doctor_and_stops_at_the_first_failure() {
+    fn output_is_capped_and_a_runaway_writer_ends() {
+        let inv = Invocation {
+            program: PathBuf::from("/bin/sh"),
+            args: vec!["-c", "yes"],
+            set: vec![],
+            remove: vec![],
+        };
+        let (_, out) = SystemProcess.output(&inv).unwrap();
+        assert!(out.len() as u64 <= OUTPUT_CAP, "{}", out.len());
+        assert!(crate::verdict::parse(&out).is_err());
+    }
+
+    #[test]
+    fn run_rein_runs_in_order_and_stops_at_the_first_failure() {
+        let install_then_doctor =
+            |p: &Stub, h: &Path| run_rein(p, h, &[ReinCommand::Install, ReinCommand::Doctor]);
         let ok = Stub {
             exits: RefCell::new(vec![Ok(Some(0)), Ok(Some(0))]),
             ..Default::default()

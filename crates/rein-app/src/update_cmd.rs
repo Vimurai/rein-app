@@ -157,9 +157,9 @@ pub fn rollback(home: &Path, process: &dyn Process, run_uid: RunUid) -> u8 {
     }
     // D-014: the rolled-back tree is re-installed (hooks, settings) and then checked, under
     // the lock, exactly like `install`.
-    let result = run_rein(process, home, &[ReinCommand::Install, ReinCommand::Doctor]);
+    let code = crate::verdict::install_then_verdict(process, home);
     drop(lock);
-    install_cmd::exit_for(result)
+    code
 }
 
 /// `rein-app doctor [--json]`: run `rein doctor` (with `--json`, its stdout untouched) and
@@ -244,6 +244,10 @@ mod tests {
             self.0.borrow_mut().push(inv.args.clone());
             Ok(Some(0))
         }
+        fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)> {
+            self.0.borrow_mut().push(inv.args.clone());
+            Ok((Some(0), crate::verdict::tests::doc("ok", &[]).into_bytes()))
+        }
         fn capture(&self, program: &str, _args: &[&str]) -> Option<String> {
             Some(if program == "node" {
                 "v24.0.0".into()
@@ -253,19 +257,25 @@ mod tests {
         }
     }
 
-    /// rein whose `install` and `doctor` exit with the given codes; records each argv and
-    /// whether the install lock was held while it ran.
+    /// rein whose `install` and plain `doctor` exit with the given codes, and whose install
+    /// document has top-level status `doc` (`"garbage"`: not a document) beside a failing
+    /// host check; records each argv and whether the install lock was held while it ran.
     struct Scripted {
         install: i32,
         doctor: i32,
+        doc: &'static str,
         ran: RefCell<Vec<(Vec<&'static str>, bool)>>,
     }
 
     impl Scripted {
         fn new(install: i32, doctor: i32) -> Self {
+            Self::with_doc(install, doctor, "ok")
+        }
+        fn with_doc(install: i32, doctor: i32, doc: &'static str) -> Self {
             Self {
                 install,
                 doctor,
+                doc,
                 ran: RefCell::default(),
             }
         }
@@ -284,6 +294,19 @@ mod tests {
             } else {
                 self.doctor
             }))
+        }
+        fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)> {
+            let home = &inv.set.iter().find(|(k, _)| *k == "HOME").unwrap().1;
+            let locked = Path::new(home).join(".rein.lock").exists();
+            self.ran.borrow_mut().push((inv.args.clone(), locked));
+            Ok(match self.doc {
+                "garbage" => (Some(0), b"not a document".to_vec()),
+                status => (
+                    Some(i32::from(status == "fail")),
+                    crate::verdict::tests::doc(status, &[("host", "fail"), ("install", "ok")])
+                        .into_bytes(),
+                ),
+            })
         }
         fn capture(&self, program: &str, _args: &[&str]) -> Option<String> {
             Some(if program == "node" {
@@ -316,52 +339,54 @@ mod tests {
         assert_eq!(rollback(home.path(), &rein, InstallLock::run_uid), 0);
         assert_eq!(
             *rein.ran.borrow(),
-            [(vec!["install"], true), (vec!["doctor"], true)]
+            [
+                (vec!["install"], true),
+                (vec!["doctor", "--scope", "install", "--json"], true)
+            ]
         );
         assert!(!home.path().join(".rein.lock").exists(), "released after");
     }
 
+    /// D-029, on every command that syncs: a failed `rein install` is 13; then the verdict is
+    /// the install document's top-level status alone (fail 3, warn and ok 0, no document 14).
+    /// Every document here carries a failing `host` check: it never decides the verdict.
     #[test]
-    fn a_failed_rein_install_is_13_and_a_failed_doctor_is_3_on_every_command() {
+    fn the_install_verdict_is_the_documents_status_on_every_command() {
         use crate::install_cmd::{EXIT_DOCTOR, EXIT_REIN_INSTALL};
-        // rollback
-        for (install, doctor, want) in [
-            (3, 0, EXIT_REIN_INSTALL),
-            (1, 0, EXIT_REIN_INSTALL),
-            (0, 2, EXIT_DOCTOR),
-        ] {
+        let rows: [(i32, &str, u8); 6] = [
+            (3, "ok", EXIT_REIN_INSTALL),
+            (1, "ok", EXIT_REIN_INSTALL),
+            (0, "fail", EXIT_DOCTOR),
+            (0, "warn", 0),
+            (0, "ok", 0),
+            (0, "garbage", EXIT_DOCTOR_NOT_RUN),
+        ];
+        let key = TestKey::generate();
+        for (install, doc, want) in rows {
             let home = home_with_snapshot();
-            let rein = Scripted::new(install, doctor);
+            let rein = Scripted::with_doc(install, 0, doc);
             assert_eq!(
                 rollback(home.path(), &rein, InstallLock::run_uid),
                 want,
-                "rollback {install}/{doctor}"
+                "rollback {install}/{doc}"
             );
             let expected_runs = if install == 0 { 2 } else { 1 };
             assert_eq!(
                 rein.argv().len(),
                 expected_runs,
-                "no retry, doctor only after a good install"
+                "no retry; doctor only after a good install"
             );
-        }
-        // install and update (update installs through the same pipeline)
-        let key = TestKey::generate();
-        for (install, doctor, want) in [(3, 0, EXIT_REIN_INSTALL), (0, 1, EXIT_DOCTOR)] {
-            let http = mem_release(&key, &format!("v{VERSION}"));
-            let home = tempfile::tempdir().unwrap();
-            let rein = Scripted::new(install, doctor);
-            assert_eq!(
-                run_with_process(home.path(), &http, &key, &rein, false),
-                want,
-                "install"
-            );
-            let home = tempfile::tempdir().unwrap();
-            let rein = Scripted::new(install, doctor);
-            assert_eq!(
-                run_with_process(home.path(), &http, &key, &rein, true),
-                want,
-                "update"
-            );
+            for is_update in [false, true] {
+                let http = mem_release(&key, &format!("v{VERSION}"));
+                let home = tempfile::tempdir().unwrap();
+                let rein = Scripted::with_doc(install, 0, doc);
+                assert_eq!(
+                    run_with_process(home.path(), &http, &key, &rein, is_update),
+                    want,
+                    "{} {install}/{doc}",
+                    if is_update { "update" } else { "install" }
+                );
+            }
         }
     }
 
@@ -383,6 +408,9 @@ mod tests {
         fn run(&self, _inv: &Invocation) -> io::Result<Option<i32>> {
             self.0
                 .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no rein"))
+        }
+        fn output(&self, inv: &Invocation) -> io::Result<(Option<i32>, Vec<u8>)> {
+            Ok((self.run(inv)?, Vec::new()))
         }
         fn capture(&self, _program: &str, _args: &[&str]) -> Option<String> {
             None
@@ -614,7 +642,13 @@ mod tests {
             fs::read_to_string(home.path().join(".rein/bin/rein")).unwrap(),
             "old"
         );
-        assert_eq!(*rein.0.borrow(), [vec!["install"], vec!["doctor"]]);
+        assert_eq!(
+            *rein.0.borrow(),
+            [
+                vec!["install"],
+                vec!["doctor", "--scope", "install", "--json"]
+            ]
+        );
         assert_eq!(doctor(home.path(), &rein, false), 0);
     }
 }

@@ -2,7 +2,7 @@
 
 **rein-app is the installer and updater for [Rein](https://github.com/Vimurai/rein).** It
 fetches a signed `rein` release, verifies it, installs it into `$HOME/.rein`, and runs
-`rein install` and `rein doctor` from it. It can also update or roll back that install and set
+`rein install` and an install check (`rein doctor --scope install`) from it. It can also update or roll back that install and set
 the few Claude Code profile settings Rein owns.
 
 rein-app **is not** Rein. It contains no Rein logic: the `rein` CLI, its MCP servers, hooks

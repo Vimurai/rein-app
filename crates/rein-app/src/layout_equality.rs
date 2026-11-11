@@ -18,11 +18,11 @@
 //! the installer script removes a retired mirror, not `rein install`), B re-runs rein-app's
 //! install; the directory is gone on both sides.
 //!
-//! `rein doctor` also checks the host (Claude, Chromium, gh copilot, the cwd as a project),
-//! which a sterile HOME never passes, so install may end 3 (D-028): the exit must be 0 or 3,
-//! and doctor run from the installed tree must not report `[INSTALL_TREE_MISMATCH]` or
-//! `[INSTALL_INCOMPLETE]`. At rein 3f68eff it did (`rein install` rewrote a shipped lock
-//! file); rein E-426 fixed that, and the test is green at rein f7b3554.
+//! rein-app's verdict is `rein doctor --scope install --json` (D-029, rein E-427): host and
+//! project checks never decide it, so install must exit 0 (from rein cac86a4 on). Doctor,
+//! run from the installed tree, must also not report `[INSTALL_TREE_MISMATCH]` or
+//! `[INSTALL_INCOMPLETE]`. History: red at rein 3f68eff (`rein install` rewrote a shipped
+//! lock file), green with exit 0 or 3 at f7b3554 (E-426), exit 0 required at cac86a4.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -84,13 +84,13 @@ fn tree_findings(home: &Path, cwd: &Path) -> Vec<String> {
         .collect()
 }
 
-/// Exit 0 or 3, no tree finding from doctor, no undocumented difference (D-028).
+/// Exit 0, no tree finding from doctor, no undocumented difference (D-028, D-029).
 fn check(code: u8, a: &Path, b: &Path, cwd: &Path, case: &str) {
     let findings = tree_findings(b, cwd);
     let diff = undocumented(&a.join(".rein"), &b.join(".rein"));
     assert!(
-        matches!(code, 0 | 3) && findings.is_empty() && diff.is_empty(),
-        "{case}: rein-app install exited {code} (0 or 3 allowed)\n\
+        code == 0 && findings.is_empty() && diff.is_empty(),
+        "{case}: rein-app install exited {code} (0 required)\n\
          doctor tree findings:\n{}\nundocumented differences:\n{}",
         findings.join("\n"),
         diff.join("\n")

@@ -13,9 +13,9 @@ release.
 
 | Command | What it does | Exit codes |
 |---|---|---|
-| `rein-app install [--version X.Y.Z]` | Fetches and verifies the release (the newest if `--version` is omitted), installs it into `$HOME/.rein`, then runs `rein install` and `rein doctor` from it. | 0 ok · 2 verification failed · 3 `rein doctor` failed · 4 a required runtime is missing · 13 `rein install` failed (rein's own exit code is printed) |
+| `rein-app install [--version X.Y.Z]` | Fetches and verifies the release (the newest if `--version` is omitted), installs it into `$HOME/.rein`, then runs `rein install` and `rein doctor --scope install` from it. | 0 ok (warnings, and any host or project check, are printed but do not fail it) · 2 verification failed · 3 the install check failed · 4 a required runtime is missing · 13 `rein install` failed (rein's own exit code is printed) · 14 the install check could not run or printed no valid result |
 | `rein-app update [--yes]` | Shows the newest available version and its notes, and installs it after you confirm (`--yes` skips the question). | as `install` · 10 already current · 11 release server unreachable |
-| `rein-app rollback` | Restores the previous version's **code** from its snapshot, then runs `rein install` and `rein doctor`. Your data is untouched. | 0 · 3 · 13 as `install` · 12 no snapshot to roll back to |
+| `rein-app rollback` | Restores the previous version's **code** from its snapshot, then runs `rein install` and `rein doctor --scope install`. Your data is untouched. | 0 · 3 · 13 · 14 as `install` · 12 no snapshot to roll back to |
 | `rein-app doctor [--json]` | Runs `rein doctor` (with `--json` if given) from the installed tree and passes its output through untouched. | rein's own exit code (with `--json`, 0 or 1 means stdout is the JSON document) · 14 `rein doctor` could not be started or ended without an exit code |
 | `rein-app profiles list` | Lists the Claude Code profiles found on this machine. | 0 |
 | `rein-app profiles apply [--profile NAME]… [--enable LIST\|all] [--disable LIST\|all] [--undo] [--dry-run]` | Shows, per profile, how the Rein-owned settings would change, then writes them. `--profile` can be given more than once (default: every profile). `--enable`/`--disable` install or disable Rein plugins through `claude plugin …`. `--dry-run` prints the diff and the commands it would run, writes nothing and runs no `claude` command. | 0 · 4 `claude` not found · 5 a `settings.json` could not be parsed · 7 `claude plugin` failed |
@@ -28,6 +28,13 @@ release.
   1 is rein's own code, never the app's.
 - Exit **64** is a usage error: an unknown command or flag, or a bad value. Exit 2 always
   means a release failed verification.
+
+**The install verdict** (exit 0, 3 or 14) is the overall status of `rein doctor --scope
+install --json`, which checks only the installed tree: `fail` is exit 3, `warn` or `ok` is
+exit 0. Every check is printed. Checks of your machine (Claude, browsers, gh) and of the
+directory you ran rein-app from belong to `rein-app doctor`, which runs the full `rein
+doctor` and never fails an install. Exit 14 means the check could not start, or printed
+something that is not a valid result; it is never treated as a pass.
 
 `rein install` exit codes, printed after exit 13: **3** means the installed tree does not
 match the release manifest, or a gate dependency is off its pin; **1** means Node is below
