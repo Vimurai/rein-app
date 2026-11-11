@@ -61,6 +61,12 @@ pub fn acquire(dir: &Path, handoff: Option<&str>) -> std::io::Result<Instance> {
     match UnixStream::connect(&sock) {
         Ok(mut s) => {
             s.write_all(format!("{}\n", handoff.unwrap_or("")).as_bytes())?;
+            // Wait for the window's one-byte reply before closing. A client that closes
+            // before the window reaches `accept` can lose its connection (ECONNABORTED on
+            // macOS), and the reply means "handed off" is true when this returns.
+            s.set_read_timeout(Some(READ_TIMEOUT))?;
+            let mut ack = [0u8; 1];
+            s.read_exact(&mut ack)?;
             Ok(Instance::HandedOff)
         }
         // A socket file with nobody listening: left by a window that crashed.
@@ -74,12 +80,15 @@ pub fn acquire(dir: &Path, handoff: Option<&str>) -> std::io::Result<Instance> {
 
 /// Read one handoff from `stream`: `Some(Some(path))` for a valid path, `Some(None)` for an
 /// empty line (a bare second start: just raise the window), `None` for anything else.
-pub fn read_handoff(stream: UnixStream) -> Option<Option<PathBuf>> {
+/// A complete line is acknowledged with one byte, valid or not; the sender waits for it.
+pub fn read_handoff(mut stream: UnixStream) -> Option<Option<PathBuf>> {
     stream.set_read_timeout(Some(READ_TIMEOUT)).ok()?;
+    stream.set_write_timeout(Some(READ_TIMEOUT)).ok()?;
     let mut line = String::new();
-    BufReader::new(stream.take(MAX_LINE))
+    BufReader::new((&stream).take(MAX_LINE))
         .read_line(&mut line)
         .ok()?;
+    let _ = stream.write_all(b"\n");
     let line = line.strip_suffix('\n')?;
     if line.is_empty() {
         return Some(None);
