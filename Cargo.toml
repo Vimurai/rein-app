@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/rein-app", "crates/rein-release", "crates/rein-profiles"]
+members = ["crates/rein-app", "crates/rein-release", "crates/rein-profiles", "crates/rein-desktop"]
 
 [workspace.package]
 version = "0.1.0"
@@ -32,6 +32,9 @@ publish-jobs = ["homebrew"]
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
+# E-34: build only what ships (rein-app). The default `--workspace` build would compile the
+# window crate (rein-desktop) on every release target (DEVOPS E-34).
+precise-builds = true
 # E-6: fail any release build that would not carry rein's public key (D-003, D-010)
 github-build-setup = "../build-setup.yml"
 # E-6: .deb packages (cargo-dist has no .deb installer — D-010)

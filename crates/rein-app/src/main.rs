@@ -10,6 +10,7 @@ mod profiles_cmd;
 mod runner;
 mod update_cmd;
 mod verdict;
+mod window_cmd;
 mod wsl;
 
 use std::path::{Path, PathBuf};
@@ -67,6 +68,11 @@ enum Command {
     /// List Claude profiles and edit the Rein-owned settings keys.
     #[command(subcommand)]
     Profiles(profiles_cmd::ProfilesCommand),
+    /// Open the rein-app window (`rein-desktop`), with DIR as the first tab.
+    Window {
+        /// Project directory to open.
+        dir: Option<PathBuf>,
+    },
 }
 
 /// `$HOME` (or `%USERPROFILE%` on Windows) unless `--home` was given. An empty or relative
@@ -118,6 +124,7 @@ fn main() -> ExitCode {
         Command::Doctor { json } => update_cmd::doctor(&home, &runner::SystemProcess, json),
         Command::Launch { dir } => launch(&dir),
         Command::Profiles(cmd) => return profiles_cmd::run(&home, cmd),
+        Command::Window { dir } => window_cmd::run(dir.as_deref()),
     };
     ExitCode::from(code)
 }
@@ -186,7 +193,9 @@ mod tests {
         assert!(matches!(cli.command, Command::Update { yes: true }));
         let cli = Cli::try_parse_from(["rein-app", "doctor", "--json"]).unwrap();
         assert!(matches!(cli.command, Command::Doctor { json: true }));
-        for sub in ["rollback", "doctor", "launch"] {
+        let cli = Cli::try_parse_from(["rein-app", "window", "/p"]).unwrap();
+        assert!(matches!(cli.command, Command::Window { dir: Some(_) }));
+        for sub in ["rollback", "doctor", "launch", "window"] {
             assert!(Cli::try_parse_from(["rein-app", sub]).is_ok(), "{sub}");
         }
         assert!(Cli::try_parse_from(["rein-app", "install", "--version", "latest"]).is_err());

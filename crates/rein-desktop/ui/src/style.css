@@ -1,0 +1,28 @@
+/* Colours come from theme.ts as CSS variables; layout is the cell grid (grid.ts). */
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+}
+#grid, #probe {
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+  white-space: pre;
+  font-variant-ligatures: none;
+}
+#probe { position: absolute; visibility: hidden; top: 0; left: 0; }
+.row { height: var(--cell-h); overflow: hidden; }
+.bar { background: var(--bar-bg); color: var(--bar-fg); }
+.tab-current { background: var(--bg); color: var(--fg); font-weight: bold; }
+.dim { color: var(--dim); }
+.bar .dim, .bar.dim { color: var(--bar-dim); }
+.accent { color: var(--accent); }
+.button { color: var(--fg); }
+.border { color: var(--border); }
+/* A vertical box glyph spans the whole cell, so stacked rows join (line-height > 1). */
+.v { display: inline-block; transform: scaleY(var(--line-height)); }
+.ok { color: var(--ok); }
+.mode-terminal { background: var(--green); color: var(--bg); font-weight: bold; }

@@ -1274,3 +1274,45 @@ The operator pointed out that D-033 served only power users. People who are used
 
 ### Rollback
 Set the default style back to `modal`; the click layer and Settings are additive and can be removed without touching the action list.
+
+---
+
+## D-035 — Phase 2 window dependencies for E-34 (dependency_gate, Engineer-recorded)
+
+**Date**: 2026-11-11
+**Task**: E-34 (rein-desktop crate, web build)
+**Decision**: ADOPT the set below (operator, 2026-11-11). Every item is named in `.ai/blueprints/desktop.md` §Execution Constraints. Recorded by the Engineer; the Architect may revise.
+
+| Package | Version | License | Use | Kind |
+|---|---|---|---|---|
+| tauri (crate) | 2.11.6 | Apache-2.0 OR MIT | window, webview, IPC, capabilities | runtime (`rein-desktop` only) |
+| tauri-build (crate) | 2.6.3 | Apache-2.0 OR MIT | build script: capability/ACL codegen, context | build (`rein-desktop` only) |
+| esbuild (npm) | 0.28.2 | MIT | bundle the TypeScript UI (one file, no framework) | build-time |
+| typescript (npm) | 7.0.2 | Apache-2.0 | type-check the UI (`tsc --noEmit`) | build-time |
+
+Also used directly (Linux/FreeBSD only): `glib` 0.18.5 (MIT), already in tauri's tree at that exact version, so no new code enters the build — `glib::set_prgname("rein-app")` gives X11 WM_CLASS and the Wayland app id `rein-app` (tauri sets a GTK app id only from a dotted identifier).
+
+Not added: `tauri-plugin-single-instance` — on Linux it uses D-Bus, while the blueprint puts the lock in `$XDG_RUNTIME_DIR` (state dir fallback); a std `UnixListener` on a socket there does the handoff in ~80 lines with no dependency. No `@tauri-apps/api` npm package: the UI calls the core through `window.__TAURI_INTERNALS__.invoke` behind one small typed module, so no plugin JS enters the bundle. The web test runner is Node's built-in `node:test` (no Jest/Vitest). The xterm packages are E-35's gate.
+
+### Why needed
+Tauri 2 is the stack fixed by `architect.md` §5 and D-033; esbuild and TypeScript are the blueprint's web build.
+
+### Alternatives considered
+1. **Implement ourselves** — not for a webview host. Accepted for the single-instance lock (above).
+2. **tauri 3.0.0-alpha** — rejected: alpha; the blueprint says Tauri 2.
+3. **Vite** instead of esbuild — rejected: larger tree; the blueprint names esbuild.
+
+### Size / weight
+tauri pulls wry, tao, webkit2gtk bindings (Linux) / WKWebView (macOS), muda, serde, tokio — a large tree, isolated to `rein-desktop`. The `rein-app` CLI crate gains nothing (checked by `cargo tree -p rein-app`). esbuild ships one native binary per platform; typescript is pure JS. Neither is in any shipped artifact.
+
+### Security track record
+Tauri has a public security policy, an external audit (Radically Open Security, v1 and v2) and published GHSAs that were fixed promptly; we turn off every plugin and use a closed capability file. No RustSec advisory against tauri 2.11.x known to the Engineer at recording time (cargo-audit not installed locally). esbuild/typescript run only at build time.
+
+### Maintenance
+tauri 2.x is actively released (stable line beside the 3.0 alphas); esbuild and typescript are released monthly.
+
+### System requirement
+Linux builds need WebKitGTK 4.1, GTK 3, libsoup 3 development packages (installed on the operator's machine 2026-11-11; the hosted Linux job installs them via apt).
+
+### Rollback
+Remove `crates/rein-desktop` from the workspace members and the `window` subcommand (blueprint §Rollback Plan). `Cargo.lock` and `crates/rein-desktop/ui/package-lock.json` are committed; CI runs `--locked` / `npm ci`.

@@ -1,0 +1,112 @@
+//! desktop.md §Test Plan "Capabilities": the capability file grants nothing beyond the IPC
+//! table and window basics, no Tauri plugin is a dependency, and the CSP is asserted.
+
+use std::path::Path;
+
+/// Permissions a capability may grant. The window basics: listening for core events.
+/// Each task that adds an IPC command adds its `allow-<command>` permission here.
+const ALLOWED: &[&str] = &["core:event:allow-listen", "core:event:allow-unlisten"];
+
+fn json(rel: &str) -> serde_json::Value {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
+    serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap()
+}
+
+#[test]
+fn every_capability_grants_only_allowed_permissions() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("capabilities");
+    let mut files = 0;
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        let cap: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        files += 1;
+        assert_eq!(
+            cap["windows"],
+            serde_json::json!(["main"]),
+            "{}",
+            path.display()
+        );
+        assert!(
+            cap.get("remote").is_none(),
+            "no remote origin may reach IPC"
+        );
+        assert!(cap.get("webviews").is_none());
+        for p in cap["permissions"].as_array().unwrap() {
+            // An object form ({identifier, allow, deny}) is a scoped plugin permission.
+            let id = p
+                .as_str()
+                .unwrap_or_else(|| panic!("scoped permission {p}"));
+            assert!(
+                ALLOWED.contains(&id),
+                "permission {id} is not in the IPC table"
+            );
+        }
+    }
+    assert_eq!(files, 1, "one capability file");
+    let conf = json("tauri.conf.json");
+    assert_eq!(
+        conf["app"]["security"]["capabilities"],
+        serde_json::json!(["main"])
+    );
+}
+
+#[test]
+fn the_csp_is_default_src_self_with_no_escape_hatch() {
+    let conf = json("tauri.conf.json");
+    let sec = &conf["app"]["security"];
+    assert_eq!(sec["csp"], "default-src 'self'");
+    for hatch in [
+        "dangerousDisableAssetCspModification",
+        "devCsp",
+        "assetProtocol",
+        "dangerousRemoteDomainIpcAccess",
+    ] {
+        assert!(sec.get(hatch).is_none(), "{hatch} must not be set");
+    }
+    assert_eq!(conf["app"]["withGlobalTauri"], false);
+    assert_eq!(
+        conf["app"]["windows"],
+        serde_json::json!([]),
+        "the window is built in code, with the navigation guard"
+    );
+    assert!(
+        conf["build"].get("devUrl").is_none(),
+        "the UI is always the bundled one"
+    );
+}
+
+#[test]
+fn no_tauri_plugin_is_in_the_build() {
+    // The lockfile sees every route a plugin could take: a direct dependency in any table
+    // form, a tauri feature that pulls one in, or a transitive dependency.
+    let lock = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.lock");
+    let lock = std::fs::read_to_string(lock).unwrap();
+    let plugins: Vec<&str> = lock
+        .lines()
+        .filter_map(|l| l.strip_prefix("name = \""))
+        .filter(|n| n.starts_with("tauri-plugin"))
+        .collect();
+    assert!(
+        plugins.is_empty(),
+        "Tauri plugin(s) in Cargo.lock: {plugins:?}"
+    );
+}
+
+#[test]
+fn the_bundled_ui_has_no_inline_script_or_style() {
+    let html = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/index.html"))
+        .unwrap();
+    assert!(!html.contains("<style"), "inline style element");
+    assert!(!html.contains("style="), "inline style attribute");
+    for tag in html.split("<script").skip(1) {
+        assert!(
+            tag.split('>').next().unwrap().contains("src="),
+            "inline script"
+        );
+    }
+    assert!(
+        !html.contains("http://") && !html.contains("https://"),
+        "remote resource"
+    );
+}

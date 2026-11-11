@@ -1,0 +1,37 @@
+[package]
+name = "rein-desktop"
+description = "The rein-app window: one terminal running `rein start`, with grid-drawn chrome (Phase 2)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors = ["Emir Kovacevic"]
+publish = false
+
+[[bin]]
+name = "rein-desktop"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+# D-035. No Tauri plugin: the capability file is closed (desktop.md §Security 1).
+[dependencies]
+serde_json = "1.0.154"
+tauri = { version = "2.11.6", default-features = false, features = ["wry", "x11", "compression"] }
+
+# WM_CLASS / Wayland app id `rein-app` (main.rs). Already in tauri's tree at this version.
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+glib = "0.18.5"
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+# Not a release artifact until a task adds it to the dist configuration (desktop.md §Rollback).
+[package.metadata.dist]
+dist = false

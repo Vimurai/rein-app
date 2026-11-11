@@ -10,6 +10,8 @@
 | Lint | `cargo clippy --workspace --all-targets --locked -- -D warnings` |
 | Test | `cargo test --workspace --locked` |
 | Release build | `cargo build --profile dist` (cargo-dist profile) |
+| Window UI (in `crates/rein-desktop/ui`) | `npm ci --ignore-scripts && npm run check && npm test && npm run build` — before any cargo command that builds `rein-desktop` |
+| Windows (CLI crates only) | `cargo clippy/test --workspace --exclude rein-desktop --locked` |
 
 Order (hosted equivalent of the ci_gate step order): `fmt → clippy → test → build → release`.
 Release runs only on version tags (E-6).
@@ -256,6 +258,42 @@ cargo-dist 0.34.0, workspace version 0.1.0, HEAD at b93eae7 + `.ai/`.
   5. On Windows, uninstall the rc `.msi` first (see answer 4).
 
 ---
+### 2026-11-11 — E-34: build and test the window crate on Linux and macOS (ci_gate, D-033, D-035)
+**What / why**
+- `.github/workflows/ci.yml`: the matrix gains a `desktop` flag — `true` on `ubuntu-latest`
+  and `macos-latest`, `false` on `windows-latest` (desktop.md §Execution Constraints: the
+  Windows job keeps building the CLI crates only). Desktop jobs: install Node 24, then in
+  `crates/rein-desktop/ui` run `npm ci --ignore-scripts`, `npm run check` (tsc), `npm test`
+  (node:test) and `npm run build` (esbuild → `ui/dist`, which `rein-desktop`'s build script
+  requires). Linux additionally `apt-get install`s the WebKitGTK 4.1 / GTK 3 / libsoup 3 /
+  librsvg development packages Tauri links against. clippy and test then run over the whole
+  workspace; on Windows with `--exclude rein-desktop`.
+- `Cargo.toml` `[workspace.metadata.dist]`: `precise-builds = true`. cargo-dist's default
+  builds the release with `--workspace`, which would now compile `rein-desktop` on all five
+  targets (no WebKitGTK, no UI bundle, cross-compiled aarch64) and break every release. With
+  precise builds dist builds only the packages it ships — `rein-app`. `rein-desktop` also sets
+  `[package.metadata.dist] dist = false`; `dist plan` lists one release, `rein-app`, and no
+  window artifact (E-34 acceptance: no release artifact includes the window).
+
+**Security implications**
+- No secrets, no new permissions (`contents: read` unchanged).
+- One new third-party action: `actions/setup-node`, pinned to the v7.1.0 commit
+  `949feb2413d6458794dcd2491c4babbbce0c15c1`, no cache (no cache key to poison).
+- New network access in CI: the npm registry (two build-time packages, D-035, versions fixed by
+  the committed `package-lock.json`, `npm ci` refuses drift) and the Ubuntu apt mirrors.
+  `--ignore-scripts`: no package install script runs (esbuild works without its postinstall).
+- The window is not built by any release job.
+
+**Rollback**
+- Revert the ci.yml hunk (matrix flag and the three desktop steps) and drop
+  `crates/rein-desktop` from the workspace members (desktop.md §Rollback Plan).
+  `precise-builds` can stay — it only narrows what dist builds.
+
+**Verification**
+- Local (Linux x86_64, WSL2): fmt, clippy `-D warnings`, `cargo test --workspace`, the UI
+  check/test/build from a clean `npm ci --ignore-scripts`; `dist plan` shows release
+  `rein-app` only. Hosted: the push run (recorded below once green).
+
 ## E-9 — layout equality against rein's own installer (2026-11-11, D-012 r3, D-028)
 
 **Test:** `crates/rein-app/src/layout_equality.rs`. It runs only when `REIN_CHECKOUT` names a rein checkout and is skipped otherwise. There is no CI wiring yet (D-028). A run takes about 100–110 s and makes no network calls; npm works from the local cache.

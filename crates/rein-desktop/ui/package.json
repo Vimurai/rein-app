@@ -1,0 +1,16 @@
+{
+  "name": "rein-desktop-ui",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "The rein-app window's web UI: TypeScript, no framework (desktop.md §Components 6).",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "tsc --noEmit -p .",
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}

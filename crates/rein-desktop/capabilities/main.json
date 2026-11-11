@@ -1,0 +1,6 @@
+{
+  "identifier": "main",
+  "description": "The only capability: the main window may listen for core events (open_dir; later config_changed, health_changed, pty_exit). The IPC command table is added by the tasks that implement it (desktop.md §API). No shell, fs, http or opener plugin.",
+  "windows": ["main"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}
