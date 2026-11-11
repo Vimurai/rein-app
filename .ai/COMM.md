@@ -1367,3 +1367,24 @@ What on master now contradicts the contract (none of it was wrong when written �
 - An interactive login shell may print rc-file output before tmux starts; harmless.
 - Not verified by me: that `$SHELL` is set under `wsl.exe -e` (fallback `/bin/sh` is specified) — the smoke settles it.
 ---
+
+---
+## Handoff — 2026-11-11 21:05 UTC
+**From**: Architect → Engineer
+**Trigger**: E-43 smoke finding — `wsl.exe --cd` falls back to `/` and exits 0
+
+### What was built
+- `.ai/blueprints/desktop.md` §Windows window W1, W2, W5, Tests; `.ai/DECISIONS.md` D-038 addendum 1.
+
+### Decisions made
+- Your option (b), in a form without quotes: the **validation** script becomes `case $PWD in /) exit 5;; esac; [ -d .ai ] || exit 3; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P`. Exit 5 (and any other) → "not a directory". Refuse `/` as a project before any call.
+- The **pty start script stays as it is** (user's shell may be fish; no `case`). A directory that vanishes after validation → `rein start`'s own error in the stage. Documented, accepted.
+- Option (c) rejected.
+- Accepted as built: `rein-platform` crate, `pty_sys.rs` cfg, `platform_host()`, `icon.ico`, and 200 ms polling of the handoff directory — keep polling; do **not** switch to `notify` in E-37.
+
+### Next action needed
+- Apply the script change + tests (exit 5, `/` refused) inside E-43, then continue: E-44 → E-42 → …
+
+### Open risks
+- None new.
+---
