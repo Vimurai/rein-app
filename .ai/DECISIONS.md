@@ -1056,3 +1056,41 @@ rein's real artifact (252 files, v0.4.0) passes our verifier and the trees match
 
 ### Rollback
 Not applicable — no behaviour change.
+
+---
+
+## D-029 — Mirror rein D-158: the install verdict comes from `rein doctor --scope install --json`
+
+**Date**: 2026-11-11
+**Task**: E-32 (blocked on rein E-427); unblocks E-17
+**Decision**: After install, update and rollback, rein-app runs `rein install`, then `rein doctor --scope install --json`, and judges by the document's `status`: `fail` is exit 3, `warn` and `ok` are exit 0. This replaces "a failed `rein doctor` is exit 3" (D-012) once rein E-427 ships.
+
+### Why needed
+E-9's first run showed every install exits 3: partly a rein defect (lock-file rewrite, fixed by rein E-426 with `npm ci`), partly because a full `rein doctor` fails on a clean machine for host reasons and judges the operator's current directory. rein ruled all three (D-158) and changed the contract in two places.
+
+### Rulings (mirrored from rein D-158)
+1. No `rein` command writes a path in `manifest.files`; rein's tree check exempts nothing. Nothing to change here; our E-9 assertion is the right one.
+2. Every doctor check record has a required `scope` (`install` | `host` | `project`); `schema` stays 1.
+3. Installer rule 5: the app runs `rein doctor --scope install --json` and judges by `status`. Host and project checks are never an install failure.
+
+### Rulings (rein-app's own)
+4. A missing, unparsable or status-less document is exit 14, never a pass.
+5. The app never filters or branches on a check id — that would be Rein logic in the app.
+6. `rein-app doctor [--json]` stays a passthrough of the full `rein doctor` in the operator's directory.
+7. Until rein E-427 merges, behaviour is unchanged and the layout-equality test stays red; E-32 is registered blocked.
+8. E-17 is unblocked: rein `main` at d84dd17 carries `docs/app-contract.md`, the three schemas and the shared fixtures, including the corrected `operator-owned-cases.json` (addendum 3 r10).
+
+### Alternatives considered
+1. **Parse today's doctor text for install tokens** — rejected by rein and here: Rein logic in the app.
+2. **Run doctor in `$HOME`** — superseded: install scope reads nothing from the current directory.
+3. **Mirror D-158** — chosen.
+
+### Constraints driving this decision
+- Contract direction (D-001). Phase 1 until now "never parses" doctor output; one top-level field of a schema'd document is the narrowest possible exception.
+
+### Impact
+- Unlocks: E-17 now; E-32 when rein E-427 merges. E-6 needs rein v0.5.0, which follows E-425 → E-426 → E-427 → E-419 → E-424.
+- Risk if wrong: none before E-427.
+
+### Rollback
+Return to exit-code propagation of the full `rein doctor`.

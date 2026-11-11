@@ -222,6 +222,18 @@ Operator data is never part of the pipeline. Around it sit two side tools: a
    dependency off its pin, 1 = Node floor or `[HOOK_BASH_MISSING]`. The app reports a failed
    `rein install` as its own exit 13 (rein's code printed) and a failed `rein doctor` as exit
    3, and never retries or repairs either.
+   **Install verdict (rein D-158, mirrored D-029; E-32, built when rein E-427 merges):**
+   after `install`, `update` and `rollback` the app runs `rein install`, then
+   **`rein doctor --scope install --json`**, parses the document and judges by its
+   top-level `status`: `fail` → exit 3; `warn` and `ok` → exit 0. Host and project checks
+   never fail an install. The call reads nothing relative to the current directory. A
+   document that is missing, not valid JSON, or without a known `status` is exit 14, never
+   a pass. Every check record carries a required `scope` (`install` | `host` | `project`);
+   the app never filters by check id. The checks of the document are printed for the
+   operator (name, status, message); `rein-app doctor [--json]` stays a passthrough of the
+   full `rein doctor` in the operator's directory. Also from D-158: no `rein` command
+   writes a path listed in `manifest.files` (rein E-426, `npm ci`), so rein's tree check
+   exempts nothing.
 5. **`rein-app::RuntimeCheck`** — detects Node (≥ manifest `minNode`, default 22), git,
    sqlite3, tmux, Claude Code (`claude --version`); prints a table; missing Claude Code →
    print the official installer URL, do not bundle. Does not install anything itself in phase 1.
@@ -677,7 +689,9 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
 - E-22 (guard script, tag gate, `CODEOWNERS`) is DONE and E-23 needed no change (already
   ASCII since 6bf6244); both reviewed in D-018.
 - E-24 and E-25 are DONE, reviewed in D-019. E-26 is DONE, reviewed in D-021.
-- **E-31** (T2, after E-9) Manifest size limits and linear lookups (§Execution Constraints
+- **E-32** (T3, BLOCKED on rein E-427) Install verdict from `rein doctor --scope install
+  --json` (§Components 4 "Install verdict"; D-029).
+- **E-31** (T2) Manifest size limits and linear lookups (§Execution Constraints
   "Manifest size limits"; D-027).
 - **E-30** (T3) `config_dir` terminal safety, shell-quoted dry-run line, duplicate-row
   warning, unlisted row never suppresses the built-in, note for an unusual `config_dir`

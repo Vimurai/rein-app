@@ -268,7 +268,7 @@
     {
       "id": "E-17",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Vendor rein's shared contract fixtures from rein `tests/fixtures/release/` and run them: replace the interim `operator-owned-cases.json` with rein's (path, shipped, expected kept/replaced/deleted) and assert every row against the sync plan; add `profile-settings-cases.json` (settings before, the write attempted, accept/refuse) and assert every row against rein-profiles; add `layout-v1.json` and assert it equals the layout our fixture manifests carry; note in each test the rein commit the copy was taken from. EXTERNALLY BLOCKED: do not start until rein E-422 has published the fixtures (the Architect will say so in a handoff); report a row our code fails to the Architect instead of editing the fixture. Per .ai/blueprints/distribution.md §Test Plan \"Operator-owned conformance\" and \"Shared contract fixtures\", D-014. Acceptance: all three fixture suites green in cargo test --workspace on all three CI targets.",
       "created_at": "2026-11-09T17:01:18.951Z",
@@ -277,7 +277,7 @@
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-09T17:01:24.069Z"
+      "updated_at": "2026-11-11T12:46:46.923Z"
     },
     {
       "id": "E-18",
@@ -474,6 +474,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-11T12:42:00.319Z"
+    },
+    {
+      "id": "E-32",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 3,
+      "description": "Take the install verdict from rein's install-scope doctor document, per .ai/blueprints/distribution.md §Components 4 \"Install verdict\" and D-029 (mirrors rein D-158). EXTERNALLY BLOCKED: do not start until rein E-427 has merged `rein doctor --scope install --json` (the Architect will name the commit in a handoff). After the sync in `install`, `update` and `rollback`, run `rein install`, then `rein doctor --scope install --json` from the installed tree; parse the document against the vendored `doctor.schema.json` shape (each check has a required `scope`); exit 3 when top-level `status` is `fail`, exit 0 for `warn` and `ok`; exit 14 when the command cannot start, ends without a code, or prints a document that is not valid JSON or has no known `status` — never a pass. Print each check (name, status, message) with manifest- and document-derived text escaped; never filter or branch on a check id. Leave `rein-app doctor [--json]` as a passthrough of the full `rein doctor`. Tests with the stubbed `Process`: fail → 3, warn → 0, ok → 0, garbage → 14, a `host`-scope failure present in a document whose `status` is ok → 0, for all three commands; update `layout_equality.rs` to assert exit 0 against the rein commit named in the handoff. Update README, `docs/operator-guide.md` and the §API table wording for exit 3. Run `security_engineer` before commit. Acceptance: `cargo test --workspace` and hosted CI green on three OSes; the layout-equality test green against that rein commit.",
+      "created_at": "2026-11-11T12:46:42.742Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-11T12:46:46.439Z"
     }
   ],
   "stamps": [
