@@ -4,6 +4,8 @@
 //! on Windows, `launch` (E-6, WSL2).
 
 mod install_cmd;
+#[cfg(test)]
+mod layout_equality;
 mod profiles_cmd;
 mod runner;
 mod update_cmd;
