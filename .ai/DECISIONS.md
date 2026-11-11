@@ -1127,3 +1127,35 @@ Return to exit-code propagation of the full `rein doctor`.
 
 ### Rollback
 Tighten the harness back to a biconditional.
+
+---
+
+## D-031 — Layout-equality case 2: the clone side is updated by re-running `install-rein.sh`
+
+**Date**: 2026-11-11
+**Task**: E-9 (re-run at rein f7b3554, reported by the Engineer)
+**Decision**: In the retired-server case, side A re-runs `install-rein.sh` instead of only `rein install`. The blueprint's "`rein install` removes it on both sides" was my wording and was wrong for a clone install.
+
+### Why needed
+At f7b3554 case 1 is green (rein E-426 fixed the lock rewrite). Case 2 is red: the seeded `mcp/gone-mcp/` is removed on side B by the artifact-mode `rein install` (rein E-420), but stays on side A, where the test ran `rein install` only. The Engineer checked by hand: in a clone home `rein install` leaves the directory and re-running `install-rein.sh` removes it.
+
+### Rulings
+1. Case 2 compares like with like: an update on each side. A clone install is updated by re-running `install-rein.sh`; an artifact install by the app's sync plus `rein install`. Side A therefore re-runs `install-rein.sh`.
+2. The assertions do not change: empty diff apart from the documented differences; exit 0 or 3; no install-integrity token.
+3. Both runs at f7b3554 (case 1 green; case 2 red as first written, then with ruling 1) are recorded in `.ai/DEVOPS.md`.
+4. rein's Architect is told what was observed, in case clone-mode `rein install` was meant to remove retired mirrors too; if rein changes that, the test needs no further change.
+
+### Alternatives considered
+1. **Ask rein to make clone-mode `rein install` remove retired mirrors** — not ours to require; rein stated the removal for artifact mode (E-420).
+2. **Document `mcp/gone-mcp` as an expected difference** — rejected: it would bring back the exception rein D-155 addendum r1 removed.
+3. **Re-run the installer script on side A** — chosen.
+
+### Constraints driving this decision
+- rein D-155 addendum r1; E-9 compares what an operator ends up with.
+
+### Impact
+- E-9 can close when case 2 is green with ruling 1.
+- Risk if wrong: none in shipped behaviour — this is test setup.
+
+### Rollback
+Restore the single `rein install` on side A.

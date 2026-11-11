@@ -564,9 +564,12 @@ each pure w.r.t. I/O behind `Fs`/`Http`/`Shell` traits so Tauri reuses them with
   B is then empty except the documented differences: B has `manifest.json` (a clone install
   removes it), the install stamp says `artifact` in B and a clone path in A, and
   `config/rein-workspace.txt` exists only in A. A second case seeds both homes with a
-  retired server directory (`mcp/gone-mcp/node_modules/x`): our writer keeps it, `rein
-  install` removes it on both sides, and the diff stays empty — no expected difference is
-  left for retired servers.
+  retired server directory (`mcp/gone-mcp/node_modules/x`): our writer keeps it; on side B
+  the artifact-mode `rein install` removes it (rein E-420); on side A the test **re-runs
+  `install-rein.sh`**, which is how a clone install is updated and is what removes a
+  retired mirror there — clone-mode `rein install` alone does not (observed at rein
+  f7b3554; D-031 corrects the earlier "removes it on both sides"). The diff then stays
+  empty — no expected difference is left for retired servers.
   **As run against rein 3f68eff (D-028):** the test drives `install_cmd::install` with the
   real process runner — the `rein-app` binary has, and gets, no seam for a test key or a
   test server; everything after key and source selection is the production path. Two more
