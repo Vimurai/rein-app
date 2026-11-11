@@ -130,10 +130,13 @@ pub fn manifest_json(key_id: &str, files: &[Listed]) -> String {
             )
         })
         .collect();
+    // rein's layout-v1.json (vendored from rein d84dd17, E-17): the layout every fixture
+    // manifest carries.
+    let layout: serde_json::Value =
+        serde_json::from_str(include_str!("layout-v1.json")).unwrap();
     format!(
         r#"{{"schema":1,"version":"{VERSION}","min_node":"22.5.0","key_id":"{key_id}",
-"layout":{{"mirrored":["bin","hooks","mcp","shared","claude","contracts","templates","copilot","scripts","config"],
-"operator_owned":["accounts.json","secrets/","run/","config/rein-workspace.txt","mcp/*/node_modules/","mcp/*/package-lock.json","shared/toolchain.sh"]}},
+"layout":{layout},
 "files":[{}]}}"#,
         rows.join(",")
     )

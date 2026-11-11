@@ -1,167 +1,41 @@
 {
-  "_source": "rein-app interim table in rein's three-column shape (rein D-155: path, shipped, expected kept / replaced / deleted). Replace with rein's tests/fixtures/release/operator-owned-cases.json once rein E-422 publishes it (E-17); refresh on every manifest schema bump. 'gate-override.json' stands in for the gate's override file, whose name rein's manifest supplies.",
-  "operator_owned": [
-    "accounts.json",
-    "gate-override.json",
-    "secrets/",
-    "run/",
-    "memory/",
-    "incidents.ndjson",
-    "telemetry.sqlite",
-    "INSIGHTS.md",
-    "memory-palace.md",
-    "config/rein-workspace.txt",
-    "config/install-stamp.json",
-    "shared/toolchain.sh",
-    "mcp/*/node_modules/",
-    "mcp/*/package-lock.json"
-  ],
+  "description": "E-418 (D-153 addendum r2, D-155 r2; release-artifact.md §Data Model): what an installer does with an existing path under the Rein home. shipped = the path is in the manifest's files. A shipped path is written even when a pattern matches it (rule 3); an unshipped path matching operator_owned is kept; an unshipped path inside a mirrored directory that matches no pattern is deleted; a path outside the mirrored directories is never written or deleted, except `manifest.json` and `VERSION` (D-155 addendum 3 r10).",
   "cases": [
-    {
-      "path": "accounts.json",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "gate-override.json",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "secrets/api",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "secrets/a/b",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "run/pid",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "memory/x.json",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "incidents.ndjson",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "telemetry.sqlite",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "INSIGHTS.md",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "memory-palace.md",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "config/rein-workspace.txt",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "config/install-stamp.json",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "mcp/foo/node_modules/a/index.js",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "mcp/foo/package-lock.json",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "config/other.json",
-      "shipped": false,
-      "expected": "deleted"
-    },
-    {
-      "path": "config/rein-workspace.txt.bak",
-      "shipped": false,
-      "expected": "deleted"
-    },
-    {
-      "path": "mcp/foo/index.js",
-      "shipped": false,
-      "expected": "deleted"
-    },
-    {
-      "path": "mcp/package-lock.json",
-      "shipped": false,
-      "expected": "deleted"
-    },
-    {
-      "path": "mcp/a/b/package-lock.json",
-      "shipped": false,
-      "expected": "deleted"
-    },
-    {
-      "path": "mcp/foo/node_modules_x/a",
-      "shipped": false,
-      "expected": "deleted"
-    },
-    {
-      "path": "bin/rein",
-      "shipped": false,
-      "expected": "deleted"
-    },
-    {
-      "path": "hooks/accounts.json",
-      "shipped": false,
-      "expected": "deleted"
-    },
-    {
-      "path": "secretsx/a",
-      "shipped": false,
-      "expected": "deleted"
-    },
-    {
-      "path": "insights.md",
-      "shipped": false,
-      "expected": "deleted"
-    },
-    {
-      "path": "mcp/orchestrator-mcp/package-lock.json",
-      "shipped": true,
-      "expected": "replaced",
-      "_why": "precedence: shipped and matched by mcp/*/package-lock.json, so a shipped path wins (rein D-155 r2)"
-    },
-    {
-      "path": "mcp/orchestrator-mcp/index.js",
-      "shipped": true,
-      "expected": "replaced"
-    },
-    {
-      "path": "shared/toolchain.sh",
-      "shipped": false,
-      "expected": "kept"
-    },
-    {
-      "path": "shared/locate.sh",
-      "shipped": true,
-      "expected": "replaced"
-    },
-    {
-      "path": "bin/old-tool",
-      "shipped": false,
-      "expected": "deleted"
-    }
+    { "path": "mcp/orchestrator-mcp/package-lock.json", "shipped": "yes", "expected": "replaced", "label": "tracked and shipped, also matches mcp/*/package-lock.json — a shipped path wins" },
+    { "path": "mcp/task-synchronizer-mcp/package-lock.json", "shipped": "no", "expected": "kept", "label": "npm's lock in a server dir, not shipped" },
+    { "path": "mcp/task-synchronizer-mcp/node_modules/dep/index.js", "shipped": "no", "expected": "kept", "label": "under mcp/*/node_modules/" },
+    { "path": "mcp/task-synchronizer-mcp/node_modules", "shipped": "no", "expected": "kept", "label": "the directory a trailing-slash pattern names" },
+    { "path": "mcp/a/b/node_modules/x.js", "shipped": "no", "expected": "deleted", "label": "* matches one segment, not two" },
+    { "path": "mcp/node_modules/x.js", "shipped": "no", "expected": "deleted", "label": "* needs a segment" },
+    { "path": "mcp/task-synchronizer-mcp/index.js", "shipped": "yes", "expected": "replaced", "label": "an ordinary shipped file" },
+    { "path": "mcp/retired-mcp/index.js", "shipped": "no", "expected": "deleted", "label": "an orphan from an earlier version" },
+    { "path": "config/rein-workspace.txt", "shipped": "no", "expected": "kept", "label": "literal" },
+    { "path": "config/install-stamp.json", "shipped": "no", "expected": "kept", "label": "literal" },
+    { "path": "config/other.json", "shipped": "no", "expected": "deleted", "label": "a literal does not cover its siblings" },
+    { "path": "shared/toolchain.sh", "shipped": "no", "expected": "kept", "label": "literal" },
+    { "path": "shared/toolchain.sh.bak", "shipped": "no", "expected": "deleted", "label": "a literal is the whole path" },
+    { "path": "run/build-1.json", "shipped": "no", "expected": "kept", "label": "under run/" },
+    { "path": "runner.json", "shipped": "no", "expected": "kept", "label": "outside the mirrored directories: left alone, matched or not" },
+    { "path": "secrets/token", "shipped": "no", "expected": "kept", "label": "under secrets/" },
+    { "path": "memory/a/b.md", "shipped": "no", "expected": "kept", "label": "deep under memory/" },
+    { "path": "accounts.json", "shipped": "no", "expected": "kept", "label": "top-level literal" },
+    { "path": "gate-override.json", "shipped": "no", "expected": "kept", "label": "top-level literal" },
+    { "path": "incidents.ndjson", "shipped": "no", "expected": "kept", "label": "top-level literal" },
+    { "path": "telemetry.sqlite", "shipped": "no", "expected": "kept", "label": "top-level literal" },
+    { "path": "INSIGHTS.md", "shipped": "no", "expected": "kept", "label": "top-level literal" },
+    { "path": "memory-palace.md", "shipped": "no", "expected": "kept", "label": "top-level literal" },
+    { "path": "insights.md", "shipped": "no", "expected": "kept", "label": "outside the mirrored directories: left alone, matched or not" },
+    { "path": "shared/Toolchain.sh", "shipped": "no", "expected": "deleted", "label": "matching is case-sensitive" },
+    { "path": "ci/x.json", "shipped": "no", "expected": "kept", "label": "an unlisted top-level directory" },
+    { "path": "hooks/old-hook.sh", "shipped": "no", "expected": "deleted", "label": "a retired hook" }
+  ],
+  "glob_cases": [
+    { "pattern": "a/**/z", "path": "a/b/c/z", "match": true, "label": "** crosses segments" },
+    { "pattern": "a/**/z", "path": "a/b/c/y", "match": false, "label": "the literal tail still applies" },
+    { "pattern": "a/*.md", "path": "a/x.md", "match": true, "label": "* inside a segment" },
+    { "pattern": "a/*.md", "path": "a/b/x.md", "match": false, "label": "* stops at /" },
+    { "pattern": "a.b", "path": "axb", "match": false, "label": "a dot is literal" },
+    { "pattern": "run/", "path": "runner.json", "match": false, "label": "a directory pattern is not a prefix" },
+    { "pattern": "INSIGHTS.md", "path": "insights.md", "match": false, "label": "matching is case-sensitive" }
   ]
 }
