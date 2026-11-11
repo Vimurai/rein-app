@@ -979,3 +979,24 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - E-9 is the first time rein-app reads an artifact made by rein's own generator; expect contract mismatches and report them rather than patching around them.
 ---
+
+---
+## Handoff — 2026-11-10 23:31 UTC
+**From**: Architect → Engineer
+**Trigger**: E-29 contract conflict ruled (D-025)
+
+### What was built
+- `.ai/DECISIONS.md` D-025; `.ai/blueprints/distribution.md` §Components 3 step b (owned matching is case-sensitive), §Task Breakdown E-29; `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-025**: your option (c). D-023 ruling 2 (the protective fold) is withdrawn — rein's table rules case-sensitive matching and I ruled against it without checking. You were right to stop and not touch the fixture.
+
+### Blueprint divergence (if any)
+- The E-29 task text still lists item (2); it is void. Say so in the task's completion summary.
+
+### Next action needed
+- **E-29**: remove the fold from matcher/owned/scan/snapshot; keep r1 (parse refusal), r3 (symlink Conflict), r4 (escaping). Drop or invert the fold's tests so the "operator-created case variant" case asserts today's contract behaviour (pruned, present in the snapshot). `operator_owned_conformance` must pass with the fixture untouched. Then E-30, E-9.
+
+### Open risks
+- An operator-created case variant of an owned name is pruned on update (recoverable from the snapshot). Asked of rein · Architect; a new task follows if rein amends its table.
+---
