@@ -1743,3 +1743,38 @@ Presentation only — revert the UI commits to return to the grid chrome; fonts,
 
 ### D-049 addendum 1 (2026-11-12) — there is no rein tmux theme; the default theme is `catppuccin-mocha`
 E-48 finding: rein at 3994640 sets no tmux colours; the blue / mauve status line in the operator's screenshot is the operator's own `~/.tmux.conf` (catppuccin plugin, flavour mocha). Ruling 4 and ruling 5's request were built on the Architect's unverified reading of a screenshot and are corrected: (1) no `rein` theme is added; (2) `catppuccin-mocha` replaces `gruvbox-dark` as the default; (3) the terminal background equals the window background in every theme; (4) the theme choice (first run, Settings) carries one line telling the user to pick the theme their tmux uses; (5) `plans/rein-window-theme-request.md` is withdrawn — nothing is asked of rein. Rejected: an alias named `rein` (it would present the operator's dotfile as rein's look). E-48's task text on the `rein` theme is superseded.
+
+## D-050 — The window applies its own tmux look to the session it is attached to, and tmux undoes it on detach
+
+**Date**: 2026-11-12
+**Task**: operator direction ("I don't want to touch my existing tmux config, but on top of it rein-app should have its own setup that overrides when the app is open, so the app feels natural"); amends `desktop.md` §Core Concept ("the app never configures tmux"), §Look and feel v2 V4; adds V6. E-51.
+**Decision**: While a tab's tmux client is attached, the app sets a closed list of session-scoped style options coloured from the window theme. A `client-detached` hook set at the same time unsets them when the app's client goes away.
+
+### Why needed
+D-049 addendum 1 left the look of tmux to the user's own configuration; the operator wants the app to bring its own look without editing that configuration.
+
+### Rulings
+1. **Scope:** session-scoped options only (window-scoped for border styles), from the closed list in V6. No global option, no key binding, no file, no `pane-border-format`.
+2. **The app never creates, names, renames or kills a session and never mints a role.** The session is found by the tty of the app's own client.
+3. **One constant `sh` script on stdin**, values as validated positional words — the same script on Linux, macOS and through `wsl.exe`. This avoids every command-line quoting problem recorded in D-038.
+4. **tmux restores itself** through the `client-detached` hook, so a crash cannot leave the overlay behind.
+5. **Settings:** `[tmux] overlay` (default on) and `status` = `hidden` (default) | `app` | `keep`.
+6. Requires tmux ≥ 3.2; otherwise, or on any failure, nothing is styled and the health view says why.
+7. **Contract:** this narrows our reading of rein contract §3.5 by the operator's direction; rein's Architect is to be notified (`plans/rein-window-theme-request.md`), and the overlay is switched off by default again if rein objects on a ground the operator accepts.
+
+### Alternatives considered
+1. **Ask rein to apply a host theme in `rein start`** — rejected for now: rein has no tmux look of its own to extend, and the operator wants the look owned by the app.
+2. **Write an include file and have the user source it from `~/.tmux.conf`** — rejected: the operator does not want their config touched.
+3. **Start tmux with the app's own config (`tmux -f`)** — rejected: the app does not start tmux, `rein start` does; and it would drop the user's bindings.
+4. **Recolour the user's status-line plugin through its own variables** — rejected: plugin-specific.
+5. **The app restores the options itself on close** — rejected: a crash would leave them; the hook is safer.
+
+### Constraints driving this decision
+- D-033 ruling 7 (closed process list, validated arguments), D-038 (no interpolation through `wsl.exe`), rein contract §3.5.
+
+### Impact
+- Unlocks: E-51.
+- Risk if wrong: a plain terminal attached to the same session sees the overlay while the app is attached; `status = hidden` hides a status line the user relies on (one setting changes it); rein may use a private tmux socket (E-51 checks first and stops if so); `#{hook_client}` behaviour differs across tmux versions (tested in CI on the runner's tmux, version recorded).
+
+### Rollback
+Set `overlay = false` (or ship that as the default); delete the script and the Host method. Detaching always restores the user's look.

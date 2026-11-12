@@ -436,9 +436,78 @@ limit rises from 1.5 to 2 MiB.
 - **tmux looks like part of the window when the window theme matches the user's tmux
   theme.** tmux's status line and borders are the user's own configuration; the app never
   configures tmux (contract §3.5) and rein does not either, so there is nothing to ask
-  rein for. The first-run screen and Settings say so in one line beside the theme
-  choice: "Pick the theme your tmux uses — the window will match it." The request file
-  `plans/rein-window-theme-request.md` is withdrawn.
+  rein for. **Superseded by V6 (D-050):** the app now applies its own tmux overlay while
+  attached, so no "pick the theme your tmux uses" line is shown.
+
+### V6. tmux overlay — the app's own tmux look while it is attached (D-050)
+Operator direction: "I don't want to touch my existing tmux config, but on top of it
+rein-app should have its own setup that overrides while the app is open, so the app
+feels natural." This replaces the last bullet of V4 ("pick the theme your tmux uses").
+
+**Core concept.** When a tab's tmux client is attached, the app sets a closed list of
+**session-scoped style options** on that session, coloured from the active window theme.
+tmux itself undoes them the moment the app's client detaches. No file of the user's is
+read or written, no global option is changed, no session is created, renamed or killed,
+and the session is found through the app's own client tty — never by name.
+
+- **Overlay script.** One compile-time-constant POSIX `sh` script, fed on **stdin** to
+  `sh -s -- <client tty> <status mode> <colour>…` (so nothing passes through a shell
+  command line or `wsl.exe`'s re-parsing except simple validated words). It:
+  1. finds `tmux` on the login `PATH`; exits quietly if tmux is older than 3.2;
+  2. waits up to 10 s for a client whose `client_tty` equals `$1`, and takes its
+     `session_id`; no such client → exits quietly (nothing is styled);
+  3. applies, with `set-option -t <session_id>` (and `-w` per window of that session, plus
+     a session `after-new-window` hook for later windows), only these options:
+     `status`, `status-style`, `status-left`, `status-right`, `window-status-format`,
+     `window-status-current-format`, `message-style`, `message-command-style`,
+     `mode-style`, `pane-border-style`, `pane-active-border-style`;
+  4. installs a session `client-detached` hook that, when the detaching client is `$1`
+     (`#{hook_client}`), unsets every option and hook it set — so a closed tab, a quit
+     and a crash all restore the user's look without the app doing anything;
+  5. is idempotent: running it again (theme change) replaces the previous overlay.
+- **What it looks like.** Pane borders in the theme's `border` colour, the active pane's
+  border in the accent; copy-mode selection and the tmux message line in the accent;
+  status line per the setting below. `pane-border-format` and everything else rein or the
+  user draws inside the borders is left alone.
+- **Settings** (`config.toml` `[tmux]`, `ui.json`, the Settings overlay; `config.toml`
+  wins as always): `overlay = true | false` (default `true`) and
+  `status = "hidden" | "app" | "keep"` (default `hidden` — the window's tab bar and status
+  bar already show the project; `app` = a minimal status line in the theme's colours
+  showing only the window list; `keep` = the user's own status line untouched).
+- **Client tty.** Linux / macOS: the pty's slave name from the pty layer. Windows: the
+  start script becomes `tty; exec ~/.rein/bin/rein start`; the host reads the first 4 KiB
+  of pty output for a line that is exactly a tty path and removes that line from what the
+  terminal shows.
+- **Where it runs.** `LocalHost`: `/bin/sh -s -- …`. `WslHost`:
+  `wsl.exe -d D -e sh -ls -- …` with the same script on stdin. 15-second limit, output
+  discarded except the exit code; any failure leaves tmux as the user has it and shows
+  nothing but a line in the health view ("tmux overlay not applied: <reason>").
+- **Validation before any process starts:** tty `^/dev/(pts/[0-9]{1,5}|ttys[0-9]{1,4})$`;
+  status mode one of three words; colours `^#[0-9a-f]{6}$` from the app's theme table.
+  Session and window ids used inside the script come from tmux's own output and are
+  checked against `^[$@][0-9]+$` by the script.
+- **Known limits (accepted):** a plain terminal attached to the same session at the same
+  time sees the overlay until the app detaches; the user's look flashes for a moment
+  before the overlay lands; a status line built by a plugin with its own colours is
+  replaced or hidden, not recoloured.
+- **Security.** The process list gains `sh` (absolute `/bin/sh` locally) running one
+  constant script; that script runs `tmux` with a closed option list. On Windows the tty
+  comes from pty output, which is untrusted: the worst a forged line can do is style
+  another tmux session of the same user. No command, format or option name comes from
+  the web view, the config file or the terminal.
+- **Contract note.** Our blueprint has said "the app never configures tmux" (our reading
+  of rein contract §3.5). The operator, who owns both projects, directs this narrower
+  rule: the app never creates, names, renames or kills a session and never mints a role;
+  it may set the listed style options on the session its own client is attached to.
+  `plans/rein-window-theme-request.md` carries the notice for `rein · Architect`.
+- **Tests.** The script against a real tmux server on a private socket (`tmux -L`) in CI
+  on Linux and macOS: options applied to the right session only; a second session
+  untouched; detach of the app client restores every option and removes the hooks; detach
+  of another client does not; second run replaces the first; tmux < 3.2 and "no such
+  client" exit quietly. Unit tests: argument validation; the Windows tty line is consumed
+  and a non-matching first line is passed through untouched. The user's `~/.tmux.conf`
+  is never opened (asserted by running with `HOME` pointing at a directory whose
+  `.tmux.conf` is unreadable).
 
 ### V5. Windows: no console window
 `rein-desktop.exe` is built for the Windows GUI subsystem (release builds), so no console

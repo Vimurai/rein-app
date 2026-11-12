@@ -776,6 +776,24 @@
         "E-49"
       ],
       "updated_at": "2026-11-12T13:10:06.616Z"
+    },
+    {
+      "id": "E-51",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 3,
+      "description": "Implement the tmux overlay of the window, per .ai/blueprints/desktop.md §Look and feel v2 V6 and D-050 (operator direction: the app applies its own tmux look on top of the user's config while it is open, without touching `~/.tmux.conf`): (1) write the one constant POSIX `sh` overlay script, fed on stdin to `sh -s -- <client tty> <status mode> <colours…>`, that requires tmux ≥ 3.2, finds the session of the client with that tty (waiting up to 10 s), sets only the listed session-scoped style options (per window for the border styles, with an `after-new-window` hook), installs the `client-detached` hook that unsets everything when that client detaches, and is idempotent; (2) add it to the `Host` seam — `LocalHost` runs `/bin/sh -s`, `WslHost` runs `wsl.exe -d D -e sh -ls` with the same stdin — with the validation, 15-second limit and quiet failure the blueprint states; (3) take the client tty from the pty layer on Linux / macOS; on Windows change the start script to `tty; exec ~/.rein/bin/rein start` and consume the tty line from the first 4 KiB of pty output; (4) run the overlay after a tab attaches and on a theme or setting change; (5) add `[tmux] overlay` (default true) and `status` (`hidden` default | `app` | `keep`) to `config.toml`, `ui.json`, `ui_get` / `ui_set` (Settings rows come with E-50). First check whether `rein start` uses tmux's default server socket; if not, stop and report. Acceptance: the V6 tests pass against a real tmux server on a private socket on Linux and macOS in CI; `.tmux.conf` is never opened; no session is created, renamed or killed and no global option set (asserted); interop smoke of the Windows path reported; `security_engineer` before commit; hosted `ci` and `desktop-windows` green (D-048); a screenshot of a project tab with the overlay on is attached to the handoff for the operator.",
+      "created_at": "2026-11-12T13:25:20.625Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-48"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-48"
+      ],
+      "updated_at": "2026-11-12T13:25:20.626Z"
     }
   ],
   "stamps": [
@@ -2019,6 +2037,33 @@
       "timestamp": "2026-11-12T11:06:51.668Z",
       "summary": "[TIER_2] E-41 pass 3: blueprint aligned (ALIGN_PASS) and the clean-code gate is clear (CLEAN_PASS, 0 warnings). The `:settings` blocker is fixed and the web suite is 37/37. Open P3s: recapture the first-run/picker/light-settings screens (VIBE_CLEARED caveat). Architect: add `:settings` to the desktop.md:265 command list.",
       "sha": "81f254ee86675bdae64dc6f457b878cd2138deed",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-47",
+      "timestamp": "2026-11-12T13:14:20.926Z",
+      "summary": "[TIER_2] E-47 standards-checker PASS — 7 files clean, 0 warnings, 0 errors (7ms)",
+      "sha": "28ffac875a6900b2ea720345c21fe490b57eab26",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner-mcp",
+      "task_id": "E-47",
+      "timestamp": "2026-11-12T13:14:32.245Z",
+      "summary": "[TIER_2] E-47 aligned with desktop.md V5 / D-049: GUI subsystem in release builds, native message box for refusals, CREATE_NO_WINDOW at all 3 Command::new sites, spawn-site test, PE subsystem check in CI. align_diff warned ORPHANED_WORK on wsl_host.rs and spawn_sites.rs; both are named in V5 and E-47, so the warning is resolved.",
+      "sha": "28ffac875a6900b2ea720345c21fe490b57eab26",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-47",
+      "timestamp": "2026-11-12T13:14:33.529Z",
+      "summary": "[TIER_2] E-47 blueprint aligned + clean-code gate clear: 0 warnings ignored (aligner ORPHANED_WORK warning resolved against desktop.md V5)",
+      "sha": "28ffac875a6900b2ea720345c21fe490b57eab26",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
