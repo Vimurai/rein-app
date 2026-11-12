@@ -46,7 +46,9 @@ mod tests {
     fn the_table_is_the_pages_own() {
         // Each theme's `bg` follows its name within a few tokens in theme.ts, whether the theme
         // is an object literal (`name: "…", fg, bg`) or a `theme("…", fg, bg, …)` call.
-        let src = include_str!("../ui/src/theme.ts");
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/src/theme.ts");
+        let src = std::fs::read_to_string(&path).expect("ui/src/theme.ts");
+        let src = src.as_str();
         for (name, bg) in BUILT_IN {
             let at = src
                 .find(&format!("\"{name}\""))
