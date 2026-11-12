@@ -6,6 +6,20 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+/// Start `cmd` without a console window on Windows (`CREATE_NO_WINDOW`): a GUI program's
+/// helper (`wsl.exe`, `rein-app`) would otherwise open one (desktop.md §Look and feel v2 V5).
+/// Every `Command` the window builds goes through this; a test enumerates the sites.
+#[cfg(windows)]
+pub fn hide_console(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+/// No console windows exist outside Windows.
+#[cfg(not(windows))]
+pub fn hide_console(_: &mut Command) {}
+
 /// How a captured run ended: its exit code (`None`: killed by a signal) and its stdout.
 pub type Output = (Option<i32>, Vec<u8>);
 

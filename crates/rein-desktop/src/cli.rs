@@ -206,14 +206,7 @@ fn bounded(l: &str) -> String {
     doctor::escape(&l[..cut])
 }
 
-#[cfg(windows)]
-fn hide_console(cmd: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-}
-
-#[cfg(not(windows))]
-fn hide_console(_: &mut Command) {}
+use rein_platform::process::hide_console;
 
 /// One CLI run at a time per window (desktop.md §API `release_apply`).
 #[derive(Default)]

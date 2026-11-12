@@ -319,6 +319,26 @@ gh run download <run-id> -n rein-desktop-windows-x64-setup
 ```
 Run the setup `.exe` (SmartScreen: More info → Run anyway). Then start `rein-desktop.exe \\wsl.localhost\<distro>\home\<you>\<project>` (or a Linux path such as `/home/<you>/<project>`) until E-38 adds the start screen.
 
+### 2026-11-12 — E-47: the installer workflow checks the PE subsystem
+**What / why**
+- `.github/workflows/desktop-windows.yml`: after the NSIS build, a PowerShell step reads
+  `target/release/rein-desktop.exe` and fails unless its PE optional header's `Subsystem`
+  is 2 (Windows GUI). The operator saw a console window open with the app, and closing it
+  closed the app (D-049 V5). The binary is now built for the GUI subsystem in release
+  builds (`windows_subsystem = "windows"`), and this step keeps a regression from shipping.
+
+**Security implications**
+- None. No secrets, no new action, no network access; the step only reads a local file.
+  Workflow permissions stay `contents: read`.
+
+**Rollback**
+- Delete the step. The workflow is otherwise unchanged. The subsystem attribute is one line
+  in `crates/rein-desktop/src/main.rs`.
+
+**Proof**
+- A real run on the commit: the step prints the subsystem it read, and the run is green
+  only if that is 2.
+
 ## E-9 — layout equality against rein's own installer (2026-11-11, D-012 r3, D-028)
 
 **Test:** `crates/rein-app/src/layout_equality.rs`. It runs only when `REIN_CHECKOUT` names a rein checkout and is skipped otherwise. There is no CI wiring yet (D-028). A run takes about 100–110 s and makes no network calls; npm works from the local cache.

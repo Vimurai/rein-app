@@ -473,15 +473,7 @@ impl WslShell for SystemWsl {
     }
 }
 
-#[cfg(windows)]
-fn hide_console(cmd: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    cmd.creation_flags(CREATE_NO_WINDOW);
-}
-
-#[cfg(not(windows))]
-fn hide_console(_: &mut Command) {}
+use rein_platform::process::hide_console;
 
 #[cfg(test)]
 mod tests {

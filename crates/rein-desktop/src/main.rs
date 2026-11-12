@@ -4,6 +4,10 @@
 //! terminal stage (E-35), modes (E-36), config (E-37), projects and tabs (E-38) and the
 //! health / release / profile actions (E-39) build on this.
 
+// Windows: a GUI-subsystem program, so no console window opens with it and none can close it
+// (desktop.md §Look and feel v2 V5). Debug builds keep the console for development.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod actions;
 mod cli;
 mod cli_ipc;
@@ -46,38 +50,71 @@ const EVENT_OPEN_DIR: &str = "open_dir";
 /// Event carrying the config after a save of config.toml (desktop.md §API).
 const EVENT_CONFIG_CHANGED: &str = "config_changed";
 
-fn usage() -> ExitCode {
-    eprintln!("usage: rein-desktop [DIR]");
-    ExitCode::from(64)
+const USAGE: &str = "usage: rein-desktop [DIR]";
+
+/// Why the window does not start, for the operator: the exit code and the message (`None`:
+/// nothing to say).
+type Refusal = (ExitCode, Option<String>);
+
+fn usage() -> Refusal {
+    (ExitCode::from(64), Some(USAGE.into()))
+}
+
+/// Tell the operator something before (or without) a window. On stderr / stdout, and on
+/// Windows — where a GUI-subsystem program has no console — in a native message box too.
+fn tell(text: &str, error: bool) {
+    if error {
+        eprintln!("{text}");
+    } else {
+        println!("{text}");
+    }
+    #[cfg(windows)]
+    {
+        let level = if error {
+            rfd::MessageLevel::Error
+        } else {
+            rfd::MessageLevel::Info
+        };
+        let _ = rfd::MessageDialog::new()
+            .set_title("rein-app")
+            .set_description(text)
+            .set_level(level)
+            .set_buttons(rfd::MessageButtons::Ok)
+            .show();
+    }
+}
+
+/// Refuse to start: tell why, return the exit code.
+fn refuse((code, message): Refusal) -> ExitCode {
+    if let Some(m) = message {
+        tell(&m, code != ExitCode::SUCCESS);
+    }
+    code
 }
 
 /// The DIR argument, or `None` when no DIR was given. On Linux / macOS it is made absolute
 /// and must pass the path rule; on Windows it is kept as typed (a `\\wsl.localhost\…` or a
 /// Linux path) after the text rule, and mapped into WSL when the tab opens (W3).
-fn parse_args(args: &[String], windows: bool) -> Result<Option<String>, ExitCode> {
+fn parse_args(args: &[String], windows: bool) -> Result<Option<String>, Refusal> {
     match args {
         [] => Ok(None),
-        [a] if a == "-h" || a == "--help" => {
-            println!(
-                "usage: rein-desktop [DIR]\nOpen the rein-app window, with DIR as the first tab."
-            );
-            Err(ExitCode::SUCCESS)
-        }
+        [a] if a == "-h" || a == "--help" => Err((
+            ExitCode::SUCCESS,
+            Some(format!(
+                "{USAGE}\nOpen the rein-app window, with DIR as the first tab."
+            )),
+        )),
         [a] if a.starts_with('-') => Err(usage()),
         [a] if windows => {
-            project_path::check_text(a).map_err(|why| {
-                eprintln!("rein-desktop: {why}");
-                ExitCode::from(1)
-            })?;
+            project_path::check_text(a)
+                .map_err(|why| (ExitCode::from(1), Some(format!("rein-desktop: {why}"))))?;
             Ok(Some(a.clone()))
         }
         [a] => {
             let abs = std::path::absolute(a).map_err(|_| usage())?;
             let s = abs.to_string_lossy().into_owned();
-            project_path::check(&s).map_err(|why| {
-                eprintln!("rein-desktop: {why}");
-                ExitCode::from(1)
-            })?;
+            project_path::check(&s)
+                .map_err(|why| (ExitCode::from(1), Some(format!("rein-desktop: {why}"))))?;
             Ok(Some(s))
         }
         _ => Err(usage()),
@@ -109,20 +146,26 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let dir = match parse_args(&args, cfg!(windows)) {
         Ok(d) => d,
-        Err(code) => return code,
+        Err(r) => return refuse(r),
     };
 
     let listener = {
         let Some(inst_dir) = single_instance::instance_dir(&dirs::process_env) else {
-            eprintln!("rein-desktop: cannot determine a runtime or state directory (set HOME)");
-            return ExitCode::from(1);
+            return refuse((
+                ExitCode::from(1),
+                Some(
+                    "rein-desktop: cannot determine a runtime or state directory (set HOME)".into(),
+                ),
+            ));
         };
         match single_instance::acquire(&inst_dir, dir.as_deref()) {
             Ok(single_instance::Instance::HandedOff) => return ExitCode::SUCCESS,
             Ok(single_instance::Instance::Primary(l)) => l,
             Err(e) => {
-                eprintln!("rein-desktop: single-instance lock: {e}");
-                return ExitCode::from(1);
+                return refuse((
+                    ExitCode::from(1),
+                    Some(format!("rein-desktop: single-instance lock: {e}")),
+                ));
             }
         }
     };
@@ -236,10 +279,7 @@ fn main() -> ExitCode {
     });
     match result {
         Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("rein-desktop: {e}");
-            ExitCode::from(1)
-        }
+        Err(e) => refuse((ExitCode::from(1), Some(format!("rein-desktop: {e}")))),
     }
 }
 
