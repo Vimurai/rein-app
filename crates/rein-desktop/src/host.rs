@@ -68,7 +68,8 @@ pub trait Host: Send + Sync {
     /// Run the tmux overlay script (V6, D-050) with `args`, which
     /// [`tmux_overlay::args`](crate::tmux_overlay::args) validated: on Linux / macOS
     /// `/bin/sh -s`, on Windows `sh -ls` inside WSL. `Err` says why it was not applied.
-    fn tmux_overlay(&self, args: &[String]) -> Result<(), String>;
+    /// `alive`: the tab's terminal is still there; the run is stopped when it turns false.
+    fn tmux_overlay(&self, args: &[String], alive: &dyn Fn() -> bool) -> Result<(), String>;
 
     /// The WSL distro a project belongs to, recorded with recent projects (Windows only).
     fn distro(&self) -> Option<String> {

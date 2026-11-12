@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # tmux-overlay.sh — E-51 / D-050: the window's tmux overlay script (src/tmux_overlay.sh)
-# against a real tmux server, Linux and macOS.
+# against a real tmux server, Linux and macOS. About 75 s: the slow-start case waits 12 s and
+# "no client" waits the script's full 60 s.
 #
 # Two private sockets, never the default one: `a` is the "user's" server holding the
 # sessions; `b` hosts the clients — each pane of `b` runs `tmux attach` to `a`, so every
@@ -133,7 +134,21 @@ check "  ... and unsets every option the user had not set" "" "$(for o in status
 check "  ... and leaves no saved copy behind" 0 "$(tmux show-options -t one | grep -c @rein-saved || true)$(for w in $(tmux list-windows -t one -F '#{window_id}'); do tmux show-options -w -t "$w" | grep -c @rein-saved || true; done | tr -d '0\n')"
 check "the sessions are all still there" "one two" "$(tmux list-sessions -F '#{session_name}' | sort | tr '\n' ' ' | sed 's/ $//')"
 
-check "no client on that tty exits 5" 5 "$(overlay /dev/pts/999 hidden)"
+# E-56: a fresh `rein start` attaches seconds after the tab opens (two panes, each waited on
+# until its shell is ready). The overlay waits for the client: here it attaches 12 s after
+# the overlay starts — past the 10 s the E-51 script waited, so dc0ad9f fails this case.
+b new-session -d -s late -x 120 -y 40 "sleep 12; env -u TMUX tmux attach -t one"
+late_tty="$(b display-message -p -t late '#{pane_tty}')"
+t0=$(date +%s)
+check "slow start: exit 0 once the client attaches" 0 "$(overlay "$late_tty" hidden)"
+check "slow start: it waited for the attach" yes "$([ $(($(date +%s) - t0)) -ge 11 ] && echo yes || echo no)"
+check "slow start: status off on the app's session" off "$(sopt one status)"
+b kill-session -t late
+if wait_for gone; then ok "slow start: the app client detaching removes the hooks"; else no "slow start: the app client detaching removes the hooks"; fi
+sleep 0.5
+check "slow start: the user's own values are back" "|bg=#123456|$mine" "$(sopt one status)|$(sopt one status-style)|$(sopt one status-right)"
+
+check "no client on that tty exits 5 (after the full wait)" 5 "$(overlay /dev/pts/999 hidden)"
 check "the user's .tmux.conf was never loaded" no "$([ -e "$W/conf-was-read" ] && echo yes || echo no)"
 
 if [ "$fails" -eq 0 ]; then echo "PASS: tmux overlay"; else echo "$fails failure(s)"; fi

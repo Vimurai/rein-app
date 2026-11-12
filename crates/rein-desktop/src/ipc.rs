@@ -19,8 +19,10 @@ use crate::host::Host;
 use crate::pty::{ChildSpec, Events, PtyError, PtyHost, PtyId, Size};
 use crate::tmux_overlay::{self, Colours, OverlayHealth};
 
-/// How long `tab_tmux` waits for a tab's tty (V6).
-pub const TTY_WAIT: Duration = Duration::from_secs(10);
+/// How long `tab_tmux` waits for a tab's tty (V6). On Windows the start script prints it after
+/// the login shell's start-up files, which can take seconds; the wait ends early when the tab
+/// closes or its terminal ends (E-56).
+pub const TTY_WAIT: Duration = tmux_overlay::CLIENT_WAIT;
 
 #[cfg(all(test, unix))]
 mod commands {
@@ -201,10 +203,14 @@ impl Desktop {
             *n += 1;
             *n
         });
+        // The tab is still open on the same pty and its child is running (E-56): every wait
+        // below — the tty, then the script's wait for the tmux client — ends when it is not.
+        let alive = || self.tabs().get(&tab).map(|t| t.pty) == Some(pty) && self.host.alive(pty);
         let deadline = Instant::now() + TTY_WAIT;
         let tty = loop {
             match self.host.tty(pty) {
                 Ok(Some(t)) => break t,
+                Ok(None) if !alive() => return None,
                 Ok(None) if Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(100))
                 }
@@ -220,9 +226,10 @@ impl Desktop {
         if seq(&mut |m| m.get(&tab).copied().unwrap_or_default()) != mine {
             return None; // a newer request for this tab runs instead
         }
-        let outcome = self.platform.tmux_overlay(&args);
-        // A tab closed while the script ran restored itself through the hook.
-        self.tabs().contains_key(&tab).then_some(outcome)
+        let outcome = self.platform.tmux_overlay(&args, &alive);
+        // A tab closed (or a terminal that ended) while the script ran: nothing to report —
+        // a styled session restored itself through the hook.
+        alive().then_some(outcome)
     }
 
     /// The window is closing: detach every tab and reap every child before the process ends.
@@ -593,6 +600,9 @@ mod tests {
     struct OverlayHost {
         seen: Arc<Mutex<Vec<Vec<String>>>>,
         answer: Result<(), String>,
+        /// Stands in for a script still waiting for a tmux client that never attaches: the
+        /// run lasts until `alive` turns false (at most 10 s).
+        waits: bool,
     }
     impl Host for OverlayHost {
         fn project(&self, _: &str) -> Result<std::path::PathBuf, IpcError> {
@@ -614,8 +624,12 @@ mod tests {
         ) -> Result<Option<i32>, IpcError> {
             unreachable!()
         }
-        fn tmux_overlay(&self, args: &[String]) -> Result<(), String> {
+        fn tmux_overlay(&self, args: &[String], alive: &dyn Fn() -> bool) -> Result<(), String> {
             self.seen.lock().unwrap().push(args.to_vec());
+            let until = std::time::Instant::now() + Duration::from_secs(10);
+            while self.waits && alive() && std::time::Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(20));
+            }
             self.answer.clone()
         }
         fn dialog_start(&self) -> Option<std::path::PathBuf> {
@@ -629,6 +643,7 @@ mod tests {
         let d = Desktop::new(Box::new(OverlayHost {
             seen: Arc::clone(&seen),
             answer: Err("tmux is older than 3.2".into()),
+            waits: false,
         }));
         let proj = project();
         let spec = ChildSpec {
@@ -663,6 +678,53 @@ mod tests {
         d.detach(tab.id);
         assert_eq!(d.tmux_overlay(tab.id, "app", &c), None, "a closed tab");
         assert_eq!(seen.lock().unwrap().len(), 1);
+    }
+
+    /// E-56: while the overlay waits for the tab's tmux client (a fresh `rein start` attaches
+    /// late; a failed one never), the tab's terminal ending stops the run at once, and nothing
+    /// is recorded for a terminal that is gone.
+    #[test]
+    fn the_overlay_stops_waiting_when_the_tabs_terminal_ends() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let d = Desktop::new(Box::new(OverlayHost {
+            seen: Arc::clone(&seen),
+            answer: Err("the tab's tmux client was not attached within 60 seconds".into()),
+            waits: true,
+        }));
+        let proj = project();
+        let spec = ChildSpec {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), "sleep 0.3".into()],
+            cwd: Some(proj.path().into()),
+            env_remove: crate::local_host::ENV_REMOVED,
+            env_set: crate::local_host::ENV_SET,
+            tty_line: false,
+        };
+        let (tx, rx) = mpsc::channel();
+        let q: Arc<dyn Events> = Arc::new(Quiet(Mutex::new(Some(tx))));
+        let tab = d
+            .open_spec(&spec, proj.path(), Size { cols: 80, rows: 24 }, q)
+            .unwrap();
+        let c = Colours {
+            bg: "#1e1e2e".into(),
+            fg: "#cdd6f4".into(),
+            muted: "#a6adc8".into(),
+            border: "#6c7086".into(),
+            accent: "#cba6f7".into(),
+        };
+        let t0 = std::time::Instant::now();
+        assert_eq!(
+            d.tmux_overlay(tab.id, "hidden", &c),
+            None,
+            "nothing to report"
+        );
+        assert!(
+            t0.elapsed() < Duration::from_secs(3),
+            "{:?}: waited past the exit",
+            t0.elapsed()
+        );
+        assert_eq!(seen.lock().unwrap().len(), 1, "the script was started");
+        rx.recv_timeout(Duration::from_secs(5)).unwrap();
     }
 
     #[test]

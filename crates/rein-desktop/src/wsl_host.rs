@@ -99,6 +99,7 @@ pub trait WslShell: Shell {
         program: &str,
         args: &[OsString],
         limit: Duration,
+        alive: &dyn Fn() -> bool,
     ) -> io::Result<Option<i32>>;
 }
 
@@ -400,17 +401,19 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
 
     /// `wsl.exe -d D -e sh -ls -- <args>` with the constant script on stdin: the login shell's
     /// `PATH` finds the tmux `rein start` runs. Only the validated words follow `--`.
-    fn tmux_overlay(&self, args: &[String]) -> Result<(), String> {
+    fn tmux_overlay(&self, args: &[String], alive: &dyn Fn() -> bool) -> Result<(), String> {
         let d = self.probe_distro().map_err(|e| e.message)?;
         let mut argv: Vec<OsString> = ["-d", d.name.as_str(), "-e", "sh", "-ls", "--"]
             .into_iter()
             .map(OsString::from)
             .collect();
         argv.extend(args.iter().map(OsString::from));
-        tmux_overlay::outcome(
-            self.shell
-                .run_script(&self.wsl_exe, &argv, tmux_overlay::LIMIT),
-        )
+        tmux_overlay::outcome(self.shell.run_script(
+            &self.wsl_exe,
+            &argv,
+            tmux_overlay::LIMIT,
+            alive,
+        ))
     }
 }
 
@@ -500,8 +503,9 @@ impl WslShell for SystemWsl {
         program: &str,
         args: &[OsString],
         limit: Duration,
+        alive: &dyn Fn() -> bool,
     ) -> io::Result<Option<i32>> {
-        tmux_overlay::run(&mut Self::command(program, args), limit)
+        tmux_overlay::run(&mut Self::command(program, args), limit, alive)
     }
 }
 
@@ -566,6 +570,7 @@ mod tests {
             program: &str,
             args: &[OsString],
             limit: Duration,
+            _alive: &dyn Fn() -> bool,
         ) -> io::Result<Option<i32>> {
             self.limits.lock().unwrap().push(limit);
             self.run(program, args).map(|o| o.code)
@@ -829,14 +834,17 @@ mod tests {
         let mut want = vec!["-d", "Ubuntu", "-e", "sh", "-ls", "--"];
         want.extend(words.iter().map(String::as_str));
         let h = host(ready().on(&want, 0, b""));
-        assert_eq!(h.tmux_overlay(&words), Ok(()));
+        assert_eq!(h.tmux_overlay(&words, &|| true), Ok(()));
         assert_eq!(h.shell.calls().last().unwrap(), &want);
         assert_eq!(
             h.shell.limits.lock().unwrap().last(),
             Some(&tmux_overlay::LIMIT)
         );
         let h = host(ready().on(&want, 4, b""));
-        assert_eq!(h.tmux_overlay(&words), Err("tmux is older than 3.2".into()));
+        assert_eq!(
+            h.tmux_overlay(&words, &|| true),
+            Err("tmux is older than 3.2".into())
+        );
     }
 
     #[test]

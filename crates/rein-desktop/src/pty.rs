@@ -279,6 +279,14 @@ impl PtyHost {
         Ok(slot.lock().unwrap_or_else(|e| e.into_inner()).clone())
     }
 
+    /// The pty is open and its child has not exited (E-56: an overlay waiting for this tab's
+    /// tmux client stops when it is not).
+    pub fn alive(&self, id: PtyId) -> bool {
+        self.lock()
+            .get(&id)
+            .is_some_and(|s| !s.exited.load(Ordering::Acquire))
+    }
+
     /// The web side has written `bytes` of this pty's output into the terminal.
     pub fn ack(&self, id: PtyId, bytes: u32) -> Result<(), PtyError> {
         let flow = Arc::clone(&self.lock().get(&id).ok_or(PtyError::UnknownPty)?.flow);

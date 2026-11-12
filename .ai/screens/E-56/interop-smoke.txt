@@ -1,0 +1,14 @@
+# E-56 interop smoke — 2026-11-12 20:45 UTC, Windows 10.0.26300, WSL Ubuntu
+# ConPTY (portable-pty 0.9 flags) -> C:\Windows\System32\wsl.exe -d Ubuntu --cd <proj> -e /bin/zsh -lic 'tty; [sleep 15;] exec ~/.rein/bin/rein start'
+# FRESH start each run (private tmux server killed first; it loads the operator's own ~/.tmux.conf: catppuccin, status 2, status-position top).
+# The overlay is the real script, started via a second wsl.exe the moment the tty line is read, as the app does.
+# Harness: .ai/screens/E-53/ConPtyProbe.ps1 + run.sh here (DELAY=, OVERLAY=). Dumps: the stream replayed into a 120x40 terminal.
+
+run            script     attach (1049h)   overlay                      status line in dump
+e56a_control   none         1578 ms        -                            yes
+e56b_fix       fix          1587 ms        839 ms  tty /dev/pts/7; overlay started; 1860 ms  overlay exited 0 no
+e56c_fix_slow  fix         16550 ms        854 ms  tty /dev/pts/7; overlay started; 16672 ms  overlay exited 0 no
+e56d_old_slow  dc0ad9f     16534 ms        850 ms  tty /dev/pts/7; overlay started; 11216 ms  overlay exited 5 yes
+
+e56c/e56d: the attach is held back 15 s (a slow fresh start). The dc0ad9f script stops waiting at 10 s (exit 5 = no client on that tty) and the
+user's status line stays; the fixed script waits up to 60 s and applies the overlay once the client attaches.

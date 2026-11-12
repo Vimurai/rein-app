@@ -10,7 +10,7 @@
 # back or unsets the option, then drops the saved copy; an option it never set is left alone.
 # It never reads a file, sets a global option, binds a key, or creates, renames or kills a
 # session. Exit: 0 done, 2 bad arguments, 3 no tmux, 4 tmux older than 3.2, 5 no client on
-# that tty within 10 s, 6 tmux refused an option.
+# that tty within 60 s, 6 tmux refused an option.
 
 [ $# -eq 7 ] || exit 2
 tty=$1 mode=$2 bg=$3 fg=$4 muted=$5 border=$6 accent=$7
@@ -46,9 +46,12 @@ session_of() {
       fi
     done
 }
+# A fresh `rein start` attaches only once it has built the layout and each pane's shell is
+# ready — seconds after the tab opened (E-56). Wait up to 60 s (300 x 0.2 s); the app kills
+# this run at once if the tab's terminal ends first.
 sid=
 i=0
-while [ $i -lt 50 ]; do
+while [ $i -lt 300 ]; do
   sid=$(session_of)
   [ -n "$sid" ] && break
   i=$((i + 1))

@@ -21,7 +21,12 @@ use serde::Deserialize;
 /// The overlay script: `sh -s -- <tty> <hidden|app|keep|off> <bg> <fg> <muted> <border> <accent>`.
 pub const SCRIPT: &str = include_str!("tmux_overlay.sh");
 /// The whole run, the script's own 10-second wait for the client included.
-pub const LIMIT: Duration = Duration::from_secs(15);
+/// How long the script waits for the tab's tmux client (its own loop: 300 x 0.2 s). A fresh
+/// `rein start` attaches seconds after the tab opens (E-56); the run ends earlier when the
+/// tab's terminal ends (`run`'s `alive`).
+pub const CLIENT_WAIT: Duration = Duration::from_secs(60);
+/// The whole run: the client wait plus the time to style the session.
+pub const LIMIT: Duration = Duration::from_secs(75);
 /// The settings' `status` words; `off` (remove the overlay) is the app's own, used when the
 /// `overlay` setting is switched off while a tab is attached.
 pub const STATUS_MODES: &[&str] = &["hidden", "app", "keep"];
@@ -87,16 +92,28 @@ pub fn reason(code: Option<i32>) -> String {
         Some(2) => "the overlay was given a value it does not accept".into(),
         Some(3) => "tmux was not found".into(),
         Some(4) => "tmux is older than 3.2".into(),
-        Some(5) => "the tab's tmux client was not found".into(),
+        Some(5) => format!(
+            "the tab's tmux client was not attached within {} seconds",
+            CLIENT_WAIT.as_secs()
+        ),
         Some(6) => "tmux refused an option".into(),
         Some(c) => format!("the overlay exited with code {c}"),
-        None => "the overlay did not finish within 15 seconds".into(),
+        None => format!(
+            "the overlay did not finish within {} seconds",
+            LIMIT.as_secs()
+        ),
     }
 }
 
-/// Run `cmd` with [`SCRIPT`] on stdin, its output discarded, for at most `limit`. `Ok(None)`:
-/// it did not finish in time and was killed.
-pub fn run(cmd: &mut Command, limit: Duration) -> io::Result<Option<i32>> {
+/// Run `cmd` with [`SCRIPT`] on stdin, its output discarded, for at most `limit`, and only while
+/// `alive()` (the tab's terminal is still there — E-56: the script may wait a minute for a
+/// client that a failed `rein start` never attaches). `Ok(None)`: it was killed, at the limit
+/// or because `alive()` turned false.
+pub fn run(
+    cmd: &mut Command,
+    limit: Duration,
+    alive: &dyn Fn() -> bool,
+) -> io::Result<Option<i32>> {
     let deadline = Instant::now() + limit;
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -114,7 +131,7 @@ pub fn run(cmd: &mut Command, limit: Duration) -> io::Result<Option<i32>> {
         if let Some(status) = child.try_wait()? {
             return Ok(Some(status.code().unwrap_or(-1)));
         }
-        if Instant::now() >= deadline {
+        if Instant::now() >= deadline || !alive() {
             let _ = child.kill();
             let _ = child.wait();
             return Ok(None);
@@ -210,6 +227,45 @@ fn line_start(before: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// E-56: a fresh `rein start` attaches seconds after the tab opens; the script waits for
+    /// the client at least 30 s (dc0ad9f: 10 s), as long as `CLIENT_WAIT` says, and the run's
+    /// limit leaves time to style the session after that.
+    #[test]
+    fn the_client_wait_outlasts_a_fresh_start() {
+        let line = SCRIPT
+            .lines()
+            .find(|l| l.starts_with("while [ $i -lt "))
+            .expect("the client wait loop");
+        let n: u64 = line["while [ $i -lt ".len()..]
+            .split(' ')
+            .next()
+            .and_then(|x| x.parse().ok())
+            .expect("its count");
+        let after = &SCRIPT[SCRIPT.find(line).unwrap()..];
+        assert!(
+            after.lines().take(5).any(|l| l.trim() == "sleep 0.2"),
+            "polls every 0.2 s"
+        );
+        let wait = Duration::from_millis(n * 200);
+        assert!(wait >= Duration::from_secs(30), "the script waits {wait:?}");
+        assert_eq!(wait, CLIENT_WAIT);
+        assert!(LIMIT >= CLIENT_WAIT + Duration::from_secs(10));
+        assert!(reason(Some(5)).contains("60 seconds"));
+    }
+
+    /// E-56: the run stops as soon as the tab's terminal is gone, not at the limit.
+    #[cfg(unix)]
+    #[test]
+    fn a_run_stops_when_the_tab_is_gone() {
+        let t0 = Instant::now();
+        let mut cmd = Command::new("/bin/sh");
+        cmd.args(["-c", "sleep 30"]);
+        let gone_at = t0 + Duration::from_millis(200);
+        let out = run(&mut cmd, LIMIT, &|| Instant::now() < gone_at).unwrap();
+        assert_eq!(out, None, "killed");
+        assert!(t0.elapsed() < Duration::from_secs(3), "{:?}", t0.elapsed());
+    }
+
     use super::*;
 
     fn mocha() -> Colours {
@@ -289,7 +345,10 @@ mod tests {
         let start = Instant::now();
         let mut cmd = Command::new("/bin/sleep");
         cmd.arg("30");
-        assert_eq!(run(&mut cmd, Duration::from_millis(300)).unwrap(), None);
+        assert_eq!(
+            run(&mut cmd, Duration::from_millis(300), &|| true).unwrap(),
+            None
+        );
         assert!(
             start.elapsed() < Duration::from_secs(5),
             "{:?}",
@@ -297,14 +356,20 @@ mod tests {
         );
         let mut cmd = Command::new("/bin/sh");
         cmd.args(["-c", "exit 4"]);
-        assert_eq!(run(&mut cmd, Duration::from_secs(5)).unwrap(), Some(4));
+        assert_eq!(
+            run(&mut cmd, Duration::from_secs(5), &|| true).unwrap(),
+            Some(4)
+        );
     }
 
     #[test]
     fn exit_codes_have_plain_reasons() {
         assert_eq!(reason(Some(4)), "tmux is older than 3.2");
-        assert_eq!(reason(Some(5)), "the tab's tmux client was not found");
-        assert!(reason(None).contains("15 seconds"));
+        assert_eq!(
+            reason(Some(5)),
+            "the tab's tmux client was not attached within 60 seconds"
+        );
+        assert!(reason(None).contains("75 seconds"));
     }
 
     #[test]

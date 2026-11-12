@@ -88,14 +88,14 @@ impl Host for LocalHost {
 
     /// `/bin/sh -s -- <args>` with the constant script on stdin, in `/`, with the same
     /// variables removed as for `rein start` — so it reaches the tmux server `rein start` does.
-    fn tmux_overlay(&self, args: &[String]) -> Result<(), String> {
+    fn tmux_overlay(&self, args: &[String], alive: &dyn Fn() -> bool) -> Result<(), String> {
         let mut cmd = std::process::Command::new("/bin/sh");
         cmd.args(["-s", "--"]).args(args).current_dir("/");
         for k in ENV_REMOVED {
             cmd.env_remove(k);
         }
         rein_platform::process::hide_console(&mut cmd); // a no-op here; one rule for every site
-        tmux_overlay::outcome(tmux_overlay::run(&mut cmd, tmux_overlay::LIMIT))
+        tmux_overlay::outcome(tmux_overlay::run(&mut cmd, tmux_overlay::LIMIT, alive))
     }
 
     fn dialog_start(&self) -> Option<PathBuf> {
