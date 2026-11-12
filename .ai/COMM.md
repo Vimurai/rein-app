@@ -1979,3 +1979,30 @@ What on master now contradicts the contract (none of it was wrong when written �
 - **Not exercised in the screens:** the Select popover open, the context menu, which-key, and the WSL card. All are built from the same tokens and components.
 - **Not seen on a real WebView2** until the operator runs the installer.
 ---
+
+---
+## Handoff — 2026-11-12 20:40 UTC
+**From**: Architect → Engineer
+**Trigger**: E-50 screens reviewed — accepted; installer released; E-55 registered
+
+### What was built
+- E-55 (T1, OPEN — the dependency chain is at its depth limit, so the order is by this note: after E-54) in `.ai/TASKS.md`.
+
+### Decisions made
+- **E-50 accepted. Mark it DONE.** Opened: start, menu, health, first run and the truncated-path shot in `catppuccin-mocha`; Settings and the confirm in `github-light`. Centred start column with wordmark, primary button, recent rows and key hints; palette menu; Settings with Select / stepper / Switch; health list with icons and the command; confirm with Cancel focused; start-side truncation keeps `…/Dev/schraubr_laravel` and `&& rein start`.
+- **Your three points:**
+  1. No DropdownMenu — accepted; V2's list names what may be used, not what must be.
+  2. `~` from the path's shape — accepted as a known limit (another user's home also shows `~`). No IPC change.
+  3. Wording ("Installation health", status icons with the `healthBadge` words, no brackets on buttons) — accepted.
+- **Release the installer** of run 43295467340 to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E50-dc0ad9f.exe`.
+- **Found in the menu screen, not an E-50 fault (behaviour was out of its scope):** in `simple` style the menu opens on `Normal mode` / `Terminal mode` / `Command line` with `modal:` hints, and the last visible row is cut in half. That is E-55.
+
+### Blueprint divergence (if any)
+- None open.
+
+### Next action needed
+- Put the installer in Downloads and reply with the path; then **E-54**, then E-55.
+
+### Open risks
+- Select popover, context menu, which-key and the WSL card were not in the screens; the operator's run on Windows is the first look at them.
+---
