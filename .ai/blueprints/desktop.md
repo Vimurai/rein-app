@@ -160,9 +160,13 @@ sixteen colours are given to xterm.js, so the chrome and the terminal always mat
    previous good config and shows the error (file, line, reason) on the command line.
    A key may be bound only to an action from the closed list; the file cannot name a
    program to run.
-5. **`HealthService`** — runs `rein doctor --json` through the Phase 1 runner (same 4 MiB
-   cap and strict parse; 120-second limit) when a tab opens, after update / rollback, and on
-   `health.show`. It displays the document's `status` and checks; it never recomputes a
+5. **`HealthService`** — runs `rein doctor --scope install --json` with cwd = the home
+   directory (D-045 addendum 1: the install-scope document the CLI's own verdict reads,
+   D-029; a full run judges the cwd as a project and fails on a healthy install) through
+   the Phase 1 runner (same 4 MiB cap and strict parse; 120-second limit) when a tab
+   opens, after update / rollback, and on `health.show`; never while a release or profile
+   run is in progress. The segment says "install", and that is all it claims. Per-project
+   health (full scope, cwd = the tab's project) is not in this revision. It displays the document's `status` and checks; it never recomputes a
    verdict and never branches on a check id (D-029, D-032). The strict doctor parser
    (`parse`, `Document`, `Status`, `check_lines`) moves from the `rein-app` bin crate into
    `rein-platform` — moved, not copied — and both use it.
@@ -238,7 +242,7 @@ else (no `shell`, `fs`, `http` or `opener` plugin).
 | `health_get` | refresh: bool | `HealthView` | — (failure is `status: unknown`) |
 | `release_check` | — | the lines of `rein-app update --check` + its exit code (0 newer · 10 current · 11 offline) | CLI not found |
 | `release_apply` | `update` \| `rollback` | the CLI's lines (channel), then its exit code | a run is already in progress · CLI not found · every Phase 1 refusal, text unchanged |
-| `profiles_plan` / `profiles_apply` | profile names (`[A-Za-z0-9._-]{1,64}`, each present in `rein-app profiles list`) | the lines of `profiles apply --dry-run` / `profiles apply` + exit code | unknown or unsafe name · Phase 1 errors, text unchanged |
+| `profiles_plan` / `profiles_apply` | profile names (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}` — never a leading `-`, which could be read as a flag; each present as a table row of `rein-app profiles list`) | the lines of `profiles apply --dry-run` / `profiles apply` + exit code | unknown or unsafe name · Phase 1 errors, text unchanged |
 | `clipboard_write` | text (≤ 64 KiB); text only, through `arboard` (D-042) | — | — |
 | `dir_complete` | absolute path prefix that passes the project-path check | at most 50 directory paths (directories only; hidden ones only when the typed stem starts with `.`; names failing the display-text rule dropped), through the `Host` seam | unsafe or relative prefix → empty list |
 | `clipboard_read` | — (only on a paste action started by the user) | text (≤ 1 MiB) | — |
@@ -391,7 +395,7 @@ W4. **Health, release, profiles on Windows** — never the Windows binary's own
    login shell with a constant script per action:
    | Action | Script (after `wsl.exe -d D -e <shell> -lc`) | Shown as |
    |---|---|---|
-   | `health_get` | `exec ~/.rein/bin/rein doctor --json` | parsed on the Windows side by the Phase 1 parser (4 MiB, strict, 120 s) |
+   | `health_get` | `cd; exec ~/.rein/bin/rein doctor --scope install --json` | parsed on the Windows side by the Phase 1 parser (4 MiB, strict, 120 s) |
    | `release_check` | `exec rein-app update --check` | the CLI's lines, escaped, unchanged |
    | `release_apply update` / `rollback` | `exec rein-app update --yes` / `exec rein-app rollback` | lines streamed; the CLI's exit code |
    | `profiles_plan` / `profiles_apply` | `exec rein-app profiles apply --dry-run --profile N…` / without `--dry-run` | the CLI's lines; exit code |

@@ -1629,3 +1629,6 @@ The update / rollback flow (check, notes, lock, owner guard, snapshot swap, inst
 
 ### Rollback
 `run_cli` is one method; an in-process implementation can replace `LocalHost`'s later without touching the IPC table.
+
+### D-045 addendum 1 (2026-11-12) — window health is the install scope, run from the home directory
+Ratified from E-39: `health_get` runs `rein doctor --scope install --json` with cwd = home (on Windows `cd;` before the constant `exec`). Measured: a full `rein doctor --json` from `$HOME` is `fail` on a healthy install because project-scope and host checks judge the cwd; the statusline claims "install ok" and the install scope is the document D-029 already uses for that. The window still recomputes nothing. Per-project health per tab is deferred. Also ratified: profile names must start with a letter or digit (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`); `profiles list` is read as table rows only; no doctor run while a release or profile run is in progress.
