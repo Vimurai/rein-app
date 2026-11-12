@@ -109,6 +109,15 @@ test("every title-bar and status-bar control carries its action", async () => {
   assert.deepEqual(calls(status.project.action), ["project.pick", null]);
   assert.deepEqual([status.health.icon, ...calls(status.health.action)], ["ok", "health.show", null]);
   assert.deepEqual(calls(status.command.copy), ["cmd.yank", null]);
+  // E-50: the home directory is shown as `~` (V2: `~/Dev/schraubr_laravel`); nothing else is.
+  const { tildePath } = await import("../src/chrome.ts");
+  assert.equal(status.project.text, "~/p");
+  assert.equal(tildePath("/home/emir/Dev/schraubr_laravel"), "~/Dev/schraubr_laravel");
+  assert.equal(tildePath("/Users/me/code/x"), "~/code/x");
+  assert.equal(tildePath("/root"), "~");
+  assert.equal(tildePath("/homework/x"), "/homework/x");
+  assert.equal(tildePath("/srv/home/me/x"), "/srv/home/me/x");
+  assert.equal(tildePath("/home"), "/home");
   assert.equal(status.mode, null, "no mode badge in the simple style");
   assert.equal(statusBar(null, null, null, "NORMAL").mode, "NORMAL");
   assert.equal(statusBar(null, null, null, null).health.icon, "checking");

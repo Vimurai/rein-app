@@ -102,3 +102,22 @@ test("the shadcn variables of every theme keep text at 4.5:1", async () => {
     assert.ok(Object.keys(cssVariables(t)).includes("--card"), "the stylesheet gets them too");
   }
 });
+
+// E-50: a selected row in a menu, list or picker is the accent at 15 % over the popover
+// (`bg-primary/15`); its text reads at 4.5:1 in every theme. Dim text (shortcut, path) turns
+// full foreground on a selected row, because the dim colour on the tint is 3.8:1 in gruvbox-dark.
+test("text on the selected-row tint reads at 4.5:1 in every theme", async () => {
+  const { shadcnVariables } = await import("../src/theme.ts");
+  const mix = (a, b, f) =>
+    "#" +
+    [1, 3, 5]
+      .map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * f + parseInt(b.slice(i, i + 2), 16) * (1 - f)))
+      .map((n) => n.toString(16).padStart(2, "0"))
+      .join("");
+  for (const t of THEMES.values()) {
+    const v = shadcnVariables(t);
+    const tint = mix(v["--primary"], v["--popover"], 0.15);
+    const c = contrast(v["--popover-foreground"], tint);
+    assert.ok(c >= 4.5, `${t.name}: text on the selected-row tint ${tint} is ${c.toFixed(2)}`);
+  }
+});

@@ -1,58 +1,83 @@
-// The start screen (desktop.md §Core Concept "Screen", E-38): the wordmark in block
-// characters, the recent projects numbered 1–9 (a missing one dimmed), and five key hints.
-// Nothing else. Pure, so it tests under Node.
+// The start screen (desktop.md §Look and feel v2 V2, E-38 → E-50): a centred column — the
+// wordmark, a primary `Open a project…`, the recent projects as rows (number, name, dim path,
+// last opened; a missing one dimmed), a secondary `Check installation`, the WSL setup card on
+// Windows when needed, and the key hints. Pure, so it tests under Node; shell.tsx draws it.
 
-import type { Span } from "./grid.ts";
 import type { ActionCall, KeyTable } from "./keymap.ts";
-
-/** The start screen's buttons (D-034): plain words, the key hints stay beside them. */
-export const OPEN_BUTTON = "[ Open a project… ]";
-export const CHECK_BUTTON = "[ Check installation ]";
 
 export interface RecentView {
   path: string;
   name: string;
+  /** Seconds since the Unix epoch. */
   last_opened: number;
   /** `false`: the directory is gone. `null`: not checked (Windows). */
   exists: boolean | null;
 }
 
-export const WORDMARK = ["█▀█ █▀▀ █ █▄ █", "█▀▄ ██▄ █ █ ▀█"];
+export const OPEN_LABEL = "Open a project…";
+export const CHECK_LABEL = "Check installation";
 
-export const HINTS = "p projects   o open directory   h checkhealth   u update   q quit";
+/** The keys the start screen answers to, in the words its hint line shows. */
+export const HINTS: readonly [string, string][] = [
+  ["p", "projects"],
+  ["o", "open directory"],
+  ["h", "check health"],
+  ["u", "update"],
+  ["q", "quit"],
+];
 
-/** The lines drawn centred in the stage when no project is open. `setup`: Windows without
- *  WSL or without a distro — the reason and the command to run come first (E-45). */
-export function startLines(
+export interface StartRow {
+  /** The digit that opens it (1–9). */
+  n: number;
+  name: string;
+  path: string;
+  /** "3 h ago", "yesterday", … */
+  ago: string;
+  missing: boolean;
+  action: ActionCall;
+}
+
+export interface StartScreen {
+  /** Windows without WSL or without a distro (E-45): the reason and the command to run. */
+  setup: { reason: string; command: string; again: ActionCall } | null;
+  open: { label: string; action: ActionCall };
+  check: { label: string; action: ActionCall };
+  recent: StartRow[];
+  hints: readonly [string, string][];
+}
+
+/** How long ago `then` was, at `now` (both seconds since the epoch), in a few plain words. */
+export function ago(then: number, now: number): string {
+  const s = Math.max(0, now - then);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  const days = Math.floor(s / 86400);
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days} days ago`;
+  return new Date(then * 1000).toISOString().slice(0, 10);
+}
+
+/** What the start screen shows; at most nine recent projects, newest first as given. */
+export function startScreen(
   recent: readonly RecentView[],
-  setup: { reason: string; command: string } | null = null,
-): (string | Span)[] {
-  const shown = recent.slice(0, 9);
-  const width = Math.max(0, ...shown.map((r) => r.name.length));
-  const rows: (string | Span)[] = shown.map((r, i) => ({
-    text: `${i + 1}  ${r.name.padEnd(width)}  ${r.path}${r.exists === false ? "  (missing)" : ""}`,
-    cls: r.exists === false ? "dim" : "",
-    action: { name: "project.open", arg: r.path },
-  }));
-  const blocker: (string | Span)[] = setup
-    ? [
-        { text: setup.reason, cls: "error" },
-        { text: `run in an administrator terminal:  ${setup.command}`, cls: "" },
-        { text: "c  check again", cls: "", action: { name: "health.show" } },
-        "",
-      ]
-    : [];
-  return [
-    ...WORDMARK.map((text) => ({ text, cls: "accent" })),
-    "",
-    ...blocker,
-    { text: OPEN_BUTTON, cls: "button", action: { name: "project.open" } },
-    { text: CHECK_BUTTON, cls: "button", action: { name: "health.show" } },
-    "",
-    ...(rows.length ? rows : ["no recent projects"]),
-    "",
-    HINTS,
-  ];
+  setup: { reason: string; command: string } | null,
+  now: number,
+): StartScreen {
+  return {
+    setup: setup && { ...setup, again: { name: "health.show" } },
+    open: { label: OPEN_LABEL, action: { name: "project.open" } },
+    check: { label: CHECK_LABEL, action: { name: "health.show" } },
+    recent: recent.slice(0, 9).map((r, i) => ({
+      n: i + 1,
+      name: r.name,
+      path: r.path,
+      ago: ago(r.last_opened, now),
+      missing: r.exists === false,
+      action: { name: "project.open", arg: r.path },
+    })),
+    hints: HINTS,
+  };
 }
 
 /** The start screen's keys over a key table: the five hints (digits are `tab.goto`, which

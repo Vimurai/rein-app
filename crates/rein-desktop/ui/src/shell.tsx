@@ -1,21 +1,26 @@
 // The window shell (E-42, D-037; frame rebuilt in E-49 per desktop.md §Look and feel v2 V2):
 // the title bar / tab bar, the borderless terminal stage (xterm.js, E-35), the status bar,
 // the toast and — in the modal style — the command palette. The frame is drawn by `frame.tsx`
-// from the pure `chrome.ts`; the start screen (no tab) is still the grid's lines until E-50.
+// from the pure `chrome.ts`; the start screen (no tab) by `start-screen.tsx` (E-50).
 // E-36 adds the modes: keys go through
 // the pure `modes` function with the key table as input; NORMAL and COMMAND keys drive the
 // app, TERMINAL keys go to the pty except the escape chord. Text goes in as React text nodes
 // only, never as HTML.
 
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuShortcut, ContextMenuTrigger } from "../components/context-menu.tsx";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../components/tooltip.tsx";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from "../components/context-menu.tsx";
 import { DEFAULT_MODAL, DEFAULT_SIMPLE } from "./keymap.ts";
 import { describe as describeAction, menuEntries } from "./menu.ts";
 import { pasteNeedsQuestion } from "./paste.ts";
 import type { ActionName } from "./actions.ts";
 import { commonPrefix, complete, parse } from "./commands.ts";
-import type { Span } from "./grid.ts";
 import { TOAST_MS, chromeOf, statusBar, titleBar } from "./chrome.ts";
 import { CommandPalette, StatusBar, TitleBar, Toast } from "./frame.tsx";
 import {
@@ -36,7 +41,8 @@ import { keyBytes, keyName } from "./keys.ts";
 import type { ActionCall, KeyTable } from "./keymap.ts";
 import { WHICH_KEY_DELAY_MS, continuations, step, type ModeState } from "./modes.ts";
 import { MenuOverlay, PasteConfirm, ProjectPicker, WhichKey, label } from "./overlays.tsx";
-import { startLines, withStartKeys, type RecentView } from "./start.ts";
+import { startScreen, withStartKeys, type RecentView } from "./start.ts";
+import { StartScreen } from "./start-screen.tsx";
 import { TermTab } from "./term.ts";
 import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
 
@@ -103,48 +109,9 @@ interface OpenTab {
   exited: boolean;
 }
 
-/** What a chrome button does and says: the shell's `run` and the action's tooltip. */
-const ButtonCtx = createContext<{ run: (c: ActionCall) => void; tip: (c: ActionCall) => string } | null>(null);
-
-/** One span; with an action it is a button (D-034): hover highlight, tooltip naming the
- *  action and its shortcut, the same text as its accessible name. Still drawn on the grid. */
-function SpanView({ s }: { s: Span }) {
-  const ctx = useContext(ButtonCtx);
-  if (!s.action || !ctx) return <span className={s.cls || undefined}>{s.text}</span>;
-  const action = s.action;
-  const tip = ctx.tip(action);
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button type="button" className={`chrome-btn ${s.cls}`.trim()} aria-label={tip} onClick={() => ctx.run(action)}>
-          {s.text}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>{tip}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-/** The start screen (no tab open): the grid's lines, centred, in the terminal font — rebuilt
- *  as the V2 column with E-50. Plain text is dim; a span keeps its class and its action. */
-function StartLines({ lines }: { lines: readonly (string | Span)[] }) {
-  return (
-    <div id="start" className="flex h-full flex-col items-center justify-center overflow-hidden">
-      <div className="start-lines">
-        {lines.map((l, i) => (
-          <div key={i} className="row">
-            {typeof l === "string" ? <span className="dim">{l || " "}</span> : <SpanView s={l} />}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function Shell(props: ShellProps) {
   const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, tmuxKey, handlers, notice, startDir, startLast } =
     props;
-  const [cell, setCell] = useState({ w: 0, h: 0 });
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const [recent, setRecent] = useState<RecentView[]>([]);
   const [picker, setPicker] = useState(false);
@@ -193,8 +160,8 @@ export function Shell(props: ShellProps) {
     return () => clearTimeout(t);
   }, [message]);
 
-  // Theme and font (config.toml, `:theme`): the CSS variables every element reads, the cell
-  // size of the font, and the open terminal — restyled before paint.
+  // Theme and font (config.toml, `:theme`): the CSS variables every element reads and the open
+  // terminal — restyled before paint.
   useLayoutEffect(() => {
     const root = document.documentElement.style;
     for (const [k, v] of Object.entries(cssVariables(theme))) root.setProperty(k, v);
@@ -202,13 +169,6 @@ export function Shell(props: ShellProps) {
     root.setProperty("--font-size", `${fontSize}px`);
     root.setProperty("--line-height", String(lineHeight));
     root.setProperty("--opacity", String(opacity));
-    const probe = document.getElementById("probe");
-    const measure = () => {
-      const r = probe?.getBoundingClientRect();
-      if (r) setCell({ w: r.width / 10, h: r.height });
-    };
-    measure();
-    void document.fonts.ready.then(measure);
     for (const t of tabs.current) t.term.restyle({ fontFamily, fontSize, lineHeight, theme });
   }, [theme, fontFamily, fontSize, lineHeight, opacity]);
 
@@ -654,11 +614,6 @@ export function Shell(props: ShellProps) {
   // The `simple` style has no modes, so no mode badge (D-034).
   const status = statusBar(current ? current.project : null, health, lastCmd, keys.style === "modal" ? modeView.mode : null);
 
-  // Overlays still size themselves in grid cells (E-50 moves them to the V1 scale).
-  useEffect(() => {
-    document.documentElement.style.setProperty("--cell-h", `${cell.h}px`);
-  }, [cell]);
-
   // The stage is borderless and fills what the bars leave (V2): the terminal follows its size
   // in whole cells, centred; the window itself is never snapped to cells.
   useEffect(() => {
@@ -672,30 +627,33 @@ export function Shell(props: ShellProps) {
   }, []);
 
   return (
-    <ButtonCtx.Provider value={runner}>
+    <>
       <div id="frame" role="application" aria-label="rein-app" className="flex h-full flex-col">
         <TitleBar bar={bar} chrome={CHROME} r={runner} />
         <div id="stage" className="relative min-h-0 flex-1">
           {!termOpen && (
-            <StartLines
-              lines={startLines(
+            <StartScreen
+              model={startScreen(
                 recent,
                 health?.setup ? { reason: health.reason ?? "WSL is not ready", command: health.setup } : null,
+                Math.floor(Date.now() / 1000),
               )}
+              r={runner}
             />
           )}
           <ContextMenu>
             <ContextMenuTrigger asChild>
               <div id="term" ref={termsEl} className={termOpen ? undefined : "hidden"} />
             </ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem onSelect={() => run({ name: "term.copy" })}>
-            Copy<ContextMenuShortcut>Ctrl+Shift+C</ContextMenuShortcut>
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={() => run({ name: "term.paste" })}>
-            Paste<ContextMenuShortcut>Ctrl+Shift+V</ContextMenuShortcut>
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={() => tab.current?.selectAll()}>Select all</ContextMenuItem>
+            <ContextMenuContent>
+              <ContextMenuItem onSelect={() => run({ name: "term.copy" })}>
+                Copy<ContextMenuShortcut>Ctrl+Shift+C</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => run({ name: "term.paste" })}>
+                Paste<ContextMenuShortcut>Ctrl+Shift+V</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={() => tab.current?.selectAll()}>Select all</ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
         </div>
@@ -750,6 +708,6 @@ export function Shell(props: ShellProps) {
           }}
         />
       )}
-    </ButtonCtx.Provider>
+    </>
   );
 }

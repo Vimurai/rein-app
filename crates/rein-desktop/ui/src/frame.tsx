@@ -1,8 +1,7 @@
 // The window frame in the modern look (desktop.md §Look and feel v2 V1–V2, E-49): the title
 // bar that is the tab bar, the status bar, the toast and the command palette. What each one
 // shows and runs comes from the pure `chrome.ts`; this file only draws it. Sizes are in px
-// (the 4 px scale of V1): Tailwind's spacing unit is still the cell until E-50 moves the
-// overlays over. Text goes in as React text nodes only.
+// (the 4 px scale of V1). Text goes in as React text nodes only.
 
 import type { MouseEvent, ReactNode } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/tooltip.tsx";
@@ -51,6 +50,18 @@ function TipButton({
       </TooltipTrigger>
       <TooltipContent>{tip}</TooltipContent>
     </Tooltip>
+  );
+}
+
+/** Text that loses its START when it does not fit, so the end stays visible: a path keeps the
+ *  project's own directory, a command keeps `&& rein start` (V2, E-50). The ellipsis is
+ *  drawn by the browser at the left of a right-to-left box; the text itself is an isolated
+ *  left-to-right run, so its slashes and punctuation keep their places. */
+export function TruncStart({ text, className = "" }: { text: string; className?: string }) {
+  return (
+    <span className={`block min-w-0 truncate text-left [direction:rtl] ${className}`.trim()}>
+      <span className="[direction:ltr] [unicode-bidi:isolate]">{text}</span>
+    </span>
   );
 }
 
@@ -200,8 +211,8 @@ export function StatusBar({ bar, r }: { bar: StatusBarData; r: Runner }) {
       className="flex h-[26px] shrink-0 items-center gap-[12px] border-t border-border bg-background px-[8px] font-ui text-[12px] text-muted-foreground select-none"
     >
       {bar.project && (
-        <TipButton tip={r.tip(bar.project.action)} className="min-w-0 truncate rounded-md px-[4px] font-mono hover:bg-muted hover:text-foreground" onClick={() => r.run(bar.project!.action)}>
-          {bar.project.text}
+        <TipButton tip={r.tip(bar.project.action)} className="min-w-0 rounded-md px-[4px] font-mono hover:bg-muted hover:text-foreground" onClick={() => r.run(bar.project!.action)}>
+          <TruncStart text={bar.project.text} />
         </TipButton>
       )}
       <TipButton
@@ -215,7 +226,7 @@ export function StatusBar({ bar, r }: { bar: StatusBarData; r: Runner }) {
       <div className="flex-1" />
       {bar.command && (
         <div className="flex min-w-0 items-center gap-[2px] rounded-md border border-border pl-[8px] font-mono">
-          <span className="min-w-0 truncate">{bar.command.text}</span>
+          <TruncStart text={bar.command.text} />
           <TipButton tip={r.tip(bar.command.copy)} className="flex size-[20px] shrink-0 items-center justify-center rounded-md hover:bg-muted hover:text-foreground" onClick={() => r.run(bar.command!.copy)}>
             <Copy size={12} aria-hidden="true" />
           </TipButton>

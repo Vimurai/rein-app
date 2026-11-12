@@ -1,13 +1,14 @@
-// Overlays on the grid (desktop.md "Screen", §Components 6 `overlays`). E-36: the leader's
-// which-key overlay — a rounded box border with the title in it, one row per key that can
-// follow, the action in plain words. More overlays (picker, health, profiles, confirm) join
-// in E-38..E-40.
+// The window's overlays in the modern look (desktop.md §Look and feel v2 V2, E-50): which-key,
+// the project picker, the menu, the paste confirm and the first-run choice — shadcn Dialog and
+// Command driven only by the tokens. What each one shows and does is unchanged from E-36..E-41.
 
 import { useState, type KeyboardEvent } from "react";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList, CommandShortcut } from "../components/command.tsx";
-import { Button } from "../components/button.tsx";
-import { Dialog, DialogContent } from "../components/dialog.tsx";
+import { Button, Kbd } from "../components/button.tsx";
+import { Dialog, DialogContent, DialogFooter } from "../components/dialog.tsx";
 import { ACTIONS } from "./actions.ts";
+import { TruncStart } from "./frame.tsx";
+import { Folder, Keyboard, MousePointerClick } from "./icons.ts";
 import { fuzzy, type RecentView } from "./start.ts";
 import type { ActionCall } from "./keymap.ts";
 import type { MenuEntry } from "./menu.ts";
@@ -19,35 +20,49 @@ export function label(call: ActionCall): string {
   return LABELS.get(call.name) ?? call.name;
 }
 
-/** `╭─ title ───╮` … `╰───╯`, `width` cells wide, with `rows` inside. */
-export function boxRows(title: string, rows: readonly string[], width: number): string[] {
-  const inner = Math.max(title.length + 4, width - 2);
-  const pad = (s: string) => (s.length > inner - 2 ? `${s.slice(0, inner - 3)}…` : s.padEnd(inner - 2));
-  const head = `─ ${title} `;
-  return [
-    `╭${head}${"─".repeat(Math.max(0, inner - head.length))}╮`,
-    ...rows.map((r) => `│ ${pad(r)} │`),
-    `╰${"─".repeat(inner)}╯`,
-  ];
-}
-
+/** The keys that can follow the leader, each with its action in plain words (E-36): a card
+ *  just above the status bar, at the left. */
 export function WhichKey({ leader, next }: { leader: string; next: readonly [string, ActionCall][] }) {
-  const width = Math.max(30, ...next.map(([k, a]) => k.length + label(a).length + 8));
-  const lines = boxRows(leader, next.map(([k, a]) => `${k.padEnd(3)}  ${label(a)}`), width);
   return (
-    <div className="which-key" role="dialog" aria-label={`keys after ${leader}`}>
-      {lines.map((l, i) => (
-        <div key={i} className="row">
-          {l}
-        </div>
-      ))}
+    <div
+      role="dialog"
+      aria-label={`keys after ${leader}`}
+      className="fixed bottom-[38px] left-3 z-40 min-w-64 rounded-lg border border-border bg-popover p-2 font-ui text-[13px] text-popover-foreground shadow-md"
+    >
+      <div className="flex items-center gap-2 px-1 pb-2 text-[12px] text-muted-foreground">
+        <Kbd>{leader}</Kbd>
+        <span>then</span>
+      </div>
+      <ul className="grid gap-1">
+        {next.map(([k, a]) => (
+          <li key={k} className="flex items-center gap-3 px-1">
+            <Kbd className="min-w-7">{k}</Kbd>
+            <span>{label(a)}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
-/** The project picker (desktop.md "Screen" overlay; E-38): recent projects, fuzzy filtered,
- *  `j` `k` (while the filter is empty) `C-n` `C-p` ↑ ↓ to move, `Enter` to open, `Del` to
- *  forget the selected one, `Esc` to close. Built on the restyled Dialog and Command. */
+/** The keys a palette answers to, under its list. */
+function PaletteHints({ hints, count }: { hints: readonly [string, string][]; count?: string }) {
+  return (
+    <div className="flex shrink-0 items-center gap-4 border-t border-border px-3 py-2 text-[12px] text-muted-foreground">
+      {hints.map(([k, what]) => (
+        <span key={k} className="flex items-center gap-1.5">
+          <Kbd>{k}</Kbd>
+          {what}
+        </span>
+      ))}
+      {count && <span className="ml-auto tabular-nums">{count}</span>}
+    </div>
+  );
+}
+
+/** The project picker (E-38): recent projects, fuzzy filtered, `j` `k` (while the filter is
+ *  empty) `C-n` `C-p` ↑ ↓ to move, `Enter` to open, `Del` to forget the selected one, `Esc`
+ *  to close. */
 export function ProjectPicker({
   recent,
   onPick,
@@ -78,33 +93,34 @@ export function ProjectPicker({
   };
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent title="projects" aria-describedby={undefined}>
+      <DialogContent title="Projects" bare aria-describedby={undefined} className="w-[min(640px,calc(100vw-32px))]">
         <Command shouldFilter={false} value={current} onValueChange={setSelected} onKeyDown={onKeyDown} loop>
-          <CommandInput value={query} onValueChange={setQuery} placeholder="type to filter" autoFocus />
+          <CommandInput value={query} onValueChange={setQuery} placeholder="Find a recent project" autoFocus />
           <CommandList>
-            {items.length === 0 && <CommandEmpty>no project matches</CommandEmpty>}
+            {items.length === 0 && <CommandEmpty>No project matches.</CommandEmpty>}
             {items.map((r) => (
               <CommandItem
                 key={r.path}
                 value={r.path}
                 onSelect={() => onPick(r.path)}
-                className={r.exists === false ? "text-dim" : undefined}
+                className={r.exists === false ? "opacity-60" : undefined}
               >
-                <span>{r.name}</span>
-                <CommandShortcut>
-                  {r.path}
-                  {r.exists === false ? "  (missing)" : ""}
-                </CommandShortcut>
+                <Folder size={15} aria-hidden="true" className="shrink-0 text-muted-foreground group-data-[selected=true]:text-popover-foreground" />
+                <span className="shrink-0 font-medium">{r.name}</span>
+                {r.exists === false && <span className="shrink-0 text-[12px] text-muted-foreground group-data-[selected=true]:text-popover-foreground">missing</span>}
+                <TruncStart text={r.path} className="ml-auto pl-4 font-mono text-[11px] text-muted-foreground group-data-[selected=true]:text-popover-foreground" />
               </CommandItem>
             ))}
           </CommandList>
         </Command>
-        <div className="flex h-cell justify-between px-1 text-dim">
-          <span>Enter open · Del forget · Esc close</span>
-          <span>
-            {items.length}/{recent.length}
-          </span>
-        </div>
+        <PaletteHints
+          hints={[
+            ["Enter", "open"],
+            ["Del", "forget"],
+            ["Esc", "close"],
+          ]}
+          count={`${items.length} of ${recent.length}`}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -115,7 +131,7 @@ export function ProjectPicker({
 export function MenuOverlay({
   entries,
   initialQuery = "",
-  title = "menu",
+  title = "Menu",
   onRun,
   onClose,
 }: {
@@ -127,11 +143,11 @@ export function MenuOverlay({
 }) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent title={title} aria-describedby={undefined}>
+      <DialogContent title={title} bare aria-describedby={undefined}>
         <Command loop>
-          <CommandInput placeholder="type to find an action" defaultValue={initialQuery} autoFocus />
+          <CommandInput placeholder="Find an action" defaultValue={initialQuery} autoFocus />
           <CommandList>
-            <CommandEmpty>no action matches</CommandEmpty>
+            <CommandEmpty>No action matches.</CommandEmpty>
             {entries.map((e) => (
               <CommandItem
                 key={`${e.call.name} ${e.call.arg ?? ""}`}
@@ -144,6 +160,12 @@ export function MenuOverlay({
             ))}
           </CommandList>
         </Command>
+        <PaletteHints
+          hints={[
+            ["Enter", "run"],
+            ["Esc", "close"],
+          ]}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -162,44 +184,52 @@ export function PasteConfirm({ text, onPaste, onClose }: { text: string; onPaste
           else if (e.key === "n") onClose();
         }}
       >
-        <div className="px-1 whitespace-pre text-dim">
+        <pre className="m-0 overflow-hidden rounded-md border border-border bg-background p-3 font-mono text-[12px] whitespace-pre text-foreground">
           {preview.join("\n")}
           {n > preview.length ? `\n… ${n - preview.length} more` : ""}
-        </div>
-        <div className="flex justify-end gap-2 px-1">
+        </pre>
+        <DialogFooter>
           <Button autoFocus onClick={onClose}>
-            [ Cancel ]
+            Cancel
           </Button>
           <Button variant="primary" onClick={onPaste}>
-            [ Paste {n} lines ]
+            Paste {n} lines
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-/** The first-run choice (D-034): two large choices, each with a three-line preview. */
+/** The first-run choice (D-034): two cards, each with a three-line preview. */
 export function FirstRun({ onChoose }: { onChoose: (style: "simple" | "modal") => void }) {
   const choice = (style: "simple" | "modal", title: string, lines: string[], autoFocus: boolean) => (
     <button
       type="button"
       autoFocus={autoFocus}
       onClick={() => onChoose(style)}
-      className="flex flex-1 cursor-pointer flex-col items-start border border-border bg-bar-bg px-1 text-left font-mono text-bar-fg outline-none hover:border-accent focus-visible:border-accent focus-visible:text-accent"
+      className="flex flex-1 cursor-pointer flex-col items-start gap-3 rounded-lg border border-border bg-background p-4 text-left text-foreground outline-none transition-colors duration-150 hover:border-ring focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <span className="font-bold">{title}</span>
-      {lines.map((l) => (
-        <span key={l} className="text-dim">
-          {l}
-        </span>
-      ))}
+      <span className="flex size-8 items-center justify-center rounded-md bg-muted text-foreground">
+        {style === "simple" ? <MousePointerClick size={16} aria-hidden="true" /> : <Keyboard size={16} aria-hidden="true" />}
+      </span>
+      <span className="text-[14px] font-semibold">{title}</span>
+      <span className="grid gap-1 text-[12px] text-muted-foreground">
+        {lines.map((l) => (
+          <span key={l}>{l}</span>
+        ))}
+      </span>
     </button>
   );
   return (
     <Dialog open onOpenChange={() => {}}>
-      <DialogContent title="How do you like to work?" aria-describedby={undefined} onEscapeKeyDown={(e) => e.preventDefault()}>
-        <div className="flex gap-2 px-1">
+      <DialogContent
+        title="How do you like to work?"
+        aria-describedby={undefined}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+        className="w-[min(640px,calc(100vw-32px))]"
+      >
+        <div className="flex gap-3">
           {choice(
             "simple",
             "Simple — click and shortcuts",
@@ -213,9 +243,7 @@ export function FirstRun({ onChoose }: { onChoose: (style: "simple" | "modal") =
             false,
           )}
         </div>
-        <div className="mt-[var(--cell-h)] px-1 pb-[calc(var(--cell-h)/2)] text-dim">
-          You can change this any time: menu → Input style.
-        </div>
+        <p className="m-0 text-[12px] text-muted-foreground">You can change this any time: menu → Input style.</p>
       </DialogContent>
     </Dialog>
   );

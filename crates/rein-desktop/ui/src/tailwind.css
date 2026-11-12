@@ -14,8 +14,8 @@
   --radius-*: initial;
   --font-*: initial;
   --animate-*: initial;
-  /* One grid cell: a character wide, a text row high. */
-  --spacing: 1ch;
+  /* V1: the 4 px scale (E-50 moved the overlays off the cell grid). */
+  --spacing: 4px;
 }
 
 @theme inline {
@@ -47,9 +47,8 @@
   --color-ansi-15: var(--ansi-15);
 }
 
-/* E-49 (desktop.md §Look and feel v2 V1): the shadcn/ui tokens, the UI font, the radii and
-   the shadow of the modern chrome. The frame (src/frame.tsx) uses these; the overlays move
-   to them with E-50. */
+/* E-49 / E-50 (desktop.md §Look and feel v2 V1): the shadcn/ui tokens, the UI font, the radii
+   and the shadow of the modern look — the frame, every overlay and every screen use these. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -64,13 +63,10 @@
   --color-ring: var(--ring);
   --color-destructive: var(--destructive);
   --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
   --shadow-md: 0 4px 12px rgb(0 0 0 / 0.25), 0 1px 3px rgb(0 0 0 / 0.2);
-}
-
-@utility h-cell {
-  height: var(--cell-h);
 }
 
 /* Radix Select and Scroll Area insert a <style> element to hide the native scrollbar of their

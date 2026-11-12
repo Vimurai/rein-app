@@ -144,7 +144,7 @@ The first four rows exit **1** and write nothing. The message names the path inv
 > workflow (Windows) or from source (Linux, macOS).
 
 The window draws Rein sessions in tabs: each tab runs `rein start` in a project
-directory, with a tab line on top and a status line at the bottom. Closing the window
+directory, with the tabs in the title bar on top and a status bar at the bottom. Closing the window
 detaches the tabs; their tmux sessions keep running.
 
 ### Windows
@@ -168,8 +168,9 @@ installer is unsigned, SmartScreen warns "Windows protected your PC": choose **M
 Run anyway**. Start the window from the Start menu: **rein-app**.
 
 **Before you start.**
-- WSL2 with a Linux distribution. If it is missing, the status line says so and gives the
-  command to run (`wsl --install`, or `wsl --install -d Ubuntu`); `c` checks again.
+- WSL2 with a Linux distribution. If it is missing, a card on the start screen says so and
+  gives the command to run (`wsl --install`, or `wsl --install -d Ubuntu`); **Check again**
+  (or `c`) checks again.
 - Rein installed inside that distribution (`rein` on the login shell's `PATH`).
 - For **update, rollback and profiles**: the Linux `rein-app` installed *inside* WSL. The
   window runs `rein-app` there; if it is not found (exit 127), the window says "rein-app
@@ -231,7 +232,12 @@ window, so it shows up blank.
 
 ### Using the window
 
-The first start asks how you like to work:
+**The start screen** (no project open) has **Open a project…**, **Check installation** and
+your recent projects, newest first, each with when it was last opened; click one or press
+its number (`1`–`9`). `p` opens the project list, `o` a folder, `h` the health check, `u`
+the update, `q` quits.
+
+The first start asks how you like to work, with two cards:
 - **simple** (the default): keys always go to the terminal, except a few shortcuts such as
   `Ctrl+Shift+P` (menu), `Ctrl+Shift+O` (open a folder), `Ctrl+Shift+T` (recent projects),
   `Ctrl+Tab`, `Alt+1`–`9`, `Ctrl+Shift+W`, `Ctrl+Shift+C` / `V`, `Ctrl+=` / `-` / `0` and
@@ -239,8 +245,14 @@ The first start asks how you like to work:
 - **modal**: vim-style modes. `Ctrl+\ Ctrl+n` leaves the terminal, `Space` opens the
   leader keys, `:` the command line.
 
-Everything is also a button: tabs, `[+]`, `[≡]` (the menu), and the status line's segments.
-The **menu** (`Ctrl+Shift+P`) lists every action with its key.
+Everything is also a button: the tabs in the title bar, `+` (open a project), the version
+(update), `☰` (the menu), and the status bar's project path, health badge and command
+chip. The **menu** (`Ctrl+Shift+P`) is a searchable list of every action with its key; type
+to filter, `Enter` runs. Messages appear for a few seconds at the bottom right.
+
+The **status bar** shows the tab's project path (your home directory as `~`; a long path
+loses its start, so the project's own folder stays visible), the health badge, and the last
+command the window ran for you, with a copy button.
 
 **Settings** (menu → Settings, `Ctrl+,`, or `:settings`) sets the input style, theme, font
 size and title bar. It also has **Open config file location**, which shows the path of
@@ -253,26 +265,27 @@ size and title bar. It also has **Open config file location**, which shows the p
 | `config.toml` | `$XDG_CONFIG_HOME/rein-app/` (default `~/.config/rein-app/`) | the same, or `~/Library/Application Support/rein-app/` when `XDG_CONFIG_HOME` is unset | `%APPDATA%\rein-app\` | you; the window writes a commented template once and never again |
 | `ui.json` | `$XDG_STATE_HOME/rein-app/` (default `~/.local/state/rein-app/`) | the same, or `~/Library/Application Support/rein-app/` when `XDG_STATE_HOME` is unset | `%LOCALAPPDATA%\rein-app\` | the window, for choices made in Settings and the first-run question |
 
-**`config.toml` wins.** A setting that `config.toml` sets is shown in Settings as "set in
+**`config.toml` wins.** A setting that `config.toml` sets is shown in Settings as "Set in
 config.toml" and cannot be changed there. Saving `config.toml` reloads the window. A line
 the window cannot read is reported with its file, line and reason, and the previous
 settings stay in force.
 
-### The health segment
+### The health badge
 
-The status line's health segment is the result of `rein doctor --scope install --json`. It
+The status bar's health badge is the result of `rein doctor --scope install --json`. It
 runs in your home directory (inside WSL on Windows) when the window starts, when a tab
-opens, and when you click the segment or **Check installation**. It checks the **Rein
+opens, and when you click the badge or **Check installation**. It checks the **Rein
 install** only, not the project in a tab:
 
-| Segment | Meaning |
+| Badge | Meaning |
 |---|---|
-| `✓ install ok` | every install check passed |
-| `! install warn` | at least one warning |
-| `✗ install FAIL` | at least one check failed |
-| `? health unknown` | the check could not run (for example, WSL or `rein` is missing); clicking it shows why |
+| ✓ **Install OK** (green check) | every install check passed |
+| ⚠ **Install warning** (yellow triangle) | at least one warning |
+| ✗ **Install failed** (red cross) | at least one check failed |
+| ? **Health unknown** (question mark) | the check could not run (for example, WSL or `rein` is missing); clicking it shows why |
 
-Clicking the segment opens the full list of checks.
+Clicking the badge opens **Installation health**: every check with its status icon, its
+line and, where `rein doctor` gives one, the fix.
 
 ## Not supported
 

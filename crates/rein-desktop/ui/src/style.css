@@ -1,6 +1,7 @@
-/* Colours come from theme.ts as CSS variables. The frame (title bar, stage, status bar) is the
-   modern layout of desktop.md V2 (frame.tsx, E-49); the overlays are still on the cell grid
-   until E-50. */
+/* Colours come from theme.ts as CSS variables. Everything around the terminal — the frame,
+   the overlays and the start screen — is the modern look of desktop.md §Look and feel v2
+   (E-49, E-50) and is styled with the Tailwind token classes; what is left here is the page,
+   the stage and the few classes Tailwind cannot express. */
 html, body {
   margin: 0;
   height: 100%;
@@ -8,61 +9,18 @@ html, body {
   /* config.toml `window.opacity`: shows through where the window is transparent. */
   background: color-mix(in srgb, var(--bg) calc(var(--opacity, 1) * 100%), transparent);
   color: var(--fg);
-  /* Every overlay (menu, dialogs, tooltips, Settings) is on the same grid as the chrome:
-     the configured font, size and line height, so a row is one cell high at any zoom. */
-  font-family: var(--font-family);
-  font-size: var(--font-size);
-  line-height: var(--line-height);
+  /* The UI font (V1); the terminal and command text name the mono font themselves. */
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
 }
 #root { height: 100%; }
-.start-lines, #probe {
-  font-family: var(--font-family);
-  font-size: var(--font-size);
-  line-height: var(--line-height);
-  white-space: pre;
-  font-variant-ligatures: none;
-}
-#probe { position: absolute; visibility: hidden; top: 0; left: 0; }
-.row { height: var(--cell-h); overflow: hidden; }
-.bar { background: var(--bar-bg); color: var(--bar-fg); }
-.tab-current { background: var(--bg); color: var(--fg); font-weight: bold; }
-.dim { color: var(--dim); }
-.bar .dim, .bar.dim { color: var(--bar-dim); }
-.accent { color: var(--accent); }
-.button { color: var(--fg); }
-.frame { color: var(--border); }
-/* A vertical box glyph spans the whole cell, so stacked rows join (line-height > 1). */
-.v { display: inline-block; transform: scaleY(var(--line-height)); }
-.ok { color: var(--ok); }
-.mode-terminal { background: var(--mode-terminal); color: var(--bg); font-weight: bold; }
-.mode-normal { background: var(--mode-normal); color: var(--bg); font-weight: bold; }
-.mode-command { background: var(--mode-command); color: var(--bg); font-weight: bold; }
+/* The modal style's mode badge in the status bar (frame.tsx). */
+.mode-terminal { background: var(--mode-terminal); color: var(--bg); }
+.mode-normal { background: var(--mode-normal); color: var(--bg); }
+.mode-command { background: var(--mode-command); color: var(--bg); }
+/* The command palette's block cursor (frame.tsx). */
 .cursor { background: var(--fg); color: var(--bg); }
-/* Chrome buttons (D-034): drawn on the grid like any text, highlighted under the pointer. */
-.chrome-btn {
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  cursor: pointer;
-}
-.chrome-btn:hover, .chrome-btn:focus-visible { background: var(--accent); color: var(--bg); outline: none; }
-/* The which-key overlay sits on the stage, just above the status bar (26 px + 8 px). */
-.which-key {
-  position: absolute;
-  left: 8px;
-  bottom: 34px;
-  z-index: 5;
-  font-family: var(--font-family);
-  font-size: var(--font-size);
-  line-height: var(--line-height);
-  white-space: pre;
-  background: var(--bg);
-  color: var(--fg);
-}
-.error { color: var(--error); }
 
 /* The stage (V2): borderless, 8 px at the sides and 4 px at top and bottom; the terminal
    fills it in whole cells and is centred in it (term.ts), on the window's background. */
@@ -79,7 +37,4 @@ html, body {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
 .hidden { display: none; }
-/* An overlay sits between grid rows: a ring of the background, one row wide, hides the
-   halves of the stage glyphs its border would otherwise cut through (not a shadow). */
-[data-slot="dialog-content"] { box-shadow: 0 0 0 var(--cell-h) var(--bg); }
 .fatal { position: absolute; z-index: 10; margin: 1em; color: #fb4934; background: #282828; white-space: pre-wrap; }

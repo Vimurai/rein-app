@@ -1,5 +1,5 @@
-// shadcn/ui Tooltip, restyled to the grid (D-037): one bar-coloured row, no arrow, no shadow,
-// appears without animation.
+// shadcn/ui Tooltip, new-york look driven only by the theme tokens (desktop.md §Look and feel
+// v2 V2, E-50): a small rounded popover in the UI font. No entry animation (motion is E-54's).
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { ComponentProps } from "react";
 import { cn } from "../lib/utils.ts";
@@ -13,7 +13,7 @@ export const TooltipTrigger = TooltipPrimitive.Trigger;
 
 export function TooltipContent({
   className,
-  sideOffset = 0,
+  sideOffset = 6,
   portal = true,
   ...props
 }: ComponentProps<typeof TooltipPrimitive.Content> & { portal?: boolean }) {
@@ -21,7 +21,11 @@ export function TooltipContent({
     <TooltipPrimitive.Content
       data-slot="tooltip-content"
       sideOffset={sideOffset}
-      className={cn("z-50 border border-border bg-bar-bg px-1 font-mono whitespace-pre text-bar-fg", className)}
+      collisionPadding={8}
+      className={cn(
+        "z-50 rounded-md border border-border bg-popover px-2 py-1 font-ui text-[12px] whitespace-pre text-popover-foreground shadow-md",
+        className,
+      )}
       {...props}
     />
   );

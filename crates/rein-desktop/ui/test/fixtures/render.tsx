@@ -1,4 +1,4 @@
-// Rendered to HTML by test/components.test.mjs (E-42): one Dialog, one Tooltip and the Command
+// Rendered to HTML by test/components.test.mjs (E-42, E-50): one Dialog, one Tooltip and the Command
 // list, each open, without a portal so the server render includes them.
 import { renderToString } from "react-dom/server";
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from "../../components/command.tsx";
@@ -12,8 +12,8 @@ export function dialog(): string {
       <DialogContent portal={false} title="Update Rein">
         <DialogDescription>rein-app update --yes</DialogDescription>
         <DialogFooter>
-          <Button>[ Cancel ]</Button>
-          <Button variant="primary">[ Update to 0.5.1 ]</Button>
+          <Button>Cancel</Button>
+          <Button variant="primary">Update to 0.5.1</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>,

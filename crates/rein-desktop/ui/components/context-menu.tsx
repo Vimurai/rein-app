@@ -1,5 +1,6 @@
-// shadcn/ui Context Menu, restyled to the grid (D-037): the terminal's Copy / Paste / Select
-// all menu — box border, one row per item, shortcut at the right.
+// shadcn/ui Context Menu, new-york look driven only by the theme tokens (desktop.md §Look and
+// feel v2 V2, E-50): the terminal's Copy / Paste / Select all menu — a rounded popover, the
+// shortcut at the right of each row.
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
 import type { ComponentProps } from "react";
 import { cn } from "../lib/utils.ts";
@@ -12,7 +13,11 @@ export function ContextMenuContent({ className, ...props }: ComponentProps<typeo
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Content
         data-slot="context-menu-content"
-        className={cn("z-50 min-w-[20ch] border border-border bg-bg py-0 font-mono text-fg", className)}
+        collisionPadding={8}
+        className={cn(
+          "z-50 min-w-48 overflow-hidden rounded-md border border-border bg-popover p-1 font-ui text-[13px] text-popover-foreground shadow-md",
+          className,
+        )}
         {...props}
       />
     </ContextMenuPrimitive.Portal>
@@ -24,7 +29,7 @@ export function ContextMenuItem({ className, ...props }: ComponentProps<typeof C
     <ContextMenuPrimitive.Item
       data-slot="context-menu-item"
       className={cn(
-        "flex h-cell cursor-default items-center gap-2 px-1 outline-none select-none data-[disabled]:text-dim data-[highlighted]:bg-bar-bg data-[highlighted]:text-accent",
+        "group flex h-8 cursor-default items-center gap-2 rounded-sm px-2 outline-none select-none data-[disabled]:opacity-50 data-[highlighted]:bg-primary/15",
         className,
       )}
       {...props}
@@ -32,6 +37,10 @@ export function ContextMenuItem({ className, ...props }: ComponentProps<typeof C
   );
 }
 
+export function ContextMenuSeparator({ className, ...props }: ComponentProps<typeof ContextMenuPrimitive.Separator>) {
+  return <ContextMenuPrimitive.Separator className={cn("-mx-1 my-1 h-px bg-border", className)} {...props} />;
+}
+
 export function ContextMenuShortcut({ className, ...props }: ComponentProps<"span">) {
-  return <span className={cn("ml-auto text-dim", className)} {...props} />;
+  return <span className={cn("ml-auto pl-6 font-mono text-[11px] text-muted-foreground group-data-[highlighted]:text-popover-foreground", className)} {...props} />;
 }

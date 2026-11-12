@@ -91,6 +91,14 @@ export interface StatusBar {
   mode: string | null;
 }
 
+/** A project path as the status bar shows it (V2: `~/Dev/schraubr_laravel`): a path in a home
+ *  directory — `/home/<user>/…` (Linux, WSL), `/Users/<user>/…` (macOS), `/root/…` — starts
+ *  with `~`. The UI is not told the home directory, so this reads the path's own shape. */
+export function tildePath(path: string): string {
+  const m = /^(?:\/home\/[^/]+|\/Users\/[^/]+|\/root)(?=\/|$)/.exec(path);
+  return m ? `~${path.slice(m[0].length)}` : path;
+}
+
 export function statusBar(
   project: string | null,
   health: HealthView | null,
@@ -98,7 +106,7 @@ export function statusBar(
   mode: string | null,
 ): StatusBar {
   return {
-    project: project === null ? null : { text: project, action: { name: "project.pick" } },
+    project: project === null ? null : { text: tildePath(project), action: { name: "project.pick" } },
     health: { ...healthBadge(health), action: { name: "health.show" } },
     command: lastCommand === null ? null : { text: lastCommand, copy: { name: "cmd.yank" } },
     mode,
