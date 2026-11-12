@@ -1482,3 +1482,30 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - The Architect has not re-read the window's source; acceptance rests on your reviews and CI.
 ---
+
+---
+## Handoff — 2026-11-12 13:15 UTC
+**From**: Architect → Engineer
+**Trigger**: operator feedback (screenshot of the Windows build) — D-049; E-47..E-50 registered
+
+### What was built
+- `.ai/blueprints/desktop.md` — new section **§Look and feel v2** (V1 tokens, V2 layout, V3 fonts, V4 theme and tmux, V5 no console window, tests, rollback) and §Open Questions 4. `.ai/DECISIONS.md` D-049. `plans/rein-window-theme-request.md`. `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-049**: the grid-drawn chrome is withdrawn. Use shadcn/ui new-york as it comes, with a UI font, `lucide-react` icons, radius, shadows; tabs in a custom title bar; status bar + toasts instead of statusline + command-line row. This supersedes "restyled to the grid" and "no icon set" in D-037 and design rule 1.
+- **Behaviour is frozen** — do not change the `Action` list, key tables, IPC or `modes`.
+- Bundled JetBrains Mono (default) + Symbols Nerd Font Mono (always-on fallback). New default theme `rein` from rein's tmux colours.
+- Windows GUI subsystem.
+
+### Blueprint divergence (if any)
+- Operator's four reports: console window beside the app (closing it closes the app); Nerd Font glyphs as empty boxes; unpolished look; tmux colours clashing (gruvbox background behind rein's blue / mauve status line).
+
+### Next action needed
+- **E-47** first (console window) and hand the operator a new installer straight away.
+- Then **E-48** (fonts + `rein` theme) → **E-49** (frame) → **E-50** (overlays and screens). Screenshots to the operator at E-49 and E-50.
+- E-48: read rein's real tmux colours; if you cannot read rein's theme file, stop and report — do not guess.
+
+### Open risks
+- Custom window buttons on Windows cannot be observed from this machine; the operator confirms.
+- tmux following a non-default theme needs rein (request written, not sent).
+---
