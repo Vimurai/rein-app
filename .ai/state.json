@@ -742,23 +742,23 @@
     {
       "id": "E-49",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Rebuild the window's frame in the modern look, per .ai/blueprints/desktop.md §Look and feel v2 V1 and V2 (title bar, stage, status bar, toast) and D-049, which supersede the grid chrome (operator report: \"unpolished — use the UI package, modern look and feel\"): (1) implement the design tokens — UI font stack, 8 px / 6 px radius, borders, shadows, 120–150 ms transitions honouring `prefers-reduced-motion`, and the pure theme → shadcn-variables function with a contrast test (≥ 4.5:1, every theme); (2) add `lucide-react` after `skill: dependency_gate`, importing only the icons used; (3) replace the tabline with the title bar / tab bar (pill tabs, close on hover, middle-click closes, exited dot, `+`, drag region, version chip, menu button) — on Windows `decorations: false` + `shadow: true` with our own minimise / maximise / close buttons and exactly the four `core:window` permissions listed in V2 (update the capability test), on macOS the overlay title bar with an 80 px inset, on Linux native decorations with the row beneath; (4) make the stage borderless with the specified padding and stop snapping the window to whole cells; (5) replace the statusline and the permanent command-line row with the 26 px status bar (project path, health badge with icon, last-command chip with copy, mode badge only in `modal`, no clock) and the toast for messages; in `modal` style `:` opens the command palette anchored at the bottom. Behaviour stays: the `Action` list, both key tables, IPC and `modes` are unchanged. Acceptance: pointer-parity, newcomer-path, IPC and capability tests pass; JS + CSS bundle ≤ 2 MiB; `ux_reviewer` screenshots of a project tab in `rein` and `github-light` are attached to the handoff for the operator; hosted `ci` and `desktop-windows` green on the commit (D-048).",
       "created_at": "2026-11-12T13:09:58.989Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-12T19:41:35.624Z",
+      "summary": "Modern frame at 43e119e: tokens + contrast test, lucide icons, title bar/tab bar, borderless stage, 26px status bar, toast. Hosted ci + desktop-windows green; screens accepted (Archi …[full in LOG.md]",
       "depends_on": [
         "E-48"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-12T14:10:58.988Z"
+      "updated_at": "2026-11-12T19:41:35.624Z"
     },
     {
       "id": "E-50",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Restyle every overlay and screen of the window to the modern look, per .ai/blueprints/desktop.md §Look and feel v2 V2 (overlays, start screen, Settings / first run) and \"Tests (v2)\" and D-049: use the shadcn new-york components driven only by the E-49 tokens (Dialog, Command, DropdownMenu, ContextMenu, Tooltip, Select, Switch) for the menu, project picker, health view, update / rollback / profiles dialogs with their two labelled buttons (safe one focused), which-key, the terminal context menu and the paste confirm; rebuild the start screen as the centred column (wordmark, primary `Open a project…`, recent rows with folder icon / name / dim path / last opened, `Check installation`, the WSL setup card on Windows); rebuild Settings and the first-run choice (two cards) with shadcn form controls; remove the remaining box-drawing chrome and the grid-only styles no longer used. Behaviour and content stay as they are; update `docs/operator-guide.md` where it describes the old look. Acceptance: pointer-parity, newcomer-path and accessibility-name tests pass; CSP unchanged with no functional breakage from refused runtime styles (D-044 ruling 4); final `ux_reviewer` pass with screenshots of the start screen, a project tab, menu, Settings, health and a confirm dialog in `rein` and `github-light` attached to the handoff for the operator; a fresh Windows installer is named in the handoff; hosted `ci` and `desktop-windows` green on the commit (D-048).",
       "created_at": "2026-11-12T13:10:06.616Z",
@@ -767,11 +767,9 @@
       "depends_on": [
         "E-49"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-49"
-      ],
-      "updated_at": "2026-11-12T13:10:06.616Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T19:41:35.627Z"
     },
     {
       "id": "E-51",
