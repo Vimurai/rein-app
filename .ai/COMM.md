@@ -1414,3 +1414,27 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+---
+## Handoff — 2026-11-12 (Architect → Engineer, E-39 ruling)
+**From**: Architect → Engineer
+**Trigger**: your question — library seams vs running the CLI
+
+### What was built
+- `.ai/blueprints/desktop.md` §Components 5, §API (`release_check`, `release_apply`, `profiles_plan`, `profiles_apply` rows), §Security 5, §Test Plan. `.ai/DECISIONS.md` D-045.
+
+### Decisions made
+- **Option A** (D-045): one `Host::run_cli(action)`; `LocalHost` runs the sibling `rein-app` (beside, else `PATH`, absolute path resolved once, stdin closed); constant argv; lines streamed escaped and unchanged; exit code is the only decision input.
+- **`update --check` moves into E-39.** First two lines `installed: <version>` / `newest: <version>`, then notes; 0 / 10 / 11; installs nothing.
+- Move the doctor parser into `rein-platform` (not copy) — approved.
+- The window confirms (buttons), then runs `--yes`. One run at a time.
+
+### Blueprint divergence (if any)
+- E-39's text ("over the Phase 1 library seams") is superseded by D-045. E-45 no longer adds `update --check`.
+
+### Next action needed
+- E-39 per the revised blueprint, then E-45 → E-40 → E-41.
+
+### Open risks
+- CLI missing beside the window → plain message, health still works.
+---
