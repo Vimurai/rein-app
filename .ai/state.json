@@ -776,18 +776,18 @@
     {
       "id": "E-51",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Implement the tmux overlay of the window, per .ai/blueprints/desktop.md §Look and feel v2 V6 and D-050 (operator direction: the app applies its own tmux look on top of the user's config while it is open, without touching `~/.tmux.conf`): (1) write the one constant POSIX `sh` overlay script, fed on stdin to `sh -s -- <client tty> <status mode> <colours…>`, that requires tmux ≥ 3.2, finds the session of the client with that tty (waiting up to 10 s), sets only the listed session-scoped style options (per window for the border styles, with an `after-new-window` hook), installs the `client-detached` hook that unsets everything when that client detaches, and is idempotent; (2) add it to the `Host` seam — `LocalHost` runs `/bin/sh -s`, `WslHost` runs `wsl.exe -d D -e sh -ls` with the same stdin — with the validation, 15-second limit and quiet failure the blueprint states; (3) take the client tty from the pty layer on Linux / macOS; on Windows change the start script to `tty; exec ~/.rein/bin/rein start` and consume the tty line from the first 4 KiB of pty output; (4) run the overlay after a tab attaches and on a theme or setting change; (5) add `[tmux] overlay` (default true) and `status` (`hidden` default | `app` | `keep`) to `config.toml`, `ui.json`, `ui_get` / `ui_set` (Settings rows come with E-50). First check whether `rein start` uses tmux's default server socket; if not, stop and report. Acceptance: the V6 tests pass against a real tmux server on a private socket on Linux and macOS in CI; `.tmux.conf` is never opened; no session is created, renamed or killed and no global option set (asserted); interop smoke of the Windows path reported; `security_engineer` before commit; hosted `ci` and `desktop-windows` green (D-048); a screenshot of a project tab with the overlay on is attached to the handoff for the operator.",
       "created_at": "2026-11-12T13:25:20.625Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-12T18:06:27.891Z",
+      "summary": "0aa9206: tmux overlay (V6/D-050) — constant sh script, Host seam, tty per pty, [tmux] settings, tab_tmux IPC; real-tmux e2e on Linux+macOS; SEC_CLEARED r3; ci 43274051860 + desktop-w …[full in LOG.md]",
       "depends_on": [
         "E-48"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-12T14:10:58.989Z"
+      "updated_at": "2026-11-12T18:06:27.892Z"
     },
     {
       "id": "E-52",
