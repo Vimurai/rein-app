@@ -712,21 +712,21 @@
     {
       "id": "E-47",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Fix the console window that opens beside `rein-desktop` on Windows, per .ai/blueprints/desktop.md §Look and feel v2 V5 and D-049 (operator report: a PowerShell/console window opens with the app and closing it closes the app): build release `rein-desktop.exe` for the Windows GUI subsystem; show a start-up failure that has no window, and a refused second start, in a native message box instead of stderr; confirm every helper process (`wsl.exe`, `rein-app`) is started with `CREATE_NO_WINDOW` and add a test that enumerates the spawn sites; add a step to `desktop-windows.yml` (`skill: ci_gate`) that fails unless the built binary's PE subsystem is GUI. Acceptance: tests above pass; hosted `ci` and `desktop-windows` green on the commit (D-048); the handoff gives the operator the new installer's run URL and download command and states that the Engineer cannot observe the Windows desktop, so the operator confirms no console appears.",
       "created_at": "2026-11-12T13:09:41.484Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-12T13:36:21.317Z",
+      "summary": "No console window on Windows: GUI-subsystem release build, start-up refusals in a native message box, one hide_console (CREATE_NO_WINDOW) with a spawn-site test, PE-subsystem check i …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-12T13:09:41.486Z"
+      "updated_at": "2026-11-12T13:36:21.317Z"
     },
     {
       "id": "E-48",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Bundle the terminal fonts and add the `rein` default theme in `rein-desktop`, per .ai/blueprints/desktop.md §Look and feel v2 V3 and V4 and D-049 (operator report: icons in tmux render as empty boxes; tmux colours clash with the window): (1) after `skill: dependency_gate`, vendor JetBrains Mono (four styles, OFL-1.1) and Symbols Nerd Font Mono under `crates/rein-desktop/ui/fonts/` with licence texts and a SHA-256 manifest checked by a test; serve them from the app (CSP unchanged); make JetBrains Mono the default terminal font on every platform and always append the symbols font to the terminal font stack whatever `font.family` is set; open xterm.js only after `document.fonts.load` resolves and rebuild the glyph atlas when fonts finish loading; fonts ≤ 3 MiB total; (2) read the exact colours of rein's tmux status line and pane borders from rein's tmux theme at the vendored rein commit, add the built-in theme `rein` with them (alias an existing theme if identical), make it the default, and make the terminal background equal the window background. Acceptance: font-manifest and font-stack tests pass; a rendering check under Xvfb shows U+E0B0 and U+F07B drawn from the bundled font, not a missing-glyph box; the `rein` theme values are recorded with their source file and commit in the handoff — if rein's theme file cannot be read, stop and report instead of guessing colours; hosted `ci` and `desktop-windows` green on the commit (D-048).",
       "created_at": "2026-11-12T13:09:49.632Z",
@@ -735,11 +735,9 @@
       "depends_on": [
         "E-47"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-47"
-      ],
-      "updated_at": "2026-11-12T13:09:49.633Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T13:36:21.321Z"
     },
     {
       "id": "E-49",
