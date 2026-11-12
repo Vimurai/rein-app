@@ -193,6 +193,12 @@ impl<S: Shell + Send + Sync> Host for WslHost<S> {
         }
     }
 
+    /// Listing inside WSL would be a new `wsl.exe` call shape (§Windows window W2 lists them
+    /// all), so `:open` offers no directory completion on Windows in this revision.
+    fn complete_dir(&self, _prefix: &str) -> Result<Vec<String>, IpcError> {
+        Ok(Vec::new())
+    }
+
     fn rein_start(&self, project: &Path) -> Result<ChildSpec, IpcError> {
         let d = self.distro()?;
         let project = project.to_string_lossy();

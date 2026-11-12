@@ -4,6 +4,9 @@
 //! terminal stage (E-35), modes (E-36), config (E-37), projects and tabs (E-38) and the
 //! health / release / profile actions (E-39) build on this.
 
+// Validates config.toml key bindings from E-37; until then only its tests use it.
+#[cfg_attr(not(test), allow(dead_code))]
+mod actions;
 mod dirs;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod handoff_dir;
@@ -130,7 +133,9 @@ fn main() -> ExitCode {
             ipc::pty_write,
             ipc::pty_resize,
             ipc::pty_ack,
-            ipc::tab_detach
+            ipc::tab_detach,
+            ipc::clipboard_write,
+            ipc::dir_complete
         ]);
     let result = builder
         .setup(move |app| {

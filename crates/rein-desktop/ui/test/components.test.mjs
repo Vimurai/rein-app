@@ -105,6 +105,12 @@ test("the built bundle is at most 1.5 MiB uncompressed, xterm.js included", asyn
   } finally {
     process.chdir(prev);
   }
+  // Our grid's own classes (style.css) must not also be Tailwind utilities: `.border` was,
+  // and drew a box around every frame glyph.
+  const tw = readFileSync(join(dir, "tw.css"), "utf8");
+  const ours = new Set([...readFileSync(join(ui, "src/style.css"), "utf8").matchAll(/\.([a-z][\w-]*)/g)].map((m) => m[1]));
+  const clashes = [...ours].filter((c) => new RegExp(`\\.${c}[{,:\\s]`).test(tw) && c !== "hidden");
+  assert.deepEqual(clashes, [], "classes defined by both style.css and Tailwind");
   const total = readdirSync(dir).reduce((n, f) => n + statSync(join(dir, f)).size, 0);
   assert.ok(total <= 1.5 * 1024 * 1024, `${(total / 1024).toFixed(0)} KiB`);
   assert.ok(total > 300 * 1024, "the bundle includes xterm.js and React");

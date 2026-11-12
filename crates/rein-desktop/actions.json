@@ -1,0 +1,33 @@
+{
+  "comment": "The closed Action list (desktop.md §Data Model `Action`, D-033 ruling 2). The one source for Rust (build.rs → OUT_DIR/actions.rs) and TypeScript (ui/gen-actions.mjs → ui/src/actions.ts). `arg`: null, \"n\" (a tab number 1–9), \"name\" (a theme name), \"style\" (simple | modal), \"dir\" (a project path).",
+  "actions": [
+    { "name": "mode.normal", "arg": null, "label": "Normal mode" },
+    { "name": "mode.terminal", "arg": null, "label": "Terminal mode" },
+    { "name": "mode.command", "arg": null, "label": "Command line" },
+    { "name": "project.pick", "arg": null, "label": "Recent projects…" },
+    { "name": "project.open", "arg": "dir", "label": "Open a project…" },
+    { "name": "tab.next", "arg": null, "label": "Next tab" },
+    { "name": "tab.prev", "arg": null, "label": "Previous tab" },
+    { "name": "tab.goto", "arg": "n", "label": "Go to tab" },
+    { "name": "tab.detach", "arg": null, "label": "Close tab (the session keeps running)" },
+    { "name": "app.quit", "arg": null, "label": "Quit (every session keeps running)" },
+    { "name": "health.show", "arg": null, "label": "Check installation health" },
+    { "name": "release.update", "arg": null, "label": "Update Rein" },
+    { "name": "release.rollback", "arg": null, "label": "Undo last update" },
+    { "name": "profiles.show", "arg": null, "label": "Profiles" },
+    { "name": "profiles.apply", "arg": null, "label": "Apply profile settings" },
+    { "name": "cmd.yank", "arg": null, "label": "Copy the last command" },
+    { "name": "config.open", "arg": null, "label": "Show the config file's location" },
+    { "name": "config.reload", "arg": null, "label": "Reload the config file" },
+    { "name": "theme.set", "arg": "name", "label": "Theme" },
+    { "name": "menu.show", "arg": null, "label": "Menu" },
+    { "name": "settings.show", "arg": null, "label": "Settings" },
+    { "name": "help.show", "arg": null, "label": "Help" },
+    { "name": "input.style", "arg": "style", "label": "Input style" },
+    { "name": "font.bigger", "arg": null, "label": "Bigger font" },
+    { "name": "font.smaller", "arg": null, "label": "Smaller font" },
+    { "name": "font.reset", "arg": null, "label": "Reset font size" },
+    { "name": "term.copy", "arg": null, "label": "Copy" },
+    { "name": "term.paste", "arg": null, "label": "Paste" }
+  ]
+}

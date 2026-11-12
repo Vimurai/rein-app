@@ -21,11 +21,28 @@ html, body {
 .bar .dim, .bar.dim { color: var(--bar-dim); }
 .accent { color: var(--accent); }
 .button { color: var(--fg); }
-.border { color: var(--border); }
+.frame { color: var(--border); }
 /* A vertical box glyph spans the whole cell, so stacked rows join (line-height > 1). */
 .v { display: inline-block; transform: scaleY(var(--line-height)); }
 .ok { color: var(--ok); }
 .mode-terminal { background: var(--green); color: var(--bg); font-weight: bold; }
+.mode-normal { background: var(--ansi-12); color: var(--bg); font-weight: bold; }
+.mode-command { background: var(--ansi-11); color: var(--bg); font-weight: bold; }
+.cursor { background: var(--fg); color: var(--bg); }
+/* The which-key overlay sits on the stage, just above the statusline. */
+.which-key {
+  position: absolute;
+  left: 1ch;
+  bottom: calc(2 * var(--cell-h));
+  z-index: 5;
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+  white-space: pre;
+  background: var(--bg);
+  color: var(--fg);
+}
+.error { color: var(--ansi-9); }
 
 /* The terminal sits over the stage rows, sized in whole cells (main.ts sets the variables). */
 #term {

@@ -5,6 +5,7 @@ import "./style.css";
 import { createRoot } from "react-dom/client";
 import { TooltipProvider } from "../components/tooltip.tsx";
 import { hardenPrototypes } from "./harden.ts";
+import { DEFAULT_MODAL } from "./keymap.ts";
 import { Shell } from "./shell.tsx";
 import { GRUVBOX_DARK, cssVariables } from "./theme.ts";
 
@@ -33,6 +34,7 @@ if (mount) {
     <TooltipProvider>
       <Shell
         theme={GRUVBOX_DARK}
+        keys={DEFAULT_MODAL}
         fontFamily={FONT_FAMILY}
         fontSize={FONT_SIZE_PX}
         lineHeight={LINE_HEIGHT}

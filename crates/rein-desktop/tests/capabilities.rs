@@ -14,6 +14,10 @@ const ALLOWED: &[&str] = &[
     "allow-pty-resize",
     "allow-pty-ack",
     "allow-tab-detach",
+    // E-36: cmd.yank copies the last shown command (desktop.md §API, D-042).
+    "allow-clipboard-write",
+    // E-36: `:open` Tab completion of directories, through the host.
+    "allow-dir-complete",
 ];
 
 fn json(rel: &str) -> serde_json::Value {

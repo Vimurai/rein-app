@@ -95,8 +95,8 @@ export function stage(lines: string[], cols: number, rows: number): Row[] {
   if (rows <= 0) return [];
   if (rows < 2 || cols < 2) return Array.from({ length: rows }, () => fit([], cols));
   const inner = cols - 2;
-  const top = [{ text: `┌${"─".repeat(inner)}┐`, cls: "border" }];
-  const bottom = [{ text: `└${"─".repeat(inner)}┘`, cls: "border" }];
+  const top = [{ text: `┌${"─".repeat(inner)}┐`, cls: "frame" }];
+  const bottom = [{ text: `└${"─".repeat(inner)}┘`, cls: "frame" }];
   const body = rows - 2;
   const first = Math.max(0, Math.floor((body - lines.length) / 2));
   const out: Row[] = [top];
@@ -105,11 +105,11 @@ export function stage(lines: string[], cols: number, rows: number): Row[] {
     const pad = inner - width(text);
     const l = Math.floor(pad / 2);
     out.push([
-      { text: "│", cls: "border v" },
+      { text: "│", cls: "frame v" },
       { text: " ".repeat(l), cls: "" },
       { text, cls: "dim" },
       { text: " ".repeat(pad - l), cls: "" },
-      { text: "│", cls: "border v" },
+      { text: "│", cls: "frame v" },
     ]);
   }
   out.push(bottom);

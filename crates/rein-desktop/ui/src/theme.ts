@@ -33,6 +33,17 @@ export const GRUVBOX_DARK: Theme = {
   border: "#7c6f64",
 };
 
+/** The six built-in themes (desktop.md "For tiling window managers"); E-37 ships the five
+ *  besides `gruvbox-dark`. `:theme` completes these names. */
+export const THEME_NAMES: readonly string[] = [
+  "gruvbox-dark",
+  "tokyonight",
+  "catppuccin-mocha",
+  "nord",
+  "solarized-dark",
+  "github-light",
+];
+
 /** The CSS variables the stylesheet reads, for one theme. */
 export function cssVariables(t: Theme): Record<string, string> {
   return {

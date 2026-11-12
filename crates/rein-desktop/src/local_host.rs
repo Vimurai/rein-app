@@ -61,6 +61,37 @@ impl Host for LocalHost {
         installed_rein(home)?;
         Ok(ChildSpec::rein_start(home, project))
     }
+
+    fn complete_dir(&self, prefix: &str) -> Result<Vec<String>, IpcError> {
+        complete_dir(prefix)
+    }
+}
+
+/// The most directories one `:open` Tab completion offers.
+pub const MAX_COMPLETIONS: usize = 50;
+
+/// Directories under the prefix's parent whose name starts with the typed stem. Names that
+/// fail the path text rule are left out, so nothing unprintable reaches the command line.
+pub fn complete_dir(prefix: &str) -> Result<Vec<String>, IpcError> {
+    project_path::check(prefix).map_err(|why| err("unsafe_path", why))?;
+    let cut = prefix.rfind('/').map_or(0, |i| i + 1);
+    let (parent, stem) = prefix.split_at(cut);
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return Ok(Vec::new());
+    };
+    let mut out: Vec<String> = entries
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().into_string().ok()?;
+            let shown = name.starts_with(stem) && (!name.starts_with('.') || stem.starts_with('.'));
+            let dir = std::fs::metadata(e.path()).is_ok_and(|m| m.is_dir());
+            let full = format!("{parent}{name}/");
+            (shown && dir && project_path::check(&full).is_ok()).then_some(full)
+        })
+        .collect();
+    out.sort();
+    out.truncate(MAX_COMPLETIONS);
+    Ok(out)
 }
 
 /// A project directory as `tab_open` accepts it: the text rule, canonical, a directory, and
@@ -107,6 +138,32 @@ pub fn installed_rein(home: &Path) -> Result<PathBuf, IpcError> {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+
+    #[test]
+    fn complete_dir_lists_matching_directories_only() {
+        let t = tempfile::tempdir().unwrap();
+        let base = t.path().canonicalize().unwrap();
+        for d in ["proj", "prod", ".private", "other"] {
+            std::fs::create_dir(base.join(d)).unwrap();
+        }
+        std::fs::write(base.join("profile.txt"), "").unwrap();
+        let b = base.to_str().unwrap();
+        assert_eq!(
+            complete_dir(&format!("{b}/pro")).unwrap(),
+            [format!("{b}/prod/"), format!("{b}/proj/")]
+        );
+        assert_eq!(
+            complete_dir(&format!("{b}/.p")).unwrap(),
+            [format!("{b}/.private/")]
+        );
+        assert_eq!(
+            complete_dir(&format!("{b}/")).unwrap().len(),
+            3,
+            "hidden left out"
+        );
+        assert!(complete_dir(&format!("{b}/missing/x")).unwrap().is_empty());
+        assert_eq!(complete_dir("relative").unwrap_err().kind, "unsafe_path");
+    }
 
     #[test]
     fn the_production_child_is_exactly_rein_start_in_the_project() {

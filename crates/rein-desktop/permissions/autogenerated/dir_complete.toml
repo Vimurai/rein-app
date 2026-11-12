@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dir-complete"
+description = "Enables the dir_complete command without any pre-configured scope."
+commands.allow = ["dir_complete"]
+
+[[permission]]
+identifier = "deny-dir-complete"
+description = "Denies the dir_complete command without any pre-configured scope."
+commands.deny = ["dir_complete"]

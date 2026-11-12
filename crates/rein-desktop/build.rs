@@ -11,7 +11,39 @@ include!("src/ipc_commands.rs");
 
 const PLACEHOLDER: &str = "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><title>rein-app</title></head>\n<body><p>The window's UI is not built. Run <code>npm ci --ignore-scripts &amp;&amp; npm run build</code> in crates/rein-desktop/ui, then build again.</p></body></html>\n";
 
+/// `OUT_DIR/actions.rs` from `actions.json`: the closed Action list for Rust (desktop.md
+/// §Data Model; the TypeScript side is generated from the same file by `ui/gen-actions.mjs`).
+fn generate_actions() {
+    println!("cargo:rerun-if-changed=actions.json");
+    let text = std::fs::read_to_string("actions.json").expect("read actions.json");
+    let doc: serde_json::Value = serde_json::from_str(&text).expect("actions.json is JSON");
+    let mut out = String::from(
+        "/// The closed Action list, generated from `actions.json` by build.rs.\n\
+         pub const ACTIONS: &[Action] = &[\n",
+    );
+    for a in doc["actions"].as_array().expect("an `actions` array") {
+        let name = a["name"].as_str().expect("an action name");
+        let arg = match a["arg"].as_str() {
+            None => "ActionArg::None",
+            Some("n") => "ActionArg::TabNumber",
+            Some("name") => "ActionArg::ThemeName",
+            Some("style") => "ActionArg::InputStyle",
+            Some("dir") => "ActionArg::Dir",
+            Some(other) => panic!("actions.json: unknown arg kind {other:?}"),
+        };
+        assert!(
+            name.bytes().all(|b| b.is_ascii_lowercase() || b == b'.'),
+            "actions.json: bad name {name:?}"
+        );
+        out.push_str(&format!("    Action {{ name: {name:?}, arg: {arg} }},\n"));
+    }
+    out.push_str("];\n");
+    let dest = std::path::Path::new(&std::env::var("OUT_DIR").expect("OUT_DIR")).join("actions.rs");
+    std::fs::write(dest, out).expect("write actions.rs");
+}
+
 fn main() {
+    generate_actions();
     println!("cargo:rerun-if-changed=ui/dist");
     println!("cargo:rerun-if-changed=src/ipc_commands.rs");
     let dist = std::path::Path::new("ui/dist");

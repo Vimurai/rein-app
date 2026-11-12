@@ -54,6 +54,9 @@ export class TermTab {
   /** Called with the tab once open, and with an error message if opening fails. */
   onOpen: (tab: Tab) => void = () => {};
   onError: (message: string) => void = () => {};
+  /** Sees every key event xterm gets; `false` keeps the key from the terminal (the modes
+   *  layer takes the escape chord, E-36). */
+  keyFilter: (e: KeyboardEvent) => boolean = () => true;
 
   constructor(el: HTMLElement, project: string, opts: TermOptions) {
     this.#el = el;
@@ -77,6 +80,7 @@ export class TermTab {
     } catch {
       // no WebGL here: the DOM renderer is used
     }
+    this.term.attachCustomKeyEventHandler((e) => this.keyFilter(e));
     this.term.onData((s) => this.#input(s));
     this.term.onResize(({ cols, rows }) => {
       if (this.#tab) ptyResize(this.#tab.pty, cols, rows).catch(() => {});
@@ -108,6 +112,20 @@ export class TermTab {
       const msg = (e as { message?: string }).message ?? String(e);
       this.onError(msg);
     }
+  }
+
+  /** Send `data` to the pty as if typed (a chord prefix the modes layer held, then released). */
+  send(data: string): void {
+    if (this.#exited || !this.#tab) return;
+    for (const piece of splitInput(data)) ptyWrite(this.#tab.pty, piece).catch(() => {});
+  }
+
+  focus(): void {
+    this.term.focus();
+  }
+
+  blur(): void {
+    this.term.blur();
   }
 
   /** The stage changed size: refit in whole cells (the core gets the new size). */

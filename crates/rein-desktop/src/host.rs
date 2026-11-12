@@ -18,4 +18,9 @@ pub trait Host: Send + Sync {
     /// The pty child that runs `rein start` in `project`, which [`project`](Self::project)
     /// returned.
     fn rein_start(&self, project: &Path) -> Result<ChildSpec, IpcError>;
+
+    /// `:open` Tab completion (E-36): directories whose path starts with `prefix`, each ending
+    /// in `/`, a bounded number, sorted. Hidden ones only when the typed name
+    /// starts with `.`. A host that cannot list returns none.
+    fn complete_dir(&self, prefix: &str) -> Result<Vec<String>, IpcError>;
 }

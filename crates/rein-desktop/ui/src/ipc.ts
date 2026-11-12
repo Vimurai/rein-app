@@ -81,3 +81,5 @@ export const ptyResize = (pty: number, cols: number, rows: number) =>
   invoke<void>("pty_resize", { pty, cols, rows });
 export const ptyAck = (pty: number, bytes: number) => invoke<void>("pty_ack", { pty, bytes });
 export const tabDetach = (tab: number) => invoke<void>("tab_detach", { tab });
+export const clipboardWrite = (text: string) => invoke<void>("clipboard_write", { text });
+export const dirComplete = (prefix: string) => invoke<string[]>("dir_complete", { prefix });

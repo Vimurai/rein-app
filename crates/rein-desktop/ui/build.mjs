@@ -3,9 +3,10 @@
 // No inline script or style, so the CSP `default-src 'self'` holds (desktop.md §Security 1).
 import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { generate } from "./gen-actions.mjs";
 
 export const ESBUILD = {
   entryPoints: { app: "src/main.tsx", boot: "src/boot.ts" },
@@ -35,6 +36,8 @@ export function buildTailwind(out) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("build.mjs")) {
+  // The Action list from ../actions.json (the source the Rust side reads too).
+  writeFileSync("src/actions.ts", generate());
   rmSync("dist", { recursive: true, force: true });
   mkdirSync("dist");
   await build({ ...ESBUILD, outdir: "dist" });

@@ -1530,3 +1530,26 @@ E-43's interop smoke showed `wsl.exe --cd <missing | file | unreadable>` prints 
 
 ### D-038 addendum 2 (2026-11-11) — E-43 (dbc9908) and E-44 (8988d48) accepted; two residual risks recorded
 `security_engineer` PASS, no P0/P1. Accepted fixes: `%SystemRoot%` only when drive-absolute, UNC `%LOCALAPPDATA%` refused, bounded handoff read. Accepted residual risks, written into `desktop.md` §Security (Windows): (1) the pty start script keeps no `/` guard — reaching a session that way needs `/.ai`, i.e. root in the distro; a guard cannot be a constant that every user shell (fish) accepts; (2) WSL's `appendWindowsPath` puts Windows directories on the Linux `PATH` — WSL's own default, mitigated by the operator in `/etc/wsl.conf`, to be stated in the Windows operator docs. `desktop-windows.yml` also triggers on `crates/rein-platform/**`.
+
+## D-042 — Clipboard for `clipboard_write` (E-36, dependency_gate, Engineer-recorded)
+
+**Date**: 2026-11-12
+**Task**: E-36 (`cmd.yank`: `y` copies the last shown command through `clipboard_write`, ≤ 64 KiB — desktop.md §API)
+**Decision**: ADOPT `arboard` 3.7.0 (published 2026-10-15; MIT OR Apache-2.0) with **default features off** (text only — no image decoding, no `image` crate) as a dependency of `rein-desktop` (operator, 2026-11-11: "don't ask me for permissions, just build it"). The Architect may revise.
+
+### Why needed
+`clipboard_write` is an IPC command (§API): the core writes the clipboard. Tauri core has no clipboard API without the clipboard-manager plugin, and the capability file admits no plugin (§Security 1).
+
+### Alternatives considered
+1. **`tauri-plugin-clipboard-manager`** — a plugin; the closed capability file and the "no Tauri plugin in Cargo.lock" test forbid it.
+2. **`navigator.clipboard.writeText` in the web view** — no IPC, but availability differs across WebKitGTK, WKWebView and WebView2, and it would put a clipboard path outside the validated IPC table.
+3. **Hand-rolled per-OS clipboard code** — X11 selections, Wayland data-control, Win32 and NSPasteboard each need platform bindings and `unsafe`, which the workspace forbids.
+
+### Size / weight
+Text-only arboard pulls `x11rb` on Linux (pure Rust X11), `clipboard-win` on Windows and `objc2-app-kit` on macOS — several of these are already in Tauri's tree. On Wayland it works through XWayland; the `wayland-data-control` feature is left off.
+
+### Security track record
+Maintained by 1Password; no RustSec advisory known to the Engineer. The IPC input is bounded (64 KiB) and only ever *written*; reading the clipboard (`clipboard_read`, E-40) is a separate, user-gesture-only command.
+
+### Rollback
+Remove `clipboard_write` and the dependency; `y` then reports that copying is unavailable.

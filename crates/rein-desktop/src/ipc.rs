@@ -28,6 +28,8 @@ pub const ROWS: std::ops::RangeInclusive<u32> = 2..=200;
 /// desktop.md §Execution Constraints.
 pub const MAX_TABS: usize = 16;
 pub const EVENT_PTY_EXIT: &str = "pty_exit";
+/// `clipboard_write` (desktop.md §API): the most text one copy may carry.
+pub const MAX_CLIPBOARD: usize = 64 * 1024;
 
 /// An IPC refusal: a stable `kind` for the UI and a plain-words `message`.
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -89,7 +91,7 @@ pub struct Tab {
 pub struct Desktop {
     /// Linux / macOS (`LocalHost`) or Windows (`WslHost`): how a project is validated and
     /// what the pty child is.
-    platform: Box<dyn Host>,
+    pub platform: Box<dyn Host>,
     pub host: PtyHost,
     tabs: Mutex<HashMap<u32, Tab>>,
     next_tab: AtomicU32,
@@ -242,6 +244,41 @@ pub fn tab_detach(state: State<'_, Desktop>, tab: u32) {
     state.detach(tab);
 }
 
+/// `:open` Tab completion (E-36), through the host: directories starting with `prefix`.
+#[tauri::command(async)]
+pub fn dir_complete(state: State<'_, Desktop>, prefix: String) -> Result<Vec<String>, IpcError> {
+    state.platform.complete_dir(&prefix)
+}
+
+pub fn validate_clipboard(text: &str) -> Result<&str, IpcError> {
+    if text.len() > MAX_CLIPBOARD {
+        return Err(err("too_large", "text larger than 64 KiB"));
+    }
+    Ok(text)
+}
+
+/// One clipboard handle for the window's life: on X11 the copied text is served by the
+/// program that set it, and dropping the handle can take the text with it.
+static CLIPBOARD: std::sync::OnceLock<Mutex<Option<arboard::Clipboard>>> =
+    std::sync::OnceLock::new();
+
+/// `cmd.yank` (E-36): put `text` — a command the window showed — on the system clipboard.
+/// Write only; reading the clipboard is a separate, user-gesture command (E-40).
+#[tauri::command(async)]
+pub fn clipboard_write(text: String) -> Result<(), IpcError> {
+    let text = validate_clipboard(&text)?;
+    let cell = CLIPBOARD.get_or_init(|| Mutex::new(None));
+    let mut slot = cell.lock().unwrap_or_else(|e| e.into_inner());
+    if slot.is_none() {
+        *slot = Some(arboard::Clipboard::new().map_err(|e| err("clipboard", e.to_string()))?);
+    }
+    slot.as_mut()
+        .map(|c| c.set_text(text))
+        .transpose()
+        .map_err(|e| err("clipboard", e.to_string()))?;
+    Ok(())
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -311,6 +348,15 @@ mod tests {
             validate_project(link.to_str().unwrap()).unwrap(),
             proj.path().canonicalize().unwrap()
         );
+    }
+
+    #[test]
+    fn a_clipboard_write_is_bounded() {
+        assert_eq!(
+            kind(validate_clipboard(&"x".repeat(MAX_CLIPBOARD + 1))),
+            "too_large"
+        );
+        assert!(validate_clipboard(&"x".repeat(MAX_CLIPBOARD)).is_ok());
     }
 
     #[test]

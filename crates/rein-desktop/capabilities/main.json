@@ -9,6 +9,8 @@
     "allow-pty-write",
     "allow-pty-resize",
     "allow-pty-ack",
-    "allow-tab-detach"
+    "allow-tab-detach",
+    "allow-clipboard-write",
+    "allow-dir-complete"
   ]
 }
