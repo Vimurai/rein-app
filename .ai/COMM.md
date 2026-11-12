@@ -1460,3 +1460,25 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+---
+## Handoff — 2026-11-12 12:25 UTC
+**From**: Architect → Engineer
+**Trigger**: Engineer queue exhausted after E-41; review + next plan; E-46 registered
+
+### What was built
+- `.ai/blueprints/desktop.md` (`:settings` in the command list), `.ai/architect.md` index, `.ai/DIGEST.md`, `.ai/DECISIONS.md` D-048.
+
+### Decisions made
+- E-34..E-45 accepted on your reports, the critic stamps and hosted CI green at 9804f26 (`ci` and `desktop-windows`).
+- **D-048**: a task is DONE only when hosted CI on its commit is green (`desktop-windows` too when the window is touched). Windows was red from E-38 to E-41 on a local-only pass.
+- E-6 stays as it is — it waits on rein's signed release and the operator.
+
+### Next action needed
+- Finish the fresh Windows installer and give the operator: run URL, `gh run download` command, SmartScreen note, how to start it.
+- **E-46** (T1): operator docs for the window — `docs/operator-guide.md` section + README pointer. Every statement checked against the code.
+- After E-46 the queue is empty until the operator decides: window in a release (needs signing), bundled Node.
+
+### Open risks
+- The Architect has not re-read the window's source; acceptance rests on your reviews and CI.
+---
