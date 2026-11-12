@@ -726,23 +726,23 @@
     {
       "id": "E-48",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Bundle the terminal fonts and add the `rein` default theme in `rein-desktop`, per .ai/blueprints/desktop.md §Look and feel v2 V3 and V4 and D-049 (operator report: icons in tmux render as empty boxes; tmux colours clash with the window): (1) after `skill: dependency_gate`, vendor JetBrains Mono (four styles, OFL-1.1) and Symbols Nerd Font Mono under `crates/rein-desktop/ui/fonts/` with licence texts and a SHA-256 manifest checked by a test; serve them from the app (CSP unchanged); make JetBrains Mono the default terminal font on every platform and always append the symbols font to the terminal font stack whatever `font.family` is set; open xterm.js only after `document.fonts.load` resolves and rebuild the glyph atlas when fonts finish loading; fonts ≤ 3 MiB total; (2) read the exact colours of rein's tmux status line and pane borders from rein's tmux theme at the vendored rein commit, add the built-in theme `rein` with them (alias an existing theme if identical), make it the default, and make the terminal background equal the window background. Acceptance: font-manifest and font-stack tests pass; a rendering check under Xvfb shows U+E0B0 and U+F07B drawn from the bundled font, not a missing-glyph box; the `rein` theme values are recorded with their source file and commit in the handoff — if rein's theme file cannot be read, stop and report instead of guessing colours; hosted `ci` and `desktop-windows` green on the commit (D-048).",
       "created_at": "2026-11-12T13:09:49.632Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-12T14:10:58.982Z",
+      "summary": "Bundled JetBrains Mono 2.304 + Symbols Nerd Font Mono 3.5.1 (D-051, manifest test), symbols font always in the stack, fonts load before xterm; catppuccin-mocha default, terminal bg = …[full in LOG.md]",
       "depends_on": [
         "E-47"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-12T13:36:21.321Z"
+      "updated_at": "2026-11-12T14:10:58.983Z"
     },
     {
       "id": "E-49",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Rebuild the window's frame in the modern look, per .ai/blueprints/desktop.md §Look and feel v2 V1 and V2 (title bar, stage, status bar, toast) and D-049, which supersede the grid chrome (operator report: \"unpolished — use the UI package, modern look and feel\"): (1) implement the design tokens — UI font stack, 8 px / 6 px radius, borders, shadows, 120–150 ms transitions honouring `prefers-reduced-motion`, and the pure theme → shadcn-variables function with a contrast test (≥ 4.5:1, every theme); (2) add `lucide-react` after `skill: dependency_gate`, importing only the icons used; (3) replace the tabline with the title bar / tab bar (pill tabs, close on hover, middle-click closes, exited dot, `+`, drag region, version chip, menu button) — on Windows `decorations: false` + `shadow: true` with our own minimise / maximise / close buttons and exactly the four `core:window` permissions listed in V2 (update the capability test), on macOS the overlay title bar with an 80 px inset, on Linux native decorations with the row beneath; (4) make the stage borderless with the specified padding and stop snapping the window to whole cells; (5) replace the statusline and the permanent command-line row with the 26 px status bar (project path, health badge with icon, last-command chip with copy, mode badge only in `modal`, no clock) and the toast for messages; in `modal` style `:` opens the command palette anchored at the bottom. Behaviour stays: the `Action` list, both key tables, IPC and `modes` are unchanged. Acceptance: pointer-parity, newcomer-path, IPC and capability tests pass; JS + CSS bundle ≤ 2 MiB; `ux_reviewer` screenshots of a project tab in `rein` and `github-light` are attached to the handoff for the operator; hosted `ci` and `desktop-windows` green on the commit (D-048).",
       "created_at": "2026-11-12T13:09:58.989Z",
@@ -751,11 +751,9 @@
       "depends_on": [
         "E-48"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-48"
-      ],
-      "updated_at": "2026-11-12T13:09:58.989Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T14:10:58.988Z"
     },
     {
       "id": "E-50",
@@ -778,7 +776,7 @@
     {
       "id": "E-51",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 3,
       "description": "Implement the tmux overlay of the window, per .ai/blueprints/desktop.md §Look and feel v2 V6 and D-050 (operator direction: the app applies its own tmux look on top of the user's config while it is open, without touching `~/.tmux.conf`): (1) write the one constant POSIX `sh` overlay script, fed on stdin to `sh -s -- <client tty> <status mode> <colours…>`, that requires tmux ≥ 3.2, finds the session of the client with that tty (waiting up to 10 s), sets only the listed session-scoped style options (per window for the border styles, with an `after-new-window` hook), installs the `client-detached` hook that unsets everything when that client detaches, and is idempotent; (2) add it to the `Host` seam — `LocalHost` runs `/bin/sh -s`, `WslHost` runs `wsl.exe -d D -e sh -ls` with the same stdin — with the validation, 15-second limit and quiet failure the blueprint states; (3) take the client tty from the pty layer on Linux / macOS; on Windows change the start script to `tty; exec ~/.rein/bin/rein start` and consume the tty line from the first 4 KiB of pty output; (4) run the overlay after a tab attaches and on a theme or setting change; (5) add `[tmux] overlay` (default true) and `status` (`hidden` default | `app` | `keep`) to `config.toml`, `ui.json`, `ui_get` / `ui_set` (Settings rows come with E-50). First check whether `rein start` uses tmux's default server socket; if not, stop and report. Acceptance: the V6 tests pass against a real tmux server on a private socket on Linux and macOS in CI; `.tmux.conf` is never opened; no session is created, renamed or killed and no global option set (asserted); interop smoke of the Windows path reported; `security_engineer` before commit; hosted `ci` and `desktop-windows` green (D-048); a screenshot of a project tab with the overlay on is attached to the handoff for the operator.",
       "created_at": "2026-11-12T13:25:20.625Z",
@@ -787,11 +785,9 @@
       "depends_on": [
         "E-48"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-48"
-      ],
-      "updated_at": "2026-11-12T13:25:20.626Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T14:10:58.989Z"
     }
   ],
   "stamps": [
@@ -2062,6 +2058,33 @@
       "timestamp": "2026-11-12T13:14:33.529Z",
       "summary": "[TIER_2] E-47 blueprint aligned + clean-code gate clear: 0 warnings ignored (aligner ORPHANED_WORK warning resolved against desktop.md V5)",
       "sha": "28ffac875a6900b2ea720345c21fe490b57eab26",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-48",
+      "timestamp": "2026-11-12T13:37:06.692Z",
+      "summary": "standards-checker PASS — 23 files clean, 0 errors, 0 warnings (33ms; installed checker ~/.rein/scripts used, in-tree scripts/ absent)",
+      "sha": "6aeb50881e5c1b714dd7ca0f890ff50f476271e3",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner-mcp (reviewed by rein-review-tier2)",
+      "task_id": "E-48",
+      "timestamp": "2026-11-12T13:37:44.040Z",
+      "summary": "E-48 staged diff matches desktop.md V3 / V4 and D-049 addendum 1. The MCP FAIL was a false-positive CAPABILITIES_BYPASS on the read-only test path `new URL(\"../fonts/\", import.meta.url)` in test/fonts.test.mjs; harden.test.mjs and actions.test.mjs already use the same form. ORPHANED_WORK on the licence files and MANIFEST.sha256 is covered by V3. One deviation for the Architect: the blueprint test line says the font stack \"always ends with the symbols font\", but terminalStack puts the symbols font before the generic family. Should-fix: GENERIC's comment says families after a generic are never reached (CSS falls back per glyph), and the SAMPLE comment mentions icons that \"Mm\" does not contain.",
+      "sha": "6aeb50881e5c1b714dd7ca0f890ff50f476271e3",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-48",
+      "timestamp": "2026-11-12T13:37:50.042Z",
+      "summary": "[TIER_2] E-48: blueprint aligned and the clean-code gate is clear. ALIGN_PASS overrides the MCP FAIL, which was a false-positive CAPABILITIES_BYPASS on a static test-relative `../fonts/` URL. CLEAN_PASS: 23 files, 0 findings, checked by the installed ~/.rein standards checker. For the Architect: the symbols font is placed before the generic family, while the blueprint's test line says it ends the stack; desktop.md:524 needs amending or the order needs changing. Should-fix, not blocking: two fonts.ts comments (GENERIC rationale, SAMPLE icons).",
+      "sha": "6aeb50881e5c1b714dd7ca0f890ff50f476271e3",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
