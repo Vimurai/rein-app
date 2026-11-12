@@ -14,6 +14,7 @@ mod ipc;
 #[cfg(unix)]
 mod local_host;
 mod project_path;
+mod projects;
 mod pty;
 mod pty_sys;
 mod security;
@@ -137,6 +138,11 @@ fn main() -> ExitCode {
     let builder = tauri::Builder::default()
         .manage(ipc::Desktop::new(platform_host(start.wsl.distro.clone())))
         .manage(std::sync::Arc::clone(&config))
+        // Recent projects (E-38). On Windows they live inside WSL: not probed per row (W2).
+        .manage(std::sync::Arc::new(projects::ProjectStore::open(
+            dirs::state_dir(&dirs::process_env),
+            cfg!(unix),
+        )))
         .invoke_handler(tauri::generate_handler![
             ipc::tab_open,
             ipc::pty_write,
@@ -145,7 +151,9 @@ fn main() -> ExitCode {
             ipc::tab_detach,
             ipc::clipboard_write,
             ipc::dir_complete,
-            ipc::config_get
+            ipc::config_get,
+            ipc::projects_list,
+            ipc::projects_forget
         ]);
     let result = builder
         .setup(move |app| {

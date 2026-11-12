@@ -21,7 +21,8 @@ export interface ShellData {
   mode: string | null;
   segments: string[];
   clock: string;
-  stageLines: string[];
+  /** Centred in the stage frame: plain text is drawn dim; a span keeps its own class. */
+  stageLines: (string | Span)[];
   commandLine: string;
 }
 
@@ -91,7 +92,7 @@ export function tabline(d: ShellData, cols: number): Row {
 }
 
 /** Stage: a box-drawn frame with `lines` centred inside; `rows` may be < 2 on tiny windows. */
-export function stage(lines: string[], cols: number, rows: number): Row[] {
+export function stage(lines: readonly (string | Span)[], cols: number, rows: number): Row[] {
   if (rows <= 0) return [];
   if (rows < 2 || cols < 2) return Array.from({ length: rows }, () => fit([], cols));
   const inner = cols - 2;
@@ -101,13 +102,14 @@ export function stage(lines: string[], cols: number, rows: number): Row[] {
   const first = Math.max(0, Math.floor((body - lines.length) / 2));
   const out: Row[] = [top];
   for (let i = 0; i < body; i++) {
-    const text = clip(lines[i - first] ?? "", inner);
+    const line = lines[i - first] ?? "";
+    const text = clip(typeof line === "string" ? line : line.text, inner);
     const pad = inner - width(text);
     const l = Math.floor(pad / 2);
     out.push([
       { text: "│", cls: "frame v" },
       { text: " ".repeat(l), cls: "" },
-      { text, cls: "dim" },
+      { text, cls: typeof line === "string" ? "dim" : line.cls },
       { text: " ".repeat(pad - l), cls: "" },
       { text: "│", cls: "frame v" },
     ]);

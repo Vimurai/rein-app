@@ -5,15 +5,16 @@
 // app, TERMINAL keys go to the pty except the escape chord. Text goes in as React text nodes
 // only, never as HTML.
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import type { ActionName } from "./actions.ts";
 import { commonPrefix, complete, parse } from "./commands.ts";
 import { cells, fit, layout, type Row, type ShellData } from "./grid.ts";
-import { clipboardWrite, dirComplete, listen } from "./ipc.ts";
+import { clipboardWrite, closeWindow, dirComplete, listen, projectsForget, projectsList } from "./ipc.ts";
 import { keyBytes, keyName } from "./keys.ts";
 import type { ActionCall, KeyTable } from "./keymap.ts";
 import { WHICH_KEY_DELAY_MS, continuations, step, type ModeState } from "./modes.ts";
-import { WhichKey, label } from "./overlays.tsx";
+import { ProjectPicker, WhichKey, label } from "./overlays.tsx";
+import { startLines, withStartKeys, type RecentView } from "./start.ts";
 import { TermTab } from "./term.ts";
 import { THEME_NAMES, cssVariables, type Theme } from "./theme.ts";
 
@@ -38,6 +39,8 @@ export interface ShellProps {
   /** A line to show on the command line (a config.toml reload or refusal); `seq` changes
    *  each time there is a new one. */
   notice: { text: string; error: boolean; seq: number };
+  /** `window.start = "last"` (config.toml): reopen the most recent project at start. */
+  startLast: boolean;
   /** The DIR the window was started with (set by the core before any script ran). */
   startDir: string | null;
 }
@@ -54,11 +57,6 @@ const INITIAL: ShellData = {
 
 /** Actions whose backend arrives with a later task: they say so in one line (E-36). */
 const LATER: Partial<Record<ActionName, string>> = {
-  "project.pick": "E-38",
-  "tab.next": "E-38",
-  "tab.prev": "E-38",
-  "tab.goto": "E-38",
-  "app.quit": "E-38",
   "health.show": "E-39",
   "release.update": "E-39",
   "release.rollback": "E-39",
@@ -93,6 +91,20 @@ function shellWord(s: string): string {
   return /^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`;
 }
 
+/** At most 16 tabs (desktop.md §Execution Constraints); the core enforces it too. */
+const MAX_TABS = 16;
+
+/** One open tab: its terminal, its pane, and what the chrome shows for it. */
+interface OpenTab {
+  term: TermTab;
+  el: HTMLDivElement;
+  /** As asked for (`:open`, a handoff), and canonical once open. */
+  requested: string;
+  project: string;
+  title: string;
+  open: boolean;
+}
+
 /** One grid row: spans of text with their style class. */
 export function GridRow({ row, className = "" }: { row: Row; className?: string }) {
   return (
@@ -117,19 +129,29 @@ function useViewport(): { w: number; h: number } {
 }
 
 export function Shell(props: ShellProps) {
-  const { theme, keys, fontFamily, fontSize, lineHeight, opacity, handlers, notice, startDir } = props;
+  const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, handlers, notice, startDir, startLast } =
+    props;
   const [cell, setCell] = useState({ w: 0, h: 0 });
   const view = useViewport();
-  const [data, setData] = useState<ShellData>(INITIAL);
+  const data = INITIAL;
   const [clock, setClock] = useState(clockNow);
-  const [termShown, setTermShown] = useState(false);
-  const [termOpen, setTermOpen] = useState(false);
+  const [, rerender] = useReducer((n: number) => n + 1, 0);
+  const [recent, setRecent] = useState<RecentView[]>([]);
+  const [picker, setPicker] = useState(false);
   const [modeView, setModeView] = useState<ModeState>({ mode: "NORMAL", pending: [] });
   const [cmdText, setCmdText] = useState("");
   const [message, setMessage] = useState<{ text: string; error: boolean }>({ text: "", error: false });
   const [whichKey, setWhichKey] = useState(false);
-  const termEl = useRef<HTMLDivElement>(null);
-  const tab = useRef<TermTab | null>(null);
+  /** The panes of the open tabs live here, one element per tab (only the current one shown). */
+  const termsEl = useRef<HTMLDivElement>(null);
+  const tabs = useRef<OpenTab[]>([]);
+  const cur = useRef(0);
+  /** The current tab's terminal, read like a ref. */
+  const tab = { get current(): TermTab | null { return tabs.current[cur.current]?.term ?? null; } };
+  const pickerRef = useRef(false);
+  pickerRef.current = picker;
+  // No tab open: the start screen's keys (p o h u q, digits) join the keymap.
+  const keys = tabs.current.length ? projectKeys : withStartKeys(projectKeys);
   const modeRef = useRef<ModeState>(modeView);
   const cmdRef = useRef("");
   const lastCommand = useRef<string | null>(null);
@@ -162,7 +184,7 @@ export function Shell(props: ShellProps) {
     };
     measure();
     void document.fonts.ready.then(measure);
-    tab.current?.restyle({ fontFamily, fontSize, lineHeight, theme });
+    for (const t of tabs.current) t.term.restyle({ fontFamily, fontSize, lineHeight, theme });
   }, [theme, fontFamily, fontSize, lineHeight, opacity]);
 
   useEffect(() => {
@@ -198,52 +220,85 @@ export function Shell(props: ShellProps) {
     setCmdText(text);
   }, []);
 
-  /** Open `project` in the stage: `rein start` in a pty, drawn by xterm.js. */
+  const refreshRecent = useCallback(() => {
+    projectsList().then(setRecent, () => {});
+  }, []);
+
+  /** Show tab `i` (its pane only) and keep the chrome in step. */
+  const showTab = useCallback((i: number) => {
+    cur.current = Math.max(0, Math.min(i, tabs.current.length - 1));
+    tabs.current.forEach((t, k) => t.el.classList.toggle("hidden", k !== cur.current));
+    const t = tabs.current[cur.current];
+    if (t) {
+      requestAnimationFrame(() => t.term.shown());
+      if (modeRef.current.mode === "TERMINAL") t.term.focus();
+    }
+    rerender();
+  }, []);
+
+  /** Open `project` in a new tab: `rein start` in a pty, drawn by xterm.js (at most 16). */
   const open = useCallback(
     (project: string) => {
-      if (tab.current) {
-        say(`one project per window until tabs arrive (E-38) — not opening ${project}`, true);
+      const same = tabs.current.findIndex((t) => t.project === project || t.requested === project);
+      if (same >= 0) {
+        showTab(same);
         return;
       }
-      const el = termEl.current;
-      if (!el) return;
-      setTermShown(true);
-      const t = new TermTab(el, project, { fontFamily, fontSize, lineHeight, theme });
-      tab.current = t;
-      t.keyFilter = (e) => terminalKeyRef.current(e);
-      t.onOpen = (opened) => {
-        setTermOpen(true);
-        setData((d) => ({ ...d, tabs: [{ name: opened.title, current: true }], segments: [opened.title] }));
+      if (tabs.current.length >= MAX_TABS) {
+        say(`at most ${MAX_TABS} tabs — close one first (ZZ or :q)`, true);
+        return;
+      }
+      const host = termsEl.current;
+      if (!host) return;
+      const el = document.createElement("div");
+      el.className = "term-pane";
+      host.append(el);
+      const term = new TermTab(el, project, { fontFamily, fontSize, lineHeight, theme });
+      const entry: OpenTab = { term, el, requested: project, project, title: project.split(/[/\\]/).pop() || "/", open: false };
+      tabs.current.push(entry);
+      term.keyFilter = (e) => terminalKeyRef.current(e);
+      term.onOpen = (opened) => {
+        entry.open = true;
+        entry.project = opened.project;
+        entry.title = opened.title;
+        showTab(tabs.current.indexOf(entry));
         showCommand(`cd ${shellWord(opened.project)} && rein start`);
         setMode({ mode: "TERMINAL", pending: [] });
+        refreshRecent();
       };
-      t.onError = (msg) => {
-        void t.detach();
-        tab.current = null;
-        setTermShown(false);
-        setTermOpen(false);
-        setData((d) => ({ ...d, stageLines: [`cannot open ${project}`, msg] }));
-        say(`E: ${msg}`, true);
+      term.onError = (msg) => {
+        void term.detach();
+        el.remove();
+        tabs.current = tabs.current.filter((t) => t !== entry);
+        showTab(cur.current);
+        say(`E: cannot open ${project}: ${msg}`, true);
       };
-      void t.start();
+      showTab(tabs.current.length - 1);
+      void term.start();
     },
-    [fontFamily, fontSize, lineHeight, theme, say, showCommand, setMode],
+    [fontFamily, fontSize, lineHeight, theme, say, showCommand, setMode, showTab, refreshRecent],
   );
 
-  const detach = useCallback(() => {
-    const t = tab.current;
-    if (!t) {
-      say("no tab is open");
-      return;
-    }
-    tab.current = null;
-    void t.detach();
-    setTermShown(false);
-    setTermOpen(false);
-    setData((d) => ({ ...d, tabs: [], segments: [], stageLines: INITIAL.stageLines }));
-    setMode({ mode: "NORMAL", pending: [] });
-    say("tab closed — the tmux session keeps running");
-  }, [say, setMode]);
+  const openRef = useRef(open);
+  openRef.current = open;
+
+  /** Close tab `i` (default: the current one); its tmux session keeps running. */
+  const detach = useCallback(
+    (i = cur.current) => {
+      const t = tabs.current[i];
+      if (!t) {
+        say("no tab is open");
+        return;
+      }
+      void t.term.detach();
+      t.el.remove();
+      tabs.current = tabs.current.filter((x) => x !== t);
+      showTab(Math.min(i, tabs.current.length - 1));
+      if (!tabs.current.length) setMode({ mode: "NORMAL", pending: [] });
+      say(`${t.title} closed — its tmux session keeps running`);
+    },
+    [say, setMode, showTab],
+  );
 
   /** Run one action — from a key, the command line or (E-40) a click: the same closed list. */
   const run = useCallback(
@@ -276,6 +331,38 @@ export function Shell(props: ShellProps) {
         case "tab.detach":
           detach();
           return;
+        case "tab.next":
+        case "tab.prev": {
+          const n = tabs.current.length;
+          if (n) showTab((cur.current + (call.name === "tab.next" ? 1 : n - 1)) % n);
+          return;
+        }
+        case "tab.goto": {
+          const n = Number(call.arg ?? "1");
+          if (tabs.current.length) {
+            if (n <= tabs.current.length) showTab(n - 1);
+            else say(`no tab ${n}`);
+          } else {
+            // The start screen: digit N opens recent project N.
+            const r = recent[n - 1];
+            if (r) open(r.path);
+            else say(`no recent project ${n}`);
+          }
+          return;
+        }
+        case "app.quit":
+          for (const t of [...tabs.current]) {
+            void t.term.detach();
+            t.el.remove();
+          }
+          tabs.current = [];
+          closeWindow().catch(() => say("every tab is closed; close the window to quit"));
+          return;
+        case "project.pick":
+          refreshRecent();
+          setMode({ mode: "NORMAL", pending: [] });
+          setPicker(true);
+          return;
         case "cmd.yank": {
           const cmd = lastCommand.current;
           if (!cmd) {
@@ -297,7 +384,7 @@ export function Shell(props: ShellProps) {
         }
       }
     },
-    [open, detach, say, setMode, setCmd, showCommand, handlers],
+    [open, detach, say, setMode, setCmd, showCommand, handlers, showTab, recent, refreshRecent],
   );
 
   /** TERMINAL keys, seen by xterm first: hold a chord prefix, take the chord, pass the rest. */
@@ -354,12 +441,13 @@ export function Shell(props: ShellProps) {
   // NORMAL and COMMAND keys: the window handles them before anything else sees them.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (pickerRef.current) return; // the picker's own keys (j k C-n C-p Enter Esc Del)
       const k = keyName(e);
       if (!k) return;
       if (modeRef.current.mode === "TERMINAL") {
         // A TERMINAL key that missed the terminal (focus was on the page): give the terminal
         // focus and pass the key through the same chord logic, so none is lost.
-        const inTerm = e.target instanceof Node && termEl.current?.contains(e.target);
+        const inTerm = e.target instanceof Node && termsEl.current?.contains(e.target);
         if (!inTerm && tab.current) {
           e.preventDefault();
           tab.current.focus();
@@ -415,18 +503,37 @@ export function Shell(props: ShellProps) {
   // Core events: a child exited; a second start handed over a DIR.
   useEffect(() => {
     void listen<{ id: number; code: number }>("pty_exit", ({ id, code }) => {
-      if (tab.current?.tab?.pty === id) tab.current.exited(code);
+      tabs.current.find((t) => t.term.tab?.pty === id)?.term.exited(code);
     });
-    void listen<string>("open_dir", open);
-    if (typeof startDir === "string") open(startDir);
+    void listen<string>("open_dir", (dir) => openRef.current(dir));
+    projectsList().then(
+      (list) => {
+        setRecent(list);
+        if (typeof startDir === "string") openRef.current(startDir);
+        else if (startLast && list[0]) openRef.current(list[0].path);
+      },
+      () => {
+        if (typeof startDir === "string") openRef.current(startDir);
+      },
+    );
     // Listeners live as long as the window; `open` is stable for a given font and theme.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const cols = cells(view.w, cell.w);
   const rows = cells(view.h, cell.h);
+  const termOpen = tabs.current.length > 0;
+  const current = tabs.current[cur.current];
   const shell = layout(
-    { ...data, mode: modeView.mode, clock, commandLine: "", stageLines: termOpen ? [] : data.stageLines },
+    {
+      ...data,
+      tabs: tabs.current.map((t, i) => ({ name: t.title, current: i === cur.current })),
+      segments: current ? [current.title] : [],
+      mode: modeView.mode,
+      clock,
+      commandLine: "",
+      stageLines: termOpen ? [] : startLines(recent),
+    },
     cols,
     rows,
   );
@@ -456,8 +563,24 @@ export function Shell(props: ShellProps) {
         <GridRow row={shell.statusline} className="bar" />
         <GridRow row={commandRow} />
       </div>
-      <div id="term" ref={termEl} className={termShown ? undefined : "hidden"} />
+      <div id="term" ref={termsEl} className={termOpen ? undefined : "hidden"} />
       {whichKey && <WhichKey leader={keys.leader} next={continuations(keys, modeView.pending)} />}
+      {picker && (
+        <ProjectPicker
+          recent={recent}
+          onPick={(path) => {
+            setPicker(false);
+            open(path);
+          }}
+          onForget={(path) => {
+            projectsForget(path).then(setRecent, () => say(`E: cannot forget ${path}`, true));
+          }}
+          onClose={() => {
+            setPicker(false);
+            if (tabs.current.length) setMode({ mode: "TERMINAL", pending: [] });
+          }}
+        />
+      )}
     </>
   );
 }

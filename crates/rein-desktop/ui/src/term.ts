@@ -124,6 +124,13 @@ export class TermTab {
     this.term.focus();
   }
 
+  /** The pane became visible again (a tab switch): refit, and repaint every row — the
+   *  renderer draws nothing while its element is `display: none`. */
+  shown(): void {
+    this.#fit.fit();
+    this.term.refresh(0, this.term.rows - 1);
+  }
+
   /** Font or theme changed (config.toml was saved, or `:theme`): restyle and refit. */
   restyle(opts: TermOptions): void {
     this.term.options.fontFamily = opts.fontFamily;

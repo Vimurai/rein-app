@@ -83,5 +83,10 @@ export const ptyAck = (pty: number, bytes: number) => invoke<void>("pty_ack", { 
 export const tabDetach = (tab: number) => invoke<void>("tab_detach", { tab });
 export const clipboardWrite = (text: string) => invoke<void>("clipboard_write", { text });
 export const dirComplete = (prefix: string) => invoke<string[]>("dir_complete", { prefix });
+export const projectsList = () => invoke<import("./start.ts").RecentView[]>("projects_list", {});
+export const projectsForget = (path: string) =>
+  invoke<import("./start.ts").RecentView[]>("projects_forget", { path });
+/** Close the window (`:qa`, after every tab is detached): Tauri's core window command. */
+export const closeWindow = () => invoke<void>("plugin:window|close", { label: "main" });
 export const configGet = (reload = false) =>
   invoke<import("./config.ts").ConfigView>("config_get", { reload });

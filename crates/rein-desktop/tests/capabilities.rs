@@ -8,6 +8,8 @@ use std::path::Path;
 const ALLOWED: &[&str] = &[
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    // E-38: `:qa` closes the window (a window basic, desktop.md §Test Plan "Capabilities").
+    "core:window:allow-close",
     // E-35 — desktop.md §API
     "allow-tab-open",
     "allow-pty-write",
@@ -20,6 +22,9 @@ const ALLOWED: &[&str] = &[
     "allow-dir-complete",
     // E-37: the config, its path and its last error.
     "allow-config-get",
+    // E-38: recent projects.
+    "allow-projects-list",
+    "allow-projects-forget",
 ];
 
 fn json(rel: &str) -> serde_json::Value {

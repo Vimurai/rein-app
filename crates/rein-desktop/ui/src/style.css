@@ -53,5 +53,7 @@ html, body {
   width: var(--stage-w);
   height: var(--stage-h);
 }
+/* One pane per tab inside #term; only the current tab's is shown (E-38). */
+#term .term-pane { position: absolute; inset: 0; }
 .hidden { display: none; }
 .fatal { position: absolute; z-index: 10; margin: 1em; color: #fb4934; background: #282828; white-space: pre-wrap; }

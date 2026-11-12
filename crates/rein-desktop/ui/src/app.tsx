@@ -78,6 +78,7 @@ export function App({ initial, startDir }: { initial: ConfigView; startDir: stri
       handlers={handlers}
       notice={notice}
       startDir={startDir}
+      startLast={initial.config.window.start === "last"}
     />
   );
 }

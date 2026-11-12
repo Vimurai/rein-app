@@ -206,17 +206,42 @@ impl Events for ChannelEvents {
 pub fn tab_open(
     app: AppHandle,
     state: State<'_, Desktop>,
+    projects: State<'_, Arc<crate::projects::ProjectStore>>,
     project: String,
     cols: u32,
     rows: u32,
     output: Channel<InvokeResponseBody>,
 ) -> Result<Tab, IpcError> {
-    state.open(
+    let tab = state.open(
         &project,
         cols,
         rows,
         Arc::new(ChannelEvents { output, app }),
-    )
+    )?;
+    // Recent projects (E-38): the canonical path the tab runs in. A failed save only loses
+    // the list entry; the tab is open either way.
+    let _ = projects.touch(&tab.project, None);
+    Ok(tab)
+}
+
+/// `projects_list` (desktop.md §API, E-38): the recent projects, newest first.
+#[tauri::command(async)]
+pub fn projects_list(
+    projects: State<'_, Arc<crate::projects::ProjectStore>>,
+) -> Vec<crate::projects::RecentView> {
+    projects.list()
+}
+
+/// `projects_forget` (E-38): drop one recent project, then the list.
+#[tauri::command(async)]
+pub fn projects_forget(
+    projects: State<'_, Arc<crate::projects::ProjectStore>>,
+    path: String,
+) -> Result<Vec<crate::projects::RecentView>, IpcError> {
+    projects
+        .forget(&path)
+        .map_err(|e| err("io", format!("cannot save the recent projects: {e}")))?;
+    Ok(projects.list())
 }
 
 #[tauri::command(async)]

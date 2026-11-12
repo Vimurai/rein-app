@@ -12,6 +12,9 @@
     "allow-tab-detach",
     "allow-clipboard-write",
     "allow-dir-complete",
-    "allow-config-get"
+    "allow-config-get",
+    "allow-projects-list",
+    "allow-projects-forget",
+    "core:window:allow-close"
   ]
 }

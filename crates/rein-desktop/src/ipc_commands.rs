@@ -10,4 +10,6 @@ pub const COMMANDS: &[&str] = &[
     "clipboard_write",
     "dir_complete",
     "config_get",
+    "projects_list",
+    "projects_forget",
 ];
