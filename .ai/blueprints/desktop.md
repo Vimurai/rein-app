@@ -52,7 +52,7 @@ Everything else follows five design rules:
 │   the user's own tmux.conf)      │                                         │     drawn by tmux
 │                                  │                                         │
 └──────────────────────────────────┴─────────────────────────────────────────┘
- TERMINAL │ rein-app │  master │ ✓ install ok │ 2 profiles │ C-\ C-n   14:02   <- statusline
+ TERMINAL │ rein-app │ ✓ install ok │ C-\ C-n                             14:02   <- statusline
  :                                                                              <- command line
 ```
 Overlays float centred over the stage with a rounded box border and a title in the border:
@@ -83,6 +83,9 @@ numbered 1–9, and five key hints (`p` projects, `o` open directory, `h` checkh
 | NORMAL | `ZZ`, `:q` | `tab.detach` — closes the tab; the tmux session keeps running |
 | NORMAL | `:qa` | `app.quit` — detaches every tab |
 | overlay | `j` `k` `C-n` `C-p` `Enter` `Esc` | move, accept, close |
+| NORMAL | `Space S` `Space c` `Space R` `Space t` `Space ,` `Space i` `Space Space` | `profiles.apply` · `config.open` · `config.reload` · `theme.set` (opens the menu at "Theme") · `settings.show` · `input.style` (toggle) · `menu.show` (D-047) |
+`project.open` with no directory opens the system folder dialog in both styles; `:open DIR`
+still takes a typed path.
 The app binds nothing in TERMINAL mode except the escape chord, so no tmux or shell binding
 is ever shadowed. The chord is configurable.
 
@@ -96,7 +99,8 @@ time in Settings.
   the ones common terminals use: `Ctrl+Shift+P` menu, `Ctrl+Shift+O` open project,
   `Ctrl+Shift+T` project picker, `Ctrl+Tab` / `Ctrl+Shift+Tab` and `Alt+1`–`9` tabs,
   `Ctrl+Shift+W` close tab, `Ctrl+Shift+C` / `Ctrl+Shift+V` copy / paste, `Ctrl+=` / `Ctrl+-`
-  / `Ctrl+0` font size, `F1` help. The statusline shows no mode segment.
+  / `Ctrl+0` font size, `F1` help, `Ctrl+,` settings, `Ctrl+Shift+Q` quit (D-047). The
+  statusline shows no mode segment.
 - `modal`: the keymap table above. The `simple` shortcuts keep working in every mode except
   where the user rebinds them.
 Both are tables for the one `modes` function; switching style swaps the table.
@@ -112,8 +116,11 @@ a pointer cursor and a tooltip naming the action and its shortcut in the current
   plain words ("Open a project…", "Check installation health", "Update Rein", "Undo last
   update", "Profiles", "Settings", "Help") with its shortcut at the right. Click or Enter
   runs it. This is the only place a newcomer needs to know.
-- Statusline: each segment is a button — health opens the health view, profiles opens
-  Profiles, the branch segment copies the branch name.
+- Statusline: each segment is a button — the project segment opens the project picker,
+  health opens the health view. There is **no branch and no profiles segment** (D-047):
+  a branch needs git or a read inside the project, a profile count needs a CLI run at
+  every start (a `wsl.exe` call on Windows); tmux's own status line shows the branch, and
+  Profiles is in the menu.
 - Overlays: rows are clickable, the wheel scrolls, a click outside or `×` closes. Anything
   that changes the machine (update, rollback, apply profiles) ends in two labelled buttons,
   the safe one focused — `[ Cancel ]  [ Update to 0.5.1 ]` — and `y` / `n` still answer.
@@ -290,8 +297,12 @@ Trust boundaries added by the window:
    flag or version string from the web side ever reaches an argv. The programs the window
    starts are now `rein` (installed tree) and `rein-app` (beside the window, else `PATH`).
 6. **Pointer layer (D-034).** A click resolves to an `Action` through the same table as a
-   key, so it gains no new power. The capability file gains exactly one plugin permission,
-   the folder-open dialog; its result is a path and passes the `tab_open` validation. Paste
+   key, so it gains no new power. The folder dialog is opened by the core itself with
+   `rfd` (D-046, ratified D-047): **no Tauri plugin and no capability permission at all**
+   — stricter than first planned (the dialog plugin would also bring the `fs` plugin).
+   It is called from the IPC worker thread on Linux and Windows and from the main thread
+   only on macOS (on GTK a main-thread call deadlocks the window). Its result is a path
+   and passes the `tab_open` validation. Paste
    is sent to the pty only from a user gesture, and a paste containing a newline asks once
    ("Paste 3 lines?") before it is sent. `ui_set` accepts only the listed fields.
 No secret is read, stored or shown. The window makes no network call of its own; only
@@ -313,7 +324,8 @@ No secret is read, stored or shown. The window makes no network call of its own;
   Node and notarization / code signing are later revisions and are not started by any task
   below.
 - Dependencies each pass `skill: dependency_gate`: `tauri` 2, `portable-pty`, `toml`,
-  `arboard` (text clipboard, D-042; `notify` is not used — D-044); web: `@xterm/xterm`, `@xterm/addon-fit`, `@xterm/addon-webgl`, `esbuild`,
+  `arboard` (text clipboard, D-042; `notify` is not used — D-044), `rfd` (folder dialog,
+  D-046); web: `@xterm/xterm`, `@xterm/addon-fit`, `@xterm/addon-webgl`, `esbuild`,
   `typescript`, and (D-037) `react`, `react-dom`, `tailwindcss` (compiled at build time to
   one static stylesheet), the `@radix-ui/*` primitives of the components actually used,
   `cmdk`, `class-variance-authority`, `clsx`, `tailwind-merge`. Only the shadcn components
@@ -454,9 +466,13 @@ row); a missing one fails when opened.
 
 ### Security (Windows)
 - The process list stays closed: `wsl.exe` only, by absolute path, with the argv shapes in
-  W2 and W4. Scripts are compile-time constants with no interpolation; the only variable
-  argv elements are the validated distro name, the validated shell path, the validated
-  project path (as `--cd`) and validated profile names. No IPC command carries a program,
+  W2 and W4. Scripts are compile-time constants with one exception (D-047): the profile
+  script `exec rein-app profiles apply … --profile N…` has the profile names placed in
+  it, because the login shell takes one script string. Every word of that script is
+  re-checked against `[A-Za-z0-9._-]` and every name against the profile-name rule before
+  it is built, so no shell metacharacter can be present. Nothing else is ever placed in
+  a script. The other variable argv elements are the validated distro name, the validated
+  shell path and the validated project path (as `--cd`). No IPC command carries a program,
   a script or a distro name.
 - Nothing crosses the environment boundary (`WSLENV` removed).
 - The Windows binary never writes a Claude settings file or a Rein tree: the Tier 3

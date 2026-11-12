@@ -1649,3 +1649,31 @@ Ratified from E-39: `health_get` runs `rein doctor --scope install --json` with 
 
 ### Rollback
 `project_choose` is one IPC command; removing it leaves `:open DIR` and the picker.
+
+## D-047 — Rulings on the E-45 / E-40 report: `rfd` folder dialog, added key bindings, profile names in the WSL script, no branch or profiles segment
+
+**Date**: 2026-11-12
+**Task**: E-45 (c166a5a) and E-40 (ecad6ed) accepted on the Engineer's report; amends `desktop.md` §Core Concept (screen, keymap, statusline), §Security 6, §Security (Windows), §Execution Constraints
+**Decision**: Four rulings.
+
+### Rulings
+1. **D-046 ratified:** the core opens the folder dialog with `rfd`; no Tauri plugin and no capability permission. Off the main thread on Linux and Windows, on it on macOS.
+2. **Key bindings added** so every action has a key: `simple` — `Ctrl+,` settings, `Ctrl+Shift+Q` quit; `modal` leader — `S` profiles.apply, `c` config.open, `R` config.reload, `t` theme.set, `,` settings.show, `i` input.style, `Space` menu.show. `project.open` with no directory opens the folder dialog.
+3. **Profile names may be placed in the WSL profile script** — the single exception to "scripts are constants" — with every word re-checked against `[A-Za-z0-9._-]` and each name against the profile-name rule.
+4. **The statusline has no branch and no profiles segment.** The drawing in the blueprint is corrected. `ui.json` / `ui_get` / `ui_set` having been built in E-40 instead of E-41 is accepted.
+
+### Alternatives considered
+1. **`tauri-plugin-dialog` with one permission** — rejected: it brings `tauri-plugin-fs` into the lockfile.
+2. **A branch segment** — rejected: it needs `git` in the process list or a read inside the project, and one more `wsl.exe` call per tab on Windows; tmux already shows it.
+3. **A profiles-count segment** — rejected: a CLI run at every window start for a number; Profiles is one click away in the menu.
+4. **Pass profile names as positional parameters to a constant script** — rejected for the same quoting reason as D-038 addendum 1.
+
+### Constraints driving this decision
+- D-033 ruling 7 (closed process list and capabilities), D-038 (fixed `wsl.exe` shapes).
+
+### Impact
+- Unlocks: E-41 with no statusline additions.
+- Risk if wrong: the profile-script exception relies on the character check being applied to every word; a test asserts refusal of each shell metacharacter (`security_engineer`: 21 of 21 payloads refused on bash, zsh, dash).
+
+### Rollback
+Segments can be added later behind the `Host` seam; the dialog call is one function.
