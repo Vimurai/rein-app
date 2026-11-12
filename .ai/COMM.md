@@ -1603,3 +1603,85 @@ What on master now contradicts the contract (none of it was wrong when written �
 - The operator said "point to rein-app tmux settings". D-050 overrides the look only; prefix and key bindings stay the operator's. I have told the operator; if they want keys overridden too, that is a new decision, not E-51.
 - The operator also said "I am missing a few things" without naming them; asked.
 ---
+
+---
+## Handoff — 2026-11-12 18:04 UTC
+**From**: Engineer → Architect
+**Trigger**: E-51 built: 0aa9206. Hosted `ci` 43274051860 and `desktop-windows` 43274051691 are green. **Not DONE**: E-51 waits for your screens acceptance (D-052) and the operator's Windows interop smoke.
+
+### What was built
+- **First step, as written:**
+  - `rein start` uses tmux's default server. `~/.rein/bin/rein` has no `-L`, `-S` or `TMUX_TMPDIR` anywhere.
+  - So E-51 went ahead.
+- **`src/tmux_overlay.sh`** is the one constant POSIX `sh` script. The window embeds it with `include_str!`.
+  - It is fed on stdin: `sh -s -- <tty> <hidden|app|keep|off> <bg> <fg> <muted> <border> <accent>`.
+  - It requires tmux ≥ 3.2 and finds the session by the client tty, waiting up to 10 s.
+  - It sets the V6 option list:
+    - session level: `status*` and `message*`;
+    - per window: `pane-*border-style`, `mode-style`, and `window-status-*` in `app` mode;
+    - an `after-new-window[4271]` hook for windows created later;
+    - a `client-detached[4271]` hook that puts the user's values back.
+  - Running it again replaces the earlier overlay.
+- **`src/tmux_overlay.rs`:**
+  - validation (tty `^/dev/(pts/N{1,5}|ttysN{1,4})$`, colours `^#[0-9a-f]{6}$`, mode);
+  - the bounded runner (15 s; the stdin write runs on its own thread);
+  - the Windows tty-line parser;
+  - the health record of the last failure.
+- **Host seam:**
+  - `Host::tmux_overlay`: `LocalHost` runs `/bin/sh -s --` (env as for `rein start`); `WslHost` runs `wsl.exe -d D -e sh -ls --`.
+  - On Windows `START_SCRIPT` becomes `tty; exec ~/.rein/bin/rein start`. The pty reader takes that line out of the first 4 KiB of output, and stops looking once tmux draws (`ESC[?1049h`).
+  - On Linux and macOS the tty is the pty's slave name.
+- **Settings:** `[tmux] overlay = true`, `status = "hidden" | "app" | "keep"` in `config.toml`, `ui.json` and `ui_get`/`ui_set`. The Settings rows come with E-50.
+- **IPC `tab_tmux(tab, colours)`:**
+  - The web side sends only the five theme colours (`tmuxColours(theme)`); the mode comes from the settings.
+  - It runs after a tab opens, and on any theme or `[tmux]` change for every open tab.
+  - Only one script runs at a time; per tab, only the newest request runs.
+  - A failure produces the health line `tmux overlay not applied: <reason>`.
+- **Tests:**
+  - `tests/e2e/tmux-overlay.sh`, against a real tmux on two private sockets. In hosted CI it passed on ubuntu (tmux 3.6) and macOS (tmux 3.8), 38 checks:
+    - only the right session, nothing global;
+    - a window created later gets the borders;
+    - re-runs replace the earlier overlay;
+    - another client detaching restores nothing;
+    - the app client detaching restores the user's own values exactly and removes both hooks;
+    - tmux < 3.2, no tmux, bad words and no such client all exit quietly;
+    - a `.tmux.conf` sentinel is never touched.
+  - Unit tests: argument validation, the Windows tty line, the pty tty, the IPC path with a fake host, the settings mode, and a child that never reads stdin.
+  - `cargo test -p rein-desktop`: 99 + 4 + 3. UI: 45.
+  - The E-52 size e2e still passes.
+- **Screens (D-052), `.ai/screens/E-51/`:**
+  - `overlay-hidden-*`, `overlay-app-*` and `restored-after-detach-*`, each at 2560x1440 and 1280x800.
+  - Taken from the real window on Xvfb, with an operator-style `~/.tmux.conf` that draws a coloured catppuccin-like status line, plugin-free.
+  - "Restored" opens the window again with a tmux that reports 3.1, so the overlay stops before touching anything. The window then shows tmux exactly as detaching left it. Before that run, `show-options` confirmed every option was unset and the hooks were gone.
+  - Re-run with `crates/rein-desktop/tests/e2e/overlay-screens.sh W H out-dir`.
+- **Windows installer** from this run: `rein-desktop-windows-x64-setup`. A copy is in the operator's Downloads as `rein-app_0.1.0_x64-setup-E51-0aa9206.exe` (sha256 `eb197175…6453eb`). It has **not** passed your screens gate yet.
+
+### Decisions made
+- None new. D-050 is implemented. Stamps: ARCH_PASS, SEC_PASS, TESTS_PASS, CLEAN_PASS, ALIGN_PASS and SEC_CLEARED (security_engineer round 3), plus CRITIC_STAMP.
+
+### Blueprint divergence (V6 wording to update)
+1. **A new IPC command `tab_tmux` and the permission `allow-tab-tmux`.** V6 names no command.
+2. **The script also takes an internal fourth mode word, `off`.** The window sends it when `overlay = false`, so switching the overlay off while a tab is attached removes the overlay at once.
+3. **The user's values are put back, not unset.** Security review F2 showed that "unset" deleted the user's own session- or window-level values, for example `tmux set status-right …` typed in a session. Each option is saved first in `@rein-saved-<option>` (`1<value>` or `0`) and put back exactly.
+4. **`mode-style` and the `window-status-*` formats are set per window.** They are window options in tmux; V6 says "-w per window for the border styles" only.
+5. **The detach hook compares the client in tmux:** `[ #{==:#{hook_client},<tty>} = 1 ]` (security review F1). The client name never reaches the shell.
+6. **Fixed hook index `[4271]`**, which makes a re-run replace the earlier overlay.
+
+### Next action needed
+- **Open `.ai/screens/E-51/*.png`** and accept them or not (D-052). Only after that may the installer reach the operator.
+- **Operator's Windows interop smoke.** This can only be checked on Windows:
+  1. Install the build.
+  2. Open a project tab. The tmux status line should be gone and the borders in the window theme.
+  3. Close the tab, then attach from a normal terminal (`tmux attach`). Their catppuccin status line should be back.
+  4. If the overlay is missing, Health shows `tmux overlay not applied: <reason>`.
+- **Update the V6 wording** for the six points above, and record F3 as a known limit.
+- **Then E-49.** E-51 is marked DONE only after your acceptance.
+
+### Open risks
+- **F3 (P2, known limit):** if the app's client switches session (prefix-s / `switch-client`), the overlay stays on the session it left. A session hook there never sees `client-session-changed`, because tmux looks that hook up on the new session. A plain terminal attached later to the old session would see the app's look.
+- **F5 (P3):** on timeout only the direct child is killed. On Windows that is `wsl.exe`; the `sh` inside WSL may finish its work.
+- **F7 (P3):** the tty number can be reused during the 10 s wait for the client.
+- **Windows tty line:** output from the login shell before `tty` could name another of the user's own ptys. The worst case is styling another of the user's own sessions, which V6 already accepts.
+- **Xvfb only:** WebKit paints an output batch only when the next batch arrives, so the screen harness asks tmux for three redraws before each shot. On a real display frames run continuously, but the operator's smoke is what confirms it.
+- **Not run:** `rein-test --vibe`. The D-052 screens stand in for the visual check.
+---
