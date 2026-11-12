@@ -269,8 +269,8 @@ Trust boundaries added by the window:
    reply or event is handled (D-040, ratified D-044) — Tauri's `freezePrototype` stays off
    because xterm.js assigns over a prototype property while loading.
 2. **Core → processes.** The only programs the window starts are `rein` from the installed
-   tree (argv fixed per action: `start`, `doctor --json`, and what the Phase 1 library
-   already runs). The app does **not** start `$EDITOR`: `:config` shows the file's path on
+   tree (argv fixed per action: `start`, `doctor --scope install --json`) and the
+   `rein-app` CLI (§Components 5, D-045). The app does **not** start `$EDITOR`: `:config` shows the file's path on
    the command line and copies it, and the operator opens it in their own editor; the
    watcher picks up the save. No IPC command takes a program name or an argv.
    The project path is passed as cwd, never interpolated into a command line.
