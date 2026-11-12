@@ -1677,3 +1677,31 @@ Ratified from E-39: `health_get` runs `rein doctor --scope install --json` with 
 
 ### Rollback
 Segments can be added later behind the `Host` seam; the dialog call is one function.
+
+## D-048 — A task is not DONE while hosted CI on its commit is red
+
+**Date**: 2026-11-12
+**Task**: review of E-38..E-41; process ruling
+**Decision**: From E-46 on, an E-task is marked DONE only after the hosted `ci` run (and `desktop-windows`, when the change touches the window) on its commit is green. "Local CI PASS" alone is not acceptance.
+
+### Why needed
+A recent-projects test assumed POSIX temp paths. It failed on Windows from E-38 on, so the Windows CI job and the installer workflow were red through E-38, E-39, E-45, E-40 and E-41 while each was marked DONE on a local pass. The operator's installer could not be rebuilt during that time. Fixed in 9804f26 (test only; production behaviour unchanged).
+
+### Rulings
+1. Hosted CI green on the task's commit is part of every task's acceptance.
+2. A red hosted run found after DONE is fixed before the next task starts.
+3. The layout-equality test stays local (D-032); this ruling does not change that.
+
+### Alternatives considered
+1. **Keep local-only acceptance** — rejected: this machine has no Windows or macOS toolchain, so local cannot see two of three platforms.
+2. **Block the DONE mark with a hook** — deferred: a rule is enough for one Engineer; revisit if it recurs.
+
+### Constraints driving this decision
+- Three supported platforms, one development machine (Linux under WSL2).
+
+### Impact
+- Unlocks: nothing; slows each task by one CI wait.
+- Risk if wrong: none beyond the wait.
+
+### Rollback
+Drop the rule; acceptance returns to the task text.

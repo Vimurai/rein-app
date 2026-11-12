@@ -263,7 +263,7 @@ then on `PATH`) with DIR as the first tab; exit 1 with one line when it is not i
 window as a new tab (single instance) and exits 0.
 
 Command line (`:`): `:open DIR`, `:projects`, `:checkhealth`, `:update`, `:rollback`,
-`:profiles`, `:config`, `:theme NAME`, `:q`, `:qa`, `:help`. Tab completes command names,
+`:profiles`, `:config`, `:settings`, `:theme NAME`, `:q`, `:qa`, `:help`. Tab completes command names,
 directories and theme names. An unknown command prints `E492: Not a command: <name>`.
 
 ## Security
