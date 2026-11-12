@@ -11,6 +11,7 @@
     "allow-pty-ack",
     "allow-tab-detach",
     "allow-clipboard-write",
-    "allow-dir-complete"
+    "allow-dir-complete",
+    "allow-config-get"
   ]
 }

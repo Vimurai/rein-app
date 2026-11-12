@@ -9,4 +9,5 @@ pub const COMMANDS: &[&str] = &[
     "tab_detach",
     "clipboard_write",
     "dir_complete",
+    "config_get",
 ];

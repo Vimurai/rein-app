@@ -5,7 +5,7 @@
 // app, TERMINAL keys go to the pty except the escape chord. Text goes in as React text nodes
 // only, never as HTML.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ActionName } from "./actions.ts";
 import { commonPrefix, complete, parse } from "./commands.ts";
 import { cells, fit, layout, type Row, type ShellData } from "./grid.ts";
@@ -15,7 +15,15 @@ import type { ActionCall, KeyTable } from "./keymap.ts";
 import { WHICH_KEY_DELAY_MS, continuations, step, type ModeState } from "./modes.ts";
 import { WhichKey, label } from "./overlays.tsx";
 import { TermTab } from "./term.ts";
-import { THEME_NAMES, type Theme } from "./theme.ts";
+import { THEME_NAMES, cssVariables, type Theme } from "./theme.ts";
+
+/** What an action handler supplied by the app may do on the command line. */
+export interface Ui {
+  say: (text: string, error?: boolean) => void;
+  showCommand: (cmd: string, note?: string) => void;
+}
+
+export type Handlers = Partial<Record<ActionName, (call: ActionCall, ui: Ui) => void>>;
 
 export interface ShellProps {
   theme: Theme;
@@ -23,6 +31,13 @@ export interface ShellProps {
   fontFamily: string;
   fontSize: number;
   lineHeight: number;
+  /** Window opacity (0.6–1.0, config.toml); applies where the window is transparent. */
+  opacity: number;
+  /** Actions the app owns (config, theme — E-37); everything else the shell runs. */
+  handlers: Handlers;
+  /** A line to show on the command line (a config.toml reload or refusal); `seq` changes
+   *  each time there is a new one. */
+  notice: { text: string; error: boolean; seq: number };
   /** The DIR the window was started with (set by the core before any script ran). */
   startDir: string | null;
 }
@@ -49,9 +64,6 @@ const LATER: Partial<Record<ActionName, string>> = {
   "release.rollback": "E-39",
   "profiles.show": "E-39",
   "profiles.apply": "E-39",
-  "config.open": "E-37",
-  "config.reload": "E-37",
-  "theme.set": "E-37",
   "menu.show": "E-40",
   "help.show": "E-40",
   "input.style": "E-40",
@@ -94,22 +106,6 @@ export function GridRow({ row, className = "" }: { row: Row; className?: string 
   );
 }
 
-/** The cell size of the configured font, measured from the hidden probe. */
-function useCell(): { w: number; h: number } {
-  const [cell, setCell] = useState({ w: 0, h: 0 });
-  useEffect(() => {
-    const probe = document.getElementById("probe");
-    if (!probe) return;
-    const measure = () => {
-      const r = probe.getBoundingClientRect();
-      setCell({ w: r.width / 10, h: r.height });
-    };
-    measure();
-    void document.fonts.ready.then(measure);
-  }, []);
-  return cell;
-}
-
 function useViewport(): { w: number; h: number } {
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   useEffect(() => {
@@ -120,8 +116,9 @@ function useViewport(): { w: number; h: number } {
   return size;
 }
 
-export function Shell({ theme, keys, fontFamily, fontSize, lineHeight, startDir }: ShellProps) {
-  const cell = useCell();
+export function Shell(props: ShellProps) {
+  const { theme, keys, fontFamily, fontSize, lineHeight, opacity, handlers, notice, startDir } = props;
+  const [cell, setCell] = useState({ w: 0, h: 0 });
   const view = useViewport();
   const [data, setData] = useState<ShellData>(INITIAL);
   const [clock, setClock] = useState(clockNow);
@@ -148,6 +145,29 @@ export function Shell({ theme, keys, fontFamily, fontSize, lineHeight, startDir 
   }, []);
 
   const say = useCallback((text: string, error = false) => setMessage({ text, error }), []);
+
+  // Theme and font (config.toml, `:theme`): the CSS variables every element reads, the cell
+  // size of the font, and the open terminal — restyled before paint.
+  useLayoutEffect(() => {
+    const root = document.documentElement.style;
+    for (const [k, v] of Object.entries(cssVariables(theme))) root.setProperty(k, v);
+    root.setProperty("--font-family", fontFamily);
+    root.setProperty("--font-size", `${fontSize}px`);
+    root.setProperty("--line-height", String(lineHeight));
+    root.setProperty("--opacity", String(opacity));
+    const probe = document.getElementById("probe");
+    const measure = () => {
+      const r = probe?.getBoundingClientRect();
+      if (r) setCell({ w: r.width / 10, h: r.height });
+    };
+    measure();
+    void document.fonts.ready.then(measure);
+    tab.current?.restyle({ fontFamily, fontSize, lineHeight, theme });
+  }, [theme, fontFamily, fontSize, lineHeight, opacity]);
+
+  useEffect(() => {
+    if (notice.text) say(notice.text, notice.error);
+  }, [notice, say]);
 
   /** Show the exact command an action ran or stands for; `y` copies it. */
   const showCommand = useCallback(
@@ -228,6 +248,11 @@ export function Shell({ theme, keys, fontFamily, fontSize, lineHeight, startDir 
   /** Run one action — from a key, the command line or (E-40) a click: the same closed list. */
   const run = useCallback(
     (call: ActionCall) => {
+      const own = handlers[call.name];
+      if (own) {
+        own(call, { say, showCommand });
+        return;
+      }
       switch (call.name) {
         case "mode.normal":
           setMode({ mode: "NORMAL", pending: [] });
@@ -272,7 +297,7 @@ export function Shell({ theme, keys, fontFamily, fontSize, lineHeight, startDir 
         }
       }
     },
-    [open, detach, say, setMode, setCmd, showCommand],
+    [open, detach, say, setMode, setCmd, showCommand, handlers],
   );
 
   /** TERMINAL keys, seen by xterm first: hold a chord prefix, take the chord, pass the rest. */

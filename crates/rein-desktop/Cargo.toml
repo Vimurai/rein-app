@@ -26,6 +26,8 @@ portable-pty = "0.9.0"
 # The bounded process run and WSL detection, shared with the CLI (D-038).
 rein-platform = { version = "0.1.0", path = "../rein-platform" }
 serde = { version = "1.0.229", features = ["derive"] }
+# config.toml (E-37, D-043): the version Tauri's build already uses.
+toml = "1.2.1"
 tauri = { version = "2.11.6", default-features = false, features = ["wry", "x11", "compression"] }
 
 [target.'cfg(unix)'.dependencies]

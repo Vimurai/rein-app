@@ -124,6 +124,15 @@ export class TermTab {
     this.term.focus();
   }
 
+  /** Font or theme changed (config.toml was saved, or `:theme`): restyle and refit. */
+  restyle(opts: TermOptions): void {
+    this.term.options.fontFamily = opts.fontFamily;
+    this.term.options.fontSize = opts.fontSize;
+    this.term.options.lineHeight = opts.lineHeight;
+    this.term.options.theme = xtermTheme(opts.theme);
+    this.#fit.fit();
+  }
+
   blur(): void {
     this.term.blur();
   }

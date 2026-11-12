@@ -15,6 +15,12 @@ export interface Theme {
   /** Dim text on `barBg`. */
   barDim: string;
   border: string;
+  /** Error lines on `bg`, and the statusline's mode segments (text in `bg` on them): the
+   *  terminal palette's red / green / blue / yellow unless a theme needs a readable tone. */
+  error: string;
+  modeTerminal: string;
+  modeNormal: string;
+  modeCommand: string;
 }
 
 export const GRUVBOX_DARK: Theme = {
@@ -31,7 +37,79 @@ export const GRUVBOX_DARK: Theme = {
   dim: "#a89984",
   barDim: "#bdae93",
   border: "#7c6f64",
+  error: "#fe6352",
+  modeTerminal: "#b8bb26",
+  modeNormal: "#83a598",
+  modeCommand: "#fabd2f",
 };
+
+const theme = (
+  name: string,
+  fg: string,
+  bg: string,
+  accent: string,
+  ansi: string[],
+  chrome: { barBg: string; barFg: string; dim: string; barDim: string; border: string },
+  roles: Partial<Pick<Theme, "error" | "modeTerminal" | "modeNormal" | "modeCommand">> = {},
+): Theme => ({
+  name,
+  fg,
+  bg,
+  accent,
+  ansi,
+  ...chrome,
+  error: roles.error ?? ansi[9] ?? fg,
+  modeTerminal: roles.modeTerminal ?? ansi[10] ?? fg,
+  modeNormal: roles.modeNormal ?? ansi[12] ?? fg,
+  modeCommand: roles.modeCommand ?? ansi[11] ?? fg,
+});
+
+export const TOKYONIGHT = theme("tokyonight", "#c0caf5", "#1a1b26", "#7aa2f7", [
+  "#15161e", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#bb9af7", "#7dcfff", "#a9b1d6",
+  "#414868", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#bb9af7", "#7dcfff", "#c0caf5",
+], { barBg: "#24283b", barFg: "#c0caf5", dim: "#a9b1d6", barDim: "#a9b1d6", border: "#565f89" });
+
+export const CATPPUCCIN_MOCHA = theme("catppuccin-mocha", "#cdd6f4", "#1e1e2e", "#cba6f7", [
+  "#45475a", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5", "#bac2de",
+  "#585b70", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5", "#a6adc8",
+], { barBg: "#313244", barFg: "#cdd6f4", dim: "#a6adc8", barDim: "#bac2de", border: "#6c7086" });
+
+export const NORD = theme("nord", "#d8dee9", "#2e3440", "#88c0d0", [
+  "#3b4252", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0",
+  "#4c566a", "#d08770", "#a3be8c", "#ebcb8b", "#88c0d0", "#b48ead", "#8fbcbb", "#eceff4",
+], { barBg: "#3b4252", barFg: "#e5e9f0", dim: "#aeb6c3", barDim: "#c2c9d4", border: "#616e88" }, { error: "#e0957d" });
+
+export const SOLARIZED_DARK = theme("solarized-dark", "#93a1a1", "#002b36", "#b58900", [
+  "#073642", "#dc322f", "#859900", "#b58900", "#268bd2", "#d33682", "#2aa198", "#eee8d5",
+  "#586e75", "#cb4b16", "#859900", "#b58900", "#268bd2", "#6c71c4", "#93a1a1", "#fdf6e3",
+], { barBg: "#073642", barFg: "#eee8d5", dim: "#8c9a9b", barDim: "#a3afaf", border: "#586e75" }, { error: "#f2643f", modeNormal: "#3a9be2" });
+
+export const GITHUB_LIGHT = theme("github-light", "#1f2328", "#ffffff", "#0969da", [
+  "#24292f", "#cf222e", "#116329", "#4d2d00", "#0969da", "#8250df", "#1b7c83", "#6e7781",
+  "#57606a", "#a40e26", "#1a7f37", "#633c01", "#0550ae", "#6639ba", "#136061", "#8c959f",
+], { barBg: "#eaeef2", barFg: "#1f2328", dim: "#59636e", barDim: "#4d5761", border: "#8c959f" });
+
+export const THEMES: ReadonlyMap<string, Theme> = new Map(
+  [GRUVBOX_DARK, TOKYONIGHT, CATPPUCCIN_MOCHA, NORD, SOLARIZED_DARK, GITHUB_LIGHT].map((t) => [t.name, t]),
+);
+
+/** A built-in theme with `[theme.custom]` colours laid over it (`fg`, `bg`, `accent`,
+ *  `color0` … `color15`); the core has checked every value is `#rrggbb`. */
+export function resolveTheme(name: string, custom: Readonly<Record<string, string>> = {}): Theme {
+  const base = THEMES.get(name) ?? GRUVBOX_DARK;
+  const ansi = [...base.ansi];
+  for (const [k, v] of Object.entries(custom)) {
+    const n = /^color(\d+)$/.exec(k)?.[1];
+    if (n !== undefined && Number(n) < 16) ansi[Number(n)] = v;
+  }
+  return {
+    ...base,
+    fg: custom["fg"] ?? base.fg,
+    bg: custom["bg"] ?? base.bg,
+    accent: custom["accent"] ?? base.accent,
+    ansi,
+  };
+}
 
 /** The six built-in themes (desktop.md "For tiling window managers"); E-37 ships the five
  *  besides `gruvbox-dark`. `:theme` completes these names. */
@@ -57,6 +135,10 @@ export function cssVariables(t: Theme): Record<string, string> {
     "--border": t.border,
     "--ok": t.ansi[10] ?? t.fg,
     "--green": t.ansi[10] ?? t.fg,
+    "--error": t.error,
+    "--mode-terminal": t.modeTerminal,
+    "--mode-normal": t.modeNormal,
+    "--mode-command": t.modeCommand,
     // The sixteen terminal colours, for the Tailwind theme tokens (`text-ansi-1`, …).
     ...Object.fromEntries(t.ansi.map((c, i) => [`--ansi-${i}`, c])),
   };

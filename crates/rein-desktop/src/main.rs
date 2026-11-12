@@ -4,9 +4,8 @@
 //! terminal stage (E-35), modes (E-36), config (E-37), projects and tabs (E-38) and the
 //! health / release / profile actions (E-39) build on this.
 
-// Validates config.toml key bindings from E-37; until then only its tests use it.
-#[cfg_attr(not(test), allow(dead_code))]
 mod actions;
+mod config;
 mod dirs;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod handoff_dir;
@@ -40,6 +39,8 @@ const MAIN_WINDOW: &str = "main";
 /// `project_path::check`, on Windows `check_text` (printable, bounded); either way `tab_open`
 /// validates it again through the host before anything runs.
 const EVENT_OPEN_DIR: &str = "open_dir";
+/// Event carrying the config after a save of config.toml (desktop.md §API).
+const EVENT_CONFIG_CHANGED: &str = "config_changed";
 
 fn usage() -> ExitCode {
     eprintln!("usage: rein-desktop [DIR]");
@@ -89,14 +90,15 @@ fn start_dir_script(dir: Option<&str>) -> String {
 }
 
 /// Linux / macOS: projects are local directories (`LocalHost`). Windows: Rein lives inside
-/// WSL and every process is `wsl.exe` (`WslHost`, §Windows window W1–W2).
-fn platform_host() -> Box<dyn host::Host> {
+/// WSL and every process is `wsl.exe` (`WslHost`, §Windows window W1–W2), in the distro
+/// `config.toml` names (`wsl.distro`), else WSL's default.
+fn platform_host(_distro: Option<String>) -> Box<dyn host::Host> {
     #[cfg(unix)]
     return Box::new(local_host::LocalHost::new(
         dirs::process_env("HOME").map(std::path::PathBuf::from),
     ));
     #[cfg(windows)]
-    return Box::new(wsl_host::WslHost::system(None));
+    return Box::new(wsl_host::WslHost::system(_distro));
 }
 
 fn main() -> ExitCode {
@@ -126,8 +128,15 @@ fn main() -> ExitCode {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     glib::set_prgname(Some("rein-app"));
 
+    // config.toml (E-37): read before the window is built — decorations, opacity and the WSL
+    // distro are start-time settings; the rest reloads live.
+    let config = std::sync::Arc::new(config::ConfigService::open(dirs::config_dir(
+        &dirs::process_env,
+    )));
+    let start = config.view().config;
     let builder = tauri::Builder::default()
-        .manage(ipc::Desktop::new(platform_host()))
+        .manage(ipc::Desktop::new(platform_host(start.wsl.distro.clone())))
+        .manage(std::sync::Arc::clone(&config))
         .invoke_handler(tauri::generate_handler![
             ipc::tab_open,
             ipc::pty_write,
@@ -135,7 +144,8 @@ fn main() -> ExitCode {
             ipc::pty_ack,
             ipc::tab_detach,
             ipc::clipboard_write,
-            ipc::dir_complete
+            ipc::dir_complete,
+            ipc::config_get
         ]);
     let result = builder
         .setup(move |app| {
@@ -149,7 +159,28 @@ fn main() -> ExitCode {
                     // The start DIR is set before any page script runs, so the UI reads it at
                     // start instead of racing an event (see `start_dir_script`).
                     .initialization_script(start_dir_script(dir.as_deref()))
-                    .build()?;
+                    .decorations(start.window.decorations);
+            // Opacity below 1 needs a transparent window, decided at creation (macOS would
+            // need Tauri's private-API feature, which this app does not enable).
+            #[cfg(not(target_os = "macos"))]
+            let window = window.transparent(start.window.opacity < 1.0);
+            let window = window.build()?;
+            // A save of config.toml reaches the web side as `config_changed`.
+            {
+                let handle = app.handle().clone();
+                let config = std::sync::Arc::clone(&config);
+                std::thread::spawn(move || {
+                    loop {
+                        std::thread::sleep(config::POLL);
+                        if let Some(view) = config.reload_if_changed() {
+                            if let Some(w) = handle.get_webview_window(MAIN_WINDOW) {
+                                let _ = w.set_decorations(view.config.window.decorations);
+                            }
+                            let _ = handle.emit(EVENT_CONFIG_CHANGED, view);
+                        }
+                    }
+                });
+            }
             // Debug builds only: `REIN_DEVTOOLS=1` opens the web inspector.
             #[cfg(debug_assertions)]
             if std::env::var_os("REIN_DEVTOOLS").is_some() {

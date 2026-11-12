@@ -244,6 +244,20 @@ pub fn tab_detach(state: State<'_, Desktop>, tab: u32) {
     state.detach(tab);
 }
 
+/// `config_get` (desktop.md §API, E-37): the active config, the file's path and the last
+/// refusal. `reload` re-reads the file first (`config.reload`).
+#[tauri::command(async)]
+pub fn config_get(
+    config: State<'_, std::sync::Arc<crate::config::ConfigService>>,
+    reload: Option<bool>,
+) -> crate::config::ConfigView {
+    if reload == Some(true) {
+        config.reload()
+    } else {
+        config.view()
+    }
+}
+
 /// `:open` Tab completion (E-36), through the host: directories starting with `prefix`.
 #[tauri::command(async)]
 pub fn dir_complete(state: State<'_, Desktop>, prefix: String) -> Result<Vec<String>, IpcError> {

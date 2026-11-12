@@ -24,6 +24,15 @@ pub fn state_dir(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     xdg(env, "XDG_STATE_HOME", ".local/state")
 }
 
+/// `$XDG_CONFIG_HOME/rein-app` (default `~/.config/rein-app`), where `config.toml` lives; on
+/// Windows `%APPDATA%\rein-app` (§Windows window W6).
+pub fn config_dir(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    if cfg!(windows) {
+        return windows_dir(env("APPDATA"));
+    }
+    xdg(env, "XDG_CONFIG_HOME", ".config")
+}
+
 /// `<value>\rein-app` when `value` is a drive-absolute Windows path (`X:\…`). A network
 /// share is refused: the lock and the handoff directory must sit under the profile's own
 /// permissions (security review of E-43). Checked as text, so the rule is the same (and
@@ -65,6 +74,12 @@ mod tests {
         };
         assert_eq!(state_dir(&unset), Some(PathBuf::from(want)));
         assert_eq!(state_dir(&|_: &str| None), None);
+        let cfg = |k: &str| match k {
+            "XDG_CONFIG_HOME" => Some("/c".into()),
+            "HOME" => Some("/home/u".into()),
+            _ => None,
+        };
+        assert_eq!(config_dir(&cfg), Some(PathBuf::from("/c/rein-app")));
     }
 
     #[test]

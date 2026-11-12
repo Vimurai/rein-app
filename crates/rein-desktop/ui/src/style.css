@@ -3,7 +3,8 @@ html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--bg);
+  /* config.toml `window.opacity`: shows through where the window is transparent. */
+  background: color-mix(in srgb, var(--bg) calc(var(--opacity, 1) * 100%), transparent);
   color: var(--fg);
 }
 #grid, #probe {
@@ -25,9 +26,9 @@ html, body {
 /* A vertical box glyph spans the whole cell, so stacked rows join (line-height > 1). */
 .v { display: inline-block; transform: scaleY(var(--line-height)); }
 .ok { color: var(--ok); }
-.mode-terminal { background: var(--green); color: var(--bg); font-weight: bold; }
-.mode-normal { background: var(--ansi-12); color: var(--bg); font-weight: bold; }
-.mode-command { background: var(--ansi-11); color: var(--bg); font-weight: bold; }
+.mode-terminal { background: var(--mode-terminal); color: var(--bg); font-weight: bold; }
+.mode-normal { background: var(--mode-normal); color: var(--bg); font-weight: bold; }
+.mode-command { background: var(--mode-command); color: var(--bg); font-weight: bold; }
 .cursor { background: var(--fg); color: var(--bg); }
 /* The which-key overlay sits on the stage, just above the statusline. */
 .which-key {
@@ -42,7 +43,7 @@ html, body {
   background: var(--bg);
   color: var(--fg);
 }
-.error { color: var(--ansi-9); }
+.error { color: var(--error); }
 
 /* The terminal sits over the stage rows, sized in whole cells (main.ts sets the variables). */
 #term {

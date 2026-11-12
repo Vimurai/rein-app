@@ -18,6 +18,8 @@ const ALLOWED: &[&str] = &[
     "allow-clipboard-write",
     // E-36: `:open` Tab completion of directories, through the host.
     "allow-dir-complete",
+    // E-37: the config, its path and its last error.
+    "allow-config-get",
 ];
 
 fn json(rel: &str) -> serde_json::Value {
