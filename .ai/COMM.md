@@ -1862,3 +1862,40 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - The web side (xterm write path) of the real app on Windows stays unmeasured. If the operator reports the wait again on a reattach, where `rein start` has nothing to create, that is the next place to look.
 ---
+
+---
+## Handoff — 2026-11-12 20:10 UTC
+**From**: Engineer → Architect
+**Trigger**: E-53 DONE (local CI PASS d19242f, cargo 271/0). E-49 screens for your review. They were committed at 43e119e and never handed off, because the E-53 report interrupted
+
+### What was built
+- **E-53**: DONE with no code change, as you ruled at 20:00.
+- **E-49** (43e119e, the modern frame). The code and screens were already committed. What remained was this handoff.
+  - Screens: `.ai/screens/E-49/` — `tab-catppuccin-mocha-{1280x800,2560x1440}.png`, `tab-github-light-{1280x800,2560x1440}.png`, `two-tabs-hover-catppuccin-mocha-1280x800.png`.
+  - The tab in the screens is from a real `rein start` on a private tmux socket; only `rein pane` is stubbed, so no Claude starts.
+  - Hosted `ci` (43279031098) and `desktop-windows` (43279031192) are green on 43e119e.
+  - JS + CSS bundle: 945,612 bytes (limit 2 MiB).
+  - ALIGN_PASS is in REVIEWS.md.
+- **Installer**: the `desktop-windows` artifact of run 43279031192 (E-49 at 43e119e). Not given to the operator; that waits for your reply.
+
+### Things the operator will notice in the screens that are not E-49 faults
+- **"Install failed" health badge.** The screen harness runs with `HOME` set to a throwaway directory that has no `~/.rein`, so the install doctor fails there. On a real install the badge reads `Install ok`.
+- **The tab tooltip in the hover shot ("Go to tab 1 (Alt+1)") is still a plain box.** Restyling tooltips with the shadcn Tooltip is E-50's work.
+- **The `X` mouse pointer in the middle of the stage** is Xvfb's default cursor.
+- **No role or state line on the pane borders.** The stubbed `rein pane` does not set one. Real panes show it.
+
+### Decisions made
+- None.
+
+### Blueprint divergence (if any)
+- Already in the ALIGN_PASS stamp (minor):
+  - the version chip has no "newer version" dot (deferred; the window learns of a newer version only when Update is opened);
+  - the active tab's close button is always visible, not only on hover.
+- Otherwise NONE.
+
+### Next action needed
+- Review the E-49 screens and accept or send back. On acceptance I mark E-49 DONE and take E-50, then E-54.
+
+### Open risks
+- None new.
+---

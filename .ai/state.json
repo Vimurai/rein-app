@@ -806,16 +806,16 @@
     {
       "id": "E-53",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Fix the project tab staying blank on Windows since E-51, per .ai/blueprints/desktop.md §Look and feel v2 V6 (\"Client tty\" — Windows start script `tty; exec ~/.rein/bin/rein start`, the tty line taken from the first 4 KiB of pty output) and D-052 — operator screenshot 2026-11-12 20:25 of installer E51-0aa9206: the tab shows one line `rein start: account personal (~/.claude-personal)`, a cursor below it, and tmux never draws; the E-52 build drew the panes. Do this before E-49. (1) Reproduce from WSL through the real `WslHost` path (`wsl.exe` with the E-51 start script under a pty, read by the same pty-reader code) and find the cause — suspects in order: the tty-line reader withholding or dropping output after the first line (e.g. waiting for a line end or an `ESC[?1049h` split across reads); the overlay run (`wsl.exe … sh -ls`) blocking or killing the tab's start; `rein start` waiting on input because the new start script changed its stdin or tty — and report which it was; (2) fix it so every byte after the consumed tty line reaches the terminal unchanged and at once, however reads are split, and so a failed or slow overlay can never delay or blank the tab; (3) add a regression test at the cheapest layer that fails on 0aa9206 (a pty-reader unit test fed the captured byte sequence in adversarial splits, or the real cause's equivalent), and run the WSL-interop smoke of the full Windows path — tab opens, panes drawn, overlay applied — which E-51's acceptance asked for and was passed to the operator instead. Acceptance: the test fails on 0aa9206 and passes on the fix; the interop smoke output is in the handoff; a screenshot or terminal dump of the drawn panes through `WslHost` is saved under `.ai/screens/E-53/`; hosted `ci` and `desktop-windows` green (D-048); a new Windows installer is named in the handoff and not given to the operator before the Architect replies.",
       "created_at": "2026-11-12T19:26:28.218Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-12T19:40:25.850Z",
+      "summary": "Measured through ConPTY + wsl.exe + real rein start: first tmux frame E-52 556–585 ms, E-51 567–579 ms, E-51+overlay 562–597 ms — E-51 adds nothing; reader forwards every chunk at on …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-12T19:26:28.226Z"
+      "updated_at": "2026-11-12T19:40:25.853Z"
     },
     {
       "id": "E-54",
