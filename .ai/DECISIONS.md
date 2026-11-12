@@ -1598,3 +1598,34 @@ A hand-written TOML subset parser — a second parser of a format with string es
 
 ### Rollback
 Remove the `dir_complete` row and command (completion falls back to command and theme names); swap polling for a watcher behind the same `Config` interface.
+
+## D-045 — The window runs the `rein-app` CLI for update, rollback and profiles on every platform
+
+**Date**: 2026-11-12
+**Task**: Engineer question before E-39; amends `desktop.md` §Components 5, §API, §Security 5, §Test Plan and D-033 ruling 8 ("over the Phase 1 library seams")
+**Decision**: Option A. Release and profile actions are one `Host` method that runs the `rein-app` binary with a constant argv per action and streams its lines; the window decides only on the exit code. Health keeps calling `rein doctor --json` and parses it with the Phase 1 parser, moved into `rein-platform`.
+
+### Why needed
+The update / rollback flow (check, notes, lock, owner guard, snapshot swap, install-then-verdict, exit codes, refusal texts) lives in the `rein-app` bin crate, not in a library. D-033 assumed library seams that exist only for parts of it.
+
+### Rulings
+1. `LocalHost` starts `rein-app` found beside `rein-desktop`, else on `PATH`, resolved once to an absolute path; stdin closed. `WslHost` runs the same argv inside WSL (D-038 W4). One code path, three platforms.
+2. Argv are constants: `update --check`, `update --yes`, `rollback`, `profiles list`, `profiles apply [--dry-run] --profile N…`. Profile names match `[A-Za-z0-9._-]{1,64}` and must appear in `profiles list`.
+3. `rein-app update --check` moves from E-45 into **E-39**. Its first two lines are `installed: <version>` and `newest: <version>`; the window may display them. Nothing else in CLI text is read.
+4. The confirm step is the window's (two labelled buttons); the CLI is then run with `--yes`.
+5. The doctor parser is moved to `rein-platform`, not copied.
+6. One CLI run at a time per window.
+
+### Alternatives considered
+1. **(B) Move the orchestration into a library and call it in-process** — rejected: a large refactor of tested Tier 3 code for no user-visible gain, and Windows would still need the CLI route, leaving two paths.
+2. **Structured (JSON) CLI output for the window** — deferred: the overlays only need to show what the CLI says; add it when a screen needs fields.
+
+### Constraints driving this decision
+- "No second implementation" (D-033), the Tier 3 settings boundary, D-038 ruling 8 (Windows already takes this route).
+
+### Impact
+- Unlocks: E-39 as one path; E-45 shrinks to the WSL transport, the WSL-absent screen, `wsl.distro`, the folder-dialog start directory and Windows `dir_complete`.
+- Risk if wrong: the window needs the CLI installed beside it (true in every package; reported plainly when not); a `PATH` fallback runs whatever `rein-app` the user's `PATH` names — the same trust as typing the command.
+
+### Rollback
+`run_cli` is one method; an in-process implementation can replace `LocalHost`'s later without touching the IPC table.

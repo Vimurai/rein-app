@@ -163,7 +163,22 @@ sixteen colours are given to xterm.js, so the chrome and the terminal always mat
 5. **`HealthService`** — runs `rein doctor --json` through the Phase 1 runner (same 4 MiB
    cap and strict parse; 120-second limit) when a tab opens, after update / rollback, and on
    `health.show`. It displays the document's `status` and checks; it never recomputes a
-   verdict and never branches on a check id (D-029, D-032).
+   verdict and never branches on a check id (D-029, D-032). The strict doctor parser
+   (`parse`, `Document`, `Status`, `check_lines`) moves from the `rein-app` bin crate into
+   `rein-platform` — moved, not copied — and both use it.
+   **Release and profile actions run the `rein-app` CLI (D-045)**, not an in-process
+   library: one `Host` method `run_cli(action)` with a constant argv per action —
+   `update --check`, `update --yes`, `rollback`, `profiles list`,
+   `profiles apply [--dry-run] --profile N…`. `LocalHost` starts the `rein-app` binary
+   found beside `rein-desktop` (else on `PATH`; resolved to an absolute path once at
+   start), stdin closed, `CLAUDECODE` unset; `WslHost` runs the same argv inside WSL (W4).
+   Lines are streamed to the overlay escaped and unchanged; the exit code is returned and
+   is the only thing the window decides on. The lock, owner guard, snapshot swap, verdict
+   and refusal texts are therefore the CLI's own, by construction. `update --check` prints
+   `installed: <version>` and `newest: <version>` as its first two lines, then the notes;
+   the window may display those values and nothing else is read from the text. One CLI
+   run at a time per window. If the binary is not found: "rein-app is not installed
+   beside the window" and health keeps working.
 6. **Web UI (TypeScript + React; shadcn/ui for the click layer — D-037)** — shadcn/ui
    components (Radix primitives + Tailwind, copied into `crates/rein-desktop/ui/components/`
    and owned by us) are used for the menu (its Command component), dialogs and confirm
@@ -221,9 +236,9 @@ else (no `shell`, `fs`, `http` or `opener` plugin).
 | `projects_list` / `projects_forget` | — / path | `ProjectsFile.recent` | — |
 | `config_get` | — | `ConfigFile` + source path + last error | — |
 | `health_get` | refresh: bool | `HealthView` | — (failure is `status: unknown`) |
-| `release_check` | — | installed version, newest version, notes | offline |
-| `release_apply` | `update` \| `rollback` | progress lines (channel), then the Phase 1 exit code | lock held · every Phase 1 refusal, text unchanged |
-| `profiles_plan` / `profiles_apply` | profile names | per-profile diff of the three allowed keys / result | Phase 1 errors, text unchanged |
+| `release_check` | — | the lines of `rein-app update --check` + its exit code (0 newer · 10 current · 11 offline) | CLI not found |
+| `release_apply` | `update` \| `rollback` | the CLI's lines (channel), then its exit code | a run is already in progress · CLI not found · every Phase 1 refusal, text unchanged |
+| `profiles_plan` / `profiles_apply` | profile names (`[A-Za-z0-9._-]{1,64}`, each present in `rein-app profiles list`) | the lines of `profiles apply --dry-run` / `profiles apply` + exit code | unknown or unsafe name · Phase 1 errors, text unchanged |
 | `clipboard_write` | text (≤ 64 KiB); text only, through `arboard` (D-042) | — | — |
 | `dir_complete` | absolute path prefix that passes the project-path check | at most 50 directory paths (directories only; hidden ones only when the typed stem starts with `.`; names failing the display-text rule dropped), through the `Host` seam | unsafe or relative prefix → empty list |
 | `clipboard_read` | — (only on a paste action started by the user) | text (≤ 1 MiB) | — |
@@ -263,10 +278,13 @@ Trust boundaries added by the window:
 4. **Config file.** Read-only input: bounded to 256 KiB, unknown keys are an error, key
    bindings resolve only to `Action` names, colours only to `#rrggbb`. It cannot start a
    process, load a file or change a URL.
-5. **Settings boundary (Tier 3).** `profiles_apply` reaches `rein_profiles::apply` and
-   nothing else, so the three-key allow-list and the compile-time ban on `hooks`,
-   `permissions`, `autoMode`, `defaultMode` hold unchanged. `release_apply` takes the same
-   install lock and owner guard as the CLI.
+5. **Settings boundary (Tier 3).** `profiles_apply` and `release_apply` run the `rein-app`
+   CLI with constant argv (D-045); the window itself never writes a settings file or a
+   Rein tree. So the three-key allow-list, the compile-time ban on `hooks`, `permissions`,
+   `autoMode`, `defaultMode`, the install lock and the owner guard are the CLI's,
+   unchanged. The only variable argv elements are validated profile names; no key name,
+   flag or version string from the web side ever reaches an argv. The programs the window
+   starts are now `rein` (installed tree) and `rein-app` (beside the window, else `PATH`).
 6. **Pointer layer (D-034).** A click resolves to an `Action` through the same table as a
    key, so it gains no new power. The capability file gains exactly one plugin permission,
    the folder-open dialog; its result is a path and passes the `tab_open` validation. Paste
@@ -510,9 +528,12 @@ release artifact carries the window until a task adds it to the dist configurati
 - **Config:** defaults file parses to the built-in defaults; unknown key, bad colour,
   binding to an unknown action and an oversized file are each refused with file and line,
   and the previous config stays active; a save triggers `config_changed`.
-- **Health / release / profiles:** stubbed `Process` — `fail`, `warn`, `ok`, garbage →
-  `unknown`; `release_apply` returns the Phase 1 exit codes unchanged; `profiles_apply`
-  cannot be handed a key name (it takes profile names only).
+- **Health / release / profiles:** stubbed process runner — `fail`, `warn`, `ok`, garbage →
+  `unknown`; the exact argv of every `run_cli` action; `release_apply` returns the CLI's
+  exit code unchanged; a profile name outside the pattern or absent from `profiles list`
+  is refused before any process starts; a second run while one is in progress is refused;
+  CLI not found is reported and health still works. `rein-app update --check`: 0 / 10 /
+  11, the two leading lines, and that it installs nothing (CLI crate test).
 - **Capabilities:** a test reads the Tauri capability file and fails if any plugin
   permission beyond the IPC table and window basics is present; the CSP string is asserted.
 - **Pointer parity (D-034):** a test walks the `Action` list and fails if an action has no
