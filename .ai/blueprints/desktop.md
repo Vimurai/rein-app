@@ -565,6 +565,7 @@ readable under any loader.
 | `--motion-slow` | 220 ms | dialogs, first paint of the window |
 | `--motion-ease` | `cubic-bezier(0.2, 0, 0, 1)` | everything that enters or moves |
 | `--motion-spin` | 800 ms linear, infinite | spinners |
+| `--motion-sweep` | 1100 ms, infinite | the `ProgressLine` sweep (as built, E-54) |
 | `--loader-delay` | 150 ms | a loader is not shown for a wait shorter than this |
 
 **Components**
@@ -612,8 +613,14 @@ readable under any loader.
 running operation (`busy`), both in memory. No `config.toml` or `ui.json` key is added:
 reduced motion follows the operating system setting only.
 
-**Interface contracts.** No IPC command is added or changed; the capability file is
-unchanged. `tabPhase` reads what the UI already has: the `tab_open` call, the terminal's
+**Interface contracts.** No IPC command is added; the capability file is unchanged. One
+answer changed (E-54, for V6's failed-overlay toast): `tab_tmux` returns `string | null` —
+the reason when the overlay was not applied, `null` when it was or the tab closed. The
+reason is one of the app's own fixed sentences chosen by the script's exit code, never
+text from tmux, the pty or a path. As built: the completion spinner sits on the `:open`
+palette (the only caller of `dir_complete`), not the picker; debug builds honour
+`REIN_DESKTOP_SLOW_LIST_MS` (≤ 30 s) to hold the recent list back for screenshots, release
+builds ignore it. `tabPhase` reads what the UI already has: the `tab_open` call, the terminal's
 buffer-change event, pty exit, key input. The window background colour is set in the
 existing window builder from the theme already loaded at start.
 

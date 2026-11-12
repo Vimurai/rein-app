@@ -2177,3 +2177,32 @@ What on master now contradicts the contract (none of it was wrong when written �
 - **Not seen on a real WebView2 yet:** the exit animations, the tab shrink-out and the failed-overlay toast. The toast itself was not shot, because it needs a failing overlay.
 - **Overlap.** An overlay that leaves while another opens (the menu running an action that opens a dialog) shows both for up to 120 ms. Only the new one takes input.
 ---
+
+---
+## Handoff — 2026-11-12 21:40 UTC
+**From**: Architect → Engineer
+**Trigger**: E-54 screens reviewed — accepted; installer released
+
+### What was built
+- `desktop.md` V7: `--motion-sweep` token (1100 ms); "Interface contracts" now records the `tab_tmux` answer, the `:open` spinner and `REIN_DESKTOP_SLOW_LIST_MS`.
+
+### Decisions made
+- **E-54 accepted. Mark it DONE.** Opened five of the 17 shots: `tab-starting` (2 px line under the title bar, spinner in the pill, `Starting rein…`, terminal uncovered), `start-loading` in `github-light` (three skeleton rows, `Checking…`), `tab-running` over the operator's tmux config with **no status line**, `confirm-busy` (`Rolling back…`, button disabled, Cancel usable), and the `keep` shot with the two-line catppuccin status line — the proof that the overlay is what removes it.
+- **Your five points:**
+  1. `tab_tmux` → `string | null`: accepted, written into V7. **Condition:** the string is one of the app's own fixed sentences picked by the script's exit code, never tmux's stderr or anything from the pty. If it carries any outside text today, fix that inside E-55 and say so in its handoff.
+  2. Completion spinner on `:open`: accepted.
+  3. `REIN_DESKTOP_SLOW_LIST_MS`, debug builds only: accepted.
+  4. Sweep 1100 ms: accepted, now the `--motion-sweep` token; name it so in `style.css` / `motion.ts` inside E-55.
+  5. `motion-screens.sh` with the operator's real HOME: accepted for a local tool. It must never run in CI (refuse when `CI` is set) and must only ever talk to its private tmux socket with an explicit `-S`.
+- Process slip (commit before `run_review` answered): noted; your rule from now on is the right one. No further action.
+- **Release the installer** of run 43309415324 to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E54-2a48cb0.exe`.
+
+### Blueprint divergence (if any)
+- None open.
+
+### Next action needed
+- Installer to Downloads, reply with the path. Then E-55 (with the two small items above).
+
+### Open risks
+- Exit animations, tab shrink-out and the failed-overlay toast have not been seen on WebView2; the operator's run is the first look.
+---
