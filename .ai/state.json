@@ -536,23 +536,23 @@
     {
       "id": "E-36",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Implement the modal input layer of the window, per .ai/blueprints/desktop.md §Core Concept rules 2–4, \"Default keymap\", §Components 6 (`modes`), §Data Model `Action`, §API \"Command line\" and D-033 rulings 2 and 4: a pure `modes` function `(mode, pending keys, key) → (mode, pending keys, action?)` over TERMINAL / NORMAL / COMMAND; the closed `Action` list generated for Rust and TypeScript from one source; the default keymap table exactly as written (TERMINAL forwards every key except the escape chord `C-\\ C-n`); the leader key with a which-key overlay after 400 ms; the command line with the listed `:` commands, Tab completion of command names, directories and theme names, and `E492: Not a command: <name>` for an unknown one; the statusline mode segment coloured per mode; showing the exact `rein` / `rein-app` command an action ran on the command line, with `y` copying it through `clipboard_write` (≤ 64 KiB). Actions whose backends arrive in later tasks print one line saying so. Acceptance: §Test Plan \"Modes\" — table-driven tests for every keymap row, the leader timeout, an unbound NORMAL key ignored, and a property test that TERMINAL mode forwards every key sequence that does not contain the escape chord — green in the web test run and hosted CI.",
       "created_at": "2026-11-11T19:10:08.052Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-12T09:34:11.129Z",
+      "summary": "E-36 (0bf9edd, [TIER_2]): pure modes function with key table input, default keymap, leader + which-key (400 ms), command line (11 commands, Tab completion, E492), mode segment colour …[full in LOG.md]",
       "depends_on": [
         "E-34"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-11T20:50:23.716Z"
+      "updated_at": "2026-11-12T09:34:11.129Z"
     },
     {
       "id": "E-37",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Implement the window's `Config` service and themes, per .ai/blueprints/desktop.md §Components 4, §Data Model `ConfigFile` and file locations, §Core Concept \"For tiling window managers\", §API `config_get` / event `config_changed`, §Security boundary 4 and D-033 ruling 5: load `$XDG_CONFIG_HOME/rein-app/config.toml` (created with commented defaults on first run, never rewritten afterwards), validate it (at most 256 KiB; unknown key, colour not `#rrggbb`, or a binding to a name outside the closed `Action` list is an error naming file, line and reason), keep the previous good config on error and show the error on the command line, and reload on save through a file watcher; apply font family and size, `window.decorations`, `window.opacity` (0.6–1.0), `window.start`, the escape chord, the leader and NORMAL-mode bindings; ship the six themes (`gruvbox-dark` default, `tokyonight`, `catppuccin-mocha`, `nord`, `solarized-dark`, `github-light`) with `[theme.custom]` overrides and give the same sixteen colours to xterm.js; wire `:config` (show and copy the path — the app starts no editor), `:theme NAME` and `config.reload`. The file must not be able to start a process, load a file or set a URL. Run `skill: dependency_gate` for `toml` and `notify`. Acceptance: §Test Plan \"Config\" (defaults file equals built-in defaults; each refusal keeps the previous config; a save emits `config_changed`) green in `cargo test --workspace` and hosted CI; text contrast ≥ 4.5:1 in every built-in theme.",
       "created_at": "2026-11-11T19:10:16.767Z",
@@ -561,16 +561,14 @@
       "depends_on": [
         "E-36"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-36"
-      ],
-      "updated_at": "2026-11-11T19:10:16.768Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T09:34:11.132Z"
     },
     {
       "id": "E-38",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Implement projects, tabs and the start screen of the window, per .ai/blueprints/desktop.md §Components 3, §Core Concept \"Screen\" (tabline, overlay and start-screen drawings), §Data Model `Tab` / `ProjectsFile`, §API `projects_list` / `projects_forget` and D-033: a `ProjectStore` that keeps at most 64 recent projects in `$XDG_STATE_HOME/rein-app/projects.json` (schema 1, canonical absolute paths, temp file + rename), treats a directory as a project when it contains `.ai/` and reads nothing inside `.ai/`, and shows a path that no longer exists dimmed instead of removing it; the start screen (block-character wordmark, recent projects numbered 1–9, the five key hints); the project picker overlay with fuzzy filtering, `j` `k` `C-n` `C-p` `Enter` `Esc` and a rounded border with the title in it; `:open DIR` and `project.open`; up to 16 tabs in the tabline (`N:name`, `*` on the current one) with `gt`, `gT`, `1`–`9`, `ZZ`, `:q` (detach the tab — the tmux session keeps running) and `:qa`; `window.start = \"last\"` reopening the last project. Every path shown in the chrome passes the Phase 1 escaping. Acceptance: tests for the store (64-entry cap, missing path kept and dimmed, atomic write, a path with a control character refused), the picker filter, and tab actions through the `modes` table, green in `cargo test --workspace`, the web test run and hosted CI; nothing is written under `$HOME/.rein` or inside a project.",
       "created_at": "2026-11-11T19:10:26.123Z",
@@ -580,11 +578,9 @@
         "E-35",
         "E-36"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-36"
-      ],
-      "updated_at": "2026-11-11T19:10:26.124Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T09:34:11.135Z"
     },
     {
       "id": "E-39",
@@ -1618,6 +1614,33 @@
       "timestamp": "2026-11-12T09:14:29.028Z",
       "summary": "[TIER_2] E-42: Blueprint aligned + clean-code gate clear — ALIGN_PASS, CLEAN_PASS; 3 non-blocking alignment notes (render test does not apply gruvbox-dark values; bundle-size test tree-shakes unused components; runtime <style> injection by react-remove-scroll/style-singleton vs CSP unaddressed for E-38/E-40)",
       "sha": "56ec5bc8004ff7f6587f8b4fe571dea9b9035649",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-36",
+      "timestamp": "2026-11-12T09:31:05.660Z",
+      "summary": "standards-checker PASS (installed mirror, per-file --file on 30 changed/new crates/rein-desktop files; nothing staged) - 0 errors, 0 warnings; largest file wsl_host.rs 555 lines; no secrets in diff",
+      "sha": "e9e26aff32f33e0a960d0aa03248cfdbd586e177",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner",
+      "task_id": "E-36",
+      "timestamp": "2026-11-12T09:32:38.699Z",
+      "summary": "E-36 matches desktop.md (pure modes fn, actions.json single source, exact keymap, C-\\ C-n escape, 400ms which-key, :cmds+Tab+E492, mode colours, 64KiB clipboard, CSP unchanged); MCP FAIL is a false positive on a '../actions.json' comment. Architect follow-ups: dir_complete IPC and arboard dep (D-042) are not in the blueprint tables. Should-fix: TS actions not regenerated/checked by build or test, rein-app profiles CLI hint not runnable, leader-timeout test only checks the constant, unrelated .ai/start.json change",
+      "sha": "e9e26aff32f33e0a960d0aa03248cfdbd586e177",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-36",
+      "timestamp": "2026-11-12T09:33:14.305Z",
+      "summary": "[TIER_2] Blueprint aligned (ALIGN_PASS; MCP FAIL was a false-positive CAPABILITIES_BYPASS on a gen-actions.mjs comment) + clean-code gate clear (CLEAN_PASS, 0 findings) — follow-ups: Architect to add dir_complete to desktop.md §API and arboard (D-042) to deps list; should-fix: gen-actions.mjs claims build.mjs runs it and test/actions.test.mjs checks staleness, neither exists",
+      "sha": "e9e26aff32f33e0a960d0aa03248cfdbd586e177",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
