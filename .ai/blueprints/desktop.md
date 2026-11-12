@@ -448,8 +448,8 @@ every helper process (`wsl.exe`, `rein-app`) is started with `CREATE_NO_WINDOW` 
 enumerates the spawn sites; the ConPTY child is unaffected.
 
 ### Tests (v2)
-- Token function: contrast ≥ 4.5:1 for every text pair in every theme; the `rein` theme
-  values equal the recorded rein colours.
+- Token function: contrast ≥ 4.5:1 for every text pair in every theme; the default theme is
+  `catppuccin-mocha`.
 - Capability test: exactly the four window permissions added, nothing else.
 - Pointer parity, newcomer path and the IPC tests still pass unchanged.
 - Font manifest sums; the terminal font stack always ends with the symbols font; a
@@ -457,11 +457,11 @@ enumerates the spawn sites; the ConPTY child is unaffected.
   from the bundled font and is not a missing-glyph box.
 - Windows: the release binary's PE subsystem is GUI (checked in the installer workflow).
 - `ux_reviewer` screenshots of the start screen, a project tab, menu, Settings, health and
-  a confirm dialog in `rein` and `github-light`; **the screenshots are attached to the
+  a confirm dialog in `catppuccin-mocha` and `github-light`; **the screenshots are attached to the
   handoff for the operator** before the task is closed.
 
 ### Rollback (v2)
-Presentation only: revert the UI commits to return to the grid chrome; the `rein` theme
+Presentation only: revert the UI commits to return to the grid chrome; the default-theme change
 and bundled fonts can stay. The GUI-subsystem attribute is one line.
 
 ## Windows window (revision 2026-11-11, D-038)
