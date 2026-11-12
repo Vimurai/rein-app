@@ -1705,3 +1705,38 @@ A recent-projects test assumed POSIX temp paths. It failed on Windows from E-38 
 
 ### Rollback
 Drop the rule; acceptance returns to the task text.
+
+## D-049 — The window gets a modern look: ordinary shadcn/ui chrome, bundled fonts, a `rein` default theme, no console window
+
+**Date**: 2026-11-12
+**Task**: operator feedback with a screenshot of the first Windows build ("so unpolished — use the UI package, I want a modern look and feel"; a console window opens beside the app and closing it closes the app; "tmux should be themed to look like part of that window"; "icons are not rendering, seems like a font issue"). Supersedes D-033 ruling on the grid look (design rule 1) and D-037 ruling 3 ("shadcn's default look is not shipped", "no icon set") for the chrome. E-47..E-50.
+**Decision**: The chrome becomes a normal modern desktop UI built from shadcn/ui as it comes; only the terminal stays monospace. The app bundles its terminal fonts, matches rein's tmux colours by default, and is a Windows GUI program.
+
+### Why needed
+The grid restyle was the Architect's choice in D-033 / D-037, not the operator's; the operator asked for shadcn/ui and got a terminal imitation of it. The other three items are defects of the first build.
+
+### Rulings
+1. **Look:** proportional UI font, `lucide-react` icons, 8 px radius, shadows, short transitions; tokens derived from the theme by one tested function. Tabs move into a custom title bar (own window buttons on Windows, overlay on macOS, native decorations on Linux by default). Status bar replaces the statusline and the permanent command-line row; messages become toasts. Detail: `desktop.md` §Look and feel v2.
+2. **Behaviour is frozen:** `Action` list, both key tables, IPC table, `modes`, Host seam and all security boundaries are unchanged. The capability file gains exactly four `core:window` permissions for the custom title bar.
+3. **Fonts:** JetBrains Mono is bundled and is the default; Symbols Nerd Font Mono is bundled and always appended as a fallback. Vendored with licences and checksums.
+4. **Theme:** a built-in `rein` theme copies rein's tmux colours and is the default; the terminal background is the window background.
+5. **tmux itself is not configured by the app** (contract §3.5). Making tmux follow other themes and drop the duplicated session name is requested from rein (`plans/rein-window-theme-request.md`).
+6. **Windows:** GUI subsystem; errors with no window go to a message box; helper processes start hidden.
+7. Bundle limit: JS + CSS 2 MiB, fonts 3 MiB.
+
+### Alternatives considered
+1. **Polish the grid look** — rejected: the operator asked for a modern look twice.
+2. **Rely on an installed Nerd Font** — rejected: the default must render tmux's glyphs on a clean Windows machine.
+3. **Have the app run `tmux set` to restyle or hide the status line** — rejected: contract §3.5; it would also change the session for a plain terminal attached to it.
+4. **Keep native Windows decorations with a tab row beneath** — rejected for Windows: two stacked bars is the look the operator called unpolished; kept as the Linux default where window managers differ.
+5. **Bundle Inter as the UI font** — rejected: the system UI font looks native on each platform and costs nothing.
+
+### Constraints driving this decision
+- D-033 ruling 7 (CSP, closed IPC and capabilities), D-044 ruling 4, contract §3.5, D-048.
+
+### Impact
+- Unlocks: E-47 → E-48 → E-49 → E-50, a new installer after E-47 and after E-50.
+- Risk if wrong: custom window buttons lose Windows 11's snap-layout flyout on the maximise button; the `rein` theme copies colours that rein can change later; the redesign touches every UI component, so the parity and accessibility tests are the guard; installer size grows by the fonts.
+
+### Rollback
+Presentation only — revert the UI commits to return to the grid chrome; fonts, the `rein` theme and the GUI-subsystem fix are independent and can stay.

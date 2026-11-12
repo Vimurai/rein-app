@@ -340,6 +340,129 @@ No secret is read, stored or shown. The window makes no network call of its own;
   bundle is built in CI from a committed lockfile.
 - Hosted CI builds and tests `rein-desktop` on Linux, macOS and (from E-43) Windows.
 
+## Look and feel v2 — modern chrome (revision 2026-11-12, D-049)
+Operator feedback on the first Windows build: the grid-drawn chrome looks unpolished, a
+console window opens beside the app, Nerd Font icons in tmux show as empty boxes, and
+tmux's colours clash with the window. **This section supersedes design rule 1 ("Grid"),
+the "Screen" drawings, the chrome parts of "Two ways in", and D-037 ruling 3** wherever
+they describe how the chrome looks. Behaviour is unchanged: the `Action` list, both key
+tables, the IPC table, `modes`, the Host seam and every security boundary stay as they are.
+
+**Core concept: a modern desktop app around a terminal.** The chrome is ordinary
+shadcn/ui (new-york style) in a proportional UI font with icons, rounded corners and
+shadows; only the terminal stage is monospace. The terminal's background is the window's
+background, so tmux and the chrome read as one surface.
+
+### V1. Design tokens
+- **UI font:** `"Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif`,
+  13 px (status bar 12 px). **Monospace** only inside the terminal and for commands/paths.
+- **Shape:** radius 8 px (controls 6 px), 1 px borders in the `border` token, shadow on
+  popovers, menus and dialogs, transitions 120–150 ms (none under
+  `prefers-reduced-motion`). Spacing on a 4 px scale. No box-drawing glyphs in the chrome.
+- **Colour:** each theme maps to the shadcn variables (`background`, `foreground`, `card`,
+  `popover`, `muted`, `muted-foreground`, `primary`, `primary-foreground`, `border`,
+  `ring`, `destructive`) by one pure function: `background` = the theme background,
+  `card` / `popover` = one step lighter (dark themes) or darker (light), `primary` /
+  `ring` = the accent, `destructive` = the theme's red. A test asserts ≥ 4.5:1 for text
+  pairs in all themes.
+- **Icons:** `lucide-react`, importing only the icons used (D-037 "no icon set" is
+  withdrawn). Every icon-only button keeps its tooltip and accessible name.
+
+### V2. Layout
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│ ◆  [ schraubr_laravel × ] [ energy-api ] [ + ]      drag     0.5.0  ☰  ─ □ ✕ │ title bar 40 px
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│   terminal (tmux) — same background, 8 px side padding, no border          │
+│                                                                            │
+├────────────────────────────────────────────────────────────────────────────┤
+│ ~/Dev/schraubr_laravel   ✓ Install OK              ⧉ rein start            │ status bar 26 px
+└────────────────────────────────────────────────────────────────────────────┘
+```
+- **Title bar = tab bar.** Tabs are rounded pills: active tab on `card` with the accent
+  as a 2 px underline, close icon on hover, middle-click closes, a dot when the pty has
+  exited. Then a `+` icon button, a drag region, the version chip (opens Update; shows a
+  dot when a newer version is known), the menu icon button.
+  - **Windows:** `decorations: false`, `shadow: true` (keeps Windows 11's rounded corners
+    and shadow); our own minimise / maximise / close buttons at the right (46 × 40 px,
+    close turns red on hover); double-click on the drag region maximises. The capability
+    file gains exactly `core:window:allow-start-dragging`, `allow-minimize`,
+    `allow-toggle-maximize`, `allow-close`; the capability test lists them.
+  - **macOS:** overlay title bar with the native traffic lights; the tab row starts after
+    an 80 px inset.
+  - **Linux:** native decorations by default with the same row beneath as a tab bar;
+    `decorations = false` gives the row without window buttons (tiling WMs).
+- **Stage:** the terminal fills the rest; background = `background`; 8 px left/right and
+  4 px top/bottom padding. The window no longer snaps to whole cells.
+- **Status bar:** left — the project path (dim, click opens the picker) and the health
+  badge with an icon (check / warning / cross / question mark for `unknown`); right — the
+  last command as a chip with a copy icon (rule 4, "the UI teaches the CLI"), and in
+  `modal` style the mode badge. **No clock** (tmux shows one).
+- **No permanent command-line row.** Messages (errors, `E492`, "copied") appear as a
+  toast at the bottom right for 4 s (`aria-live="polite"`, our own small component). In
+  `modal` style `:` opens the command palette anchored at the bottom with the same
+  completion.
+- **Overlays:** shadcn Dialog, Command, DropdownMenu, ContextMenu, Tooltip, Select,
+  Switch — default new-york look driven only by the tokens. Confirm dialogs keep two
+  labelled buttons with the safe one focused.
+- **Start screen:** a centred column — wordmark, a primary `Open a project…` button, the
+  recent projects as rows (folder icon, name, dim path, last opened), a secondary
+  `Check installation` button, and the WSL setup card on Windows when needed.
+- **Settings / first run:** the same content as today in shadcn form controls; the
+  first-run choice shows two cards.
+
+### V3. Fonts in the terminal (the empty boxes)
+The app bundles, as web fonts served from the app itself (`font-src` is covered by
+`default-src 'self'`):
+- **JetBrains Mono** (regular, bold, italic, bold italic; OFL-1.1) — the default terminal
+  font on every platform, so the default no longer depends on what is installed.
+- **Symbols Nerd Font Mono** (MIT plus the icon sets' licences) — **always appended** to
+  the terminal font stack as a fallback, so Powerline and Nerd Font glyphs from tmux, the
+  shell prompt or Claude Code render whatever `font.family` the user sets.
+Font files are vendored under `crates/rein-desktop/ui/fonts/` with their licence texts and
+SHA-256 sums in a manifest that a test checks; they pass `skill: dependency_gate`. xterm.js
+is opened only after `document.fonts.load` has resolved for the stack, and the glyph atlas
+is rebuilt when fonts finish loading. Budget: fonts ≤ 3 MiB in total; the JS + CSS bundle
+limit rises from 1.5 to 2 MiB.
+
+### V4. Theme and tmux
+- A new built-in theme **`rein`** becomes the default: its sixteen colours, background and
+  accent are taken from the colours rein's own tmux status line and pane borders use (the
+  operator's screenshot shows a blue / mauve palette on a dark blue-grey — read the exact
+  values from rein's tmux theme at the vendored rein commit; if they equal an existing
+  built-in theme, alias it). With it the tmux status line, pane borders and the chrome
+  share one palette out of the box. The other six themes stay.
+- **What the window cannot do alone:** tmux's status line and borders are drawn by rein's
+  tmux configuration with fixed colours, so they do not follow when the user picks another
+  window theme, and the project name appears both in a window tab and in tmux's status
+  line. Changing that is rein's (contract §3.5: the app never configures tmux). The
+  request to rein is in `plans/rein-window-theme-request.md` and in §Open Questions 4.
+
+### V5. Windows: no console window
+`rein-desktop.exe` is built for the Windows GUI subsystem (release builds), so no console
+window opens with it and none can close it. Consequences: a start-up failure with no
+window (and a refused second start) is shown in a native message box instead of stderr;
+every helper process (`wsl.exe`, `rein-app`) is started with `CREATE_NO_WINDOW` — a test
+enumerates the spawn sites; the ConPTY child is unaffected.
+
+### Tests (v2)
+- Token function: contrast ≥ 4.5:1 for every text pair in every theme; the `rein` theme
+  values equal the recorded rein colours.
+- Capability test: exactly the four window permissions added, nothing else.
+- Pointer parity, newcomer path and the IPC tests still pass unchanged.
+- Font manifest sums; the terminal font stack always ends with the symbols font; a
+  rendering check (`ux_reviewer`, Xvfb) that a Nerd Font glyph (U+E0B0, U+F07B) is drawn
+  from the bundled font and is not a missing-glyph box.
+- Windows: the release binary's PE subsystem is GUI (checked in the installer workflow).
+- `ux_reviewer` screenshots of the start screen, a project tab, menu, Settings, health and
+  a confirm dialog in `rein` and `github-light`; **the screenshots are attached to the
+  handoff for the operator** before the task is closed.
+
+### Rollback (v2)
+Presentation only: revert the UI commits to return to the grid chrome; the `rein` theme
+and bundled fonts can stay. The GUI-subsystem attribute is one line.
+
 ## Windows window (revision 2026-11-11, D-038)
 **Core concept: Rein stays inside WSL; only the window is Windows.** `rein-desktop.exe` is
 the same crate built for Windows (Tauri 2 on WebView2). It holds no Rein tree, no profile
@@ -574,6 +697,14 @@ release artifact carries the window until a task adds it to the dist configurati
    code on "no `.ai/` here" stable? The window shows whatever it prints either way.
 3. May an app display the latest handoff line of a project (a one-line status source such
    as `rein status --json`)? The app will not read `.ai/` files itself.
+
+4. (D-049) Can `rein start` take the look from the app that hosts it? Requested: when an
+   environment variable such as `REIN_HOST_THEME` carries a palette (or a theme name),
+   rein's tmux status line and pane borders use it; and when `REIN_HOST=window` is set,
+   rein's status line drops the session-name pill the window's tab already shows. The
+   window would pass exactly those variables (on Windows through `WSLENV`, listing only
+   them). Detail: `plans/rein-window-theme-request.md`. Until answered the default `rein`
+   theme matches rein's fixed colours.
 
 ## E-## Task Breakdown (registered IDs)
 | ID | Scope | Tier | Depends on |
