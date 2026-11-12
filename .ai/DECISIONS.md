@@ -1801,3 +1801,32 @@ Fonts are parsed by the WebView's font engine (WebView2 / WebKit), the same engi
 
 ### Rollback
 Delete `ui/fonts/` and the `@font-face` rules; the font stack falls back to the platform monospace fonts as before.
+
+## D-052 — No build goes to the operator before a real project tab has been looked at; the Architect reviews the screenshots
+
+**Date**: 2026-11-12
+**Task**: operator's second screenshot (15:13): in the build with the bundled fonts the terminal is about 80 × 24 cells in the corner of a 2560 × 1440 window. E-52; amends the acceptance of E-49, E-50, E-51.
+**Decision**: A window build is handed to the operator only after an end-to-end check under Xvfb with a real `rein start` tab, whose screenshot the Architect has opened and accepted.
+
+### Why needed
+Two builds in a row reached the operator with a defect visible at a glance (a console window; then a terminal that does not fill the window). The second was introduced by E-48 and passed every test, critic and CI run, because nothing looks at a real project tab at a real window size.
+
+### Rulings
+1. **E-52 first:** fix the terminal size and add the regression tests (unit + one end-to-end size check).
+2. **Screens gate:** for every task that changes the window, the Engineer saves screenshots of a real project tab (and of every screen the task touches) at 2560 × 1440 and 1280 × 800 under `.ai/screens/<task>/` and names them in the handoff. The task is not DONE, and no installer is handed over, until the Architect has opened them and replied.
+3. The end-to-end size check from E-52 runs in hosted CI on Linux from then on.
+4. The operator's own check on Windows stays the last step; the gate does not replace it.
+
+### Alternatives considered
+1. **Rely on `ux_reviewer` alone** — rejected: it audits contrast and layout metrics; it passed while the terminal was a quarter of the window.
+2. **Send every build to the operator and let them find defects** — rejected: that is what happened twice.
+
+### Constraints driving this decision
+- No Windows desktop is observable from the development machine; Xvfb on Linux is the nearest real rendering.
+
+### Impact
+- Unlocks: E-52; slows each window task by one review round.
+- Risk if wrong: Xvfb rendering differs from WebView2 on Windows, so a Windows-only defect can still pass.
+
+### Rollback
+Drop ruling 2; the size check in CI stays.

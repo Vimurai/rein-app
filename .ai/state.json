@@ -788,6 +788,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-12T14:10:58.989Z"
+    },
+    {
+      "id": "E-52",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Fix the terminal not filling the window, per .ai/blueprints/desktop.md §Components 2 (the pty size in cells follows the stage), §Look and feel v2 V3 (xterm.js opens after the fonts load) and D-052 — operator screenshot 2026-11-12 15:13 of the build with the bundled fonts: tmux is drawn about 80 columns by 24 rows in the top-left of a 2560 × 1440 window and the rest of the stage is empty (no tmux dot fill, so the app's own client is small). The earlier build filled the window. Do this before any other open task. (1) Reproduce under Xvfb with a real `rein start` tab at 2560 × 1440 and find the cause — the first suspect is that after waiting for `document.fonts.load` the fitted size is never sent with `pty_resize` (or is measured before the font is applied); the second is another client or a `window-size` setting limiting the tmux window — and report which it was; (2) fix it so the pty is opened at, or immediately resized to, the fitted size, and is resized again when fonts finish loading, on window resize, on font-size change and on tab switch; (3) add a regression test at the cheapest layer that would have caught it, plus one end-to-end check under Xvfb that after a tab opens `tmux display -p '#{client_width}x#{client_height}'` for the app's client equals the fitted cols × rows and is far above 80 × 24 at that window size. Acceptance: both tests fail on the broken commit and pass on the fix; a screenshot of the filled window is saved under `.ai/screens/` and named in the handoff; hosted `ci` and `desktop-windows` green (D-048); a new Windows installer is named in the handoff.",
+      "created_at": "2026-11-12T14:13:57.206Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T14:13:57.209Z"
     }
   ],
   "stamps": [
