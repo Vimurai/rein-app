@@ -568,8 +568,11 @@ readable under any loader.
      content has not arrived.
    Each appears only after `--loader-delay`, so a fast operation shows no flicker.
 2. **Tab start state** (the E-53 wait). A tab is `starting` from `tab_open` until the first
-   of: the terminal switches to the alternate screen (tmux has drawn), the pty exits, the
-   user types into the tab, or 20 s pass. While `starting`: a `ProgressLine` runs along the
+   of: the terminal switches to the alternate screen (tmux has drawn), the tab has received
+   4 KiB of pty output in total, the pty exits, the user types into the tab, or 20 s pass.
+   (The 4 KiB rule is the fallback for older ConPTY builds that draw the alternate screen
+   themselves and never forward `ESC[?1049h` — E-53 measured `rein start`'s own lines at
+   under 1 KiB and tmux's first frame at about 5 KiB.) While `starting`: a `ProgressLine` runs along the
    top edge of the stage directly under the title bar, the tab pill shows a `Spinner` in
    place of its close icon, and the status bar shows `Starting rein…` where the last
    command chip sits. The terminal stays fully visible beneath. A pure function

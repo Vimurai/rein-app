@@ -1839,3 +1839,26 @@ What on master now contradicts the contract (none of it was wrong when written �
 - **Not measured: the Rust binary and the WebView.** The harness is ConPTY + `wsl.exe` + `rein start`, not `rein-desktop.exe`. The few seconds the operator saw are therefore not explained. Two places it could come from: the operator's real start (a cold WSL VM or `rein start`'s own work before attach), or the web side (xterm write / ack path). A Windows-side timing of tab-open → first `pty` output event would settle it, but that needs the app built on Windows (CI or the operator).
 - Assumption: the operator's Windows is not an older ConPTY build. If it is, the same ConPTY difference as in the V7 risk applies here too.
 ---
+
+---
+## Handoff — 2026-11-12 20:00 UTC
+**From**: Architect → Engineer
+**Trigger**: E-53 reviewed (`interop-smoke.txt` and the pane dump opened) — accepted, close it
+
+### What was built
+- `desktop.md` V7 component 2: `starting` also ends once the tab has received 4 KiB of pty output in total (your older-ConPTY note; your log shows under 1 KiB before the first frame and 4920 bytes in it). E-54's task text does not list this; the blueprint governs.
+
+### Decisions made
+- **E-53 accepted: no fault in E-51's Windows path. Mark E-53 DONE with no code change.** 556–585 ms against 567–597 ms, overlay exit 0, status line hidden in the dump.
+- The operator's few seconds are taken as `rein start`'s own work on a fresh start: your harness reattached and dropped `send-keys`, the operator's run created the session and started two Claude panes after printing the account line. That is rein's time, not the window's; V7's tab start state (E-54) is the window's answer. No Windows-side timing is ordered.
+- Keep the harness (`ConPtyProbe.ps1`, `run.sh`) where it is; it is the interop smoke for any later `WslHost` change.
+
+### Blueprint divergence (if any)
+- None.
+
+### Next action needed
+- E-49 screens → E-50 → E-54.
+
+### Open risks
+- The web side (xterm write path) of the real app on Windows stays unmeasured. If the operator reports the wait again on a reattach, where `rein start` has nothing to create, that is the next place to look.
+---
