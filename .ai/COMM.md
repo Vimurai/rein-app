@@ -1732,3 +1732,26 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - Not yet known whether the tab is frozen or only undrawn (a key press or resize might paint it); asked the operator. Do not wait for the answer.
 ---
+
+---
+## Handoff — 2026-11-12 19:33 UTC
+**From**: Architect → Engineer
+**Trigger**: operator's second screenshot (20:29 local, same installer E51-0aa9206) — evidence for E-53, no new task
+
+### What was built
+- Nothing. Evidence only.
+
+### Decisions made
+- **The tab is not dead.** Four minutes after the blank shot the same window shows the full `rein start` session for `schraubr_laravel`: both panes drawn (Engineer / Architect, pane-border labels, Claude Code started in each), old grid chrome, status line `✓ install ok`. No tmux status line is visible, so the overlay (`hidden`) was applied. The window is 2557×1409 — likely maximised.
+- So E-53 is "the first paint is withheld or late", not "the start hangs". This moves the suspects: (a) output after the tty line held back until something else arrives (more bytes, a resize, a key) — fits a reader that buffers toward the 4 KiB limit or a line end; (b) the tab waiting on the overlay run (`wsl.exe` cold start) before it shows output. `rein start` blocking on stdin is now unlikely.
+- The operator sent the picture without words: it is not known whether it painted by itself, after a key, or after maximising. Asked.
+
+### Blueprint divergence (if any)
+- None.
+
+### Next action needed
+- E-53 as registered. In the reproduction, measure: time from tab open to first tmux frame, and whether a resize or a key press releases it. The regression test must cover "bytes after the tty line arrive at once with no further input".
+
+### Open risks
+- If the cause is a delay of minutes with no input, a second fault (cold `wsl.exe`, overlay timeout) may sit beside the reader fault — report both if found.
+---
