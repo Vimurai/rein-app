@@ -1,4 +1,6 @@
-/* Colours come from theme.ts as CSS variables; layout is the cell grid (grid.ts). */
+/* Colours come from theme.ts as CSS variables. The frame (title bar, stage, status bar) is the
+   modern layout of desktop.md V2 (frame.tsx, E-49); the overlays are still on the cell grid
+   until E-50. */
 html, body {
   margin: 0;
   height: 100%;
@@ -12,7 +14,8 @@ html, body {
   font-size: var(--font-size);
   line-height: var(--line-height);
 }
-#grid, #probe {
+#root { height: 100%; }
+.start-lines, #probe {
   font-family: var(--font-family);
   font-size: var(--font-size);
   line-height: var(--line-height);
@@ -46,11 +49,11 @@ html, body {
   cursor: pointer;
 }
 .chrome-btn:hover, .chrome-btn:focus-visible { background: var(--accent); color: var(--bg); outline: none; }
-/* The which-key overlay sits on the stage, just above the statusline. */
+/* The which-key overlay sits on the stage, just above the status bar (26 px + 8 px). */
 .which-key {
   position: absolute;
-  left: 1ch;
-  bottom: calc(2 * var(--cell-h));
+  left: 8px;
+  bottom: 34px;
   z-index: 5;
   font-family: var(--font-family);
   font-size: var(--font-size);
@@ -61,16 +64,20 @@ html, body {
 }
 .error { color: var(--error); }
 
-/* The terminal sits over the stage rows, sized in whole cells (main.ts sets the variables). */
+/* The stage (V2): borderless, 8 px at the sides and 4 px at top and bottom; the terminal
+   fills it in whole cells and is centred in it (term.ts), on the window's background. */
 #term {
   position: absolute;
-  left: 0;
-  top: var(--stage-top);
-  width: var(--stage-w);
-  height: var(--stage-h);
+  inset: 4px 8px;
 }
 /* One pane per tab inside #term; only the current tab's is shown (E-38). */
-#term .term-pane { position: absolute; inset: 0; }
+#term .term-pane { position: absolute; inset: 0; overflow: hidden; }
+/* tmux keeps the scrollback; xterm's own scrollbar would only cover the last column. */
+#term .xterm .xterm-scrollable-element > .scrollbar { display: none; }
+/* V1: transitions are 120–150 ms, and none when the system asks for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
 .hidden { display: none; }
 /* An overlay sits between grid rows: a ring of the background, one row wide, hides the
    halves of the stage glyphs its border would otherwise cut through (not a shadow). */

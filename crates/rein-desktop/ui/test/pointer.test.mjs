@@ -80,36 +80,49 @@ test("the menu lists every action in plain words, with its shortcut", async () =
   assert.equal(showKey("<leader> h".replace("<leader>", "Space")), "Space h");
 });
 
-test("every chrome button carries its action (tooltip and accessible name come from it)", async () => {
-  const { layout } = await import("../src/grid.ts");
-  const shell = layout(
-    {
-      tabs: [{ name: "pa", current: false }, { name: "pb", current: true }],
-      version: "0.5.0",
-      mode: null,
-      segments: ["pb", { text: "✓ install ok", cls: "", action: { name: "health.show" } }],
-      clock: "10:00",
-      stageLines: [],
-      commandLine: "",
-    },
-    120,
-    30,
+// E-49 replaces the grid tabline/statusline version of this test (the frame is now
+// chrome.ts → frame.tsx, desktop.md V2): every control of the title bar and the status bar
+// runs an action from the closed list, which also names its tooltip and accessible name.
+test("every title-bar and status-bar control carries its action", async () => {
+  const { titleBar, statusBar, windowButtons, titleInset, chromeOf } = await import("../src/chrome.ts");
+  const { ACTIONS } = await import("../src/actions.ts");
+  const names = new Set(ACTIONS.map((a) => a.name));
+  const bar = titleBar(
+    [
+      { title: "pa", current: false, exited: false },
+      { title: "pb", current: true, exited: true },
+    ],
+    "0.5.0",
   );
-  const buttons = (row) => row.filter((s) => s.cls.includes("button") || s.action);
-  const tl = buttons(shell.tabline).map((s) => [s.text.trim(), s.action?.name, s.action?.arg ?? null]);
-  assert.deepEqual(tl, [
-    ["1:pa", "tab.goto", "1"],
-    ["×", "tab.detach", "1"],
-    ["2:pb*", "tab.goto", "2"],
-    ["×", "tab.detach", "2"],
-    ["[+]", "project.open", null],
-    ["rein 0.5.0", "release.update", null],
-    ["[≡]", "menu.show", null],
-  ]);
-  assert.ok(shell.statusline.some((s) => s.action?.name === "health.show"));
-  for (const s of [...shell.tabline, ...shell.statusline]) {
-    if (s.cls.includes("button")) assert.ok(s.action, `button "${s.text}" has no action`);
+  const calls = (c) => [c.name, c.arg ?? null];
+  assert.deepEqual(
+    bar.tabs.map((t) => [t.label, t.current, t.exited, calls(t.select), calls(t.close)]),
+    [
+      ["pa", false, false, ["tab.goto", "1"], ["tab.detach", "1"]],
+      ["pb", true, true, ["tab.goto", "2"], ["tab.detach", "2"]],
+    ],
+  );
+  assert.deepEqual(calls(bar.add), ["project.open", null]);
+  assert.deepEqual([bar.version.label, ...calls(bar.version.action)], ["0.5.0", "release.update", null]);
+  assert.deepEqual(calls(bar.menu), ["menu.show", null]);
+  const status = statusBar("/home/me/p", { status: "ok", checks: [], reason: null, setup: null, taken_at: 0 }, "cd /home/me/p && rein start", null);
+  assert.deepEqual(calls(status.project.action), ["project.pick", null]);
+  assert.deepEqual([status.health.icon, ...calls(status.health.action)], ["ok", "health.show", null]);
+  assert.deepEqual(calls(status.command.copy), ["cmd.yank", null]);
+  assert.equal(status.mode, null, "no mode badge in the simple style");
+  assert.equal(statusBar(null, null, null, "NORMAL").mode, "NORMAL");
+  assert.equal(statusBar(null, null, null, null).health.icon, "checking");
+  for (const c of [bar.add, bar.version.action, bar.menu, status.project.action, status.health.action, status.command.copy, ...bar.tabs.flatMap((t) => [t.select, t.close])]) {
+    assert.ok(names.has(c.name), `${c.name} is not an action`);
   }
+  // Our window buttons only where there is no native title bar; macOS leaves room for its own.
+  assert.deepEqual(windowButtons("windows"), ["minimize", "maximize", "close"]);
+  assert.deepEqual(windowButtons("linux"), []);
+  assert.deepEqual(windowButtons("macos"), []);
+  assert.equal(titleInset("macos"), 80);
+  assert.equal(titleInset("windows"), 0);
+  assert.equal(chromeOf("windows"), "windows");
+  assert.equal(chromeOf("<script>"), "linux");
 });
 
 test("a paste with a newline asks first; one line does not", async () => {

@@ -47,6 +47,28 @@
   --color-ansi-15: var(--ansi-15);
 }
 
+/* E-49 (desktop.md §Look and feel v2 V1): the shadcn/ui tokens, the UI font, the radii and
+   the shadow of the modern chrome. The frame (src/frame.tsx) uses these; the overlays move
+   to them with E-50. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.25), 0 1px 3px rgb(0 0 0 / 0.2);
+}
+
 @utility h-cell {
   height: var(--cell-h);
 }

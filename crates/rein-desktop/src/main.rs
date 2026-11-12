@@ -131,6 +131,37 @@ fn start_dir_script(dir: Option<&str>) -> String {
     )
 }
 
+/// Which window frame the UI draws (desktop.md §Look and feel v2 V2): `windows` — no native
+/// title bar, our own minimise / maximise / close buttons; `macos` — the overlay title bar,
+/// tabs after the traffic lights; `linux` — native decorations (or none), no buttons of ours.
+/// A debug build takes `REIN_DESKTOP_CHROME` instead, so the Windows frame can be looked at
+/// (and screenshotted) on Linux; a release build ignores it.
+fn chrome() -> &'static str {
+    #[cfg(debug_assertions)]
+    if let Some(c) = dirs::process_env("REIN_DESKTOP_CHROME") {
+        for known in ["windows", "macos", "linux"] {
+            if c == known {
+                return known;
+            }
+        }
+    }
+    if cfg!(windows) {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "linux"
+    }
+}
+
+/// `globalThis.__REIN_CHROME__`, set before any page script runs (a constant word).
+fn chrome_script(chrome: &str) -> String {
+    format!(
+        "Object.defineProperty(globalThis, '__REIN_CHROME__', {{ value: {}, writable: false }});",
+        serde_json::to_string(chrome).unwrap_or_else(|_| "\"linux\"".into())
+    )
+}
+
 /// Linux / macOS: projects are local directories (`LocalHost`). Windows: Rein lives inside
 /// WSL and every process is `wsl.exe` (`WslHost`, §Windows window W1–W2), in the distro
 /// `config.toml` names (`wsl.distro`), else WSL's default.
@@ -227,7 +258,18 @@ fn main() -> ExitCode {
                     // The start DIR is set before any page script runs, so the UI reads it at
                     // start instead of racing an event (see `start_dir_script`).
                     .initialization_script(start_dir_script(dir.as_deref()))
-                    .decorations(start.window.decorations);
+                    .initialization_script(chrome_script(chrome()));
+            // V2: Windows draws its own title bar (the shadow keeps Windows 11's rounded corners
+            // and drop shadow); macOS overlays the traffic lights on ours; Linux keeps the
+            // native decorations unless config.toml turns them off (tiling window managers).
+            #[cfg(windows)]
+            let window = window.decorations(false).shadow(true);
+            #[cfg(target_os = "macos")]
+            let window = window
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true);
+            #[cfg(not(any(windows, target_os = "macos")))]
+            let window = window.decorations(start.window.decorations);
             // Opacity below 1 needs a transparent window, decided at creation (macOS would
             // need Tauri's private-API feature, which this app does not enable).
             #[cfg(not(target_os = "macos"))]
@@ -291,6 +333,15 @@ mod tests {
 
     fn s(v: &[&str]) -> Vec<String> {
         v.iter().map(|x| x.to_string()).collect()
+    }
+
+    #[test]
+    fn the_chrome_is_a_constant_word() {
+        assert_eq!(
+            chrome_script("windows"),
+            "Object.defineProperty(globalThis, '__REIN_CHROME__', { value: \"windows\", writable: false });"
+        );
+        assert!(["windows", "macos", "linux"].contains(&chrome()));
     }
 
     #[test]

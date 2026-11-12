@@ -80,8 +80,34 @@ export class TermTab {
   readonly #fontsLoaded = (): void => {
     this.term.clearTextureAtlas();
     this.term.refresh(0, this.term.rows - 1);
-    this.#fit.fit();
+    this.#fitStage();
   };
+
+  /** Fit the terminal to its pane in whole cells and centre it (desktop.md V2: the stage is
+   *  borderless and the padding equal on both sides; E-49). FitAddon would keep 14 px for a
+   *  scrollbar on the right that tmux never needs — the gap the E-51 screens showed — so the
+   *  cell size is read where FitAddon reads it, and FitAddon is only the fallback before the
+   *  first render has measured a cell. What is left over, under one cell, is split on both
+   *  sides and shows the terminal's background. */
+  #fitStage(): void {
+    const core = (this.term as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } } } })._core;
+    const cell = core?._renderService?.dimensions?.css?.cell;
+    const w = this.#el.clientWidth;
+    const h = this.#el.clientHeight;
+    if (!cell || !cell.width || !cell.height || !w || !h) {
+      this.#fit.fit();
+      return;
+    }
+    const cols = Math.max(2, Math.floor(w / cell.width));
+    const rows = Math.max(2, Math.floor(h / cell.height));
+    if (cols !== this.term.cols || rows !== this.term.rows) this.term.resize(cols, rows);
+    const el = this.term.element;
+    if (el) {
+      const dx = Math.floor((w - cols * cell.width) / 2);
+      const dy = Math.floor((h - rows * cell.height) / 2);
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+    }
+  }
 
   get tab(): Tab | null {
     return this.#tab;
@@ -100,7 +126,7 @@ export class TermTab {
     // default 80 × 24: fit after the next frame, so the pty opens at the stage's size.
     await new Promise<void>((r) => requestAnimationFrame(() => r()));
     if (gen !== this.#gen) return;
-    this.#fit.fit();
+    this.#fitStage();
     const output = new Channel<ArrayBuffer>((buf) => {
       if (gen === this.#gen) this.#output(new Uint8Array(buf));
     });
@@ -114,7 +140,7 @@ export class TermTab {
       }
       this.#tab = opened;
       // The stage may have changed size while the pty was opening (seconds on Windows).
-      this.#fit.fit();
+      this.#fitStage();
       this.#size.opened(this.#tab.pty, cols, rows, this.term);
       this.#ack(0);
       this.term.focus();
@@ -153,7 +179,7 @@ export class TermTab {
   /** The pane became visible again (a tab switch): refit, and repaint every row — the
    *  renderer draws nothing while its element is `display: none`. */
   shown(): void {
-    this.#fit.fit();
+    this.#fitStage();
     this.term.refresh(0, this.term.rows - 1);
   }
 
@@ -163,7 +189,7 @@ export class TermTab {
     this.term.options.fontSize = opts.fontSize;
     this.term.options.lineHeight = opts.lineHeight;
     this.term.options.theme = xtermTheme(opts.theme);
-    this.#fit.fit();
+    this.#fitStage();
   }
 
   blur(): void {
@@ -172,7 +198,7 @@ export class TermTab {
 
   /** The stage changed size: refit in whole cells (the core gets the new size). */
   fit(): void {
-    this.#fit.fit();
+    this.#fitStage();
   }
 
   /** The child exited: say so in the stage; Enter restarts it. */

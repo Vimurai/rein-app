@@ -131,9 +131,32 @@ export const THEME_NAMES: readonly string[] = [
   "github-light",
 ];
 
+/** The shadcn/ui variables for one theme (desktop.md §Look and feel v2 V1): `background` is
+ *  the theme's, `card` / `popover` one step away (the bar colour: lighter in a dark theme,
+ *  darker in a light one), `primary` / `ring` the accent, `destructive` the theme's red. Pure;
+ *  a test holds every text pair to 4.5:1 in every theme. */
+export function shadcnVariables(t: Theme): Record<string, string> {
+  return {
+    "--background": t.bg,
+    "--foreground": t.fg,
+    "--card": t.barBg,
+    "--card-foreground": t.barFg,
+    "--popover": t.barBg,
+    "--popover-foreground": t.barFg,
+    "--muted": t.barBg,
+    "--muted-foreground": t.barDim,
+    "--primary": t.accent,
+    "--primary-foreground": t.bg,
+    "--border": t.border,
+    "--ring": t.accent,
+    "--destructive": t.error,
+  };
+}
+
 /** The CSS variables the stylesheet reads, for one theme. */
 export function cssVariables(t: Theme): Record<string, string> {
   return {
+    ...shadcnVariables(t),
     "--fg": t.fg,
     "--bg": t.bg,
     "--accent": t.accent,

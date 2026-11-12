@@ -10,6 +10,11 @@ const ALLOWED: &[&str] = &[
     "core:event:allow-unlisten",
     // E-38: `:qa` closes the window (a window basic, desktop.md §Test Plan "Capabilities").
     "core:window:allow-close",
+    // E-49 (V2): the title bar is ours — dragging and our minimise / maximise buttons. With
+    // allow-close these are exactly the four window permissions V2 lists.
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
     // E-35 — desktop.md §API
     "allow-tab-open",
     "allow-pty-write",
@@ -153,5 +158,29 @@ fn the_bundled_ui_has_no_inline_script_or_style() {
     assert!(
         !html.contains("http://") && !html.contains("https://"),
         "remote resource"
+    );
+}
+
+/// desktop.md §Look and feel v2 V2 (E-49): the title bar is ours, and the window may be moved,
+/// minimised, maximised and closed — exactly these four window permissions, nothing more.
+#[test]
+fn the_window_permissions_are_exactly_the_four_the_title_bar_needs() {
+    let cap = json("capabilities/main.json");
+    let mut window: Vec<&str> = cap["permissions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|p| p.as_str())
+        .filter(|p| p.starts_with("core:window:"))
+        .collect();
+    window.sort_unstable();
+    assert_eq!(
+        window,
+        [
+            "core:window:allow-close",
+            "core:window:allow-minimize",
+            "core:window:allow-start-dragging",
+            "core:window:allow-toggle-maximize",
+        ]
     );
 }

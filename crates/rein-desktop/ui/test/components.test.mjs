@@ -94,7 +94,8 @@ test("a Dialog, a Tooltip and the Command list render in gruvbox-dark using only
   }
 });
 
-test("the built bundle is at most 1.5 MiB uncompressed, xterm.js included", async () => {
+// E-49: the limit is 2 MiB (desktop.md V3); the icons of the modern frame are in it.
+test("the built bundle is at most 2 MiB uncompressed, xterm.js included", async () => {
   const dir = mkdtempSync(join(tmpdir(), "rein-ui-size-"));
   const prev = process.cwd();
   process.chdir(ui);
@@ -112,6 +113,7 @@ test("the built bundle is at most 1.5 MiB uncompressed, xterm.js included", asyn
   const clashes = [...ours].filter((c) => new RegExp(`\\.${c}[{,:\\s]`).test(tw) && c !== "hidden");
   assert.deepEqual(clashes, [], "classes defined by both style.css and Tailwind");
   const total = readdirSync(dir).reduce((n, f) => n + statSync(join(dir, f)).size, 0);
-  assert.ok(total <= 1.5 * 1024 * 1024, `${(total / 1024).toFixed(0)} KiB`);
+  console.log(`bundle: ${(total / 1024).toFixed(0)} KiB of 2048`);
+  assert.ok(total <= 2 * 1024 * 1024, `${(total / 1024).toFixed(0)} KiB`);
   assert.ok(total > 300 * 1024, "the bundle includes xterm.js and React");
 });

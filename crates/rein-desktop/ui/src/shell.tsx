@@ -1,6 +1,8 @@
-// The window shell as React components (E-42, D-037): tabline, stage, statusline and command
-// line — our own components on the cell grid, drawn from the pure `grid.ts` layout — and the
-// terminal stage (xterm.js, E-35) over the stage rows. E-36 adds the modes: keys go through
+// The window shell (E-42, D-037; frame rebuilt in E-49 per desktop.md §Look and feel v2 V2):
+// the title bar / tab bar, the borderless terminal stage (xterm.js, E-35), the status bar,
+// the toast and — in the modal style — the command palette. The frame is drawn by `frame.tsx`
+// from the pure `chrome.ts`; the start screen (no tab) is still the grid's lines until E-50.
+// E-36 adds the modes: keys go through
 // the pure `modes` function with the key table as input; NORMAL and COMMAND keys drive the
 // app, TERMINAL keys go to the pty except the escape chord. Text goes in as React text nodes
 // only, never as HTML.
@@ -13,7 +15,9 @@ import { describe as describeAction, menuEntries } from "./menu.ts";
 import { pasteNeedsQuestion } from "./paste.ts";
 import type { ActionName } from "./actions.ts";
 import { commonPrefix, complete, parse } from "./commands.ts";
-import { cells, fit, layout, type Row, type ShellData } from "./grid.ts";
+import type { Span } from "./grid.ts";
+import { TOAST_MS, chromeOf, statusBar, titleBar } from "./chrome.ts";
+import { CommandPalette, StatusBar, TitleBar, Toast } from "./frame.tsx";
 import {
   clipboardRead,
   clipboardWrite,
@@ -27,7 +31,7 @@ import {
   projectsList,
   type HealthView,
 } from "./ipc.ts";
-import { HealthOverlay, ProfilesOverlay, ReleaseOverlay, healthSegment } from "./release.tsx";
+import { HealthOverlay, ProfilesOverlay, ReleaseOverlay } from "./release.tsx";
 import { keyBytes, keyName } from "./keys.ts";
 import type { ActionCall, KeyTable } from "./keymap.ts";
 import { WHICH_KEY_DELAY_MS, continuations, step, type ModeState } from "./modes.ts";
@@ -66,15 +70,10 @@ export interface ShellProps {
   startDir: string | null;
 }
 
-const INITIAL: ShellData = {
-  tabs: [],
-  version: "0.5.0",
-  mode: "NORMAL",
-  segments: [],
-  clock: "",
-  stageLines: ["no project open — :open DIR, or start the window with one: rein-app window DIR"],
-  commandLine: "",
-};
+const VERSION = "0.5.0";
+
+/** The frame the core asked for (V2): set before any script ran. */
+const CHROME = chromeOf((globalThis as { __REIN_CHROME__?: unknown }).__REIN_CHROME__);
 
 /** Actions whose backend arrives with a later task: they say so in one line (E-36). */
 const LATER: Partial<Record<ActionName, string>> = {
@@ -82,11 +81,6 @@ const LATER: Partial<Record<ActionName, string>> = {
 
 /** The CLI command an action stands for (rule 4: the UI teaches the CLI). */
 const CLI: Partial<Record<ActionName, string>> = {};
-
-function clockNow(): string {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-}
 
 /** A path as one shell word: quoted only when it must be. */
 function shellWord(s: string): string {
@@ -105,15 +99,16 @@ interface OpenTab {
   project: string;
   title: string;
   open: boolean;
+  /** `rein start` exited (Enter restarts it): a dot on the tab. */
+  exited: boolean;
 }
 
-/** One grid row: spans of text with their style class. */
 /** What a chrome button does and says: the shell's `run` and the action's tooltip. */
 const ButtonCtx = createContext<{ run: (c: ActionCall) => void; tip: (c: ActionCall) => string } | null>(null);
 
 /** One span; with an action it is a button (D-034): hover highlight, tooltip naming the
  *  action and its shortcut, the same text as its accessible name. Still drawn on the grid. */
-function SpanView({ s }: { s: Row[number] }) {
+function SpanView({ s }: { s: Span }) {
   const ctx = useContext(ButtonCtx);
   if (!s.action || !ctx) return <span className={s.cls || undefined}>{s.text}</span>;
   const action = s.action;
@@ -130,33 +125,26 @@ function SpanView({ s }: { s: Row[number] }) {
   );
 }
 
-export function GridRow({ row, className = "" }: { row: Row; className?: string }) {
+/** The start screen (no tab open): the grid's lines, centred, in the terminal font — rebuilt
+ *  as the V2 column with E-50. Plain text is dim; a span keeps its class and its action. */
+function StartLines({ lines }: { lines: readonly (string | Span)[] }) {
   return (
-    <div className={`row ${className}`.trim()}>
-      {row.map((s, i) => (
-        <SpanView key={i} s={s} />
-      ))}
+    <div id="start" className="flex h-full flex-col items-center justify-center overflow-hidden">
+      <div className="start-lines">
+        {lines.map((l, i) => (
+          <div key={i} className="row">
+            {typeof l === "string" ? <span className="dim">{l || " "}</span> : <SpanView s={l} />}
+          </div>
+        ))}
+      </div>
     </div>
   );
-}
-
-function useViewport(): { w: number; h: number } {
-  const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
-  useEffect(() => {
-    const o = new ResizeObserver(() => setSize({ w: window.innerWidth, h: window.innerHeight }));
-    o.observe(document.documentElement);
-    return () => o.disconnect();
-  }, []);
-  return size;
 }
 
 export function Shell(props: ShellProps) {
   const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, tmuxKey, handlers, notice, startDir, startLast } =
     props;
   const [cell, setCell] = useState({ w: 0, h: 0 });
-  const view = useViewport();
-  const data = INITIAL;
-  const [clock, setClock] = useState(clockNow);
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const [recent, setRecent] = useState<RecentView[]>([]);
   const [picker, setPicker] = useState(false);
@@ -169,7 +157,10 @@ export function Shell(props: ShellProps) {
   const [health, setHealth] = useState<HealthView | null>(null);
   const [modeView, setModeView] = useState<ModeState>({ mode: "NORMAL", pending: [] });
   const [cmdText, setCmdText] = useState("");
-  const [message, setMessage] = useState<{ text: string; error: boolean }>({ text: "", error: false });
+  /** The toast (V2): the last message, gone after 4 s. */
+  const [message, setMessage] = useState<{ text: string; error: boolean; seq: number } | null>(null);
+  /** The last command shown (rule 4), as the status bar's chip. */
+  const [lastCmd, setLastCmd] = useState<string | null>(null);
   const [whichKey, setWhichKey] = useState(false);
   /** The panes of the open tabs live here, one element per tab (only the current one shown). */
   const termsEl = useRef<HTMLDivElement>(null);
@@ -192,12 +183,15 @@ export function Shell(props: ShellProps) {
   /** The latest TERMINAL key handler, so a tab opened earlier never runs a stale one. */
   const terminalKeyRef = useRef<(e: KeyboardEvent) => boolean>(() => true);
 
+  const say = useCallback(
+    (text: string, error = false) => setMessage((m) => ({ text, error, seq: (m?.seq ?? 0) + 1 })),
+    [],
+  );
   useEffect(() => {
-    const t = setInterval(() => setClock(clockNow()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-
-  const say = useCallback((text: string, error = false) => setMessage({ text, error }), []);
+    if (!message) return;
+    const t = setTimeout(() => setMessage((m) => (m?.seq === message.seq ? null : m)), TOAST_MS);
+    return () => clearTimeout(t);
+  }, [message]);
 
   // Theme and font (config.toml, `:theme`): the CSS variables every element reads, the cell
   // size of the font, and the open terminal — restyled before paint.
@@ -233,11 +227,13 @@ export function Shell(props: ShellProps) {
     }
   }, [theme, tmuxKey]);
 
-  /** Show the exact command an action ran or stands for; `y` copies it. */
+  /** Show the exact command an action ran or stands for, as the status bar's chip; `y` and
+   *  the chip's copy button copy it. A note goes to the toast. */
   const showCommand = useCallback(
     (cmd: string, note = "") => {
       lastCommand.current = cmd;
-      say(note ? `${cmd}   — ${note}` : cmd);
+      setLastCmd(cmd);
+      if (note) say(note);
     },
     [say],
   );
@@ -296,11 +292,12 @@ export function Shell(props: ShellProps) {
       el.className = "term-pane";
       host.append(el);
       const term = new TermTab(el, project, { fontFamily, fontSize, lineHeight, theme });
-      const entry: OpenTab = { term, el, requested: project, project, title: project.split(/[/\\]/).pop() || "/", open: false };
+      const entry: OpenTab = { term, el, requested: project, project, title: project.split(/[/\\]/).pop() || "/", open: false, exited: false };
       tabs.current.push(entry);
       term.keyFilter = (e) => terminalKeyRef.current(e);
       term.onOpen = (opened) => {
         entry.open = true;
+        entry.exited = false;
         entry.project = opened.project;
         entry.title = opened.title;
         showTab(tabs.current.indexOf(entry));
@@ -554,8 +551,8 @@ export function Shell(props: ShellProps) {
     const common = commonPrefix(items);
     completion.current = { base, items, index: items.length === 1 ? 0 : -1 };
     setCmd(items.length === 1 ? (items[0] ?? base) : common.length > base.length ? common : base);
-    if (items.length > 1) say(items.map((i) => i.slice(i.lastIndexOf(" ") + 1)).join("  "));
-  }, [say, setCmd]);
+    // More than one: the palette lists them above the command line.
+  }, [setCmd]);
 
   // NORMAL and COMMAND keys: the window handles them before anything else sees them.
   useEffect(() => {
@@ -626,7 +623,11 @@ export function Shell(props: ShellProps) {
     void listen<HealthView>("health_changed", setHealth);
     healthGet(false).then(setHealth, () => {});
     void listen<{ id: number; code: number }>("pty_exit", ({ id, code }) => {
-      tabs.current.find((t) => t.term.tab?.pty === id)?.term.exited(code);
+      const t = tabs.current.find((x) => x.term.tab?.pty === id);
+      if (!t) return;
+      t.term.exited(code);
+      t.exited = true;
+      rerender();
     });
     void listen<string>("open_dir", (dir) => openRef.current(dir));
     projectsList().then(
@@ -643,62 +644,50 @@ export function Shell(props: ShellProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const cols = cells(view.w, cell.w);
-  const rows = cells(view.h, cell.h);
   const termOpen = tabs.current.length > 0;
   const current = tabs.current[cur.current];
-  const shell = layout(
-    {
-      ...data,
-      tabs: tabs.current.map((t, i) => ({ name: t.title, current: i === cur.current })),
-      segments: [
-        ...(current ? [{ text: current.title, cls: "", action: { name: "project.pick" } as ActionCall }] : []),
-        { text: healthSegment(health), cls: "", action: { name: "health.show" } },
-      ],
-      // The `simple` style has no modes, so no mode segment (D-034).
-      mode: keys.style === "modal" ? modeView.mode : null,
-      clock,
-      commandLine: "",
-      stageLines: termOpen
-        ? []
-        : startLines(
-            recent,
-            health?.setup ? { reason: health.reason ?? "WSL is not ready", command: health.setup } : null,
-          ),
-    },
-    cols,
-    rows,
+  const runner = { run, tip: (c: ActionCall) => describeAction(c, keys, otherTable) };
+  const bar = titleBar(
+    tabs.current.map((t, i) => ({ title: t.title, current: i === cur.current, exited: t.exited })),
+    VERSION,
   );
-  const stage = termOpen ? shell.stage.map(() => [{ text: " ".repeat(cols), cls: "" }]) : shell.stage;
-  const commandRow: Row =
-    modeView.mode === "COMMAND"
-      ? fit([{ text: `:${cmdText}`, cls: "" }, { text: " ", cls: "cursor" }], cols)
-      : fit([{ text: message.text ? ` ${message.text}` : "", cls: message.error ? "error" : "" }], cols); // one-cell inset, like the statusline
+  // The `simple` style has no modes, so no mode badge (D-034).
+  const status = statusBar(current ? current.project : null, health, lastCmd, keys.style === "modal" ? modeView.mode : null);
 
-  // The terminal sits over the stage rows, sized in whole cells (style.css reads these).
+  // Overlays still size themselves in grid cells (E-50 moves them to the V1 scale).
   useEffect(() => {
-    const root = document.documentElement.style;
-    root.setProperty("--cell-h", `${cell.h}px`);
-    root.setProperty("--stage-top", `${cell.h}px`);
-    root.setProperty("--stage-w", `${cols * cell.w}px`);
-    root.setProperty("--stage-h", `${stage.length * cell.h}px`);
-    tab.current?.fit();
-  }, [cell, cols, stage.length]);
+    document.documentElement.style.setProperty("--cell-h", `${cell.h}px`);
+  }, [cell]);
+
+  // The stage is borderless and fills what the bars leave (V2): the terminal follows its size
+  // in whole cells, centred; the window itself is never snapped to cells.
+  useEffect(() => {
+    const el = termsEl.current;
+    if (!el) return;
+    const o = new ResizeObserver(() => tab.current?.fit());
+    o.observe(el);
+    return () => o.disconnect();
+    // `tab` reads the current tab when the observer fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <ButtonCtx.Provider value={{ run, tip: (c) => describeAction(c, keys, otherTable) }}>
-      <div id="grid" role="application" aria-label="rein-app">
-        <GridRow row={shell.tabline} className="bar" />
-        {stage.map((r, i) => (
-          <GridRow key={i} row={r} />
-        ))}
-        <GridRow row={shell.statusline} className="bar" />
-        <GridRow row={commandRow} />
-      </div>
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div id="term" ref={termsEl} className={termOpen ? undefined : "hidden"} />
-        </ContextMenuTrigger>
+    <ButtonCtx.Provider value={runner}>
+      <div id="frame" role="application" aria-label="rein-app" className="flex h-full flex-col">
+        <TitleBar bar={bar} chrome={CHROME} r={runner} />
+        <div id="stage" className="relative min-h-0 flex-1">
+          {!termOpen && (
+            <StartLines
+              lines={startLines(
+                recent,
+                health?.setup ? { reason: health.reason ?? "WSL is not ready", command: health.setup } : null,
+              )}
+            />
+          )}
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <div id="term" ref={termsEl} className={termOpen ? undefined : "hidden"} />
+            </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onSelect={() => run({ name: "term.copy" })}>
             Copy<ContextMenuShortcut>Ctrl+Shift+C</ContextMenuShortcut>
@@ -707,8 +696,13 @@ export function Shell(props: ShellProps) {
             Paste<ContextMenuShortcut>Ctrl+Shift+V</ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuItem onSelect={() => tab.current?.selectAll()}>Select all</ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
+            </ContextMenuContent>
+          </ContextMenu>
+        </div>
+        <StatusBar bar={status} r={runner} />
+      </div>
+      <Toast message={message} />
+      {modeView.mode === "COMMAND" && <CommandPalette text={cmdText} items={completion.current?.items ?? []} />}
       {overlay === "menu" && (
         <MenuOverlay
           entries={menuEntries(keys, otherTable, { tabs: tabs.current.length })}

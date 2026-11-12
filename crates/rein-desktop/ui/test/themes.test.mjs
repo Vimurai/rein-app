@@ -74,3 +74,31 @@ test("the tmux overlay colours are the theme's, lower case, in every theme", asy
   assert.equal(custom.accent, "#abcdef");
   for (const v of Object.values(custom)) assert.match(v, /^#[0-9a-f]{6}$/);
 });
+
+// E-49 (desktop.md V1): every theme maps to the shadcn variables by one pure function, and
+// every text pair the modern frame draws reads at 4.5:1 or more. Extends the chrome pairs above.
+test("the shadcn variables of every theme keep text at 4.5:1", async () => {
+  const { shadcnVariables } = await import("../src/theme.ts");
+  const pairs = [
+    ["--foreground", "--background"],
+    ["--card-foreground", "--card"],
+    ["--popover-foreground", "--popover"],
+    ["--muted-foreground", "--muted"],
+    ["--muted-foreground", "--background"],
+    ["--primary-foreground", "--primary"],
+    ["--destructive", "--background"],
+    // The close button turns red on hover with the background colour as its icon.
+    ["--background", "--destructive"],
+  ];
+  for (const t of THEMES.values()) {
+    const v = shadcnVariables(t);
+    assert.equal(v["--background"], t.bg, `${t.name}: background is the theme's`);
+    assert.equal(v["--primary"], t.accent, `${t.name}: primary is the accent`);
+    assert.equal(v["--ring"], t.accent);
+    for (const [fg, bg] of pairs) {
+      const c = contrast(v[fg], v[bg]);
+      assert.ok(c >= 4.5, `${t.name}: ${fg} on ${bg} is ${c.toFixed(2)}`);
+    }
+    assert.ok(Object.keys(cssVariables(t)).includes("--card"), "the stylesheet gets them too");
+  }
+});

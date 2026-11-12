@@ -1833,3 +1833,44 @@ Drop ruling 2; the size check in CI stays.
 
 ### D-050 addendum 1 (2026-11-12) — as built in E-51, ratified
 Ruling 4 is amended: the overlay **puts the user's own session- and window-level values back** (saved in `@rein-saved-<option>`) instead of unsetting them — unsetting deleted values the user had set on the session by hand (security review F2). Also ratified: IPC `tab_tmux` / `allow-tab-tmux`; the internal mode word `off`; `mode-style` and `window-status-*` set per window; the detach hook compares the client inside tmux (F1); fixed hook index `[4271]`. Accepted known limit F3: after `switch-client` the overlay stays on the session the app left. Detail: `desktop.md` V6 "As built". Screens accepted under D-052 (`.ai/screens/E-51/`).
+
+## D-053 — Icons: lucide-react 1.62.0 (E-49, dependency_gate, Engineer-recorded)
+
+**Date**: 2026-11-12
+**Task**: E-49 (desktop.md §Look and feel v2 V1 "Icons"; D-049 withdraws D-037's "no icon set" and names lucide-react)
+**Decision**: ADOPT `lucide-react` **1.62.0**, a runtime dependency of the window UI, pinned exactly.
+- Released 2026-10-27. The newest is 1.72.0 (2026-11-11). This is the latest release at least two weeks old, so a compromised new release has time to be noticed before it can reach us.
+- D-049 already rules that lucide-react is used. This entry records the version and the checks; the operator, 2026-11-11: "don't ask me for permissions, just build it" (as for D-051).
+
+### Why needed
+The modern chrome (V2) needs icons:
+- tab close, `+`, menu, minimise / maximise / restore / close;
+- the health badge (check / warning / cross / question);
+- copy, and the exited-tab dot.
+
+Drawing them as Unicode glyphs depends on the UI font and is what D-049 replaces.
+
+### Alternatives considered
+1. **Hand-written inline SVG components.** No dependency, but about 15 icons drawn and kept by us, and every later icon added by hand. lucide is the icon set shadcn/ui's new-york style is built around, so the shadcn components (E-50) expect it.
+2. **@radix-ui/react-icons.** Smaller set, 15 × 15 grid, does not match new-york's lucide icons; would need a second set later.
+3. **An icon font.** Rejected: a font load and glyph-box failure mode, the problem V3 just fixed for the terminal.
+
+### Size / weight
+- The package is 36 MB unpacked: one ES module per icon, plus types.
+- Only named imports are bundled: esbuild tree-shakes the per-icon modules. About 15 icons add roughly 10–15 KB minified to `app.js`.
+- The bundle test keeps JS + CSS ≤ 2 MiB (V3).
+- No runtime dependencies. Peer dependency: react ^16.5.1 … ^19.
+
+### Security track record
+- No published advisories for lucide-react at the time of writing.
+- `npm audit` is run at install; its result is recorded in the E-49 handoff.
+- The icons are static SVG elements built with React (no `dangerouslySetInnerHTML`). They render inside the existing CSP (`default-src 'self'`, no inline style needed).
+
+### Maintenance status
+Actively maintained: releases are roughly weekly (1.58 → 1.72 between 2026-10-16 and 2026-11-11).
+
+### License
+ISC (compatible with the project's Apache-2.0).
+
+### Rollback
+Remove the dependency and the `lucide-react` imports in `ui/src/` (the icon components are named in one place, `ui/src/icons.ts`). Replace them with inline SVG, or with text labels in the buttons' existing accessible names.

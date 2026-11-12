@@ -145,5 +145,10 @@ export const uiSet = (field: string, value: unknown) => invoke<UiView>("ui_set",
 
 /** Close the window (`:qa`, after every tab is detached): Tauri's core window command. */
 export const closeWindow = () => invoke<void>("plugin:window|close", { label: "main" });
+/** The title bar is ours (V2): dragging the empty part moves the window, our buttons minimise
+ *  and maximise it. Exactly the window permissions the capability file grants. */
+export const startDragging = () => invoke<void>("plugin:window|start_dragging", { label: "main" });
+export const minimizeWindow = () => invoke<void>("plugin:window|minimize", { label: "main" });
+export const toggleMaximize = () => invoke<void>("plugin:window|toggle_maximize", { label: "main" });
 export const configGet = (reload = false) =>
   invoke<import("./config.ts").ConfigView>("config_get", { reload });

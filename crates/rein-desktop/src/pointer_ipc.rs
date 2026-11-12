@@ -104,7 +104,9 @@ pub fn ui_set(
     let cfg = config.view();
     ui.set(&cfg, &field, &value)?;
     let view = ui.view(&cfg);
+    // Windows draws its own title bar (V2): its native decorations stay off.
     if field == "decorations"
+        && !cfg!(windows)
         && let (Some(w), Some(on)) = (
             app.get_webview_window(MAIN_WINDOW),
             view.decorations.value.as_bool(),
