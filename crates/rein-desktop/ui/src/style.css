@@ -6,6 +6,11 @@ html, body {
   /* config.toml `window.opacity`: shows through where the window is transparent. */
   background: color-mix(in srgb, var(--bg) calc(var(--opacity, 1) * 100%), transparent);
   color: var(--fg);
+  /* Every overlay (menu, dialogs, tooltips, Settings) is on the same grid as the chrome:
+     the configured font, size and line height, so a row is one cell high at any zoom. */
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
 }
 #grid, #probe {
   font-family: var(--font-family);
@@ -67,4 +72,7 @@ html, body {
 /* One pane per tab inside #term; only the current tab's is shown (E-38). */
 #term .term-pane { position: absolute; inset: 0; }
 .hidden { display: none; }
+/* An overlay sits between grid rows: a ring of the background, one row wide, hides the
+   halves of the stage glyphs its border would otherwise cut through (not a shadow). */
+[data-slot="dialog-content"] { box-shadow: 0 0 0 var(--cell-h) var(--bg); }
 .fatal { position: absolute; z-index: 10; margin: 1em; color: #fb4934; background: #282828; white-space: pre-wrap; }

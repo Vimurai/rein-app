@@ -52,8 +52,12 @@ function Panel({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent title={title} aria-describedby={undefined} onKeyDown={onKeyDown}>
-        <div className="max-h-[60vh] overflow-y-auto px-1 whitespace-pre-wrap">{children}</div>
-        {footer && <div className="flex justify-end gap-2 px-1">{footer}</div>}
+        {/* Scrolls inside the dialog (min-h-0 lets it shrink in the column), by wheel, arrows or
+            PageDown once focused; the half-shown last row says that more follows. */}
+        <div tabIndex={0} className="min-h-0 flex-1 overflow-y-auto px-1 whitespace-pre-wrap outline-none">
+          {children}
+        </div>
+        {footer && <div className="flex justify-end gap-2 px-1 pb-[calc(var(--cell-h)/2)]">{footer}</div>}
       </DialogContent>
     </Dialog>
   );
@@ -76,7 +80,10 @@ export function HealthOverlay({ health, onClose }: { health: HealthView | null; 
       {health?.reason && <div className="text-dim">{health.reason}</div>}
       {health?.checks.map((c, i) => (
         <div key={i}>
-          <span className={cls(c.status)}>{c.status === "fail" ? "FAIL" : c.status.padEnd(4)}</span> {c.id}: {c.line}
+          {/* A wrapped line lines up under the check text, not at column 0. */}
+          <div className="pl-[5ch] -indent-[5ch]">
+            <span className={cls(c.status)}>{c.status === "fail" ? "FAIL" : c.status.padEnd(4)}</span> {c.id}: {c.line}
+          </div>
           {c.fix && <div className="pl-6 text-dim">fix: {c.fix}</div>}
         </div>
       ))}

@@ -1,5 +1,5 @@
 // The command line (desktop.md §API "Command line"): `:open DIR`, `:projects`, `:checkhealth`,
-// `:update`, `:rollback`, `:profiles`, `:config`, `:theme NAME`, `:q`, `:qa`, `:help`. Tab
+// `:update`, `:rollback`, `:profiles`, `:config`, `:theme NAME`, `:settings`, `:q`, `:qa`, `:help`. Tab
 // completes command names, directories and theme names; an unknown command is
 // `E492: Not a command: <name>`. Pure — directory listing comes in through `dirs`.
 
@@ -21,6 +21,7 @@ export const COMMANDS: ReadonlyMap<string, CommandSpec> = new Map<string, Comman
   ["profiles", { action: "profiles.show" }],
   ["config", { action: "config.open" }],
   ["theme", { action: "theme.set", arg: "theme" }],
+  ["settings", { action: "settings.show" }],
   ["q", { action: "tab.detach" }],
   ["qa", { action: "app.quit" }],
   ["help", { action: "help.show" }],

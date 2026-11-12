@@ -2,7 +2,7 @@
 // and its keys.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_MODAL } from "../src/keymap.ts";
+import { DEFAULT_MODAL, DEFAULT_SIMPLE } from "../src/keymap.ts";
 import { step } from "../src/modes.ts";
 import { HINTS, WORDMARK, startLines, withStartKeys } from "../src/start.ts";
 
@@ -47,6 +47,10 @@ test("start-screen keys: p o h u q, digits open recent N", () => {
   assert.deepEqual(act("c"), { name: "health.show" });
   assert.deepEqual(act("3"), { name: "tab.goto", arg: "3" });
   assert.equal(DEFAULT_MODAL.normal.has("p"), false, "the project keymap is unchanged");
+  // The simple style has no digit keys of its own; the start screen gives them.
+  const simple = withStartKeys(DEFAULT_SIMPLE);
+  assert.deepEqual(step(simple, { mode: "NORMAL", pending: [] }, "2").action, { name: "tab.goto", arg: "2" });
+  assert.deepEqual(step(simple, { mode: "NORMAL", pending: [] }, "o").action, { name: "project.open" });
 });
 
 test("the picker's fuzzy filter keeps recency order", async () => {

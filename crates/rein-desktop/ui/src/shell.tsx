@@ -74,10 +74,6 @@ const INITIAL: ShellData = {
 
 /** Actions whose backend arrives with a later task: they say so in one line (E-36). */
 const LATER: Partial<Record<ActionName, string>> = {
-  "settings.show": "E-41",
-  "font.bigger": "E-41",
-  "font.smaller": "E-41",
-  "font.reset": "E-41",
 };
 
 /** The CLI command an action stands for (rule 4: the UI teaches the CLI). */
@@ -658,7 +654,7 @@ export function Shell(props: ShellProps) {
   const commandRow: Row =
     modeView.mode === "COMMAND"
       ? fit([{ text: `:${cmdText}`, cls: "" }, { text: " ", cls: "cursor" }], cols)
-      : fit([{ text: message.text, cls: message.error ? "error" : "" }], cols);
+      : fit([{ text: message.text ? ` ${message.text}` : "", cls: message.error ? "error" : "" }], cols); // one-cell inset, like the statusline
 
   // The terminal sits over the stage rows, sized in whole cells (style.css reads these).
   useEffect(() => {

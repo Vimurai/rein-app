@@ -209,11 +209,13 @@ export function FirstRun({ onChoose }: { onChoose: (style: "simple" | "modal") =
           {choice(
             "modal",
             "Modal — like vim",
-            ["Ctrl+\\ Ctrl+n leaves the terminal.", "Space opens the leader keys.", ": opens the command line."],
+            ["Ctrl+\\ Ctrl+n: leave the terminal.", "Space: the leader keys.", ": the command line."],
             false,
           )}
         </div>
-        <div className="px-1 text-dim">You can change this any time: menu → Input style.</div>
+        <div className="mt-[var(--cell-h)] px-1 pb-[calc(var(--cell-h)/2)] text-dim">
+          You can change this any time: menu → Input style.
+        </div>
       </DialogContent>
     </Dialog>
   );

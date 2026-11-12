@@ -154,23 +154,33 @@ impl UiStore {
                 Some(s @ ("simple" | "modal")) => d.input_style = s.into(),
                 _ => return Err(bad()),
             },
+            // `null` clears a choice: the default applies again (Reset font size).
             "theme" => {
                 refuse_config("theme.name")?;
-                match value.as_str() {
-                    Some(t) if THEMES.contains(&t) => d.theme = Some(t.into()),
-                    _ => return Err(bad()),
-                }
+                d.theme = match value {
+                    Value::Null => None,
+                    v => match v.as_str() {
+                        Some(t) if THEMES.contains(&t) => Some(t.into()),
+                        _ => return Err(bad()),
+                    },
+                };
             }
             "font_size" => {
                 refuse_config("font.size")?;
-                match value.as_u64() {
-                    Some(n @ 6..=72) => d.font_size = Some(n as u32),
-                    _ => return Err(bad()),
-                }
+                d.font_size = match value {
+                    Value::Null => None,
+                    v => match v.as_u64() {
+                        Some(n @ 6..=72) => Some(n as u32),
+                        _ => return Err(bad()),
+                    },
+                };
             }
             "decorations" => {
                 refuse_config("window.decorations")?;
-                d.decorations = Some(value.as_bool().ok_or_else(bad)?);
+                d.decorations = match value {
+                    Value::Null => None,
+                    v => Some(v.as_bool().ok_or_else(bad)?),
+                };
             }
             "first_run_done" => d.first_run_done = value.as_bool().ok_or_else(bad)?,
             _ => return Err(err("bad_field", "not a setting")),
@@ -269,6 +279,14 @@ mod tests {
         );
         assert_eq!(s.view(&c).theme.source, "config");
         s.set(&c, "decorations", &Value::from(false)).unwrap();
+        s.set(&cfg(&[]), "font_size", &Value::from(20)).unwrap();
+        assert_eq!(s.view(&cfg(&[])).font_size.value, 20);
+        s.set(&cfg(&[]), "font_size", &Value::Null).unwrap();
+        assert_eq!(
+            s.view(&cfg(&[])).font_size.source,
+            "default",
+            "null clears the choice"
+        );
         assert_eq!(
             s.view(&c).decorations,
             Effective {

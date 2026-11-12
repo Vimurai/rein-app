@@ -3,10 +3,11 @@
 // the app starts no editor), `config.reload`, `:theme NAME` (this session; config.toml is
 // never written).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fontFamily, keyTable, type ConfigView } from "./config.ts";
 import { clipboardWrite, configGet, listen, uiGet, uiSet, type UiView } from "./ipc.ts";
 import { FirstRun } from "./overlays.tsx";
+import { FONT_MAX, FONT_MIN, SettingsOverlay } from "./settings.tsx";
 import { Shell, type Handlers } from "./shell.tsx";
 import { THEMES, resolveTheme } from "./theme.ts";
 
@@ -48,6 +49,43 @@ export function App({
   const keys = useMemo(() => keyTable(cfg, style), [cfg, style]);
   const fontSize = ui?.font_size.value ?? cfg.font.size;
 
+  const [settings, setSettings] = useState(false);
+  /** A line inside Settings: the config path, or why a change was refused. The command row
+      is under the overlay's backdrop while Settings is open, so it cannot carry them. */
+  const [settingsNote, setSettingsNote] = useState<{ text: string; error: boolean } | null>(null);
+
+  /** One ui.json field (Settings, font zoom); the core refuses a field config.toml sets. */
+  const setField = (field: string, value: unknown) =>
+    uiSet(field, value).then(
+      (v) => {
+        // A theme chosen in Settings replaces a session's `:theme NAME`, so it shows at once.
+        if (field === "theme") setThemeName(null);
+        setUi(v);
+      },
+      (e: { message?: string }) => {
+        const text = `E: ${e.message ?? String(e)}`;
+        setNotice((n) => ({ text, error: true, seq: n.seq + 1 }));
+        setSettingsNote({ text, error: true });
+      },
+    );
+
+  // Ctrl + wheel changes the font size (desktop.md "Two ways in"), like Ctrl+= / Ctrl+-.
+  const zoomRef = useRef<(by: number) => void>(() => {});
+  zoomRef.current = (by) => {
+    if (ui?.font_size.source === "config") return;
+    const next = Math.min(FONT_MAX, Math.max(FONT_MIN, fontSize + by));
+    if (next !== fontSize) void setField("font_size", next);
+  };
+  useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      zoomRef.current(e.deltaY < 0 ? 1 : -1);
+    };
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => window.removeEventListener("wheel", onWheel);
+  }, []);
+
   const chooseStyle = (s: "simple" | "modal", first: boolean) =>
     uiSet("input_style", s)
       .then(() => (first ? uiSet("first_run_done", true) : uiGet()))
@@ -76,6 +114,15 @@ export function App({
         (e: { message?: string }) => ui.say(`E: ${e.message ?? String(e)}`, true),
       );
     },
+    "settings.show": () => setSettings(true),
+    "font.bigger": (_c, cmd) =>
+      ui?.font_size.source === "config" ? cmd.say("font.size is set in config.toml — change it there") : zoomRef.current(1),
+    "font.smaller": (_c, cmd) =>
+      ui?.font_size.source === "config" ? cmd.say("font.size is set in config.toml — change it there") : zoomRef.current(-1),
+    "font.reset": (_c, cmd) =>
+      ui?.font_size.source === "config"
+        ? cmd.say("font.size is set in config.toml — change it there")
+        : void setField("font_size", null),
     "input.style": (call, cmd) => {
       const next = call.arg === "simple" || call.arg === "modal" ? call.arg : style === "simple" ? "modal" : "simple";
       chooseStyle(next, false).then(
@@ -108,12 +155,26 @@ export function App({
       startLast={initial.config.window.start === "last"}
     />
   );
-  return ui && !ui.first_run_done ? (
+  return (
     <>
       {shell}
-      <FirstRun onChoose={(s) => void chooseStyle(s, true)} />
+      {ui && !ui.first_run_done && <FirstRun onChoose={(s) => void chooseStyle(s, true)} />}
+      {ui && settings && (
+        <SettingsOverlay
+          ui={ui}
+          onSet={(field, value) => void setField(field, value)}
+          themeInUse={themeName ?? baseTheme}
+          note={settingsNote}
+          onOpenConfig={() => handlers["config.open"]?.({ name: "config.open" }, {
+            say: (text, error) => setSettingsNote({ text, error: error ?? false }),
+            showCommand: (cmd, note) => setSettingsNote({ text: note ? `${cmd}\n${note}` : cmd, error: false }),
+          })}
+          onClose={() => {
+            setSettings(false);
+            setSettingsNote(null);
+          }}
+        />
+      )}
     </>
-  ) : (
-    shell
   );
 }

@@ -162,13 +162,14 @@ test("command line: the listed commands, E492, completion", async () => {
   assert.deepEqual(parse("open /home/me/p"), { action: { name: "project.open", arg: "/home/me/p" } });
   assert.deepEqual(parse("theme nord"), { action: { name: "theme.set", arg: "nord" } });
   assert.deepEqual(parse("checkhealth"), { action: { name: "health.show" } });
+  assert.deepEqual(parse("settings"), { action: { name: "settings.show" } });
   assert.deepEqual(parse("bogus"), { error: "E492: Not a command: bogus" });
   assert.deepEqual(parse("open"), { error: "E471: Argument required" });
   assert.deepEqual(parse("q now"), { error: "E488: Trailing characters" });
   assert.deepEqual(parse("  "), { empty: true });
   assert.deepEqual(
     [...COMMANDS.keys()].sort(),
-    ["checkhealth", "config", "help", "open", "profiles", "projects", "q", "qa", "rollback", "theme", "update"],
+    ["checkhealth", "config", "help", "open", "profiles", "projects", "q", "qa", "rollback", "settings", "theme", "update"],
   );
   const src = {
     themes: ["gruvbox-dark", "github-light", "nord"],

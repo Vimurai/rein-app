@@ -9,13 +9,13 @@ export function Switch({ className, ...props }: ComponentProps<typeof SwitchPrim
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        "group inline-flex h-cell items-center bg-bar-bg px-1 font-mono text-bar-fg outline-none focus-visible:bg-accent focus-visible:text-bg data-[state=checked]:text-accent",
+        "inline-flex h-cell items-center bg-bar-bg px-1 font-mono text-bar-fg outline-none focus-visible:bg-accent focus-visible:text-bg disabled:text-dim data-[state=checked]:text-accent",
         className,
       )}
       {...props}
     >
-      <span className="group-data-[state=checked]:hidden">[off]</span>
-      <span className="hidden group-data-[state=checked]:inline">[ on]</span>
+      {/* The state as text, drawn on the grid: [  on ] / [ off ] (same width, so the right-aligned switch does not move). */}
+      {props.checked ? "[  on ]" : "[ off ]"}
       <SwitchPrimitive.Thumb className="hidden" />
     </SwitchPrimitive.Root>
   );

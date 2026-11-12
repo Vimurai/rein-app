@@ -65,6 +65,8 @@ export function withStartKeys(table: KeyTable): KeyTable {
   normal.set("u", { name: "release.update" });
   normal.set("q", { name: "app.quit" });
   normal.set("c", { name: "health.show" }); // "check again" when WSL is not ready (E-45)
+  // Digit N opens recent project N, in either input style (simple has no digit keys of its own).
+  for (const n of ["1", "2", "3", "4", "5", "6", "7", "8", "9"]) normal.set(n, { name: "tab.goto", arg: n });
   return { ...table, normal };
 }
 

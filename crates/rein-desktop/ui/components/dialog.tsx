@@ -17,7 +17,7 @@ export function DialogContent({
 }: ComponentProps<typeof DialogPrimitive.Content> & { title: ReactNode; portal?: boolean }) {
   const content = (
     <>
-      <DialogPrimitive.Overlay data-slot="dialog-overlay" className="fixed inset-0 z-40 bg-bg/60" />
+      <DialogPrimitive.Overlay data-slot="dialog-overlay" className="fixed inset-0 z-40 bg-bg/85" />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(

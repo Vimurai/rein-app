@@ -28,6 +28,7 @@
   --color-dim: var(--dim);
   --color-bar-dim: var(--bar-dim);
   --color-border: var(--border);
+  --color-error: var(--error);
   --color-ansi-0: var(--ansi-0);
   --color-ansi-1: var(--ansi-1);
   --color-ansi-2: var(--ansi-2);
