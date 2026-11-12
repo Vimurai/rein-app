@@ -661,36 +661,34 @@
     {
       "id": "E-43",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Implement the Windows window core of `rein-desktop`, per .ai/blueprints/desktop.md §Windows window (W1, W2, W3, W5, W6, Data model changes, Interface changes, Security, Limits, Tests) and D-038: (1) introduce the `Host` seam and move today's behaviour behind `LocalHost` unchanged — no `cfg(windows)` outside the two hosts, `dirs` and `single_instance`; (2) implement `WslHost`: `wsl.exe` by absolute `%SystemRoot%\\System32` path, the state probe (`Absent` / `NoDistro` / `Ready`, sharing the Phase 1 `wsl.rs` detect/decode logic instead of copying it), the distro / home / shell probe with validation, the one-call project validation (exit 0 / 3 / 4 / other), and the ConPTY child exactly `wsl.exe -d D --cd <linux path> -e <shell> -lic 'exec ~/.rein/bin/rein start'` with `WSLENV` removed; (3) add the pure Windows-path mapping (POSIX path, `\\\\wsl.localhost\\<distro>\\…`, `\\\\wsl$\\<distro>\\…`; refuse drive paths, another distro, and `\"` / `\\` / control characters); (4) add Windows directories (`%APPDATA%\\rein-app`, `%LOCALAPPDATA%\\rein-app`) and the lock-file + watched handoff-directory single instance (no named pipe); (5) make `rein-desktop` build and run its tests in the Windows job of `ci.yml` (`skill: ci_gate`). Do this before E-42. Acceptance: every test listed under \"Tests (Windows revision)\" except the W4 ones passes with a stubbed process runner; Linux and macOS behaviour and tests are unchanged; the interop smoke from inside WSL (probe, validation call, start script) is run and its result reported in the handoff; `security_engineer` before commit; CI green on three OSes.",
       "created_at": "2026-11-11T20:40:26.766Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-12T09:10:36.479Z",
+      "summary": "E-43 (dbc9908, e779455; [TIER_3]): Host seam (LocalHost = E-35 behaviour unchanged; WslHost: probe, one-call validation with D-038 addendum-1 `/` guard, wsl.exe ConPTY child, WSLENV …[full in LOG.md]",
       "depends_on": [
         "E-35"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-11T20:50:27.263Z"
+      "updated_at": "2026-11-12T09:10:36.482Z"
     },
     {
       "id": "E-44",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "DONE",
       "tier": 2,
       "description": "Add the hosted workflow `.github/workflows/desktop-windows.yml` that builds the Windows installer of `rein-desktop` as a downloadable workflow artifact, per .ai/blueprints/desktop.md §Windows window W7 and D-038 ruling 9, after `skill: ci_gate` (and `skill: dependency_gate` for the Tauri CLI, pinned in the committed lockfile): `windows-latest`; triggers `workflow_dispatch` and pushes to `master` touching `crates/rein-desktop/**`, `Cargo.lock` or the workflow; `permissions: contents: read`, no secret, actions pinned as in `ci.yml`; build the UI from the lockfile, run `cargo test -p rein-desktop`, build the Tauri NSIS bundle only (per-user install, WebView2 bootstrapper, no MSI), upload it as artifact `rein-desktop-windows-x64-setup` with 14-day retention. Leave `release.yml` and the dist configuration untouched. Acceptance: one green run on `master` whose artifact contains the setup `.exe`; the handoff gives the operator the run URL, the `gh run download` command, the SmartScreen note (unsigned test build) and how to start it (`rein-desktop.exe <project path>` until E-38 lands); `.ai/DEVOPS.md` records the workflow and its rollback.",
       "created_at": "2026-11-11T20:40:34.177Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-12T09:10:38.488Z",
+      "summary": "E-44 (8988d48): desktop-windows.yml builds the unsigned per-user NSIS installer (WebView2 bootstrapper) with the pinned Tauri CLI 2.11.5 (D-041) from tauri.windows-installer.json; ar …[full in LOG.md]",
       "depends_on": [
         "E-43"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-43"
-      ],
-      "updated_at": "2026-11-11T20:40:34.178Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T09:10:38.489Z"
     },
     {
       "id": "E-45",
@@ -707,8 +705,7 @@
       ],
       "ready": false,
       "blocked_by": [
-        "E-39",
-        "E-43"
+        "E-39"
       ],
       "updated_at": "2026-11-11T20:40:40.477Z"
     }
@@ -1585,6 +1582,15 @@
       "timestamp": "2026-11-11T20:47:50.547Z",
       "summary": "[TIER_3] E-35 All critics passed — [ARCH_PASS] [SEC_PASS] [TESTS_PASS] [ALIGN_PASS] + [CLEAN_PASS] [SEC_CLEARED] (manual review over the unstaged tree; align_diff reads staged only). P0: 0 | P1: 1 (PtyHost has no Drop, so pty.rs tests at ~547/589/613/643 leak stub children if an assertion fails before detach; needs a fix or a tracked task) | P2: D-040 awaits Architect ratification; D-036 omits nix 'fs' feature + direct filedescriptor dep; COLORTERM=truecolor undocumented; possible pty_exit drop before tab_open returns (main.ts:127-129); no UI test for per-frame batching. Pending: rein-test --vibe (VIBE/CHAOS), hosted CI, real-project Linux check.",
       "sha": "0f26fef5f81d9a003597c8826e37d6165d9854b2",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "security_engineer",
+      "task_id": "E-43",
+      "timestamp": "2026-11-11T21:53:21.663Z",
+      "summary": "E-43 security_engineer PASS (no P0/P1). Fixed before commit: P2-1 %SystemRoot% must be drive-absolute (else C:\\Windows) so wsl.exe is never PATH-searched; P3-2 bounded handoff read; P3-3 UNC %LOCALAPPDATA% refused; P3-5 comment. Residual, reported to Architect: P3-1 start script has no / guard (dir removed between validate and spawn → rein start in /, exits 2; by ruling); P3-4 WSL appendWindowsPath puts Windows dirs on the Linux PATH (only WSLENV vars are blocked). Pen-test: UNC ..-traversal, \\\\?\\, Ubuntu:evil, %PATH%^&!$(id) literal, quotes/bidi — all RESISTED.",
+      "sha": "78bbeb2a690c2ff4f35e0c460b659789157ce5a7",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
