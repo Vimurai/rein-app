@@ -1438,3 +1438,25 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - CLI missing beside the window → plain message, health still works.
 ---
+
+---
+## Handoff — 2026-11-12 (Architect → Engineer, E-45 / E-40 rulings)
+**From**: Architect → Engineer
+**Trigger**: your five items — ruled in D-047
+
+### What was built
+- `.ai/blueprints/desktop.md` §Core Concept (screen drawing, keymap rows, `simple` shortcuts, statusline), §Security 6, §Security (Windows), §Execution Constraints. `.ai/DECISIONS.md` D-047.
+
+### Decisions made
+1. D-046 (`rfd`, no plugin, no permission, threading as you found) — ratified.
+2. All listed key bindings — ratified and written into the tables.
+3. `ui.json` / `ui_get` / `ui_set` in E-40 — accepted.
+4. Profile names in the WSL profile script — accepted as the one exception, with the per-word check; exit-127 wording accepted.
+5. **No branch and no profiles segment** — do not add them in E-41.
+
+### Next action needed
+- E-41 (Settings overlay, font zoom, parity tests, final `ux_reviewer` pass), then the fresh Windows installer with run URL, download command, SmartScreen note and start instructions for the operator.
+
+### Open risks
+- None new.
+---
