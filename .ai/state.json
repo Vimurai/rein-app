@@ -585,18 +585,18 @@
     {
       "id": "E-39",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Implement health, release and profile actions in the window over the Phase 1 library seams, per .ai/blueprints/desktop.md §Components 5, §Data Model `HealthView`, §API (`health_get`, `release_check`, `release_apply`, `profiles_plan`, `profiles_apply`, event `health_changed`), §Security boundary 5 and D-033 ruling 8: a `HealthService` that runs `rein doctor --json` through the existing runner (4 MiB cap, strict parse, 120-second limit) when a tab opens, after update / rollback and on `health.show`, shows the document's `status` and checks in a `:checkhealth` overlay (each check's line and fix line, escaped) and in the statusline segment, and maps any run without a valid document to `unknown` — never a pass, never a recomputed verdict, no branch on a check id (D-029, D-032); `:update` and `:rollback` showing installed and newest version with notes, asking `y/N` on the command line, streaming progress lines, and returning the Phase 1 exit code and refusal text unchanged under the same install lock and owner guard; a `:profiles` overlay showing the per-profile diff of the three allowed keys from `rein_profiles::plan` and applying through `rein_profiles::apply` only — the IPC takes profile names and can never be handed a key name. Add no second implementation of any Phase 1 behaviour. Run `security_engineer` before commit and close with a `ux_reviewer` pass over the start screen, a project tab and every overlay in `gruvbox-dark` and `github-light` at 80×24 and 200×60 cells. Acceptance: §Test Plan \"Health / release / profiles\" with the stubbed `Process` (fail, warn, ok, garbage → unknown; exit codes unchanged; no key-name input) and \"Screens\" green; `cargo test --workspace` and hosted CI green.",
       "created_at": "2026-11-11T19:10:34.436Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-12T10:12:24.764Z",
+      "summary": "E-39 (b2bcf52, [TIER_3]): Host::run_cli runs the sibling rein-app CLI with constant argv (D-045); rein-app update --check; doctor parser moved to rein-platform; health = doctor --sco …[full in LOG.md]",
       "depends_on": [
         "E-38"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-12T09:51:47.324Z"
+      "updated_at": "2026-11-12T10:12:24.764Z"
     },
     {
       "id": "E-40",
@@ -630,7 +630,6 @@
       ],
       "ready": false,
       "blocked_by": [
-        "E-39",
         "E-40"
       ],
       "updated_at": "2026-11-11T19:13:56.784Z"
@@ -684,7 +683,7 @@
     {
       "id": "E-45",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 3,
       "description": "Implement health, release and profile actions of the Windows window through WSL, per .ai/blueprints/desktop.md §Windows window W4, W2 (distro), W3 (folder dialog), Interface changes, Security and D-038 rulings 3, 8 and 10: (1) add the additive CLI flag `rein-app update --check` (print installed version, newest version and notes; install nothing; exit 0 newer · 10 current · 11 offline) and record it in distribution.md's command table by reporting it in the handoff for the Architect to write; (2) in `WslHost`, run each action as `wsl.exe -d D -e <shell> -lc '<constant script>'` exactly as the W4 table lists — doctor parsed by the Phase 1 parser (4 MiB, strict, 120 s), release and profile runs streamed with the CLI's lines escaped and unchanged and its exit code returned; profile names checked against `[A-Za-z0-9._-]{1,64}` and against `rein-app profiles list` before entering an argv; exit 127 shows \"rein-app is not installed inside WSL — install the Linux package there\" while health keeps working; (3) show the WSL-absent and no-distro states on the start screen with the command to run and a `[ Check again ]` button — the window never installs WSL or elevates; (4) accept the `wsl.distro` key in `config.toml` and open the folder dialog at `\\\\wsl.localhost\\<distro>\\home\\<user>`. Acceptance: stubbed-runner tests assert the exact argv of every W4 call, the 127 path, a refused profile name, and that no code path on Windows calls `rein_release` or `rein_profiles` writers directly; Linux and macOS behaviour unchanged; `security_engineer` before commit; CI green on three OSes; a fresh installer artifact from E-44's workflow is named in the handoff.",
       "created_at": "2026-11-11T20:40:40.476Z",
@@ -694,11 +693,9 @@
         "E-39",
         "E-43"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-39"
-      ],
-      "updated_at": "2026-11-11T20:40:40.477Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T10:12:24.768Z"
     }
   ],
   "stamps": [
@@ -1690,6 +1687,78 @@
       "timestamp": "2026-11-12T09:51:05.255Z",
       "summary": "[TIER_2] Blueprint aligned + clean-code gate clear — 1 aligner warning cleared (ORPHANED_WORK false positive: the IPC files are covered by desktop.md §API), 0 clean-code findings (manual: the standards-checker script is missing)",
       "sha": "f1b50120d1b44b75199f18956fa9c0febef9d007",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "security_engineer",
+      "task_id": "E-39",
+      "timestamp": "2026-11-12T10:05:53.671Z",
+      "summary": "E-39 security_engineer PASS (no P0/P1/P2). Verified: only validated profile names reach an argv (kind → closed enum; names shape-checked before any process, then must be listed; stricter than blueprint: must start alphanumeric, so no flag injection); PATH lookup skips relative dirs, resolved once; busy guard Drop-released; moved doctor parser identical (+fix); update --check installs nothing (0/10/11/1); CLI output reaches DOM as escaped text only. Pen-test A03 profile_name_ok (--enable, ;id, $(whoami), NUL, U+202E, ../, 65 chars) RESISTED. Fixed P3-1 (only profile-table rows count), P3-2 (second confirm starts nothing / busy not shown as failure), P3-3 (no doctor run while an update swaps the tree). Residual: no time limit on the CLI run (own binary); rein-app from a user-writable PATH dir has the user's own trust.",
+      "sha": "4e6e25138b9b649645d7443fc384f0fd3632f052",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "critic_security",
+      "task_id": "E-39",
+      "timestamp": "2026-11-12T10:06:46.448Z",
+      "summary": "[TIER_3] E-39 critic_security: No P0/P1. Closed CliAction argv, profile names regex+listed-set checked before any process, no shell, bounded runs, strict doctor parse, 5 least-privilege capabilities, UI renders text nodes only. P2: PATH fallback in find_rein_app (absolute entries only) is same-trust as user shell; SystemRunner has no timeout.",
+      "sha": "2bca8d716ab8f3a30241d80946d5afbe74e523b4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-39",
+      "timestamp": "2026-11-12T10:06:52.431Z",
+      "summary": "[TIER_3] E-39 No sovereignty violations (no architect.md/BRIEF/blueprints edits). Follows D-045 and addendum 1: constant-argv CliAction run via Host::run_cli, update --check moved into rein-app, doctor parser moved (re-exported from verdict.rs) into rein-platform, install-scope doctor from $HOME, profile-name rule enforced before any process, one-run guard, exit codes and lines passed unchanged, unknown on any invalid doc, no branch on check ids, no key-name IPC input. Capabilities and autogenerated permissions match the API table. WslHost stubs are deferred to E-45 as D-045 states. No P0/P1; P2 only: task text still says rein_profiles::apply (superseded by D-045).",
+      "sha": "2bca8d716ab8f3a30241d80946d5afbe74e523b4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-39",
+      "timestamp": "2026-11-12T10:06:59.131Z",
+      "summary": "[TIER_3] E-39 manual clean-code review (scripts/standards.mjs absent in repo; unstaged tree) — PASS: all files <1000 lines (max cli.rs 589), no secrets, no println/dbg/TODO in new code, unwrap/expect only in tests, doctor parser moved to rein-platform with verdict.rs re-export (no leftover copy), 0 warnings",
+      "sha": "2bca8d716ab8f3a30241d80946d5afbe74e523b4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner (manual; align_diff saw no staged diff)",
+      "task_id": "E-39",
+      "timestamp": "2026-11-12T10:07:21.575Z",
+      "summary": "[TIER_3] E-39 aligned with desktop.md §Components 5/§API/§Security 5/§Test Plan and D-029/D-032/D-033 r8/D-045(+add.1). No blocking deviation. Minor: HealthView gains an extra `reason` field (cli.rs:278, additive vs §Data Model); stale doc comments say `rein doctor --json` and `[A-Za-z0-9._-]{1,64}` (cli.rs:6,10; host.rs:28) though code uses --scope install and the add.1 leading-char rule; WslHost doctor/run_cli stubbed to E-45 (wsl_host.rs:202-217, per D-045 Impact); release_apply exit-code passthrough tested via CliState::collect, not the command itself (cli_ipc.rs:220). The 5 new capability perms = §API table, not a bypass.",
+      "sha": "2bca8d716ab8f3a30241d80946d5afbe74e523b4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_FAIL",
+      "agent": "critic_tests",
+      "task_id": "E-39",
+      "timestamp": "2026-11-12T10:08:09.416Z",
+      "summary": "[TIER_3] E-39 cargo test --workspace green (rein-app 38, rein-desktop 71+4, platform 2, all pass; UI node --test 30/30), acceptance rows covered, but changed behaviour find_rein_app (cli.rs:245, relative-PATH rejection, beside-exe lookup) has no test and local_doctor (cli.rs:347) spawn path is untested — COMMIT BLOCKED until a find_rein_app unit test is added",
+      "sha": "2bca8d716ab8f3a30241d80946d5afbe74e523b4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-39",
+      "timestamp": "2026-11-12T10:11:49.114Z",
+      "summary": "[TIER_3] E-39 re-review: cargo test -p rein-desktop -p rein-platform -p rein-app --locked all green (0 failures; suites 38, 2, 1, 8, 73, 4, 4 passed). Prior FAIL items resolved: find_rein_app_in is covered (none, PATH-only, beside wins, relative PATH entry ignored), and local_doctor_within is covered (not installed, exact argv and cwd stub ok, garbage, timeout all map to unknown). rein-platform doctor.rs has its own refusal tests. Health/release/profiles behaviours (exact argv, name checks, one-at-a-time, busy/unlisted refusal, CLI-missing, no doctor during a run, exit codes, escaped streaming) each have a test at the cheapest layer. release.tsx UI tests are out of scope (no DOM).",
+      "sha": "2bca8d716ab8f3a30241d80946d5afbe74e523b4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "review_synthesizer",
+      "task_id": "E-39",
+      "timestamp": "2026-11-12T10:11:57.620Z",
+      "summary": "[TIER_3] E-39 cleared: ARCH_PASS, SEC_PASS (critic_security), CLEAN_PASS, ALIGN_PASS (D-045 + addendum 1 ratified by the Architect), TESTS_PASS (after find_rein_app_in / local_doctor_within / rein-platform doctor tests), security_engineer PASS with P3-1..3 fixed. Live-verified on Xvfb against the operator's real install, no settings touched. ux_reviewer Screens pass is the one at the end of E-41 (blueprint: that one counts).",
+      "sha": "2bca8d716ab8f3a30241d80946d5afbe74e523b4",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
