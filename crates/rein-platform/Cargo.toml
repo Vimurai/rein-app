@@ -12,3 +12,4 @@ description = "Process and WSL helpers shared by the rein-app CLI and the rein-d
 workspace = true
 
 [dependencies]
+serde_json = "1.0.154"

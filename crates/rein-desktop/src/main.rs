@@ -5,6 +5,11 @@
 //! health / release / profile actions (E-39) build on this.
 
 mod actions;
+// The runner, argvs and health mapping serve LocalHost; on Windows E-45 runs them
+// through WslHost (W4), and until then they are unused there.
+#[cfg_attr(windows, allow(dead_code))]
+mod cli;
+mod cli_ipc;
 mod config;
 mod dirs;
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -138,6 +143,7 @@ fn main() -> ExitCode {
     let builder = tauri::Builder::default()
         .manage(ipc::Desktop::new(platform_host(start.wsl.distro.clone())))
         .manage(std::sync::Arc::clone(&config))
+        .manage(cli_ipc::CliState::default())
         // Recent projects (E-38). On Windows they live inside WSL: not probed per row (W2).
         .manage(std::sync::Arc::new(projects::ProjectStore::open(
             dirs::state_dir(&dirs::process_env),
@@ -153,7 +159,12 @@ fn main() -> ExitCode {
             ipc::dir_complete,
             ipc::config_get,
             ipc::projects_list,
-            ipc::projects_forget
+            ipc::projects_forget,
+            cli_ipc::health_get,
+            cli_ipc::release_check,
+            cli_ipc::release_apply,
+            cli_ipc::profiles_plan,
+            cli_ipc::profiles_apply
         ]);
     let result = builder
         .setup(move |app| {

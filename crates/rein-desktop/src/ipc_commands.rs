@@ -12,4 +12,9 @@ pub const COMMANDS: &[&str] = &[
     "config_get",
     "projects_list",
     "projects_forget",
+    "health_get",
+    "release_check",
+    "release_apply",
+    "profiles_plan",
+    "profiles_apply",
 ];

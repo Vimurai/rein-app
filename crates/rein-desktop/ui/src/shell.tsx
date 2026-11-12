@@ -9,7 +9,17 @@ import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState }
 import type { ActionName } from "./actions.ts";
 import { commonPrefix, complete, parse } from "./commands.ts";
 import { cells, fit, layout, type Row, type ShellData } from "./grid.ts";
-import { clipboardWrite, closeWindow, dirComplete, listen, projectsForget, projectsList } from "./ipc.ts";
+import {
+  clipboardWrite,
+  closeWindow,
+  dirComplete,
+  healthGet,
+  listen,
+  projectsForget,
+  projectsList,
+  type HealthView,
+} from "./ipc.ts";
+import { HealthOverlay, ProfilesOverlay, ReleaseOverlay, healthSegment } from "./release.tsx";
 import { keyBytes, keyName } from "./keys.ts";
 import type { ActionCall, KeyTable } from "./keymap.ts";
 import { WHICH_KEY_DELAY_MS, continuations, step, type ModeState } from "./modes.ts";
@@ -57,11 +67,6 @@ const INITIAL: ShellData = {
 
 /** Actions whose backend arrives with a later task: they say so in one line (E-36). */
 const LATER: Partial<Record<ActionName, string>> = {
-  "health.show": "E-39",
-  "release.update": "E-39",
-  "release.rollback": "E-39",
-  "profiles.show": "E-39",
-  "profiles.apply": "E-39",
   "menu.show": "E-40",
   "help.show": "E-40",
   "input.style": "E-40",
@@ -74,12 +79,7 @@ const LATER: Partial<Record<ActionName, string>> = {
 };
 
 /** The CLI command an action stands for (rule 4: the UI teaches the CLI). */
-const CLI: Partial<Record<ActionName, string>> = {
-  "health.show": "rein-app doctor",
-  "release.update": "rein-app update",
-  "release.rollback": "rein-app rollback",
-  "profiles.show": "rein-app profiles list",
-};
+const CLI: Partial<Record<ActionName, string>> = {};
 
 function clockNow(): string {
   const now = new Date();
@@ -138,6 +138,9 @@ export function Shell(props: ShellProps) {
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const [recent, setRecent] = useState<RecentView[]>([]);
   const [picker, setPicker] = useState(false);
+  /** The health / update / rollback / profiles overlay, if one is open (E-39). */
+  const [overlay, setOverlay] = useState<"health" | "update" | "rollback" | "profiles" | null>(null);
+  const [health, setHealth] = useState<HealthView | null>(null);
   const [modeView, setModeView] = useState<ModeState>({ mode: "NORMAL", pending: [] });
   const [cmdText, setCmdText] = useState("");
   const [message, setMessage] = useState<{ text: string; error: boolean }>({ text: "", error: false });
@@ -149,7 +152,7 @@ export function Shell(props: ShellProps) {
   /** The current tab's terminal, read like a ref. */
   const tab = { get current(): TermTab | null { return tabs.current[cur.current]?.term ?? null; } };
   const pickerRef = useRef(false);
-  pickerRef.current = picker;
+  pickerRef.current = picker || overlay !== null;
   // No tab open: the start screen's keys (p o h u q, digits) join the keymap.
   const keys = tabs.current.length ? projectKeys : withStartKeys(projectKeys);
   const modeRef = useRef<ModeState>(modeView);
@@ -265,6 +268,8 @@ export function Shell(props: ShellProps) {
         showCommand(`cd ${shellWord(opened.project)} && rein start`);
         setMode({ mode: "TERMINAL", pending: [] });
         refreshRecent();
+        // Health is checked when a tab opens (desktop.md §Components 5).
+        healthGet(true).then(setHealth, () => {});
       };
       term.onError = (msg) => {
         void term.detach();
@@ -278,6 +283,11 @@ export function Shell(props: ShellProps) {
     },
     [fontFamily, fontSize, lineHeight, theme, say, showCommand, setMode, showTab, refreshRecent],
   );
+
+  const closeOverlay = useCallback(() => {
+    setOverlay(null);
+    if (tabs.current.length) setMode({ mode: "TERMINAL", pending: [] });
+  }, [setMode]);
 
   const openRef = useRef(open);
   openRef.current = open;
@@ -357,6 +367,22 @@ export function Shell(props: ShellProps) {
           }
           tabs.current = [];
           closeWindow().catch(() => say("every tab is closed; close the window to quit"));
+          return;
+        case "health.show":
+          setMode({ mode: "NORMAL", pending: [] });
+          showCommand("rein doctor --scope install --json");
+          setOverlay("health");
+          healthGet(true).then(setHealth, () => {});
+          return;
+        case "release.update":
+        case "release.rollback":
+          setMode({ mode: "NORMAL", pending: [] });
+          setOverlay(call.name === "release.update" ? "update" : "rollback");
+          return;
+        case "profiles.show":
+        case "profiles.apply":
+          setMode({ mode: "NORMAL", pending: [] });
+          setOverlay("profiles");
           return;
         case "project.pick":
           refreshRecent();
@@ -502,6 +528,8 @@ export function Shell(props: ShellProps) {
 
   // Core events: a child exited; a second start handed over a DIR.
   useEffect(() => {
+    void listen<HealthView>("health_changed", setHealth);
+    healthGet(false).then(setHealth, () => {});
     void listen<{ id: number; code: number }>("pty_exit", ({ id, code }) => {
       tabs.current.find((t) => t.term.tab?.pty === id)?.term.exited(code);
     });
@@ -528,7 +556,7 @@ export function Shell(props: ShellProps) {
     {
       ...data,
       tabs: tabs.current.map((t, i) => ({ name: t.title, current: i === cur.current })),
-      segments: current ? [current.title] : [],
+      segments: current ? [current.title, healthSegment(health)] : [healthSegment(health)],
       mode: modeView.mode,
       clock,
       commandLine: "",
@@ -565,6 +593,11 @@ export function Shell(props: ShellProps) {
       </div>
       <div id="term" ref={termsEl} className={termOpen ? undefined : "hidden"} />
       {whichKey && <WhichKey leader={keys.leader} next={continuations(keys, modeView.pending)} />}
+      {overlay === "health" && <HealthOverlay health={health} onClose={closeOverlay} />}
+      {(overlay === "update" || overlay === "rollback") && (
+        <ReleaseOverlay kind={overlay} onClose={closeOverlay} onCommand={showCommand} />
+      )}
+      {overlay === "profiles" && <ProfilesOverlay onClose={closeOverlay} onCommand={showCommand} />}
       {picker && (
         <ProjectPicker
           recent={recent}

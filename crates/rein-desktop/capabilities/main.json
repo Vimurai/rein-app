@@ -15,6 +15,11 @@
     "allow-config-get",
     "allow-projects-list",
     "allow-projects-forget",
+    "allow-health-get",
+    "allow-release-check",
+    "allow-release-apply",
+    "allow-profiles-plan",
+    "allow-profiles-apply",
     "core:window:allow-close"
   ]
 }

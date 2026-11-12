@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::cli::{self, CliAction, HealthView, Runner};
 use crate::host::Host;
 use crate::ipc::{IpcError, err};
 use crate::project_path;
@@ -37,13 +38,30 @@ impl ChildSpec {
 
 pub struct LocalHost {
     home: Option<PathBuf>,
+    /// The `rein-app` CLI beside the window, else on `PATH`, resolved once (D-045).
+    rein_app: Option<PathBuf>,
+    runner: Box<dyn Runner>,
 }
 
 impl LocalHost {
     /// `home` is `$HOME`; one that is not absolute counts as unset.
     pub fn new(home: Option<PathBuf>) -> Self {
+        Self::with_runner(
+            home,
+            cli::find_rein_app(std::env::var_os("PATH")),
+            Box::new(cli::SystemRunner),
+        )
+    }
+
+    pub fn with_runner(
+        home: Option<PathBuf>,
+        rein_app: Option<PathBuf>,
+        runner: Box<dyn Runner>,
+    ) -> Self {
         Self {
             home: home.filter(|h| h.is_absolute()),
+            rein_app,
+            runner,
         }
     }
 }
@@ -64,6 +82,24 @@ impl Host for LocalHost {
 
     fn complete_dir(&self, prefix: &str) -> Result<Vec<String>, IpcError> {
         complete_dir(prefix)
+    }
+
+    fn doctor(&self) -> HealthView {
+        match &self.home {
+            Some(h) => cli::local_doctor(h),
+            None => cli::unknown("HOME is not set to an absolute path"),
+        }
+    }
+
+    fn run_cli(
+        &self,
+        action: &CliAction,
+        line: &mut dyn FnMut(String),
+    ) -> Result<Option<i32>, IpcError> {
+        let program = self.rein_app.as_deref().ok_or_else(cli::cli_missing)?;
+        self.runner
+            .run(program, &action.argv(), line)
+            .map_err(|e| err("cli", format!("cannot run rein-app: {e}")))
     }
 }
 

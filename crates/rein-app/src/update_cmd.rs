@@ -116,6 +116,32 @@ pub fn update(home: &Path, latest_api: &str, confirm: Confirm<'_>, deps: &Deps<'
     install_cmd::install(home, &latest.version, deps)
 }
 
+/// `rein-app update --check` (desktop.md §Components 5, D-045): report, install nothing.
+/// The first two lines are `installed: <version>` (`none` when Rein is not installed) and
+/// `newest: <version>`, then the sanitised notes. Exit 0 a newer release exists, 10 current,
+/// 11 the release server cannot be reached.
+pub fn update_check(home: &Path, latest_api: &str, deps: &Deps<'_>, out: &mut dyn Write) -> u8 {
+    let installed = installed_version(&InstallPaths::new(home).rein());
+    let latest = match resolve_latest(deps, latest_api) {
+        Ok(l) => l,
+        Err(code) => return code,
+    };
+    let shown = installed
+        .as_ref()
+        .map_or_else(|| "none".to_string(), ToString::to_string);
+    let _ = writeln!(out, "installed: {shown}");
+    let _ = writeln!(out, "newest: {}", latest.version);
+    let notes = sanitise_notes(&latest.notes);
+    if !notes.trim().is_empty() {
+        let _ = writeln!(out, "{notes}");
+    }
+    if installed.as_ref().is_some_and(|v| *v >= latest.version) {
+        EXIT_CURRENT
+    } else {
+        0
+    }
+}
+
 /// `update` from the CLI: asks on stdin when it is a terminal, else requires `--yes`.
 pub fn update_cli(home: &Path, yes: bool, latest_api: &str, deps: &Deps<'_>) -> u8 {
     if yes {
@@ -505,6 +531,52 @@ mod tests {
             format!("{VERSION}\n")
         );
         assert_eq!(run_update(home.path(), &http, &key, None), EXIT_CURRENT);
+    }
+
+    fn run_check(home: &Path, http: &MemHttp, key: &TestKey) -> (u8, String) {
+        let rein = OkRein::default();
+        let verifier = key.verifier();
+        let source = ReleaseSource {
+            base_url: BASE.into(),
+        };
+        let deps = Deps {
+            http,
+            source: &source,
+            verifier: &verifier,
+            process: &rein,
+            run_uid: InstallLock::run_uid,
+        };
+        let mut out = Vec::new();
+        let code = update_check(home, API, &deps, &mut out);
+        (code, String::from_utf8(out).unwrap())
+    }
+
+    #[test]
+    fn update_check_reports_two_leading_lines_and_installs_nothing() {
+        let home = tempfile::tempdir().unwrap();
+        let key = TestKey::generate();
+        let http = mem_release(&key, &format!("v{VERSION}"));
+        let (code, out) = run_check(home.path(), &http, &key);
+        assert_eq!(code, 0, "{out}");
+        let mut lines = out.lines();
+        assert_eq!(lines.next(), Some("installed: none"));
+        assert_eq!(lines.next(), Some(format!("newest: {VERSION}").as_str()));
+        assert!(!home.path().join(".rein").exists(), "installs nothing");
+
+        assert_eq!(run_update(home.path(), &http, &key, None), 0);
+        let (code, out) = run_check(home.path(), &http, &key);
+        assert_eq!(code, EXIT_CURRENT);
+        assert!(
+            out.starts_with(&format!("installed: {VERSION}\nnewest: {VERSION}\n")),
+            "{out}"
+        );
+
+        let (code, out) = run_check(home.path(), &MemHttp(HashMap::new()), &key);
+        assert_eq!(code, EXIT_OFFLINE);
+        assert_eq!(
+            out, "",
+            "nothing on stdout when offline (the reason goes to stderr)"
+        );
     }
 
     #[test]

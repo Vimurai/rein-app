@@ -6,6 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::cli::{CliAction, HealthView};
 use crate::ipc::IpcError;
 use crate::pty::ChildSpec;
 
@@ -23,4 +24,15 @@ pub trait Host: Send + Sync {
     /// in `/`, a bounded number, sorted. Hidden ones only when the typed name
     /// starts with `.`. A host that cannot list returns none.
     fn complete_dir(&self, prefix: &str) -> Result<Vec<String>, IpcError>;
+
+    /// `rein doctor --scope install --json` from the installed tree, as a `HealthView` (E-39).
+    fn doctor(&self) -> HealthView;
+
+    /// Run the `rein-app` CLI for `action` (constant argv, D-045), each line of its output
+    /// escaped to `line`; the exit code (`None`: killed by a signal).
+    fn run_cli(
+        &self,
+        action: &CliAction,
+        line: &mut dyn FnMut(String),
+    ) -> Result<Option<i32>, IpcError>;
 }

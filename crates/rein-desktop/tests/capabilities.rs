@@ -25,6 +25,12 @@ const ALLOWED: &[&str] = &[
     // E-38: recent projects.
     "allow-projects-list",
     "allow-projects-forget",
+    // E-39: health, release and profiles through the rein-app CLI (D-045).
+    "allow-health-get",
+    "allow-release-check",
+    "allow-release-apply",
+    "allow-profiles-plan",
+    "allow-profiles-apply",
 ];
 
 fn json(rel: &str) -> serde_json::Value {

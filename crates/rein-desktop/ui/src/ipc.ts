@@ -86,6 +86,37 @@ export const dirComplete = (prefix: string) => invoke<string[]>("dir_complete", 
 export const projectsList = () => invoke<import("./start.ts").RecentView[]>("projects_list", {});
 export const projectsForget = (path: string) =>
   invoke<import("./start.ts").RecentView[]>("projects_forget", { path });
+export interface HealthCheck {
+  id: string;
+  status: "ok" | "warn" | "fail";
+  line: string;
+  fix: string | null;
+}
+export interface HealthView {
+  status: "ok" | "warn" | "fail" | "unknown";
+  checks: HealthCheck[];
+  reason: string | null;
+  taken_at: number;
+}
+export interface ReleaseCheck {
+  installed: string | null;
+  newest: string | null;
+  lines: string[];
+  code: number | null;
+}
+export interface ProfilesRun {
+  profiles: string[];
+  lines: string[];
+  code: number | null;
+}
+export const healthGet = (refresh: boolean) => invoke<HealthView>("health_get", { refresh });
+export const releaseCheck = () => invoke<ReleaseCheck>("release_check", {});
+/** `update` | `rollback`: the CLI's lines arrive on `output`; resolves to its exit code. */
+export const releaseApply = (kind: "update" | "rollback", output: Channel<string>) =>
+  invoke<number | null>("release_apply", { kind, output });
+export const profilesPlan = (names: string[]) => invoke<ProfilesRun>("profiles_plan", { names });
+export const profilesApply = (names: string[]) => invoke<ProfilesRun>("profiles_apply", { names });
+
 /** Close the window (`:qa`, after every tab is detached): Tauri's core window command. */
 export const closeWindow = () => invoke<void>("plugin:window|close", { label: "main" });
 export const configGet = (reload = false) =>

@@ -199,6 +199,23 @@ impl<S: Shell + Send + Sync> Host for WslHost<S> {
         Ok(Vec::new())
     }
 
+    /// Health inside WSL is E-45 (§Windows window W4).
+    fn doctor(&self) -> crate::cli::HealthView {
+        crate::cli::unknown("checking health inside WSL arrives with E-45")
+    }
+
+    /// Release and profile actions inside WSL are E-45 (W4).
+    fn run_cli(
+        &self,
+        _action: &crate::cli::CliAction,
+        _line: &mut dyn FnMut(String),
+    ) -> Result<Option<i32>, IpcError> {
+        Err(err(
+            "not_yet",
+            "update, rollback and profiles inside WSL arrive with E-45",
+        ))
+    }
+
     fn rein_start(&self, project: &Path) -> Result<ChildSpec, IpcError> {
         let d = self.distro()?;
         let project = project.to_string_lossy();

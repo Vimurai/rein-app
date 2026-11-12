@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-release-apply"
+description = "Enables the release_apply command without any pre-configured scope."
+commands.allow = ["release_apply"]
+
+[[permission]]
+identifier = "deny-release-apply"
+description = "Denies the release_apply command without any pre-configured scope."
+commands.deny = ["release_apply"]

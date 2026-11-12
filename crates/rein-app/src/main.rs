@@ -47,8 +47,12 @@ enum Command {
     /// Install the newest rein release if it is newer than the installed one.
     Update {
         /// Install without asking.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "check")]
         yes: bool,
+        /// Report the installed and newest version and the notes; install nothing
+        /// (exit 0 newer, 10 current, 11 offline).
+        #[arg(long)]
+        check: bool,
     },
     /// Restore the previous rein version's code from its snapshot (your data is kept),
     /// then run `rein install` and `rein doctor`.
@@ -113,7 +117,10 @@ fn main() -> ExitCode {
         Command::Install { version } => {
             with_network(|deps| update_cmd::install_cli(&home, version, REIN_LATEST_API, deps))
         }
-        Command::Update { yes } => {
+        Command::Update { check: true, .. } => with_network(|deps| {
+            update_cmd::update_check(&home, REIN_LATEST_API, deps, &mut std::io::stdout())
+        }),
+        Command::Update { yes, .. } => {
             with_network(|deps| update_cmd::update_cli(&home, yes, REIN_LATEST_API, deps))
         }
         Command::Rollback => update_cmd::rollback(
@@ -190,7 +197,22 @@ mod tests {
         let cli = Cli::try_parse_from(["rein-app", "install"]).unwrap();
         assert!(matches!(cli.command, Command::Install { version: None }));
         let cli = Cli::try_parse_from(["rein-app", "update", "--yes"]).unwrap();
-        assert!(matches!(cli.command, Command::Update { yes: true }));
+        assert!(matches!(
+            cli.command,
+            Command::Update {
+                yes: true,
+                check: false
+            }
+        ));
+        let cli = Cli::try_parse_from(["rein-app", "update", "--check"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Update {
+                yes: false,
+                check: true
+            }
+        ));
+        assert!(Cli::try_parse_from(["rein-app", "update", "--check", "--yes"]).is_err());
         let cli = Cli::try_parse_from(["rein-app", "doctor", "--json"]).unwrap();
         assert!(matches!(cli.command, Command::Doctor { json: true }));
         let cli = Cli::try_parse_from(["rein-app", "window", "/p"]).unwrap();
