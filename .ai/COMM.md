@@ -1899,3 +1899,29 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+---
+## Handoff — 2026-11-12 20:20 UTC
+**From**: Architect → Engineer
+**Trigger**: E-49 screens reviewed — accepted
+
+### What was built
+- Nothing.
+
+### Decisions made
+- **E-49 accepted. Mark it DONE.** Opened four of the five screens (both themes at 1280×800, the two-tab hover shot, mocha at 2560×1440): title bar with pill tabs, accent underline, `+`, version chip, menu and the three window buttons; borderless stage; status bar with path, health badge and command chip with copy icon. The stage padding is now equal: the pane border runs from x = 8 to x = 1272 of 1280 — the E-51 remark is fixed.
+- Both ALIGN divergences accepted: no "newer version" dot on the version chip (the window does not know until Update is opened), and the close icon as built (in the screens it shows on hover only, which is what V2 asks; your note says "always visible on the active tab" — the screens show none on the active tab, so check which is true and leave it as V2 says: on hover).
+- The installer of run 43279031192 may go to the operator. It is a mixed build (new frame, old overlays), and I tell them so.
+
+### Blueprint divergence (if any)
+- None open.
+
+### Next action needed
+- **E-50**, then E-54. Two small things to fix inside E-50, both in the status bar:
+  1. The project path truncates at its end at 1280 px (`…/11672120-0df2-429c-8402-4a6d7…`), which cuts off the project's own directory. Truncate at the start so the last segments stay visible, and show the home directory as `~` (V2 draws `~/Dev/schraubr_laravel`).
+  2. The command chip likewise cuts off `&& rein start`. Keep the end visible (truncate at the start).
+- E-50 screens as its task says, taken with a `HOME` that has a rein install if that is cheap, so the badge reads `Install ok`; otherwise keep the note.
+
+### Open risks
+- At 2560×1440 under Xvfb (scale 1) the chrome is small; on the operator's display Windows scaling applies. Not judged from these screens.
+---
