@@ -13,7 +13,7 @@
 //! `unknown` — never a pass, never a recomputed verdict, no branch on a check id.
 
 use std::io::{BufRead, BufReader, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -149,7 +149,9 @@ impl Runner for SystemRunner {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .env_remove("CLAUDECODE");
+            .env_remove("CLAUDECODE")
+            // On Windows the program is wsl.exe: nothing crosses into WSL (W2).
+            .env_remove("WSLENV");
         hide_console(&mut cmd);
         let mut child = cmd.spawn()?;
         let (tx, rx) = mpsc::channel::<String>();
@@ -243,7 +245,8 @@ impl Drop for Busy<'_> {
 }
 
 /// The `rein-app` binary beside this one, else on `PATH`, resolved once (D-045).
-pub fn find_rein_app(env_path: Option<std::ffi::OsString>) -> Option<PathBuf> {
+#[cfg(unix)] // LocalHost (Linux, macOS); WslHost runs its own calls (W4)
+pub fn find_rein_app(env_path: Option<std::ffi::OsString>) -> Option<std::path::PathBuf> {
     let beside = std::env::current_exe()
         .ok()
         .and_then(|e| e.parent().map(Path::to_path_buf));
@@ -252,10 +255,11 @@ pub fn find_rein_app(env_path: Option<std::ffi::OsString>) -> Option<PathBuf> {
 
 /// [`find_rein_app`] with the window's directory given: beside it first, then the absolute
 /// `PATH` entries in order (a relative entry would resolve against the working directory).
+#[cfg(unix)] // LocalHost (Linux, macOS); WslHost runs its own calls (W4)
 pub fn find_rein_app_in(
     beside: Option<&Path>,
     env_path: Option<std::ffi::OsString>,
-) -> Option<PathBuf> {
+) -> Option<std::path::PathBuf> {
     let name = if cfg!(windows) {
         "rein-app.exe"
     } else {
@@ -272,6 +276,7 @@ pub fn find_rein_app_in(
     })
 }
 
+#[cfg(unix)] // LocalHost (Linux, macOS); WslHost runs its own calls (W4)
 pub fn cli_missing() -> IpcError {
     err(
         "cli_missing",
@@ -287,6 +292,9 @@ pub struct HealthView {
     pub checks: Vec<HealthCheck>,
     /// Why the status is `unknown`, in plain words.
     pub reason: Option<String>,
+    /// Windows: WSL is missing or has no distro — the command the operator runs (the window
+    /// never installs WSL or asks for elevation; the start screen shows it).
+    pub setup: Option<String>,
     /// Seconds since the Unix epoch.
     pub taken_at: u64,
 }
@@ -312,6 +320,7 @@ pub fn unknown(reason: impl Into<String>) -> HealthView {
         status: "unknown",
         checks: Vec::new(),
         reason: Some(reason.into()),
+        setup: None,
         taken_at: now(),
     }
 }
@@ -345,6 +354,7 @@ pub fn health_from(code: Option<i32>, stdout: &[u8]) -> HealthView {
                 })
                 .collect(),
             reason: None,
+            setup: None,
             taken_at: now(),
         },
         Err(e) => unknown(format!(
@@ -356,11 +366,13 @@ pub fn health_from(code: Option<i32>, stdout: &[u8]) -> HealthView {
 
 /// `<home>/.rein/bin/rein doctor --scope install --json` with the shared bounded run (4 MiB,
 /// 120 s).
+#[cfg(unix)] // LocalHost (Linux, macOS); WslHost runs its own calls (W4)
 pub fn local_doctor(home: &Path) -> HealthView {
     local_doctor_within(home, DOCTOR_LIMIT)
 }
 
 /// [`local_doctor`] with the time limit given (tests use a short one).
+#[cfg(unix)] // LocalHost (Linux, macOS); WslHost runs its own calls (W4)
 pub fn local_doctor_within(home: &Path, limit: Duration) -> HealthView {
     let rein = home.join(".rein/bin/rein");
     if !rein.is_file() {
@@ -386,6 +398,7 @@ pub fn local_doctor_within(home: &Path, limit: Duration) -> HealthView {
 }
 
 /// `doctor --scope install --json` (contract §2.6; the CLI's install check runs it too).
+#[cfg(unix)] // LocalHost (Linux, macOS); WslHost runs its own calls (W4)
 pub const DOCTOR_ARGS: [&str; 4] = ["doctor", "--scope", "install", "--json"];
 pub const DOCTOR_LIMIT: Duration = Duration::from_secs(120);
 pub const DOCTOR_CAP: u64 = 4 * 1024 * 1024;

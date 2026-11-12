@@ -5,9 +5,6 @@
 //! health / release / profile actions (E-39) build on this.
 
 mod actions;
-// The runner, argvs and health mapping serve LocalHost; on Windows E-45 runs them
-// through WslHost (W4), and until then they are unused there.
-#[cfg_attr(windows, allow(dead_code))]
 mod cli;
 mod cli_ipc;
 mod config;

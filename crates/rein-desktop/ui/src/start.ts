@@ -17,17 +17,30 @@ export const WORDMARK = ["█▀█ █▀▀ █ █▄ █", "█▀▄ ██
 
 export const HINTS = "p projects   o open directory   h checkhealth   u update   q quit";
 
-/** The lines drawn centred in the stage when no project is open. */
-export function startLines(recent: readonly RecentView[]): (string | Span)[] {
+/** The lines drawn centred in the stage when no project is open. `setup`: Windows without
+ *  WSL or without a distro — the reason and the command to run come first (E-45). */
+export function startLines(
+  recent: readonly RecentView[],
+  setup: { reason: string; command: string } | null = null,
+): (string | Span)[] {
   const shown = recent.slice(0, 9);
   const width = Math.max(0, ...shown.map((r) => r.name.length));
   const rows: (string | Span)[] = shown.map((r, i) => ({
     text: `${i + 1}  ${r.name.padEnd(width)}  ${r.path}${r.exists === false ? "  (missing)" : ""}`,
     cls: r.exists === false ? "dim" : "",
   }));
+  const blocker: (string | Span)[] = setup
+    ? [
+        { text: setup.reason, cls: "error" },
+        { text: `run in an administrator terminal:  ${setup.command}`, cls: "" },
+        "c  check again",
+        "",
+      ]
+    : [];
   return [
     ...WORDMARK.map((text) => ({ text, cls: "accent" })),
     "",
+    ...blocker,
     ...(rows.length ? rows : ["no recent projects"]),
     "",
     HINTS,
@@ -43,6 +56,7 @@ export function withStartKeys(table: KeyTable): KeyTable {
   normal.set("h", { name: "health.show" });
   normal.set("u", { name: "release.update" });
   normal.set("q", { name: "app.quit" });
+  normal.set("c", { name: "health.show" }); // "check again" when WSL is not ready (E-45)
   return { ...table, normal };
 }
 

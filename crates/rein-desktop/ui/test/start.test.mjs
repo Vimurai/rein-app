@@ -20,6 +20,12 @@ test("wordmark, numbered recent projects, missing dimmed, five hints", () => {
   assert.equal(text.at(-1), HINTS);
   assert.equal(HINTS.split(/ {3}/).length, 5);
   assert.ok(startLines([]).includes("no recent projects"));
+  // Windows without WSL: the reason and the command lead, with "check again" (E-45).
+  const blocked = startLines([], { reason: "WSL is not installed", command: "wsl --install" });
+  const bt = blocked.map((l) => (typeof l === "string" ? l : l.text));
+  assert.equal(bt[3], "WSL is not installed");
+  assert.match(bt[4], /wsl --install$/);
+  assert.equal(bt[5], "c  check again");
 });
 
 test("start-screen keys: p o h u q, digits open recent N", () => {
@@ -30,6 +36,7 @@ test("start-screen keys: p o h u q, digits open recent N", () => {
   assert.deepEqual(act("h"), { name: "health.show" });
   assert.deepEqual(act("u"), { name: "release.update" });
   assert.deepEqual(act("q"), { name: "app.quit" });
+  assert.deepEqual(act("c"), { name: "health.show" });
   assert.deepEqual(act("3"), { name: "tab.goto", arg: "3" });
   assert.equal(DEFAULT_MODAL.normal.has("p"), false, "the project keymap is unchanged");
 });

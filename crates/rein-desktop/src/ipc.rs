@@ -220,7 +220,7 @@ pub fn tab_open(
     )?;
     // Recent projects (E-38): the canonical path the tab runs in. A failed save only loses
     // the list entry; the tab is open either way.
-    let _ = projects.touch(&tab.project, None);
+    let _ = projects.touch(&tab.project, state.platform.distro());
     Ok(tab)
 }
 

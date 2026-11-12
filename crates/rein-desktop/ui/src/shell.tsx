@@ -560,7 +560,12 @@ export function Shell(props: ShellProps) {
       mode: modeView.mode,
       clock,
       commandLine: "",
-      stageLines: termOpen ? [] : startLines(recent),
+      stageLines: termOpen
+        ? []
+        : startLines(
+            recent,
+            health?.setup ? { reason: health.reason ?? "WSL is not ready", command: health.setup } : null,
+          ),
     },
     cols,
     rows,

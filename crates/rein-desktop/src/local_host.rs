@@ -103,31 +103,19 @@ impl Host for LocalHost {
     }
 }
 
-/// The most directories one `:open` Tab completion offers.
-pub const MAX_COMPLETIONS: usize = 50;
-
 /// Directories under the prefix's parent whose name starts with the typed stem. Names that
 /// fail the path text rule are left out, so nothing unprintable reaches the command line.
 pub fn complete_dir(prefix: &str) -> Result<Vec<String>, IpcError> {
     project_path::check(prefix).map_err(|why| err("unsafe_path", why))?;
-    let cut = prefix.rfind('/').map_or(0, |i| i + 1);
-    let (parent, stem) = prefix.split_at(cut);
+    let (parent, stem) = crate::host::split_prefix(prefix);
     let Ok(entries) = std::fs::read_dir(parent) else {
         return Ok(Vec::new());
     };
-    let mut out: Vec<String> = entries
-        .flatten()
-        .filter_map(|e| {
-            let name = e.file_name().into_string().ok()?;
-            let shown = name.starts_with(stem) && (!name.starts_with('.') || stem.starts_with('.'));
-            let dir = std::fs::metadata(e.path()).is_ok_and(|m| m.is_dir());
-            let full = format!("{parent}{name}/");
-            (shown && dir && project_path::check(&full).is_ok()).then_some(full)
-        })
-        .collect();
-    out.sort();
-    out.truncate(MAX_COMPLETIONS);
-    Ok(out)
+    let dirs = entries.flatten().filter_map(|e| {
+        let dir = std::fs::metadata(e.path()).is_ok_and(|m| m.is_dir());
+        dir.then(|| e.file_name().into_string().ok()).flatten()
+    });
+    Ok(crate::host::completions(parent, stem, dirs))
 }
 
 /// A project directory as `tab_open` accepts it: the text rule, canonical, a directory, and

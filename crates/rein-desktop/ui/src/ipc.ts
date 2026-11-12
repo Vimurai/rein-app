@@ -96,6 +96,8 @@ export interface HealthView {
   status: "ok" | "warn" | "fail" | "unknown";
   checks: HealthCheck[];
   reason: string | null;
+  /** Windows: WSL missing or without a distro — the command to run (E-45). */
+  setup: string | null;
   taken_at: number;
 }
 export interface ReleaseCheck {

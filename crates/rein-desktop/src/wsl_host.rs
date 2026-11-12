@@ -30,6 +30,39 @@ pub const PROBE_SCRIPT: &str = "printf %s\\\\n $WSL_DISTRO_NAME $HOME $SHELL";
 pub const VALIDATE_SCRIPT: &str = "case $PWD in /) exit 5;; esac; [ -d .ai ] || exit 3; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P";
 /// The pty child's script, run by the user's login + interactive shell (W2).
 pub const START_SCRIPT: &str = "exec ~/.rein/bin/rein start";
+/// Health inside WSL, from the Linux home (W4, D-045 addendum 1).
+pub const DOCTOR_SCRIPT: &str = "cd; exec ~/.rein/bin/rein doctor --scope install --json";
+/// `:open` completion under a parent other than `/` (W4): the `/` guard, then the listing.
+pub const LIST_SCRIPT: &str = "case $PWD in /) exit 5;; esac; ls -1Ap";
+/// The same for the parent `/` itself (the `--cd` fallback cannot mislead there).
+pub const LIST_ROOT_SCRIPT: &str = "ls -1Ap";
+pub const LIST_LIMIT: Duration = Duration::from_secs(5);
+
+/// `exec rein-app <argv>` for the login shell (W4). The argv is the action's constant words
+/// and profile names that passed `profile_name_ok`; every word is checked again here to hold
+/// only `[A-Za-z0-9._-]`, so nothing in the script can be read by `wsl.exe` or a shell as
+/// anything but a word.
+pub fn cli_script(action: &crate::cli::CliAction) -> Result<String, IpcError> {
+    let argv = action.argv();
+    let plain = |w: &String| {
+        !w.is_empty()
+            && w.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+    };
+    // A name after `--profile` must also pass the full profile-name rule (never a flag).
+    let names_ok = argv
+        .windows(2)
+        .filter(|w| w[0] == "--profile")
+        .all(|w| crate::cli::profile_name_ok(&w[1]));
+    if !argv.iter().all(plain) || !names_ok {
+        return Err(err(
+            "bad_profile",
+            "a profile name may hold letters, digits and . _ - only",
+        ));
+    }
+    Ok(format!("exec rein-app {}", argv.join(" ")))
+}
+
 /// Nothing from Windows crosses into WSL (W2 "Environment").
 pub const ENV_REMOVED: &[&str] = &["WSLENV"];
 
@@ -45,8 +78,22 @@ pub struct Distro {
     pub shell: String,
 }
 
-pub struct WslHost<S: Shell + Send + Sync> {
+/// A [`Shell`] whose calls can carry their own limits: doctor (120 s, 4 MiB) and directory
+/// listing (5 s, 64 KiB) differ from the 30 s default (§Windows window "Limits", W4).
+pub trait WslShell: Shell {
+    fn run_within(
+        &self,
+        program: &str,
+        args: &[OsString],
+        limit: Duration,
+        cap: u64,
+    ) -> io::Result<ShellOut>;
+}
+
+pub struct WslHost<S: WslShell + Send + Sync> {
     shell: S,
+    /// Streams the `rein-app` CLI's lines (release and profile actions, W4).
+    runner: Box<dyn crate::cli::Runner>,
     /// `%SystemRoot%\System32\wsl.exe` — never a `PATH` search.
     wsl_exe: String,
     /// `wsl.distro` from `config.toml` (E-37 supplies it; `None` = WSL's default).
@@ -59,16 +106,23 @@ impl WslHost<SystemWsl> {
     pub fn system(configured: Option<String>) -> Self {
         Self::new(
             SystemWsl,
+            Box::new(crate::cli::SystemRunner),
             wsl_exe(std::env::var("SystemRoot").ok()),
             configured,
         )
     }
 }
 
-impl<S: Shell + Send + Sync> WslHost<S> {
-    pub fn new(shell: S, wsl_exe: String, configured: Option<String>) -> Self {
+impl<S: WslShell + Send + Sync> WslHost<S> {
+    pub fn new(
+        shell: S,
+        runner: Box<dyn crate::cli::Runner>,
+        wsl_exe: String,
+        configured: Option<String>,
+    ) -> Self {
         Self {
             shell,
+            runner,
             wsl_exe,
             configured,
             probed: Mutex::new(None),
@@ -80,8 +134,23 @@ impl<S: Shell + Send + Sync> WslHost<S> {
         self.shell.run(&self.wsl_exe, &args)
     }
 
+    fn run_within(&self, args: &[&str], limit: Duration, cap: u64) -> io::Result<ShellOut> {
+        let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+        self.shell.run_within(&self.wsl_exe, &args, limit, cap)
+    }
+
+    /// The window's distro name, if WSL has been probed successfully (recent projects
+    /// record it, E-38).
+    pub fn distro_name(&self) -> Option<String> {
+        self.probed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|d| d.name.clone())
+    }
+
     /// The window's distro, probed once (W2). Refusals name the command that fixes them.
-    pub fn distro(&self) -> Result<Distro, IpcError> {
+    pub fn probe_distro(&self) -> Result<Distro, IpcError> {
         let mut probed = self.probed.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(d) = probed.as_ref() {
             return Ok(d.clone());
@@ -145,9 +214,9 @@ impl<S: Shell + Send + Sync> WslHost<S> {
     }
 }
 
-impl<S: Shell + Send + Sync> Host for WslHost<S> {
+impl<S: WslShell + Send + Sync> Host for WslHost<S> {
     fn project(&self, input: &str) -> Result<PathBuf, IpcError> {
-        let d = self.distro()?;
+        let d = self.probe_distro()?;
         let linux = wsl_path::to_linux(input, &d.name).map_err(|e| {
             let kind = match e {
                 PathError::NotWsl { .. } => "not_wsl_path",
@@ -195,29 +264,97 @@ impl<S: Shell + Send + Sync> Host for WslHost<S> {
 
     /// Listing inside WSL would be a new `wsl.exe` call shape (§Windows window W2 lists them
     /// all), so `:open` offers no directory completion on Windows in this revision.
-    fn complete_dir(&self, _prefix: &str) -> Result<Vec<String>, IpcError> {
-        Ok(Vec::new())
+    /// `:open` completion inside WSL (W4): `--cd <parent>` and a constant listing script, 5 s,
+    /// 64 KiB; only `name/` lines count; any failure is an empty list, never an error line.
+    fn complete_dir(&self, prefix: &str) -> Result<Vec<String>, IpcError> {
+        if wsl_path::check_linux(prefix).is_err() {
+            return Ok(Vec::new());
+        }
+        let Ok(d) = self.probe_distro() else {
+            return Ok(Vec::new());
+        };
+        let (parent, stem) = crate::host::split_prefix(prefix);
+        let script = if parent == "/" {
+            LIST_ROOT_SCRIPT
+        } else {
+            LIST_SCRIPT
+        };
+        let out = self.run_within(
+            &["-d", &d.name, "--cd", parent, "-e", "sh", "-c", script],
+            LIST_LIMIT,
+            CALL_CAP,
+        );
+        let Ok(out) = out.map(|o| o.stdout).and_then(|b| {
+            String::from_utf8(b).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+        }) else {
+            return Ok(Vec::new());
+        };
+        let dirs = out
+            .lines()
+            .filter_map(|l| l.strip_suffix('/'))
+            .map(String::from)
+            .collect::<Vec<_>>();
+        Ok(crate::host::completions(parent, stem, dirs))
     }
 
-    /// Health inside WSL is E-45 (§Windows window W4).
+    /// `rein doctor --scope install --json` inside WSL, from the Linux home (W4), parsed here
+    /// by the shared strict parser (120 s, 4 MiB). WSL absent or without a distro is
+    /// `unknown` with the command that fixes it.
     fn doctor(&self) -> crate::cli::HealthView {
-        crate::cli::unknown("checking health inside WSL arrives with E-45")
+        let d = match self.probe_distro() {
+            Ok(d) => d,
+            Err(e) => {
+                let mut v = crate::cli::unknown(e.message);
+                v.setup = match e.kind {
+                    "wsl_absent" => Some("wsl --install".into()),
+                    "wsl_no_distro" => Some("wsl --install -d Ubuntu".into()),
+                    _ => None,
+                };
+                return v;
+            }
+        };
+        let args = ["-d", &d.name, "-e", &d.shell, "-lc", DOCTOR_SCRIPT];
+        match self.run_within(&args, crate::cli::DOCTOR_LIMIT, crate::cli::DOCTOR_CAP) {
+            Ok(o) => crate::cli::health_from(o.code, &o.stdout),
+            Err(e) if e.kind() == io::ErrorKind::TimedOut => {
+                crate::cli::unknown("rein doctor did not finish within 120 seconds")
+            }
+            Err(e) => crate::cli::unknown(format!("cannot run rein doctor inside WSL: {e}")),
+        }
     }
 
-    /// Release and profile actions inside WSL are E-45 (W4).
+    /// The `rein-app` CLI inside WSL (W4): the user's login shell runs `exec rein-app …` with
+    /// the action's constant argv. Exit 127: the Linux package is not installed there.
     fn run_cli(
         &self,
-        _action: &crate::cli::CliAction,
-        _line: &mut dyn FnMut(String),
+        action: &crate::cli::CliAction,
+        line: &mut dyn FnMut(String),
     ) -> Result<Option<i32>, IpcError> {
-        Err(err(
-            "not_yet",
-            "update, rollback and profiles inside WSL arrive with E-45",
-        ))
+        let d = self.probe_distro()?;
+        let script = cli_script(action)?;
+        let args: Vec<String> = ["-d", &d.name, "-e", &d.shell, "-lc", &script]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let code = self
+            .runner
+            .run(Path::new(&self.wsl_exe), &args, line)
+            .map_err(|e| err("cli", format!("cannot run wsl.exe: {e}")))?;
+        if code == Some(127) {
+            return Err(err(
+                "cli_missing",
+                "rein-app is not installed inside WSL, or not on its login shell's PATH — install the Linux package there",
+            ));
+        }
+        Ok(code)
+    }
+
+    fn distro(&self) -> Option<String> {
+        self.distro_name()
     }
 
     fn rein_start(&self, project: &Path) -> Result<ChildSpec, IpcError> {
-        let d = self.distro()?;
+        let d = self.probe_distro()?;
         let project = project.to_string_lossy();
         wsl_path::check_linux(&project).map_err(|e| err("unsafe_path", e.to_string()))?;
         Ok(ChildSpec {
@@ -293,13 +430,25 @@ pub struct SystemWsl;
 
 impl Shell for SystemWsl {
     fn run(&self, program: &str, args: &[OsString]) -> io::Result<ShellOut> {
+        self.run_within(program, args, CALL_LIMIT, CALL_CAP)
+    }
+}
+
+impl WslShell for SystemWsl {
+    fn run_within(
+        &self,
+        program: &str,
+        args: &[OsString],
+        limit: Duration,
+        cap: u64,
+    ) -> io::Result<ShellOut> {
         let mut cmd = Command::new(program);
         cmd.args(args).stderr(Stdio::null());
         for k in ENV_REMOVED {
             cmd.env_remove(k);
         }
         hide_console(&mut cmd);
-        match rein_platform::process::output(&mut cmd, CALL_LIMIT, CALL_CAP)? {
+        match rein_platform::process::output(&mut cmd, limit, cap)? {
             Some((code, stdout)) => Ok(ShellOut { code, stdout }),
             None => Err(io::Error::new(
                 io::ErrorKind::TimedOut,
@@ -323,6 +472,7 @@ fn hide_console(_: &mut Command) {}
 mod tests {
     use super::*;
     use std::collections::VecDeque;
+    use std::sync::Arc;
 
     const EXE: &str = "C:\\Windows\\System32\\wsl.exe";
 
@@ -331,6 +481,7 @@ mod tests {
     struct Stub {
         answers: Vec<(Vec<String>, Option<i32>, Vec<u8>)>,
         calls: Mutex<VecDeque<Vec<String>>>,
+        limits: Mutex<Vec<Duration>>,
     }
 
     impl Stub {
@@ -344,6 +495,40 @@ mod tests {
         }
         fn calls(&self) -> Vec<Vec<String>> {
             self.calls.lock().unwrap().iter().cloned().collect()
+        }
+    }
+
+    impl WslShell for Stub {
+        fn run_within(
+            &self,
+            program: &str,
+            args: &[OsString],
+            limit: Duration,
+            _cap: u64,
+        ) -> io::Result<ShellOut> {
+            self.limits.lock().unwrap().push(limit);
+            self.run(program, args)
+        }
+    }
+
+    /// Records the CLI runs; answers with fixed lines and code.
+    #[derive(Default)]
+    struct Cli {
+        calls: Arc<Mutex<Vec<Vec<String>>>>,
+        code: Option<i32>,
+    }
+
+    impl crate::cli::Runner for Cli {
+        fn run(
+            &self,
+            program: &Path,
+            args: &[String],
+            line: &mut dyn FnMut(String),
+        ) -> io::Result<Option<i32>> {
+            assert_eq!(program, Path::new(EXE));
+            self.calls.lock().unwrap().push(args.to_vec());
+            line("a line".into());
+            Ok(self.code)
         }
     }
 
@@ -383,7 +568,7 @@ mod tests {
     }
 
     fn host(s: Stub) -> WslHost<Stub> {
-        WslHost::new(s, EXE.into(), None)
+        WslHost::new(s, Box::new(Cli::default()), EXE.into(), None)
     }
 
     fn validate(path: &str) -> Vec<&str> {
@@ -402,16 +587,19 @@ mod tests {
     #[test]
     fn states_absent_no_distro_ready() {
         assert_eq!(
-            host(Stub::default()).distro().unwrap_err().kind,
+            host(Stub::default()).probe_distro().unwrap_err().kind,
             "wsl_absent"
         );
         let empty =
             Stub::default()
                 .on(&["--status"], 0, b"")
                 .on(&["--list", "--quiet"], 0, &utf16("\r\n"));
-        assert_eq!(host(empty).distro().unwrap_err().kind, "wsl_no_distro");
+        assert_eq!(
+            host(empty).probe_distro().unwrap_err().kind,
+            "wsl_no_distro"
+        );
         let h = host(ready());
-        let d = h.distro().unwrap();
+        let d = h.probe_distro().unwrap();
         assert_eq!(
             d,
             Distro {
@@ -420,7 +608,7 @@ mod tests {
                 shell: "/usr/bin/zsh".into()
             }
         );
-        h.distro().unwrap();
+        h.probe_distro().unwrap();
         assert_eq!(h.shell.calls().len(), 3, "probed once, then cached");
     }
 
@@ -439,7 +627,7 @@ mod tests {
                 .on(&["--list", "--quiet"], 0, b"Ubuntu\n")
                 .on(&["-e", "sh", "-c", PROBE_SCRIPT], 0, out);
             assert_eq!(
-                host(s).distro().unwrap_err().kind,
+                host(s).probe_distro().unwrap_err().kind,
                 "wsl_failed",
                 "{:?}",
                 String::from_utf8_lossy(out)
@@ -453,7 +641,7 @@ mod tests {
                 0,
                 b"Ubuntu\n/home/me\n\n",
             );
-        assert_eq!(host(no_shell).distro().unwrap().shell, "/bin/sh");
+        assert_eq!(host(no_shell).probe_distro().unwrap().shell, "/bin/sh");
     }
 
     #[test]
@@ -466,12 +654,30 @@ mod tests {
                 0,
                 b"Debian\n/home/me\n/bin/bash\n",
             );
-        let h = WslHost::new(s, EXE.into(), Some("debian".into()));
-        assert_eq!(h.distro().unwrap().name, "Debian");
-        let missing = WslHost::new(ready(), EXE.into(), Some("Arch".into()));
-        assert_eq!(missing.distro().unwrap_err().kind, "wsl_distro_missing");
-        let bad = WslHost::new(ready(), EXE.into(), Some("a b".into()));
-        assert_eq!(bad.distro().unwrap_err().kind, "wsl_distro_missing");
+        let h = WslHost::new(
+            s,
+            Box::new(Cli::default()),
+            EXE.into(),
+            Some("debian".into()),
+        );
+        assert_eq!(h.probe_distro().unwrap().name, "Debian");
+        let missing = WslHost::new(
+            ready(),
+            Box::new(Cli::default()),
+            EXE.into(),
+            Some("Arch".into()),
+        );
+        assert_eq!(
+            missing.probe_distro().unwrap_err().kind,
+            "wsl_distro_missing"
+        );
+        let bad = WslHost::new(
+            ready(),
+            Box::new(Cli::default()),
+            EXE.into(),
+            Some("a b".into()),
+        );
+        assert_eq!(bad.probe_distro().unwrap_err().kind, "wsl_distro_missing");
     }
 
     #[test]
@@ -563,9 +769,205 @@ mod tests {
         }
     }
 
+    fn doc_ok() -> Vec<u8> {
+        br#"{"schema":1,"version":"0.5.0","status":"ok","checks":[]}"#.to_vec()
+    }
+
+    #[test]
+    fn doctor_runs_the_install_scope_inside_wsl_with_the_long_limit() {
+        let s = ready().on(
+            &["-d", "Ubuntu", "-e", "/usr/bin/zsh", "-lc", DOCTOR_SCRIPT],
+            0,
+            &doc_ok(),
+        );
+        let h = host(s);
+        assert_eq!(h.doctor().status, "ok");
+        assert!(
+            h.shell
+                .limits
+                .lock()
+                .unwrap()
+                .contains(&crate::cli::DOCTOR_LIMIT)
+        );
+        assert_eq!(
+            host(Stub::default()).doctor().status,
+            "unknown",
+            "WSL absent"
+        );
+        assert_eq!(
+            h.distro_name().as_deref(),
+            Some("Ubuntu"),
+            "recorded with recent projects"
+        );
+        let absent = host(Stub::default()).doctor();
+        assert_eq!(absent.setup.as_deref(), Some("wsl --install"));
+        let empty =
+            Stub::default()
+                .on(&["--status"], 0, b"")
+                .on(&["--list", "--quiet"], 0, &utf16("\r\n"));
+        assert_eq!(
+            host(empty).doctor().setup.as_deref(),
+            Some("wsl --install -d Ubuntu")
+        );
+        assert!(
+            host(Stub::default())
+                .doctor()
+                .reason
+                .unwrap()
+                .contains("wsl --install")
+        );
+    }
+
+    #[test]
+    fn cli_actions_run_the_constant_script_in_the_login_shell() {
+        let cli = Cli::default();
+        let calls = Arc::clone(&cli.calls);
+        let h = WslHost::new(ready(), Box::new(cli), EXE.into(), None);
+        let mut lines = Vec::new();
+        h.run_cli(&crate::cli::CliAction::UpdateCheck, &mut |l| lines.push(l))
+            .unwrap();
+        let names = vec!["work".to_string(), "default".to_string()];
+        h.run_cli(
+            &crate::cli::CliAction::ProfilesApply {
+                dry_run: true,
+                names,
+            },
+            &mut |_| {},
+        )
+        .unwrap();
+        let calls = calls.lock().unwrap();
+        let want = |script: &str| -> Vec<String> {
+            ["-d", "Ubuntu", "-e", "/usr/bin/zsh", "-lc", script]
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
+        };
+        assert_eq!(calls[0], want("exec rein-app update --check"));
+        assert_eq!(
+            calls[1],
+            want("exec rein-app profiles apply --dry-run --profile work --profile default")
+        );
+        assert_eq!(lines, ["a line"]);
+    }
+
+    #[test]
+    fn every_cli_action_has_its_exact_script_inside_wsl() {
+        use crate::cli::CliAction;
+        let cli = Cli::default();
+        let calls = Arc::clone(&cli.calls);
+        let h = WslHost::new(ready(), Box::new(cli), EXE.into(), None);
+        let names = vec!["work".to_string()];
+        for a in [
+            CliAction::Update,
+            CliAction::Rollback,
+            CliAction::ProfilesList,
+            CliAction::ProfilesApply {
+                dry_run: false,
+                names,
+            },
+        ] {
+            h.run_cli(&a, &mut |_| {}).unwrap();
+        }
+        let scripts: Vec<String> = calls.lock().unwrap().iter().map(|c| c[5].clone()).collect();
+        assert_eq!(
+            scripts,
+            [
+                "exec rein-app update --yes",
+                "exec rein-app rollback",
+                "exec rein-app profiles list",
+                "exec rein-app profiles apply --profile work",
+            ]
+        );
+    }
+
+    #[test]
+    fn exit_127_says_the_linux_package_is_missing_and_bad_names_never_reach_a_script() {
+        let cli = Cli {
+            code: Some(127),
+            ..Cli::default()
+        };
+        let h = WslHost::new(ready(), Box::new(cli), EXE.into(), None);
+        let e = h
+            .run_cli(&crate::cli::CliAction::Update, &mut |_| {})
+            .unwrap_err();
+        assert_eq!(e.kind, "cli_missing");
+        assert!(e.message.contains("inside WSL"));
+        for bad in ["a b", "x;id", "$(id)", "a\"b", "", "-x", "--enable"] {
+            let a = crate::cli::CliAction::ProfilesApply {
+                dry_run: false,
+                names: vec![bad.into()],
+            };
+            assert_eq!(cli_script(&a).unwrap_err().kind, "bad_profile", "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn dir_completion_lists_inside_wsl_with_the_guard_and_never_errors() {
+        let list = b"proj/\nprod/\nprofile.txt\n.hidden/\n./\n../\n";
+        let s = ready()
+            .on(
+                &[
+                    "-d",
+                    "Ubuntu",
+                    "--cd",
+                    "/home/me/",
+                    "-e",
+                    "sh",
+                    "-c",
+                    LIST_SCRIPT,
+                ],
+                0,
+                list,
+            )
+            .on(
+                &[
+                    "-d",
+                    "Ubuntu",
+                    "--cd",
+                    "/",
+                    "-e",
+                    "sh",
+                    "-c",
+                    LIST_ROOT_SCRIPT,
+                ],
+                0,
+                b"home/\netc/\n",
+            );
+        let h = host(s);
+        assert_eq!(
+            h.complete_dir("/home/me/pro").unwrap(),
+            ["/home/me/prod/", "/home/me/proj/"]
+        );
+        assert_eq!(
+            h.complete_dir("/h").unwrap(),
+            ["/home/"],
+            "the root uses the unguarded listing"
+        );
+        assert!(
+            h.complete_dir("/home/me/missing/x").unwrap().is_empty(),
+            "a failed call: no lines"
+        );
+        assert!(h.complete_dir("relative").unwrap().is_empty());
+        assert!(h.shell.limits.lock().unwrap().contains(&LIST_LIMIT));
+        assert!(
+            host(Stub::default())
+                .complete_dir("/home/me/p")
+                .unwrap()
+                .is_empty(),
+            "WSL absent"
+        );
+    }
+
     #[test]
     fn scripts_are_constants_without_quotes() {
-        for s in [PROBE_SCRIPT, VALIDATE_SCRIPT, START_SCRIPT] {
+        for s in [
+            PROBE_SCRIPT,
+            VALIDATE_SCRIPT,
+            START_SCRIPT,
+            DOCTOR_SCRIPT,
+            LIST_SCRIPT,
+            LIST_ROOT_SCRIPT,
+        ] {
             assert!(!s.contains(['"', '\'']), "{s}");
         }
     }

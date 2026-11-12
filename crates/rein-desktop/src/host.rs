@@ -10,6 +10,35 @@ use crate::cli::{CliAction, HealthView};
 use crate::ipc::IpcError;
 use crate::pty::ChildSpec;
 
+/// The most directories one `:open` Tab completion offers.
+pub const MAX_COMPLETIONS: usize = 50;
+
+/// `/home/me/pro` → (`/home/me/`, `pro`).
+pub fn split_prefix(prefix: &str) -> (&str, &str) {
+    prefix.split_at(prefix.rfind('/').map_or(0, |i| i + 1))
+}
+
+/// The completions of `stem` under `parent` from the directory names found there — one rule
+/// for every host: matching names only, hidden ones only when the stem starts with `.`, no
+/// `.` / `..`, every full path passing the path text rule, sorted, at most 50.
+pub fn completions(
+    parent: &str,
+    stem: &str,
+    dir_names: impl IntoIterator<Item = String>,
+) -> Vec<String> {
+    let mut out: Vec<String> = dir_names
+        .into_iter()
+        .filter(|n| n != "." && n != "..")
+        .filter(|n| n.starts_with(stem) && (!n.starts_with('.') || stem.starts_with('.')))
+        .map(|n| format!("{parent}{n}/"))
+        .filter(|full| crate::project_path::check(full).is_ok())
+        .collect();
+    out.sort();
+    out.dedup();
+    out.truncate(MAX_COMPLETIONS);
+    out
+}
+
 pub trait Host: Send + Sync {
     /// A project as the user gave it (argv, `:open`, the folder dialog, a second start) →
     /// the validated, canonical path the pty child runs in. May start processes (on Windows
@@ -35,4 +64,9 @@ pub trait Host: Send + Sync {
         action: &CliAction,
         line: &mut dyn FnMut(String),
     ) -> Result<Option<i32>, IpcError>;
+
+    /// The WSL distro a project belongs to, recorded with recent projects (Windows only).
+    fn distro(&self) -> Option<String> {
+        None
+    }
 }
