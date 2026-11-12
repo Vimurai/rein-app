@@ -2006,3 +2006,27 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - Select popover, context menu, which-key and the WSL card were not in the screens; the operator's run on Windows is the first look at them.
 ---
+
+---
+## Handoff — 2026-11-12 20:45 UTC
+**From**: Architect → Engineer
+**Trigger**: operator screenshot 21:34 local of installer E50-dc0ad9f — the frame "works great" but the tab still shows the user's tmux status line. E-56 registered
+
+### What was built
+- E-56 (T2, OPEN) in `.ai/TASKS.md`.
+
+### Decisions made
+- **E-56 before E-54.** If you have started E-54, park it at a clean point.
+- What the screenshot shows on real Windows (2560×1440, WebView2): title bar, pill tab, version chip, menu, window buttons, status bar with `~/Dev/schraubr_laravel`, `Install OK` and the command chip — all as designed. Under the title bar sits the user's catppuccin status line (session pill, window list, counts, clock), which V6's default `hidden` should have removed. The same machine's E-51 build hid it (operator shot 20:29).
+- The tab was a fresh `rein start` (both Claude panes just ran preflight). E-53's harness measured a reattach only; a fresh start attaches seconds later, so "the overlay gives up before the client exists" is a real suspect next to "the restyle no longer calls `tab_tmux`".
+- My part: I accepted E-50 on screens that could not show this — the screen harness stubs tmux's status line away. A screen set for a window task must from now on include one shot taken with a tmux config that has a visible status line.
+
+### Blueprint divergence (if any)
+- None known until the cause is found. If the fix needs the overlay to find the session another way than by client tty, stop and report.
+
+### Next action needed
+- E-56 as registered: cause, fix, regression test, slow-start e2e case, fresh-start interop dump. Then E-54, E-55.
+
+### Open risks
+- Not known whether the status line also stays after closing and reopening the tab (a reattach). Asked the operator; do not wait.
+---

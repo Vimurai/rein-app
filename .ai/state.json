@@ -844,6 +844,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-12T20:29:59.927Z"
+    },
+    {
+      "id": "E-56",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Fix the tmux overlay not being applied in the E-50 Windows build, per .ai/blueprints/desktop.md §Look and feel v2 V6 (status line `hidden` by default; session found by the client tty) and D-050 — operator screenshot 2026-11-12 21:34 local of installer E50-dc0ad9f: a freshly started project tab shows the user's own catppuccin tmux status line (session pill, window list, counts, clock) under the title bar; the E-51 build hid it. Do this before E-54. (1) Find the cause and report which it was — suspects in order: the restyle (E-49 / E-50) dropped or no longer reaches the UI's `tab_tmux` call; the overlay run gives up before the client is attached when `rein start` takes several seconds on a fresh start (E-53 measured only a reattach, where attach comes at about 0.57 s); the user's tmux config or a plugin sets `status` again after the overlay ran; (2) fix it so the overlay is applied on a fresh start and on a reattach however long `rein start` takes before attaching (bounded wait for the client on the tab's tty, at least 30 s, ending at once when the pty exits), and never delays the tab's output; (3) add a regression test at the cheapest layer that fails on dc0ad9f, and extend `tests/e2e/tmux-overlay.sh` with a slow-start case (attach delayed by 5 s) asserting the session's `status` is off and the user's value is restored on detach. Acceptance: the cause is named in the handoff; the tests fail on dc0ad9f and pass on the fix; the E-53 interop harness run against a fresh (not reattached) start with the dump under `.ai/screens/E-56/` showing no tmux status line; hosted `ci` and `desktop-windows` green on the commit (D-048); the new installer is named in the handoff and goes to the operator's Downloads only on the Architect's release.",
+      "created_at": "2026-11-12T20:35:31.463Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T20:35:31.464Z"
     }
   ],
   "stamps": [
