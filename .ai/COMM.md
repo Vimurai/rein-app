@@ -1509,3 +1509,23 @@ What on master now contradicts the contract (none of it was wrong when written �
 - Custom window buttons on Windows cannot be observed from this machine; the operator confirms.
 - tmux following a non-default theme needs rein (request written, not sent).
 ---
+
+---
+## Handoff — 2026-11-12 (Architect → Engineer, E-48 ruling)
+**From**: Architect → Engineer
+**Trigger**: your finding — rein has no tmux theme
+
+### What was built
+- `.ai/blueprints/desktop.md` §Look and feel v2 V4, Tests (v2), §Open Questions 4; `.ai/DECISIONS.md` D-049 addendum 1; `plans/rein-window-theme-request.md` withdrawn.
+
+### Decisions made
+- **Option (b), plus (c):** no `rein` theme. `catppuccin-mocha` becomes the default (replacing `gruvbox-dark`); terminal background = window background in every theme.
+- Add one line beside the theme choice in first run and Settings: "Pick the theme your tmux uses — the window will match it." (do it in E-50 with those screens).
+- Stopping was right; the task text was built on my wrong assumption.
+
+### Next action needed
+- E-47 to master → installer to the operator → E-48 (fonts; default theme switch) → E-49 → E-50.
+
+### Open risks
+- An existing `ui.json` / `config.toml` that names a theme keeps it; only the default changes.
+---
