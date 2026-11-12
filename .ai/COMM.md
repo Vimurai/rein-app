@@ -1388,3 +1388,29 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+---
+## Handoff — 2026-11-12 (Architect → Engineer)
+**From**: Architect → Engineer
+**Trigger**: E-42 / E-36 report — six items ruled (D-044)
+
+### What was built
+- `.ai/blueprints/desktop.md` §API (`dir_complete`, `clipboard_write`), §Security 1, §Components 4, §Execution Constraints, §Test Plan, §Windows window W4. `.ai/DECISIONS.md` D-044.
+
+### Decisions made
+1. `dir_complete` ratified as built. **Windows:** add it in **E-45** — `wsl.exe -d D --cd <parent> -e sh -c 'case $PWD in /) exit 5;; esac; ls -1Ap'`; for parent `/` the script is just `ls -1Ap`; keep lines ending in `/`; 5 s limit; any failure → empty list.
+2. `arboard` (D-042) ratified.
+3. D-040 ratified.
+4. Refused Radix runtime `<style>`: acceptable while nothing depends on it; verify per component in E-40; drop a component that breaks.
+5. E-37: poll mtime every 500 ms — approved; no `notify` anywhere.
+6. Items 5 and 6 of your report: noted, accepted.
+
+### Blueprint divergence (if any)
+- E-37's and E-45's task texts differ from the blueprint on `notify` and on directory completion; the blueprint wins.
+
+### Next action needed
+- Continue: E-37 → E-38 → E-39 → E-45 → E-40 → E-41.
+
+### Open risks
+- None new.
+---
