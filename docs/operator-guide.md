@@ -137,9 +137,147 @@ The first four rows exit **1** and write nothing. The message names the path inv
 | exit 2, `'P' is a case variant of operator_owned pattern 'Q'`, or `directory 'D' is a case variant of the start of operator_owned pattern 'Q'` | The release ships a path, or uses a directory, that is one of your operator-owned paths in another upper/lower case (e.g. `shared/Toolchain.sh` when `shared/toolchain.sh` is yours, or a `Shared` directory). On a case-insensitive filesystem it would overwrite your file. Nothing was written to the home. | Report it to rein. Do not work around it. |
 | exit 2, `… over the limit of N` | The release's manifest is larger than rein-app reads: more than 128 mirrored directories, 256 operator-owned patterns or 100000 files, or a path or pattern longer than 1024 bytes or deeper than 64 directories. Each limit is at least 10 times what rein ships today. Nothing was written to the home. | Update rein-app; if the newest rein-app still refuses it, report it to rein. |
 
+## Desktop window
+
+> **Status: a test build.** The window (`rein-desktop`) is not part of any release, and
+> its Windows installer is unsigned. It is built only by this repository's `desktop-windows`
+> workflow (Windows) or from source (Linux, macOS).
+
+The window draws Rein sessions in tabs: each tab runs `rein start` in a project
+directory, with a tab line on top and a status line at the bottom. Closing the window
+detaches the tabs; their tmux sessions keep running.
+
+### Windows
+
+Rein and your projects stay inside WSL2. The window is a native Windows program, and
+every process it starts runs through `%SystemRoot%\System32\wsl.exe`. It never installs
+WSL and never asks for administrator rights.
+
+**Install.** Download the installer from the newest successful
+[`desktop-windows`](../.github/workflows/desktop-windows.yml) run on `master`. The workflow
+keeps it for 14 days.
+
+```sh
+gh run list --workflow desktop-windows.yml --branch master --status success --limit 1
+gh run download <run-id> -n rein-desktop-windows-x64-setup
+```
+
+Run `rein-app_<version>_x64-setup.exe`. It installs for the current user only, so it
+needs no administrator rights, and it downloads WebView2 if it is missing. Because the
+installer is unsigned, SmartScreen warns "Windows protected your PC": choose **More info →
+Run anyway**. Start the window from the Start menu: **rein-app**.
+
+**Before you start.**
+- WSL2 with a Linux distribution. If it is missing, the status line says so and gives the
+  command to run (`wsl --install`, or `wsl --install -d Ubuntu`); `c` checks again.
+- Rein installed inside that distribution (`rein` on the login shell's `PATH`).
+- For **update, rollback and profiles**: the Linux `rein-app` installed *inside* WSL. The
+  window runs `rein-app` there; if it is not found (exit 127), the window says "rein-app
+  is not installed inside WSL, or not on its login shell's PATH". The health check needs
+  only `rein`.
+
+**Project paths.** A project is a Linux path inside the window's distribution:
+- `/home/you/project`: a POSIX absolute path, used as is;
+- `\\wsl.localhost\<distro>\home\you\project` (or `\\wsl$\<distro>\…`): mapped to
+  `/home/you/project`. The distribution must be the window's own.
+
+A drive path (`C:\…`), a relative path or another network host is refused with "Rein
+projects live inside WSL — choose a folder under `\\wsl.localhost\<distro>`". The folder
+dialog opens in `\\wsl.localhost\<distro>\home\<user>`.
+
+**Which distribution.** WSL's default, unless `config.toml` names one:
+
+```toml
+[wsl]
+distro = "Ubuntu-24.04"
+```
+
+**Windows programs on the Linux PATH.** By default WSL appends the Windows `PATH` to the
+Linux one (`appendWindowsPath=true`), so a Windows program, such as an npm shim, can be
+found by name inside WSL. This is WSL's behaviour for every terminal, not something the
+window adds; no environment variable crosses from the window. To turn it off, put this in
+`/etc/wsl.conf` inside the distribution, then run `wsl --shutdown`:
+
+```ini
+[interop]
+appendWindowsPath=false
+```
+
+**Uninstall.** Windows Settings → Apps → Installed apps → **rein-app** → Uninstall. The
+window's own files stay; delete them by hand if you want them gone:
+- `%APPDATA%\rein-app`: `config.toml`;
+- `%LOCALAPPDATA%\rein-app`: `ui.json`, `projects.json` (recent projects).
+
+Nothing inside WSL is touched.
+
+### Linux and macOS
+
+Build from source. On Linux you need WebKitGTK 4.1 and GTK 3 (Debian/Ubuntu:
+`libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev librsvg2-dev`). On both systems you
+need Node.js to bundle the web UI:
+
+```sh
+(cd crates/rein-desktop/ui && npm ci --ignore-scripts && npm run build)
+cargo build --release -p rein-app -p rein-desktop
+./target/release/rein-app window ~/my-project
+```
+
+`rein-app window [DIR]` starts `rein-desktop` (found beside `rein-app`, then on `PATH`)
+with `DIR` as the first tab. A second start hands over to the window that is already
+running.
+
+**WSLg is not supported.** Run the Windows build instead: WSLg cannot paint the WebKitGTK
+window, so it shows up blank.
+
+### Using the window
+
+The first start asks how you like to work:
+- **simple** (the default): keys always go to the terminal, except a few shortcuts such as
+  `Ctrl+Shift+P` (menu), `Ctrl+Shift+O` (open a folder), `Ctrl+Shift+T` (recent projects),
+  `Ctrl+Tab`, `Alt+1`–`9`, `Ctrl+Shift+W`, `Ctrl+Shift+C` / `V`, `Ctrl+=` / `-` / `0` and
+  `F1`. These shortcuts also work in modal style.
+- **modal**: vim-style modes. `Ctrl+\ Ctrl+n` leaves the terminal, `Space` opens the
+  leader keys, `:` the command line.
+
+Everything is also a button: tabs, `[+]`, `[≡]` (the menu), and the status line's segments.
+The **menu** (`Ctrl+Shift+P`) lists every action with its key.
+
+**Settings** (menu → Settings, `Ctrl+,`, or `:settings`) sets the input style, theme, font
+size and title bar. It also has **Open config file location**, which shows the path of
+`config.toml` and copies it.
+
+**Settings files.**
+
+| File | Linux | macOS | Windows | Written by |
+|---|---|---|---|---|
+| `config.toml` | `$XDG_CONFIG_HOME/rein-app/` (default `~/.config/rein-app/`) | the same, or `~/Library/Application Support/rein-app/` when `XDG_CONFIG_HOME` is unset | `%APPDATA%\rein-app\` | you; the window writes a commented template once and never again |
+| `ui.json` | `$XDG_STATE_HOME/rein-app/` (default `~/.local/state/rein-app/`) | the same, or `~/Library/Application Support/rein-app/` when `XDG_STATE_HOME` is unset | `%LOCALAPPDATA%\rein-app\` | the window, for choices made in Settings and the first-run question |
+
+**`config.toml` wins.** A setting that `config.toml` sets is shown in Settings as "set in
+config.toml" and cannot be changed there. Saving `config.toml` reloads the window. A line
+the window cannot read is reported with its file, line and reason, and the previous
+settings stay in force.
+
+### The health segment
+
+The status line's health segment is the result of `rein doctor --scope install --json`. It
+runs in your home directory (inside WSL on Windows) when the window starts, when a tab
+opens, and when you click the segment or **Check installation**. It checks the **Rein
+install** only, not the project in a tab:
+
+| Segment | Meaning |
+|---|---|
+| `✓ install ok` | every install check passed |
+| `! install warn` | at least one warning |
+| `✗ install FAIL` | at least one check failed |
+| `? health unknown` | the check could not run (for example, WSL or `rein` is missing); clicking it shows why |
+
+Clicking the segment opens the full list of checks.
+
 ## Not supported
 
 - **A shared `--home`.** The Rein home must be inside a private directory that only you can
   write. A `--home` inside a directory other users can write (such as `/tmp`) is not
   defended against.
-- **Native Windows.** On Windows, rein-app runs Rein inside WSL2 only.
+- **Native Windows.** On Windows, rein-app runs Rein inside WSL2 only. The desktop window
+  is a Windows program, but everything it starts runs inside WSL.

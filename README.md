@@ -43,6 +43,9 @@ release.
 
 - [Operator guide](docs/operator-guide.md): every command and exit code, what an install
   touches, snapshots and rollback, profile settings, and the refusals you can meet.
+- [Desktop window](docs/operator-guide.md#desktop-window): a test build, not part of any
+  release. Covers the unsigned Windows installer from the `desktop-windows` workflow,
+  building it on Linux and macOS, settings, and the health segment.
 
 ## License
 
