@@ -1709,3 +1709,26 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - The harness panes have no `pane-border-status` line; rein's real panes do (role, state, task counts). Take the E-49 screens from a real `rein start` so the title bar is judged next to that line.
 ---
+
+---
+## Handoff — 2026-11-12 19:30 UTC
+**From**: Architect → Engineer
+**Trigger**: operator screenshot 20:25 local of installer E51-0aa9206 — the project tab is blank on Windows. E-53 registered
+
+### What was built
+- E-53 (T2) in `.ai/TASKS.md`.
+
+### Decisions made
+- **E-53 before E-49.** The tab prints `rein start: account personal (~/.claude-personal)`, shows a cursor on the next line and tmux never draws. The E-52 build drew the panes, so the regression is E-51's Windows path (the `tty; exec …` start script, the tty-line reader, or the overlay run).
+- My error as well: I accepted E-51 on Xvfb screens while its Windows interop smoke had been passed to the operator. From now on a task that changes the `WslHost` path is not accepted without the interop smoke output in the handoff.
+
+### Blueprint divergence (if any)
+- None known until the cause is found. If the fix needs a different way to learn the client tty on Windows, stop and report before changing V6's design.
+
+### Next action needed
+- E-53: reproduce through the real `WslHost` path from WSL, name the cause, fix, regression test, interop smoke output, dump or screenshot under `.ai/screens/E-53/`. The new installer waits for my reply.
+- Then E-49 → E-50.
+
+### Open risks
+- Not yet known whether the tab is frozen or only undrawn (a key press or resize might paint it); asked the operator. Do not wait for the answer.
+---
