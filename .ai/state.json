@@ -568,24 +568,24 @@
     {
       "id": "E-38",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Implement projects, tabs and the start screen of the window, per .ai/blueprints/desktop.md §Components 3, §Core Concept \"Screen\" (tabline, overlay and start-screen drawings), §Data Model `Tab` / `ProjectsFile`, §API `projects_list` / `projects_forget` and D-033: a `ProjectStore` that keeps at most 64 recent projects in `$XDG_STATE_HOME/rein-app/projects.json` (schema 1, canonical absolute paths, temp file + rename), treats a directory as a project when it contains `.ai/` and reads nothing inside `.ai/`, and shows a path that no longer exists dimmed instead of removing it; the start screen (block-character wordmark, recent projects numbered 1–9, the five key hints); the project picker overlay with fuzzy filtering, `j` `k` `C-n` `C-p` `Enter` `Esc` and a rounded border with the title in it; `:open DIR` and `project.open`; up to 16 tabs in the tabline (`N:name`, `*` on the current one) with `gt`, `gT`, `1`–`9`, `ZZ`, `:q` (detach the tab — the tmux session keeps running) and `:qa`; `window.start = \"last\"` reopening the last project. Every path shown in the chrome passes the Phase 1 escaping. Acceptance: tests for the store (64-entry cap, missing path kept and dimmed, atomic write, a path with a control character refused), the picker filter, and tab actions through the `modes` table, green in `cargo test --workspace`, the web test run and hosted CI; nothing is written under `$HOME/.rein` or inside a project.",
       "created_at": "2026-11-11T19:10:26.123Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-12T09:51:47.320Z",
+      "summary": "E-38 (27d17ec, [TIER_2]): ProjectStore (≤64, schema 1, atomic, missing kept+dimmed, unsafe refused, not probed on Windows), projects_list/forget, ≤16 tabs with per-tab panes (gt gT 1 …[full in LOG.md]",
       "depends_on": [
         "E-35",
         "E-36"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-12T09:34:11.135Z"
+      "updated_at": "2026-11-12T09:51:47.320Z"
     },
     {
       "id": "E-39",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 3,
       "description": "Implement health, release and profile actions in the window over the Phase 1 library seams, per .ai/blueprints/desktop.md §Components 5, §Data Model `HealthView`, §API (`health_get`, `release_check`, `release_apply`, `profiles_plan`, `profiles_apply`, event `health_changed`), §Security boundary 5 and D-033 ruling 8: a `HealthService` that runs `rein doctor --json` through the existing runner (4 MiB cap, strict parse, 120-second limit) when a tab opens, after update / rollback and on `health.show`, shows the document's `status` and checks in a `:checkhealth` overlay (each check's line and fix line, escaped) and in the statusline segment, and maps any run without a valid document to `unknown` — never a pass, never a recomputed verdict, no branch on a check id (D-029, D-032); `:update` and `:rollback` showing installed and newest version with notes, asking `y/N` on the command line, streaming progress lines, and returning the Phase 1 exit code and refusal text unchanged under the same install lock and owner guard; a `:profiles` overlay showing the per-profile diff of the three allowed keys from `rein_profiles::plan` and applying through `rein_profiles::apply` only — the IPC takes profile names and can never be handed a key name. Add no second implementation of any Phase 1 behaviour. Run `security_engineer` before commit and close with a `ux_reviewer` pass over the start screen, a project tab and every overlay in `gruvbox-dark` and `github-light` at 80×24 and 200×60 cells. Acceptance: §Test Plan \"Health / release / profiles\" with the stubbed `Process` (fail, warn, ok, garbage → unknown; exit codes unchanged; no key-name input) and \"Screens\" green; `cargo test --workspace` and hosted CI green.",
       "created_at": "2026-11-11T19:10:34.436Z",
@@ -594,16 +594,14 @@
       "depends_on": [
         "E-38"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-38"
-      ],
-      "updated_at": "2026-11-11T19:10:34.437Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T09:51:47.324Z"
     },
     {
       "id": "E-40",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Implement the click-first layer of the window, per .ai/blueprints/desktop.md §Core Concept \"Two ways in: click-first and modal\" (the full list is there), §API `project_choose` / `clipboard_read`, §Security boundary 6 and D-034: (1) add the `simple` input style as a second key table for the existing `modes` function (keys go to the terminal except the listed shortcuts; no mode segment) and make it the default; its shortcuts keep working in `modal`; (2) show the first-run choice between the two styles and store `input_style` and `first_run_done` in `ui.json`; (3) make every chrome element a grid-drawn button with hover highlight, tooltip (action + current shortcut) and accessible name: tabs, `×`, `[+]` (system folder dialog via `project_choose`, validated exactly as `tab_open`), the version, `[≡]`, each statusline segment; (4) build the menu: one searchable list of every action in plain words with its shortcut; (5) make overlay rows clickable and scrollable, and end update, rollback and apply-profiles in two labelled buttons with the safe one focused (`y` / `n` still answer); (6) add the start-screen buttons; (7) terminal: drag select, right-click Copy / Paste / Select all, mouse passed to tmux when its mouse mode is on, and a question before a paste containing a newline is sent; (8) plain-word labels first, the command in dim text beneath, rein's error text unchanged. Run `skill: dependency_gate` for the Tauri dialog plugin and update the E-34 capability test to allow exactly the folder-open permission. Acceptance: §Test Plan \"Pointer parity\" (menu, both key tables, `simple` forwarding, tooltips, paste question) and \"Newcomer path\" green in `cargo test --workspace`, the web test run and hosted CI.",
       "created_at": "2026-11-11T19:13:48.596Z",
@@ -612,11 +610,9 @@
       "depends_on": [
         "E-38"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-38"
-      ],
-      "updated_at": "2026-11-11T19:13:48.597Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T09:51:47.325Z"
     },
     {
       "id": "E-41",
@@ -1667,6 +1663,33 @@
       "timestamp": "2026-11-12T09:43:02.491Z",
       "summary": "[TIER_2] Blueprint aligned + clean-code gate clear — ALIGN_PASS (5 minor deviations: config_get reload input not in §API, size refusal has no line, opacity transparency fixed at window creation, wsl.distro list check deferred to E-45, hosted CI pending); CLEAN_WARN, 9 warnings ignored (config.rs 635 lines, Rust/TS theme+defaults duplication untested, silent create_dir/write_new failure, dirs.rs config_dir test fails on Windows, app.tsx listener never unlistened, weak test cases)",
       "sha": "f147c9b2e4f7bb65a7d69706dcf0e30a0c9a462e",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-38",
+      "timestamp": "2026-11-12T09:50:10.632Z",
+      "summary": "Manual standards review (scripts/standards.mjs absent in this repo; unstaged diff) — 17 files clean: max file 670 lines (<1000), no secret patterns, no tmp files, no stdout/debug leftovers, unwraps only in tests, 0 warnings",
+      "sha": "672b310b8221f1ce148251d145c450a3945f7d9a",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner-mcp",
+      "task_id": "E-38",
+      "timestamp": "2026-11-12T09:50:58.915Z",
+      "summary": "[TIER_2] align_diff WARN (no violations): ORPHANED_WORK on ipc.rs/ipc_commands.rs/ipc.ts reviewed and cleared. They implement desktop.md §API projects_list/projects_forget (line 236), and architect.md row 14 points to desktop.md. core:window:allow-close is a 'window basic' per desktop.md §Test Plan Capabilities. Diff passed explicitly because the tree is unstaged.",
+      "sha": "f1b50120d1b44b75199f18956fa9c0febef9d007",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-38",
+      "timestamp": "2026-11-12T09:51:05.255Z",
+      "summary": "[TIER_2] Blueprint aligned + clean-code gate clear — 1 aligner warning cleared (ORPHANED_WORK false positive: the IPC files are covered by desktop.md §API), 0 clean-code findings (manual: the standards-checker script is missing)",
+      "sha": "f1b50120d1b44b75199f18956fa9c0febef9d007",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
