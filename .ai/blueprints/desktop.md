@@ -454,8 +454,17 @@ and the session is found through the app's own client tty — never by name.
   `sh -s -- <client tty> <status mode> <colour>…` (so nothing passes through a shell
   command line or `wsl.exe`'s re-parsing except simple validated words). It:
   1. finds `tmux` on the login `PATH`; exits quietly if tmux is older than 3.2;
-  2. waits up to 10 s for a client whose `client_tty` equals `$1`, and takes its
-     `session_id`; no such client → exits quietly (nothing is styled);
+  2. waits up to 60 s for a client whose `client_tty` equals `$1`, and takes its
+     `session_id`; no such client → exits quietly (nothing is styled). The wait (and the
+     whole run, limit 75 s) ends at once when the tab closes or its terminal ends. (E-56,
+     2026-11-12: the wait was 10 s; a fresh `rein start` builds the layout and waits for
+     each pane's prompt before attaching, which can take longer, and the user's status
+     line then stayed. Overlay runs still go one at a time, so a second tab's overlay can
+     wait behind the first's — known limit; its output is never delayed.)
+     **A failed overlay is told to the user:** when a tab's overlay ends without being
+     applied (any reason other than the tab having closed), the window shows the toast
+     once for that tab with the health row's text. The health badge is not changed by it
+     (the badge is the install verdict, D-029);
   3. applies, with `set-option -t <session_id>` (and `-w` per window of that session, plus
      a session `after-new-window` hook for later windows), only these options:
      `status`, `status-style`, `status-left`, `status-right`, `window-status-format`,
@@ -506,7 +515,7 @@ and the session is found through the app's own client tty — never by name.
   prefix-s) the overlay stays on the session it left until that session's next app
   detach or re-run — tmux looks `client-session-changed` up on the new session, so the old
   one never hears of it (security review F3, P2). On timeout only the direct child is
-  killed (F5). The tty number can be reused during the 10 s wait (F7). Also: a plain terminal attached to the same session at the same
+  killed (F5). The tty number can be reused during the 60 s wait (F7). Also: a plain terminal attached to the same session at the same
   time sees the overlay until the app detaches; the user's look flashes for a moment
   before the overlay lands; a status line built by a plugin with its own colours is
   replaced or hidden, not recoloured.

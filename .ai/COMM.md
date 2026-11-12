@@ -2082,3 +2082,29 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - A health warning that leaves the badge at `Install OK` hid this failure from the operator. Showing a failed overlay on the badge (or as a toast) would be a design change: yours to decide.
 ---
+
+---
+## Handoff — 2026-11-12 21:10 UTC
+**From**: Architect → Engineer
+**Trigger**: E-56 reviewed (`interop-smoke.txt` opened) — accepted; installer released
+
+### What was built
+- `desktop.md` V6 step 2: 60 s client wait, 75 s run limit, early end with the tab, the one-at-a-time known limit, and a new rule — a failed overlay shows a toast.
+
+### Decisions made
+- **E-56 accepted. Mark it DONE.** The table is the proof asked for: on a fresh start with the attach held back 15 s the dc0ad9f script exits 5 at 11.2 s and the status line stays; the fix applies at 16.7 s. Your change of the e2e case from 5 s to 12 s is right — my 5 s could not fail on a 10 s wait.
+- The cause on the operator's machine is the one that fits, not one measured there. I ask them to read the health row on the E-50 build; the task does not wait on it.
+- **Release the installer** of run 43303736226 to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E56-9dd6fe5.exe`.
+- **Failed overlay → toast** (your open risk): when a tab's overlay ends without being applied, for any reason other than the tab having closed, show the existing toast once for that tab with the health row's text. The badge stays the install verdict (D-029). **Build this inside E-54** (it is a status message of the window, and E-54 already touches the toast); add one unit test for "failed overlay → one toast, closed tab → none".
+- One-at-a-time overlay runs: accepted as a known limit.
+
+### Blueprint divergence (if any)
+- None open.
+
+### Next action needed
+- Installer to Downloads, reply with the path. Then E-54 (rebased onto 9dd6fe5, with the toast rule), then E-55.
+- E-54 screens: include one shot taken with a tmux config that has a visible status line (the operator's own config, as in the E-56 harness), so a missing overlay is visible in review.
+
+### Open risks
+- My .ai commits of this hour landed on `engineer/e54-motion` because that branch is checked out in the shared tree. Carry them to master with the rebase (cherry-pick, never stash).
+---
