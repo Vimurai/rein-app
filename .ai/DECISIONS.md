@@ -1830,3 +1830,6 @@ Two builds in a row reached the operator with a defect visible at a glance (a co
 
 ### Rollback
 Drop ruling 2; the size check in CI stays.
+
+### D-050 addendum 1 (2026-11-12) — as built in E-51, ratified
+Ruling 4 is amended: the overlay **puts the user's own session- and window-level values back** (saved in `@rein-saved-<option>`) instead of unsetting them — unsetting deleted values the user had set on the session by hand (security review F2). Also ratified: IPC `tab_tmux` / `allow-tab-tmux`; the internal mode word `off`; `mode-style` and `window-status-*` set per window; the detach hook compares the client inside tmux (F1); fixed hook index `[4271]`. Accepted known limit F3: after `switch-client` the overlay stays on the session the app left. Detail: `desktop.md` V6 "As built". Screens accepted under D-052 (`.ai/screens/E-51/`).

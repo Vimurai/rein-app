@@ -486,7 +486,27 @@ and the session is found through the app's own client tty — never by name.
   status mode one of three words; colours `^#[0-9a-f]{6}$` from the app's theme table.
   Session and window ids used inside the script come from tmux's own output and are
   checked against `^[$@][0-9]+$` by the script.
-- **Known limits (accepted):** a plain terminal attached to the same session at the same
+- **As built (E-51, 0aa9206; D-050 addendum 1 — these replace the wording above where
+  they differ):**
+  1. IPC command `tab_tmux(tab, colours)` with the permission `allow-tab-tmux`. The web
+     side sends only the five theme colours; the status mode comes from the settings. One
+     script runs at a time; per tab only the newest request runs.
+  2. The script takes a fourth, internal mode word `off`, sent when `overlay = false`, so
+     switching the overlay off removes it from attached tabs at once.
+  3. **The user's values are put back, not unset.** Each option's own session- or
+     window-level value is saved first in `@rein-saved-<option>` (`1<value>` or `0` for
+     "not set") and restored exactly on detach, on `off`, and before a re-run.
+  4. `mode-style`, `window-status-format` and `window-status-current-format` are window
+     options and are set per window, like the border styles.
+  5. The detach hook compares the client inside tmux
+     (`#{==:#{hook_client},<tty>}`); the client name never reaches a shell.
+  6. Both hooks use the fixed index `[4271]`, which is what makes a re-run replace the
+     earlier overlay and leaves the user's own hooks alone.
+- **Known limits (accepted):** if the app's client switches session (`switch-client`,
+  prefix-s) the overlay stays on the session it left until that session's next app
+  detach or re-run — tmux looks `client-session-changed` up on the new session, so the old
+  one never hears of it (security review F3, P2). On timeout only the direct child is
+  killed (F5). The tty number can be reused during the 10 s wait (F7). Also: a plain terminal attached to the same session at the same
   time sees the overlay until the app detaches; the user's look flashes for a moment
   before the overlay lands; a status line built by a plugin with its own colours is
   replaced or hidden, not recoloured.

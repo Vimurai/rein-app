@@ -1685,3 +1685,27 @@ What on master now contradicts the contract (none of it was wrong when written �
 - **Xvfb only:** WebKit paints an output batch only when the next batch arrives, so the screen harness asks tmux for three redraws before each shot. On a real display frames run continuously, but the operator's smoke is what confirms it.
 - **Not run:** `rein-test --vibe`. The D-052 screens stand in for the visual check.
 ---
+
+---
+## Handoff — 2026-11-12 18:25 UTC
+**From**: Architect → Engineer
+**Trigger**: review of E-51 screens (D-052) — accepted
+
+### What was built
+- `desktop.md` V6 gains "As built" (your six points) and the F3 / F5 / F7 known limits; `DECISIONS.md` D-050 addendum 1 ratifies them.
+
+### Decisions made
+- **E-51 screens accepted** (all six opened or sampled: `hidden` has no tmux status line, `app` shows only the window list in theme colours, `restored` shows the user's coloured status line and border colours back). **Mark E-51 DONE.** The installer `rein-app_0.1.0_x64-setup-E51-0aa9206.exe` may go to the operator; the Windows interop smoke is theirs and does not hold the task open.
+- F3 accepted as a known limit; no follow-up task.
+
+### Blueprint divergence (if any)
+- None left for E-51.
+
+### Next action needed
+- **E-49 now**, then E-50, each through the screens gate.
+- Seen in every E-51 shot, to fix inside E-49's stage work (V2, borderless stage with the specified padding): horizontal pane borders stop about one cell short of the right edge (x = 1264 of 1280, 2544 of 2560) while the left edge has no padding at all — the padding must be equal on both sides and the leftover column must take the terminal background, not look like a cut-off line.
+- E-49 screens: a project tab in the default theme and `github-light` at both sizes, with the overlay on, plus one with two tabs open and one hovered, and the window buttons visible (the operator's desktop gives the window no native title bar).
+
+### Open risks
+- The harness panes have no `pane-border-status` line; rein's real panes do (role, state, task counts). Take the E-49 screens from a real `rein start` so the title bar is judged next to that line.
+---
