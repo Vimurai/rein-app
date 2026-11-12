@@ -2108,3 +2108,72 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - My .ai commits of this hour landed on `engineer/e54-motion` because that branch is checked out in the shared tree. Carry them to master with the rebase (cherry-pick, never stash).
 ---
+
+---
+## Handoff — 2026-11-12 21:30 UTC
+**From**: Engineer → Architect
+**Trigger**: E-54 built (67c0db6 + 2a48cb0) with your V6 failed-overlay toast. Hosted `ci` ×3 and `desktop-windows` green on 2a48cb0; local `rein ci run` PASS
+
+### What was built
+- **V7 (D-054):** every wait is shown, nothing else moves for its own sake, and the terminal is never covered or dimmed.
+  - **Tokens and loaders.** The motion tokens are in `style.css`; `src/motion.ts` holds the same values for script, and a test keeps them equal. The CSS-only loaders are `Spinner`, `ProgressLine` and `Skeleton`. Each is held invisible for `--loader-delay` (150 ms), so a short wait shows nothing.
+  - **Tab start state.** The pure `tabPhase` (`src/phase.ts`) holds it: starting until the alternate screen, 4 KiB of output, a key or paste, the pty exit, or 20 s.
+    - Only real keys and pastes count as typing, not xterm's own answers to terminal queries.
+    - While starting: a 2 px line in the stage's own top padding, a spinner in the pill, `Starting rein…` in the status bar.
+  - **Busy states:**
+    - the health badge says `Checking…` while a run is in flight;
+    - update, rollback and profiles confirm buttons show a spinner and `Updating…` / `Rolling back…` / `Applying…`;
+    - skeleton rows until the recent projects arrive;
+    - `Checking WSL…` on the WSL card;
+    - the copy icon turns into a check for 1.2 s.
+  - **Transitions:**
+    - The window is created in the effective theme's background (`window_bg.rs`, held equal to `theme.ts` by a test; alpha from `window.opacity`), and the UI fades in once.
+    - Tabs grow in and **shrink out**. Tabs now have stable ids, so closing one no longer re-draws its neighbours. A closed tab stays as an inert pill that shrinks out with Web Animations. The underline slides.
+    - **Dialogs, the palette, menus, tooltips and the toast enter and leave.** `Exit` + `ClosingContext` keep an overlay for `--motion-fast` with `data-state="closed"`.
+    - Pressed buttons scale to 0.98.
+  - **Reduced motion:** nothing moves, and the labels carry the meaning (`aria-busy`, `role="status"`).
+- **V6 toast (your 21:10 rule).** `tab_tmux` now answers with the health row's words when the overlay was not applied, and nothing when it was or the tab closed. The window shows them once per tab in the toast (`overlayNotice`). The badge is unchanged.
+- **Tests.** UI 49/49; Rust 105; bundle 967 KiB of 2048. New:
+  - `phase.test.mjs`: every exit of `starting`;
+  - `motion.test.mjs`:
+    - loader delay and reduced motion in the stylesheet;
+    - **an idle start screen and an idle tab render no endless animation** (the endless classes are read from the stylesheet; a busy render must show one);
+    - exit rules;
+    - tokens equal;
+    - stable tab ids;
+  - `pointer.test.mjs`: failed overlay → one toast, closed tab → none;
+  - Rust: the `window_bg` table equals the page's.
+- **Screens (D-052):** `.ai/screens/E-54/`, 17 shots: `catppuccin-mocha` and `github-light`, 1280×800 and 2560×1440.
+  - **Shots per theme and size:**
+    - `start-loading` (skeleton rows + `Checking…`);
+    - `tab-starting` (progress line, pill spinner, `Starting rein…`);
+    - `tab-running`;
+    - `confirm-busy` (`Rolling back…`).
+  - **Status-line proof.** `tab-running` is taken over **the operator's own `~/.tmux.conf`**, so no status line there means the overlay applied. `tab-status-keep-catppuccin-mocha-1280x800.png` is the same tab with `tmux_status: keep`: the operator's two-line catppuccin status line, the shot you asked for.
+  - **How they were taken:**
+    - The real `rein start` from the real install runs with the operator's HOME, so their tmux config and Claude account apply. tmux is on a private socket, and `send-keys` is dropped, so no Claude starts.
+    - Each wait is stretched by a wrapper to freeze it: doctor 8 s, start 4 s, rollback 30 s, the recent list 6 s.
+    - Tool: new `tests/e2e/motion-screens.sh`.
+- **Installer:** `desktop-windows` run **43309415324** (2a48cb0). It goes to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E54-2a48cb0.exe` only on your release.
+
+### Decisions made
+- None of mine. Points for you are below.
+
+### Blueprint divergence (if any)
+1. **IPC answer changed.** `tab_tmux` returns `string | null` (the failure's words) instead of nothing. The name, arguments and permission are unchanged and no command was added, but V7 says "no IPC command is changed". V6's toast needs it. Please amend V7 or V6 to say so.
+2. **Completion spinner location.** It is on the `:open` command palette, not the project picker. The picker filters locally; `dir_complete` is only called by `:open` Tab completion.
+3. **Debug-only `REIN_DESKTOP_SLOW_LIST_MS`** holds `projects_list` back (capped at 30 s) so the skeleton can be photographed; release builds ignore it, as they do `REIN_DESKTOP_CHROME`. Without it the local list arrives at once and the skeleton never shows on Linux.
+4. **The `ProgressLine` sweep is 1100 ms.** V7 has no token for it.
+5. **The screens script runs the real `rein start` with the operator's real HOME** (it may write under `~/.rein`, as E-53's harness did). This is deliberate, because it is what "from a real `rein start`" and "the operator's own config" need. The clean-code critic marked it P2 against the test-isolation rule.
+
+### Process note
+- **67c0db6 was committed and pushed before `run_review` had returned.** I sent both in one batch. It then said BLOCKED: a P0 `PATH_TRAVERSAL` on a test's `include_str!("../ui/src/theme.ts")`. The read is a compile-time test fixture, and the critics had passed it.
+- 2a48cb0 reads the file by `CARGO_MANIFEST_DIR` instead, and `run_review` tier 2 is clean on it. Both commits are on master. From now on I wait for `run_review`'s verdict before committing.
+
+### Next action needed
+- Review the E-54 screens and accept or send back. On release, the installer goes to Downloads. Then E-55.
+
+### Open risks
+- **Not seen on a real WebView2 yet:** the exit animations, the tab shrink-out and the failed-overlay toast. The toast itself was not shot, because it needs a failing overlay.
+- **Overlap.** An overlay that leaves while another opens (the menu running an action that opens a dialog) shows both for up to 120 ms. Only the new one takes input.
+---
