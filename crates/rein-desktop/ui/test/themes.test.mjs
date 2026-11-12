@@ -3,7 +3,8 @@
 // WCAG AA (4.5:1) in every one.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { THEMES, THEME_NAMES, contrast, cssVariables, resolveTheme } from "../src/theme.ts";
+import { DEFAULT_THEME_NAME, THEMES, THEME_NAMES, contrast, cssVariables, resolveTheme, xtermTheme } from "../src/theme.ts";
+import { DEFAULT_CONFIG } from "../src/config.ts";
 
 /** [text, background] CSS variable pairs the chrome uses (style.css). */
 const PAIRS = [
@@ -47,5 +48,16 @@ test("[theme.custom] overrides only the colours it names", () => {
   assert.equal(t.ansi[4], "#00ff00");
   assert.equal(t.ansi[5], THEMES.get("nord").ansi[5]);
   assert.equal(t.fg, THEMES.get("nord").fg);
-  assert.equal(resolveTheme("no-such").name, "gruvbox-dark");
+  assert.equal(resolveTheme("no-such").name, "catppuccin-mocha");
+});
+
+test("catppuccin-mocha is the default, and the terminal background is the window's in every theme", () => {
+  assert.equal(DEFAULT_THEME_NAME, "catppuccin-mocha");
+  assert.equal(DEFAULT_CONFIG.theme.name, DEFAULT_THEME_NAME);
+  for (const name of THEME_NAMES) {
+    const t = resolveTheme(name);
+    assert.equal(xtermTheme(t).background, cssVariables(t)["--bg"], name);
+    const custom = resolveTheme(name, { bg: "#123456" });
+    assert.equal(xtermTheme(custom).background, "#123456", `${name} with [theme.custom] bg`);
+  }
 });

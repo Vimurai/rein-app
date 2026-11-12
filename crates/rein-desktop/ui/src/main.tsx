@@ -7,6 +7,7 @@ import { TooltipProvider } from "../components/tooltip.tsx";
 import { App } from "./app.tsx";
 import { DEFAULT_CONFIG, type ConfigView } from "./config.ts";
 import { hardenPrototypes } from "./harden.ts";
+import { loadFonts } from "./fonts.ts";
 import { configGet, uiGet } from "./ipc.ts";
 
 // Every import above has run; nothing untrusted has been handled yet.
@@ -22,6 +23,9 @@ const initial: ConfigView = await configGet().catch((e: { message?: string }) =>
 }));
 
 const initialUi = await uiGet().catch(() => null);
+
+// The bundled terminal fonts, before the first terminal measures its cell (V3).
+await loadFonts();
 
 const mount = document.getElementById("root");
 if (mount) {

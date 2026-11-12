@@ -68,7 +68,8 @@ pub struct Theme {
 impl Default for Theme {
     fn default() -> Self {
         Self {
-            name: "gruvbox-dark".into(),
+            // D-049 addendum 1 (E-48): the default theme.
+            name: "catppuccin-mocha".into(),
             custom: BTreeMap::new(),
         }
     }
@@ -133,7 +134,7 @@ pub const DEFAULTS_FILE: &str = r##"# rein-app window configuration (desktop.md)
 #   family = "JetBrains Mono, monospace"
 
 # [theme]
-# name = "gruvbox-dark"   # gruvbox-dark | tokyonight | catppuccin-mocha | nord | solarized-dark | github-light
+# name = "catppuccin-mocha" # catppuccin-mocha | gruvbox-dark | tokyonight | nord | solarized-dark | github-light
 #   [theme.custom]        # override any colour: fg, bg, accent, color0 … color15
 #   accent = "#fabd2f"
 

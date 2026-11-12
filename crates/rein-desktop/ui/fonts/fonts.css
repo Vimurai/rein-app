@@ -1,0 +1,40 @@
+/* The bundled terminal fonts (desktop.md §Look and feel v2 V3, D-051), served by the app
+   itself: `default-src 'self'` covers font-src, so the CSP is unchanged. Copied to
+   dist/fonts.css by build.mjs; the URLs are relative to it. */
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono-BoldItalic.woff2") format("woff2");
+  font-weight: 700;
+  font-style: italic;
+  font-display: block;
+}
+/* Powerline and Nerd Font icons (U+E000–U+F8FF and the planes above), one cell wide. Always
+   in the terminal's font stack, whatever font.family says. */
+@font-face {
+  font-family: "Symbols Nerd Font Mono";
+  src: url("fonts/SymbolsNerdFontMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}

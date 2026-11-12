@@ -1,5 +1,9 @@
 // Themes: sixteen terminal colours plus foreground, background and accent (desktop.md "For
 // tiling window managers"). E-34 ships `gruvbox-dark`; E-37 adds the other five and config.
+// The default is `catppuccin-mocha` (D-049 addendum 1, E-48). The terminal's background is
+// the theme's `bg`, the window's background too, in every theme.
+
+import type { ITheme } from "@xterm/xterm";
 
 export interface Theme {
   name: string;
@@ -89,14 +93,19 @@ export const GITHUB_LIGHT = theme("github-light", "#1f2328", "#ffffff", "#0969da
   "#57606a", "#a40e26", "#1a7f37", "#633c01", "#0550ae", "#6639ba", "#136061", "#8c959f",
 ], { barBg: "#eaeef2", barFg: "#1f2328", dim: "#59636e", barDim: "#4d5761", border: "#8c959f" });
 
+/** The theme when config.toml and Settings name none (D-049 addendum 1). */
+export const DEFAULT_THEME_NAME = "catppuccin-mocha";
+
 export const THEMES: ReadonlyMap<string, Theme> = new Map(
   [GRUVBOX_DARK, TOKYONIGHT, CATPPUCCIN_MOCHA, NORD, SOLARIZED_DARK, GITHUB_LIGHT].map((t) => [t.name, t]),
 );
 
+const DEFAULT_THEME: Theme = THEMES.get(DEFAULT_THEME_NAME) ?? GRUVBOX_DARK;
+
 /** A built-in theme with `[theme.custom]` colours laid over it (`fg`, `bg`, `accent`,
  *  `color0` … `color15`); the core has checked every value is `#rrggbb`. */
 export function resolveTheme(name: string, custom: Readonly<Record<string, string>> = {}): Theme {
-  const base = THEMES.get(name) ?? GRUVBOX_DARK;
+  const base = THEMES.get(name) ?? DEFAULT_THEME;
   const ansi = [...base.ansi];
   for (const [k, v] of Object.entries(custom)) {
     const n = /^color(\d+)$/.exec(k)?.[1];
@@ -155,4 +164,21 @@ export function luminance(hex: string): number {
 export function contrast(a: string, b: string): number {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
   return (hi + 0.05) / (lo + 0.05);
+}
+
+const ANSI_KEYS = [
+  "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+  "brightBlack", "brightRed", "brightGreen", "brightYellow",
+  "brightBlue", "brightMagenta", "brightCyan", "brightWhite",
+] as const;
+
+/** The theme's sixteen colours, given to xterm so chrome and terminal match. The
+ *  terminal's background is the theme's `bg`: the window's background (E-48). */
+export function xtermTheme(t: Theme): ITheme {
+  const out: ITheme = { foreground: t.fg, background: t.bg, cursor: t.fg, selectionBackground: t.barBg };
+  ANSI_KEYS.forEach((k, i) => {
+    const c = t.ansi[i];
+    if (c) out[k] = c;
+  });
+  return out;
 }

@@ -3,6 +3,7 @@
 // key table for `modes`, the font list. Pure: no DOM.
 
 import { isActionName } from "./actions.ts";
+import { terminalStack } from "./fonts.ts";
 import { DEFAULT_MODAL, DEFAULT_SIMPLE, type ActionCall, type KeyTable } from "./keymap.ts";
 
 export interface ConfigFile {
@@ -21,16 +22,16 @@ export interface ConfigView {
 
 export const DEFAULT_CONFIG: ConfigFile = {
   font: { family: "", size: 14 },
-  theme: { name: "gruvbox-dark", custom: {} },
+  theme: { name: "catppuccin-mocha", custom: {} },
   window: { decorations: true, opacity: 1, start: "dashboard" },
   keys: { escape: ["C-\\", "C-n"], leader: "Space", normal: {} },
   wsl: { distro: null },
 };
 
-/** The platform's monospace fonts when config.toml names none (W6 on Windows). */
-export function fontFamily(cfg: ConfigFile, windows: boolean): string {
-  if (cfg.font.family.trim()) return cfg.font.family;
-  return windows ? `"Cascadia Mono", Consolas, monospace` : `"JetBrains Mono", "DejaVu Sans Mono", Menlo, monospace`;
+/** The terminal font stack: config.toml's `font.family`, else the bundled JetBrains Mono,
+ *  with the bundled symbols font always in it (V3, D-051). */
+export function fontFamily(cfg: ConfigFile): string {
+  return terminalStack(cfg.font.family);
 }
 
 /** `"tab.goto 3"` → `{ name: "tab.goto", arg: "3" }`; the core already refused anything else. */

@@ -11,7 +11,6 @@ import { FONT_MAX, FONT_MIN, SettingsOverlay } from "./settings.tsx";
 import { Shell, type Handlers } from "./shell.tsx";
 import { THEMES, resolveTheme } from "./theme.ts";
 
-const WINDOWS = navigator.userAgent.includes("Windows");
 const LINE_HEIGHT = 1.25;
 
 export function App({
@@ -145,7 +144,7 @@ export function App({
     <Shell
       theme={theme}
       keys={keys}
-      fontFamily={fontFamily(cfg, WINDOWS)}
+      fontFamily={fontFamily(cfg)}
       fontSize={fontSize}
       lineHeight={LINE_HEIGHT}
       opacity={cfg.window.opacity}

@@ -6,34 +6,18 @@
 // more than 4 MiB behind. Pty bytes are untrusted: they go only into xterm. OSC 52 is not
 // implemented by xterm without an addon (none is loaded) and links open nothing.
 
-import { Terminal, type ITheme } from "@xterm/xterm";
+import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { concat, splitInput } from "./chunks.ts";
 import { Channel, ptyAck, ptyResize, ptyWrite, tabDetach, tabOpen, type Tab } from "./ipc.ts";
-import type { Theme } from "./theme.ts";
+import { xtermTheme, type Theme } from "./theme.ts";
 
 export interface TermOptions {
   fontFamily: string;
   fontSize: number;
   lineHeight: number;
   theme: Theme;
-}
-
-const ANSI_KEYS = [
-  "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
-  "brightBlack", "brightRed", "brightGreen", "brightYellow",
-  "brightBlue", "brightMagenta", "brightCyan", "brightWhite",
-] as const;
-
-/** The theme's sixteen colours, given to xterm so chrome and terminal match. */
-export function xtermTheme(t: Theme): ITheme {
-  const out: ITheme = { foreground: t.fg, background: t.bg, cursor: t.fg, selectionBackground: t.barBg };
-  ANSI_KEYS.forEach((k, i) => {
-    const c = t.ansi[i];
-    if (c) out[k] = c;
-  });
-  return out;
 }
 
 /** A tab's terminal: `rein start` in the project, restartable with Enter after it exits. */
@@ -80,12 +64,21 @@ export class TermTab {
     } catch {
       // no WebGL here: the DOM renderer is used
     }
+    // A face that finishes loading later (bold, italic, or a font.family the system loads
+    // late) would leave the glyph atlas drawn with a fallback: rebuild it (V3).
+    document.fonts?.addEventListener("loadingdone", this.#fontsLoaded);
     this.term.attachCustomKeyEventHandler((e) => this.keyFilter(e));
     this.term.onData((s) => this.#input(s));
     this.term.onResize(({ cols, rows }) => {
       if (this.#tab) ptyResize(this.#tab.pty, cols, rows).catch(() => {});
     });
   }
+
+  readonly #fontsLoaded = (): void => {
+    this.term.clearTextureAtlas();
+    this.term.refresh(0, this.term.rows - 1);
+    this.#fit.fit();
+  };
 
   get tab(): Tab | null {
     return this.#tab;
@@ -177,6 +170,7 @@ export class TermTab {
     cancelAnimationFrame(this.#frame);
     if (this.#tab) await tabDetach(this.#tab.id).catch(() => {});
     this.#tab = null;
+    document.fonts?.removeEventListener("loadingdone", this.#fontsLoaded);
     this.term.dispose();
     this.#el.replaceChildren();
   }

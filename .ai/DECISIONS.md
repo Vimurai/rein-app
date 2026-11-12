@@ -1778,3 +1778,26 @@ D-049 addendum 1 left the look of tmux to the user's own configuration; the oper
 
 ### Rollback
 Set `overlay = false` (or ship that as the default); delete the script and the Host method. Detaching always restores the user's look.
+
+## D-051 — Bundled terminal fonts: JetBrains Mono 2.304 and Symbols Nerd Font Mono 3.5.1 (E-48, dependency_gate, Engineer-recorded)
+
+**Date**: 2026-11-12
+**Task**: E-48 (desktop.md §Look and feel v2 V3; D-049: Nerd Font glyphs showed as empty boxes)
+**Decision**: ADOPT, as vendored font files (assets, no code), the upstream release files byte for byte:
+- **JetBrains Mono 2.304** (GitHub `JetBrains/JetBrainsMono` release v2.304, 2023-01-14; the latest release): `fonts/webfonts/JetBrainsMono-{Regular,Bold,Italic,BoldItalic}.woff2`, 380 768 B total; licence OFL-1.1 (`OFL.txt`).
+- **Symbols Nerd Font Mono 3.5.1** (GitHub `ryanoasis/nerd-fonts` release v3.5.1, 2026-08-21, `NerdFontsSymbolsOnly.zip`): `SymbolsNerdFontMono-Regular.ttf`, 2 610 012 B; licence MIT (`LICENSE`), the bundled icon sets under their own permissive licences as listed by the project.
+Total 2 990 780 B (2.85 MiB), within V3's 3 MiB budget. D-049 already rules that these fonts are bundled; this entry records versions, sources, sizes and sums. Operator, 2026-11-11: "don't ask me for permissions, just build it".
+
+### Why
+Default terminal fonts differ per machine, and Windows has no Nerd Font, so Powerline and icon glyphs from tmux, prompts and Claude Code render as empty boxes. A bundled primary font plus an always-appended symbols font draws them everywhere, whatever `font.family` says.
+
+### Alternatives considered
+1. **Ask the operator to install a Nerd Font** — the report is exactly that it is not installed; a default must work.
+2. **A patched "JetBrainsMono Nerd Font" only** — larger (≈ 2.4 MB per style, ≈ 9.5 MB for four) and only one family gets the icons; the symbols-only font serves any family.
+3. **Convert the symbols TTF to woff2** — about half the size, but needs a converter in the build and the sums would no longer equal upstream's file; the TTF fits the budget.
+
+### Security / maintenance
+Fonts are parsed by the WebView's font engine (WebView2 / WebKit), the same engine that parses any web font; they are served from the app itself (`default-src 'self'` covers `font-src`, CSP unchanged) and never fetched at run time. SHA-256 sums are kept in `ui/fonts/MANIFEST.sha256` and checked by a test. Both projects are maintained (Nerd Fonts released 2026-08; JetBrains Mono is stable and its 2.304 is the current release).
+
+### Rollback
+Delete `ui/fonts/` and the `@font-face` rules; the font stack falls back to the platform monospace fonts as before.

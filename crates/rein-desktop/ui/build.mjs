@@ -3,7 +3,7 @@
 // No inline script or style, so the CSP `default-src 'self'` holds (desktop.md §Security 1).
 import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generate } from "./gen-actions.mjs";
@@ -43,4 +43,10 @@ if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith
   await build({ ...ESBUILD, outdir: "dist" });
   buildTailwind("dist/tw.css");
   copyFileSync("index.html", "dist/index.html");
+  // The bundled terminal fonts (D-051) and their @font-face sheet.
+  mkdirSync("dist/fonts");
+  for (const f of readdirSync("fonts")) {
+    if (/\.(woff2|ttf)$/.test(f)) copyFileSync(`fonts/${f}`, `dist/fonts/${f}`);
+  }
+  copyFileSync("fonts/fonts.css", "dist/fonts.css");
 }

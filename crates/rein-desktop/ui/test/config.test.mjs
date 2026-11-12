@@ -27,7 +27,10 @@ test("config bindings, leader and escape chord reach the modes function", () => 
 });
 
 test("font: config.toml's family, else the platform's", () => {
-  assert.match(fontFamily(DEFAULT_CONFIG, true), /Cascadia Mono/);
-  assert.match(fontFamily(DEFAULT_CONFIG, false), /JetBrains Mono/);
-  assert.equal(fontFamily({ ...DEFAULT_CONFIG, font: { family: "Iosevka", size: 14 } }, true), "Iosevka");
+  // The bundled font is the default everywhere; the symbols font is always in the stack.
+  assert.equal(fontFamily(DEFAULT_CONFIG), '"JetBrains Mono", "Symbols Nerd Font Mono", monospace');
+  assert.equal(
+    fontFamily({ ...DEFAULT_CONFIG, font: { family: "Iosevka", size: 14 } }),
+    '"Iosevka", "Symbols Nerd Font Mono", monospace',
+  );
 });
