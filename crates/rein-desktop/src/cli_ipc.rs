@@ -94,7 +94,7 @@ pub fn with_overlay(view: &mut HealthView, failure: Option<String>) {
         view.checks.push(crate::cli::HealthCheck {
             id: "tmux_overlay".into(),
             status: "warn",
-            line: format!("tmux overlay not applied: {why}"),
+            line: crate::tmux_overlay::not_applied(&why),
             fix: None,
         });
     }

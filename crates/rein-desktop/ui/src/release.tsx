@@ -7,7 +7,8 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { Button, Kbd } from "../components/button.tsx";
 import { Dialog, DialogContent, DialogFooter } from "../components/dialog.tsx";
 import { healthBadge } from "./chrome.ts";
-import { CircleCheck, CircleHelp, CircleX, LoaderCircle, TriangleAlert } from "./icons.ts";
+import { Spinner } from "../components/loaders.tsx";
+import { CircleCheck, CircleHelp, CircleX, TriangleAlert } from "./icons.ts";
 import {
   Channel,
   profilesApply,
@@ -92,14 +93,18 @@ function StatusLine({ status, children }: { status: "ok" | "warn" | "fail" | "un
     ) : status === "fail" ? (
       <CircleX {...p} className={`${p.className} text-destructive`} />
     ) : status === "busy" ? (
-      <LoaderCircle {...p} className={`${p.className} text-muted-foreground`} />
+      <span className="mt-px flex size-[15px] shrink-0 items-center justify-center text-muted-foreground">
+        <Spinner size={14} />
+      </span>
     ) : (
       <CircleHelp {...p} className={`${p.className} text-muted-foreground`} />
     );
   return (
-    <div className="flex items-start gap-2">
+    <div className="flex items-start gap-2" aria-busy={status === "busy" || undefined}>
       {icon}
-      <div className="min-w-0">{children}</div>
+      <div className="min-w-0" role={status === "busy" ? "status" : undefined}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -226,6 +231,15 @@ export function ReleaseOverlay({
               {kind === "update" ? `Update to ${phase.check?.newest ?? "the newest"}` : "Undo last update"}
             </Button>
           </>
+        ) : phase.at === "running" ? (
+          // V7: the confirm button turns busy; nothing can be cancelled once a run started.
+          <>
+            <Button disabled>Cancel</Button>
+            <Button variant="primary" disabled aria-busy="true">
+              <Spinner size={14} />
+              {kind === "update" ? "Updating…" : "Rolling back…"}
+            </Button>
+          </>
         ) : phase.at === "done" ? (
           <Button variant="primary" autoFocus onClick={onClose}>
             Close
@@ -253,7 +267,6 @@ export function ReleaseOverlay({
         </>
       )}
       {(phase.at === "running" || phase.at === "done") && <Output lines={phase.lines} />}
-      {phase.at === "running" && <StatusLine status="busy">Running…</StatusLine>}
       {phase.at === "done" && (
         <StatusLine status={phase.code === 0 || phase.code === 10 ? "ok" : "fail"}>
           <span className="font-medium">{phase.note}</span>
@@ -315,11 +328,21 @@ export function ProfilesOverlay({ onClose, onCommand }: { onClose: () => void; o
       footer={
         plan && !result && !error ? (
           <>
+            {/* Cancel stays usable while applying, as before E-54 (V7: "where cancelling is possible today"). */}
             <Button autoFocus onClick={onClose}>
               Cancel
             </Button>
-            <Button variant="primary" onClick={apply} disabled={running}>
-              Apply to {plan.profiles.length} profile{plan.profiles.length === 1 ? "" : "s"}
+            <Button variant="primary" onClick={apply} disabled={running} aria-busy={running || undefined}>
+              {running ? (
+                <>
+                  <Spinner size={14} />
+                  Applying…
+                </>
+              ) : (
+                <>
+                  Apply to {plan.profiles.length} profile{plan.profiles.length === 1 ? "" : "s"}
+                </>
+              )}
             </Button>
           </>
         ) : (

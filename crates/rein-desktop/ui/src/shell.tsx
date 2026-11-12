@@ -21,7 +21,10 @@ import { describe as describeAction, menuEntries } from "./menu.ts";
 import { pasteNeedsQuestion } from "./paste.ts";
 import type { ActionName } from "./actions.ts";
 import { commonPrefix, complete, parse } from "./commands.ts";
-import { TOAST_MS, chromeOf, statusBar, titleBar } from "./chrome.ts";
+import { COPIED_MS, TOAST_MS, chromeOf, overlayNotice, statusBar, titleBar } from "./chrome.ts";
+import { ProgressLine } from "../components/loaders.tsx";
+import { Exit } from "../components/dialog.tsx";
+import { MOTION } from "./motion.ts";
 import { CommandPalette, StatusBar, TitleBar, Toast } from "./frame.tsx";
 import {
   clipboardRead,
@@ -98,6 +101,8 @@ const MAX_TABS = 16;
 
 /** One open tab: its terminal, its pane, and what the chrome shows for it. */
 interface OpenTab {
+  /** For the tab's life (the title bar keys its pill by it). */
+  id: number;
   term: TermTab;
   el: HTMLDivElement;
   /** As asked for (`:open`, a handoff), and canonical once open. */
@@ -107,6 +112,8 @@ interface OpenTab {
   open: boolean;
   /** `rein start` exited (Enter restarts it): a dot on the tab. */
   exited: boolean;
+  /** A failed tmux overlay was told in a toast already (V6: once per tab). */
+  overlayTold?: boolean;
 }
 
 export function Shell(props: ShellProps) {
@@ -121,11 +128,21 @@ export function Shell(props: ShellProps) {
   const [menuQuery, setMenuQuery] = useState("");
   /** A paste with several lines, waiting for its question (D-034). */
   const [pasteText, setPasteText] = useState<string | null>(null);
+  /** The last tab id handed out. */
+  const tabSeq = useRef(0);
   const [health, setHealth] = useState<HealthView | null>(null);
+  /** Health runs in flight (V7: the badge says `Checking…`); a count, as runs can overlap. */
+  const [healthRuns, setHealthRuns] = useState(0);
+  /** The recent projects have arrived once (V7: skeleton rows until then). */
+  const [recentLoaded, setRecentLoaded] = useState(false);
+  /** The copy icon shows a check for COPIED_MS after a copy (V7). */
+  const [copied, setCopied] = useState(0);
+  /** `:open` completion is asking the core for directories (V7). */
+  const [completing, setCompleting] = useState(false);
   const [modeView, setModeView] = useState<ModeState>({ mode: "NORMAL", pending: [] });
   const [cmdText, setCmdText] = useState("");
   /** The toast (V2): the last message, gone after 4 s. */
-  const [message, setMessage] = useState<{ text: string; error: boolean; seq: number } | null>(null);
+  const [message, setMessage] = useState<{ text: string; error: boolean; seq: number; leaving?: boolean } | null>(null);
   /** The last command shown (rule 4), as the status bar's chip. */
   const [lastCmd, setLastCmd] = useState<string | null>(null);
   const [whichKey, setWhichKey] = useState(false);
@@ -156,9 +173,44 @@ export function Shell(props: ShellProps) {
   );
   useEffect(() => {
     if (!message) return;
-    const t = setTimeout(() => setMessage((m) => (m?.seq === message.seq ? null : m)), TOAST_MS);
+    if (message.leaving) {
+      const t = setTimeout(() => setMessage((m) => (m?.seq === message.seq ? null : m)), MOTION.base);
+      return () => clearTimeout(t);
+    }
+    // Fades out over the last --motion-base (V7).
+    const t = setTimeout(() => setMessage((m) => (m?.seq === message.seq ? { ...m, leaving: true } : m)), TOAST_MS - MOTION.base);
     return () => clearTimeout(t);
   }, [message]);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(0), COPIED_MS);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  /** The tmux overlay (V6) for one open tab; a failure is told once for that tab (E-54), never
+   *  for a tab that closed meanwhile. */
+  const applyTmuxOverlay = useCallback(
+    (entry: OpenTab, id: number, colours: ReturnType<typeof tmuxColours>) =>
+      tabTmux(id, colours).then(
+        (why) => {
+          const open = tabs.current.includes(entry) && entry.term.tab?.id === id;
+          const text = overlayNotice(why, open, entry.overlayTold === true);
+          if (text === null) return;
+          entry.overlayTold = true;
+          say(text, true);
+        },
+        () => {},
+      ),
+    [say],
+  );
+
+  /** Run the install health check (fresh or cached), counting it as in flight while it runs. */
+  const checkHealth = useCallback((fresh: boolean) => {
+    setHealthRuns((n) => n + 1);
+    return healthGet(fresh)
+      .then(setHealth, () => {})
+      .finally(() => setHealthRuns((n) => n - 1));
+  }, []);
 
   // Theme and font (config.toml, `:theme`): the CSS variables every element reads and the open
   // terminal — restyled before paint.
@@ -183,8 +235,10 @@ export function Shell(props: ShellProps) {
   useEffect(() => {
     for (const t of tabs.current) {
       const tab = t.term.tab;
-      if (tab) void tabTmux(tab.id, tmuxColours(theme)).catch(() => {});
+      if (tab) void applyTmuxOverlay(t, tab.id, tmuxColours(theme));
     }
+    // `applyTmuxOverlay` only reads refs and `say`, which are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme, tmuxKey]);
 
   /** Show the exact command an action ran or stands for, as the status bar's chip; `y` and
@@ -252,9 +306,10 @@ export function Shell(props: ShellProps) {
       el.className = "term-pane";
       host.append(el);
       const term = new TermTab(el, project, { fontFamily, fontSize, lineHeight, theme });
-      const entry: OpenTab = { term, el, requested: project, project, title: project.split(/[/\\]/).pop() || "/", open: false, exited: false };
+      const entry: OpenTab = { id: ++tabSeq.current, term, el, requested: project, project, title: project.split(/[/\\]/).pop() || "/", open: false, exited: false };
       tabs.current.push(entry);
       term.keyFilter = (e) => terminalKeyRef.current(e);
+      term.onPhase = () => rerender(); // starting → running / exited (V7)
       term.onOpen = (opened) => {
         entry.open = true;
         entry.exited = false;
@@ -267,9 +322,7 @@ export function Shell(props: ShellProps) {
         // The window's tmux look on the session the tab shows (V6, D-050), then health —
         // which is checked when a tab opens (desktop.md §Components 5) and carries the
         // overlay's failure, if any.
-        void tabTmux(opened.id, tmuxColours(themeRef.current))
-          .catch(() => {})
-          .then(() => healthGet(true).then(setHealth, () => {}));
+        void applyTmuxOverlay(entry, opened.id, tmuxColours(themeRef.current)).then(() => checkHealth(true));
       };
       term.onError = (msg) => {
         void term.detach();
@@ -422,7 +475,7 @@ export function Shell(props: ShellProps) {
           setMode({ mode: "NORMAL", pending: [] });
           showCommand("rein doctor --scope install --json");
           setOverlay("health");
-          healthGet(true).then(setHealth, () => {});
+          void checkHealth(true);
           return;
         case "release.update":
         case "release.rollback":
@@ -446,7 +499,10 @@ export function Shell(props: ShellProps) {
             return;
           }
           clipboardWrite(cmd).then(
-            () => say(`copied: ${cmd}`),
+            () => {
+              setCopied(Date.now());
+              say(`copied: ${cmd}`);
+            },
             (e: { message?: string }) => say(`E: cannot copy: ${e.message ?? String(e)}`, true),
           );
           return;
@@ -505,7 +561,15 @@ export function Shell(props: ShellProps) {
     const base = cmdRef.current;
     const items = await complete(base, {
       themes: THEME_NAMES,
-      dirs: async (prefix) => (prefix.startsWith("/") ? dirComplete(prefix).catch(() => []) : []),
+      dirs: async (prefix) => {
+        if (!prefix.startsWith("/")) return [];
+        setCompleting(true);
+        try {
+          return await dirComplete(prefix).catch(() => []);
+        } finally {
+          setCompleting(false);
+        }
+      },
     });
     if (!items.length) return;
     const common = commonPrefix(items);
@@ -581,7 +645,7 @@ export function Shell(props: ShellProps) {
   // Core events: a child exited; a second start handed over a DIR.
   useEffect(() => {
     void listen<HealthView>("health_changed", setHealth);
-    healthGet(false).then(setHealth, () => {});
+    void checkHealth(false);
     void listen<{ id: number; code: number }>("pty_exit", ({ id, code }) => {
       const t = tabs.current.find((x) => x.term.tab?.pty === id);
       if (!t) return;
@@ -593,10 +657,12 @@ export function Shell(props: ShellProps) {
     projectsList().then(
       (list) => {
         setRecent(list);
+        setRecentLoaded(true);
         if (typeof startDir === "string") openRef.current(startDir);
         else if (startLast && list[0]) openRef.current(list[0].path);
       },
       () => {
+        setRecentLoaded(true);
         if (typeof startDir === "string") openRef.current(startDir);
       },
     );
@@ -607,12 +673,18 @@ export function Shell(props: ShellProps) {
   const termOpen = tabs.current.length > 0;
   const current = tabs.current[cur.current];
   const runner = { run, tip: (c: ActionCall) => describeAction(c, keys, otherTable) };
+  const now = performance.now();
+  const starting = (t: OpenTab | undefined) => t !== undefined && !t.exited && t.term.phase(now) === "starting";
   const bar = titleBar(
-    tabs.current.map((t, i) => ({ title: t.title, current: i === cur.current, exited: t.exited })),
+    tabs.current.map((t, i) => ({ id: t.id, title: t.title, current: i === cur.current, exited: t.exited, starting: starting(t) })),
     VERSION,
   );
   // The `simple` style has no modes, so no mode badge (D-034).
-  const status = statusBar(current ? current.project : null, health, lastCmd, keys.style === "modal" ? modeView.mode : null);
+  const status = statusBar(current ? current.project : null, health, lastCmd, keys.style === "modal" ? modeView.mode : null, {
+    starting: starting(current),
+    health: healthRuns > 0,
+    copied: copied > 0,
+  });
 
   // The stage is borderless and fills what the bars leave (V2): the terminal follows its size
   // in whole cells, centred; the window itself is never snapped to cells.
@@ -630,13 +702,17 @@ export function Shell(props: ShellProps) {
     <>
       <div id="frame" role="application" aria-label="rein-app" className="flex h-full flex-col">
         <TitleBar bar={bar} chrome={CHROME} r={runner} />
-        <div id="stage" className="relative min-h-0 flex-1">
+        <div id="stage" className="relative min-h-0 flex-1" aria-busy={status.starting || undefined}>
+          {/* V7: the tab is starting — a 2 px line in the stage's own top padding, never over
+              the terminal. */}
+          {status.starting && <ProgressLine className="absolute inset-x-0 top-0 z-10" />}
           {!termOpen && (
             <StartScreen
               model={startScreen(
                 recent,
                 health?.setup ? { reason: health.reason ?? "WSL is not ready", command: health.setup } : null,
                 Math.floor(Date.now() / 1000),
+                { loading: !recentLoaded, checking: healthRuns > 0 },
               )}
               r={runner}
             />
@@ -660,54 +736,70 @@ export function Shell(props: ShellProps) {
         <StatusBar bar={status} r={runner} />
       </div>
       <Toast message={message} />
-      {modeView.mode === "COMMAND" && <CommandPalette text={cmdText} items={completion.current?.items ?? []} />}
-      {overlay === "menu" && (
-        <MenuOverlay
-          entries={menuEntries(keys, otherTable, { tabs: tabs.current.length })}
-          initialQuery={menuQuery}
-          onRun={(c) => {
-            closeOverlay();
-            run(c);
-          }}
-          onClose={closeOverlay}
-        />
-      )}
-      {pasteText !== null && (
-        <PasteConfirm
-          text={pasteText}
-          onPaste={() => {
-            tab.current?.paste(pasteText);
-            setPasteText(null);
-            tab.current?.focus();
-          }}
-          onClose={() => {
-            setPasteText(null);
-            tab.current?.focus();
-          }}
-        />
-      )}
+      {/* Each overlay leaves with its exit animation (V7): `Exit` keeps it for --motion-fast. */}
+      <Exit
+        show={modeView.mode === "COMMAND"}
+        render={() => <CommandPalette text={cmdText} items={completion.current?.items ?? []} pending={completing} />}
+      />
+      <Exit
+        show={overlay === "menu"}
+        render={() => (
+          <MenuOverlay
+            entries={menuEntries(keys, otherTable, { tabs: tabs.current.length })}
+            initialQuery={menuQuery}
+            onRun={(c) => {
+              closeOverlay();
+              run(c);
+            }}
+            onClose={closeOverlay}
+          />
+        )}
+      />
+      <Exit
+        show={pasteText !== null}
+        render={() => (
+          <PasteConfirm
+            text={pasteText ?? ""}
+            onPaste={() => {
+              if (pasteText !== null) tab.current?.paste(pasteText);
+              setPasteText(null);
+              tab.current?.focus();
+            }}
+            onClose={() => {
+              setPasteText(null);
+              tab.current?.focus();
+            }}
+          />
+        )}
+      />
       {whichKey && <WhichKey leader={keys.leader} next={continuations(keys, modeView.pending)} />}
-      {overlay === "health" && <HealthOverlay health={health} onClose={closeOverlay} />}
-      {(overlay === "update" || overlay === "rollback") && (
-        <ReleaseOverlay kind={overlay} onClose={closeOverlay} onCommand={showCommand} />
-      )}
-      {overlay === "profiles" && <ProfilesOverlay onClose={closeOverlay} onCommand={showCommand} />}
-      {picker && (
-        <ProjectPicker
-          recent={recent}
-          onPick={(path) => {
-            setPicker(false);
-            open(path);
-          }}
-          onForget={(path) => {
-            projectsForget(path).then(setRecent, () => say(`E: cannot forget ${path}`, true));
-          }}
-          onClose={() => {
-            setPicker(false);
-            if (tabs.current.length) setMode({ mode: "TERMINAL", pending: [] });
-          }}
-        />
-      )}
+      <Exit show={overlay === "health"} render={() => <HealthOverlay health={health} onClose={closeOverlay} />} />
+      <Exit
+        show={overlay === "update" || overlay === "rollback"}
+        render={() => (
+          <ReleaseOverlay kind={overlay === "rollback" ? "rollback" : "update"} onClose={closeOverlay} onCommand={showCommand} />
+        )}
+      />
+      <Exit show={overlay === "profiles"} render={() => <ProfilesOverlay onClose={closeOverlay} onCommand={showCommand} />} />
+      <Exit
+        show={picker}
+        render={() => (
+          <ProjectPicker
+            recent={recent}
+            onPick={(path) => {
+              setPicker(false);
+              open(path);
+            }}
+            onForget={(path) => {
+              projectsForget(path).then(setRecent, () => say(`E: cannot forget ${path}`, true));
+            }}
+            onClose={() => {
+              setPicker(false);
+              if (tabs.current.length) setMode({ mode: "TERMINAL", pending: [] });
+            }}
+          />
+        )}
+      />
     </>
   );
 }

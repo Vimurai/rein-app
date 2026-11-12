@@ -24,16 +24,22 @@ export function titleInset(chrome: Chrome): number {
 }
 
 export interface TabView {
+  /** Stays the same for the tab's life (V7: a closed tab's neighbours are not re-drawn). */
+  id?: number;
   title: string;
   current: boolean;
   /** The pty has exited (`rein start` ended): a dot on the tab. */
   exited: boolean;
+  /** `rein start` has not drawn yet (V7 `tabPhase`): a spinner in place of the close icon. */
+  starting?: boolean;
 }
 
 export interface TabControl {
+  id: number;
   label: string;
   current: boolean;
   exited: boolean;
+  starting: boolean;
   /** Click: show the tab. */
   select: ActionCall;
   /** The close icon (on hover), and a middle click on the tab. */
@@ -51,9 +57,11 @@ export interface TitleBar {
 export function titleBar(tabs: readonly TabView[], version: string): TitleBar {
   return {
     tabs: tabs.map((t, i) => ({
+      id: t.id ?? i,
       label: t.title,
       current: t.current,
       exited: t.exited,
+      starting: t.starting === true,
       select: { name: "tab.goto", arg: String(i + 1) },
       close: { name: "tab.detach", arg: String(i + 1) },
     })),
@@ -65,8 +73,10 @@ export function titleBar(tabs: readonly TabView[], version: string): TitleBar {
 
 export type HealthIcon = "ok" | "warn" | "fail" | "unknown" | "checking";
 
-/** The status bar's health badge: an icon and plain words. */
-export function healthBadge(h: HealthView | null): { icon: HealthIcon; text: string } {
+/** The status bar's health badge: an icon and plain words. `busy`: a health run is in flight
+ *  (V7) — it says so, whatever the last result was. */
+export function healthBadge(h: HealthView | null, busy = false): { icon: HealthIcon; text: string } {
+  if (busy) return { icon: "checking", text: "Checking…" };
   switch (h?.status) {
     case "ok":
       return { icon: "ok", text: "Install OK" };
@@ -85,8 +95,11 @@ export interface StatusBar {
   /** The current tab's project path (dim); a click opens the project picker. */
   project: { text: string; action: ActionCall } | null;
   health: { icon: HealthIcon; text: string; action: ActionCall };
-  /** The last command (rule 4: the UI teaches the CLI) with a copy button. */
-  command: { text: string; copy: ActionCall } | null;
+  /** The last command (rule 4: the UI teaches the CLI) with a copy button; `copied`: the
+   *  icon is a check for a moment after a copy (V7). */
+  command: { text: string; copy: ActionCall; copied: boolean } | null;
+  /** The current tab is starting (V7): `Starting rein…` where the command chip sits. */
+  starting: boolean;
   /** Only in the `modal` input style. No clock: tmux shows one. */
   mode: string | null;
 }
@@ -104,14 +117,25 @@ export function statusBar(
   health: HealthView | null,
   lastCommand: string | null,
   mode: string | null,
+  busy: { starting?: boolean; health?: boolean; copied?: boolean } = {},
 ): StatusBar {
   return {
     project: project === null ? null : { text: tildePath(project), action: { name: "project.pick" } },
-    health: { ...healthBadge(health), action: { name: "health.show" } },
-    command: lastCommand === null ? null : { text: lastCommand, copy: { name: "cmd.yank" } },
+    health: { ...healthBadge(health, busy.health === true), action: { name: "health.show" } },
+    command: lastCommand === null ? null : { text: lastCommand, copy: { name: "cmd.yank" }, copied: busy.copied === true },
+    starting: busy.starting === true,
     mode,
   };
 }
 
+/** V6 (E-54): a tab's overlay that was not applied is told once, in a toast with the health
+ *  row's words — never for a tab that has closed, never twice for the same tab. `why`: what
+ *  `tab_tmux` answered; `open`: the tab is still open; `told`: this tab was told already. */
+export function overlayNotice(why: string | null, open: boolean, told: boolean): string | null {
+  return why !== null && open && !told ? why : null;
+}
+
 /** How long a toast stays (V2). */
 export const TOAST_MS = 4000;
+/** How long the copy icon shows a check after a copy (V7). */
+export const COPIED_MS = 1200;

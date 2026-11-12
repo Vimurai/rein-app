@@ -298,6 +298,15 @@ pub fn tab_open(
 pub fn projects_list(
     projects: State<'_, Arc<crate::projects::ProjectStore>>,
 ) -> Vec<crate::projects::RecentView> {
+    // Debug builds only: `REIN_DESKTOP_SLOW_LIST_MS` holds the answer back, so the start
+    // screen's skeleton rows (V7) can be looked at and screenshotted; release builds ignore it,
+    // as they do `REIN_DESKTOP_CHROME`.
+    #[cfg(debug_assertions)]
+    if let Some(ms) =
+        crate::dirs::process_env("REIN_DESKTOP_SLOW_LIST_MS").and_then(|v| v.parse::<u64>().ok())
+    {
+        std::thread::sleep(Duration::from_millis(ms.min(30_000)));
+    }
     projects.list()
 }
 
@@ -354,7 +363,8 @@ pub fn overlay_mode(ui: &crate::ui_store::UiView) -> String {
 /// session `tab` shows, in the active theme's `colours` — after the tab opens and on a
 /// theme or setting change. Only the colours come from the web side, each checked as
 /// `#rrggbb`; the mode comes from the settings. A failure is never an error here: tmux stays
-/// as the user has it and the health view says why.
+/// as the user has it, the health view says why, and the answer carries the same words so
+/// the window can say so once (V6, E-54) — `None` when applied or when the tab has closed.
 #[tauri::command(async)]
 pub fn tab_tmux(
     state: State<'_, Desktop>,
@@ -362,14 +372,17 @@ pub fn tab_tmux(
     config: State<'_, Arc<crate::config::ConfigService>>,
     tab: u32,
     colours: Colours,
-) -> Result<(), IpcError> {
+) -> Result<Option<String>, IpcError> {
     let mode = overlay_mode(&ui.view(&config.view()));
     // Colours first: a refusal here is the web side's mistake, not tmux's.
     tmux_overlay::args("/dev/pts/0", &mode, &colours).map_err(|why| err("bad_value", why))?;
-    if let Some(outcome) = state.tmux_overlay(tab, &mode, &colours) {
-        state.overlay.record(&outcome);
+    let outcome = state.tmux_overlay(tab, &mode, &colours);
+    if let Some(o) = &outcome {
+        state.overlay.record(o);
     }
-    Ok(())
+    Ok(outcome
+        .and_then(Result::err)
+        .map(|why| tmux_overlay::not_applied(&why)))
 }
 
 /// `config_get` (desktop.md §API, E-37): the active config, the file's path and the last

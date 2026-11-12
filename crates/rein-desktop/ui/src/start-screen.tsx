@@ -4,6 +4,7 @@
 // Windows when needed, and the key hints. What it shows comes from the pure `startScreen`.
 
 import { Button, Kbd } from "../components/button.tsx";
+import { Skeleton, Spinner } from "../components/loaders.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/tooltip.tsx";
 import type { Runner } from "./frame.tsx";
 import { TruncStart } from "./frame.tsx";
@@ -36,11 +37,18 @@ export function StartScreen({ model, r }: { model: Model; r: Runner }) {
                 {model.setup.command}
               </code>
             </div>
-            <div>
-              <Button size="sm" aria-label={r.tip(model.setup.again)} onClick={() => r.run(model.setup!.again)}>
-                Check again
-                <Kbd>c</Kbd>
-              </Button>
+            <div aria-busy={model.setup.checking || undefined}>
+              {model.setup.checking ? (
+                <span className="flex h-7 items-center gap-2 text-[12px] text-muted-foreground">
+                  <Spinner size={12} />
+                  <span role="status">Checking WSL…</span>
+                </span>
+              ) : (
+                <Button size="sm" aria-label={r.tip(model.setup.again)} onClick={() => r.run(model.setup!.again)}>
+                  Check again
+                  <Kbd>c</Kbd>
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -56,9 +64,23 @@ export function StartScreen({ model, r }: { model: Model; r: Runner }) {
           </Button>
         </div>
 
-        <section aria-label="Recent projects" className="grid gap-2">
+        <section aria-label="Recent projects" aria-busy={model.loading || undefined} className="grid gap-2">
           <h2 className="m-0 text-[12px] font-medium text-muted-foreground">Recent projects</h2>
-          {model.recent.length === 0 ? (
+          {model.loading ? (
+            <div className="grid gap-0.5">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex h-10 items-center gap-3 px-2">
+                  <Skeleton className="size-5" />
+                  <Skeleton className="h-3.5 w-28" />
+                  <Skeleton className="h-3 flex-1" />
+                  <Skeleton className="h-3 w-14" />
+                </div>
+              ))}
+              <span role="status" className="sr-only">
+                Loading recent projects…
+              </span>
+            </div>
+          ) : model.recent.length === 0 ? (
             <p className="m-0 rounded-lg border border-dashed border-border p-4 text-muted-foreground">
               No recent projects yet. Open one and it appears here.
             </p>
@@ -75,7 +97,7 @@ export function StartScreen({ model, r }: { model: Model; r: Runner }) {
                           aria-label={tip}
                           onClick={() => r.run(row.action)}
                           className={
-                            "flex h-10 w-full cursor-pointer items-center gap-3 rounded-md px-2 text-left outline-none transition-colors duration-150 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring " +
+                            "flex h-10 w-full cursor-pointer items-center gap-3 rounded-md px-2 text-left outline-none transition-colors duration-[var(--motion-base)] hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring " +
                             (row.missing ? "opacity-60" : "")
                           }
                         >

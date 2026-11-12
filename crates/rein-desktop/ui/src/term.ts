@@ -11,6 +11,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { concat, splitInput } from "./chunks.ts";
 import { Channel, ptyAck, ptyResize, ptyWrite, tabDetach, tabOpen, type Tab } from "./ipc.ts";
+import { START_BYTES, START_LIMIT_MS, tabPhase, type TabPhase } from "./phase.ts";
 import { PtySize } from "./pty-size.ts";
 import { xtermTheme, type Theme } from "./theme.ts";
 
@@ -40,6 +41,14 @@ export class TermTab {
   readonly #size = new PtySize((pty, cols, rows) => {
     ptyResize(pty, cols, rows).catch(() => {});
   });
+  /** What `tabPhase` reads (V7), since the last (re)start. */
+  #alt = false;
+  #bytes = 0;
+  #typed = false;
+  #startedAt = 0;
+  #limit: ReturnType<typeof setTimeout> | undefined;
+  /** The phase may have changed (alternate screen, 4 KiB, a key, the exit, 20 s). */
+  onPhase: () => void = () => {};
   /** Called with the tab once open, and with an error message if opening fails. */
   onOpen: (tab: Tab) => void = () => {};
   onError: (message: string) => void = () => {};
@@ -74,6 +83,16 @@ export class TermTab {
     document.fonts?.addEventListener("loadingdone", this.#fontsLoaded);
     this.term.attachCustomKeyEventHandler((e) => this.keyFilter(e));
     this.term.onData((s) => this.#input(s));
+    // A key or a paste from the user ends `starting` (V7). Not `onData`: xterm's own answers
+    // to terminal queries (tmux asks at attach) arrive there too, with no key pressed.
+    this.term.onKey(() => this.#userTyped());
+    // tmux has drawn: it switched the terminal to the alternate screen (V7).
+    this.term.buffer.onBufferChange((b) => {
+      if (b.type === "alternate" && !this.#alt) {
+        this.#alt = true;
+        this.onPhase();
+      }
+    });
     this.term.onResize(({ cols, rows }) => this.#size.resized(cols, rows));
   }
 
@@ -113,9 +132,27 @@ export class TermTab {
     return this.#tab;
   }
 
+  /** Starting, running or exited (V7 `tabPhase`), at `now` (`performance.now()`). */
+  phase(now: number): TabPhase {
+    return tabPhase({
+      altScreen: this.#alt,
+      bytes: this.#bytes,
+      typed: this.#typed,
+      exited: this.#exited,
+      elapsedMs: now - this.#startedAt,
+    });
+  }
+
   /** Start (or restart) `rein start` in the project, sized to the stage. */
   async start(): Promise<void> {
     this.#exited = false;
+    this.#alt = this.term.buffer.active.type === "alternate";
+    this.#bytes = 0;
+    this.#typed = false;
+    this.#startedAt = performance.now();
+    clearTimeout(this.#limit);
+    this.#limit = setTimeout(() => this.onPhase(), START_LIMIT_MS + 50);
+    this.onPhase();
     this.#owed = 0;
     const gen = ++this.#gen;
     cancelAnimationFrame(this.#frame);
@@ -169,7 +206,14 @@ export class TermTab {
   }
 
   paste(text: string): void {
+    this.#userTyped();
     this.term.paste(text);
+  }
+
+  #userTyped(): void {
+    if (this.#typed) return;
+    this.#typed = true;
+    this.onPhase();
   }
 
   focus(): void {
@@ -204,6 +248,8 @@ export class TermTab {
   /** The child exited: say so in the stage; Enter restarts it. */
   exited(code: number): void {
     this.#exited = true;
+    clearTimeout(this.#limit);
+    this.onPhase();
     // The core reports the exit after the last output; draw that output first.
     cancelAnimationFrame(this.#frame);
     this.#flush();
@@ -213,6 +259,7 @@ export class TermTab {
   /** Detach: close the pty (the tmux session keeps running) and drop the terminal. */
   async detach(): Promise<void> {
     this.#gen++; // a start still waiting for its first frame opens nothing
+    clearTimeout(this.#limit);
     this.#size.reset();
     cancelAnimationFrame(this.#frame);
     if (this.#tab) await tabDetach(this.#tab.id).catch(() => {});
@@ -239,6 +286,9 @@ export class TermTab {
   }
 
   #output(bytes: Uint8Array): void {
+    const before = this.#bytes;
+    this.#bytes += bytes.length;
+    if (before < START_BYTES && this.#bytes >= START_BYTES) this.onPhase();
     this.#queue.push(bytes);
     if (!this.#frame) this.#frame = requestAnimationFrame(() => this.#flush());
   }

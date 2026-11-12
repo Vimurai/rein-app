@@ -14,7 +14,18 @@ html, body {
   font-size: 13px;
   line-height: 1.4;
 }
-#root { height: 100%; }
+/* V7 (D-054): the motion tokens — every duration and curve below names one of these. */
+:root {
+  --motion-fast: 120ms;
+  --motion-base: 150ms;
+  --motion-slow: 220ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-spin: 800ms;
+  --loader-delay: 150ms;
+}
+/* The UI fades in once on first paint; the window behind it already has the theme's
+   background (Rust side), so there is no white flash. */
+#root { height: 100%; animation: rein-fade-in var(--motion-slow) var(--motion-ease); }
 /* The modal style's mode badge in the status bar (frame.tsx). */
 .mode-terminal { background: var(--mode-terminal); color: var(--bg); }
 .mode-normal { background: var(--mode-normal); color: var(--bg); }
@@ -32,9 +43,71 @@ html, body {
 #term .term-pane { position: absolute; inset: 0; overflow: hidden; }
 /* tmux keeps the scrollback; xterm's own scrollbar would only cover the last column. */
 #term .xterm .xterm-scrollable-element > .scrollbar { display: none; }
-/* V1: transitions are 120–150 ms, and none when the system asks for reduced motion. */
+/* V7 keyframes: transform and opacity only (the tab pill's width is the one exception). */
+@keyframes rein-hold { from, to { opacity: 0; } }
+@keyframes rein-spin { to { transform: rotate(360deg); } }
+@keyframes rein-sweep { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@keyframes rein-pulse { 50% { opacity: 0.45; } }
+@keyframes rein-fade-in { from { opacity: 0; } }
+@keyframes rein-fade-out { to { opacity: 0; } }
+@keyframes rein-pop-in { from { opacity: 0; transform: scale(0.98); } }
+@keyframes rein-drop-in { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes rein-rise-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes rein-grow-in { from { max-width: 0; opacity: 0; } to { max-width: 220px; } }
+@keyframes rein-pop-out { to { opacity: 0; transform: scale(0.98); } }
+
+/* The loading primitives (components/loaders.tsx). Each is held invisible for
+   --loader-delay first, so a wait shorter than that shows nothing. The hold is an animation,
+   so under reduced motion (no animations) a loader shows at once and stands still. */
+.spinner {
+  flex-shrink: 0;
+  animation: rein-hold var(--loader-delay) linear, rein-spin var(--motion-spin) linear var(--loader-delay) infinite;
+}
+.progress-line {
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+  animation: rein-hold var(--loader-delay) linear;
+}
+.progress-line > span {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 40%;
+  border-radius: 9999px;
+  background: var(--primary);
+  animation: rein-sweep 1100ms var(--motion-ease) var(--loader-delay) infinite;
+}
+.skeleton {
+  border-radius: 6px;
+  background: var(--muted);
+  animation: rein-hold var(--loader-delay) linear, rein-pulse 1200ms ease-in-out var(--loader-delay) infinite;
+}
+
+/* Enter and exit (V7 component 4). Radix marks open / closed state; it waits for an exit
+   animation before it unmounts a tooltip or a menu. */
+[data-slot="dialog-overlay"][data-state="open"] { animation: rein-fade-in var(--motion-slow) var(--motion-ease); }
+[data-slot="dialog-content"][data-state="open"] { animation: rein-pop-in var(--motion-slow) var(--motion-ease); }
+[data-slot="dialog-overlay"][data-state="closed"] { animation: rein-fade-out var(--motion-fast) var(--motion-ease) forwards; }
+[data-slot="dialog-content"][data-state="closed"] { animation: rein-pop-out var(--motion-fast) var(--motion-ease) forwards; }
+[data-slot="tooltip-content"][data-state$="open"],
+[data-slot="context-menu-content"][data-state="open"],
+[data-slot="select-content"][data-state="open"] { animation: rein-drop-in var(--motion-base) var(--motion-ease); }
+[data-slot="tooltip-content"][data-state="closed"],
+[data-slot="context-menu-content"][data-state="closed"],
+[data-slot="select-content"][data-state="closed"] { animation: rein-fade-out var(--motion-fast) var(--motion-ease) forwards; }
+.palette-in { animation: rein-pop-in var(--motion-slow) var(--motion-ease); }
+.palette-out { animation: rein-pop-out var(--motion-fast) var(--motion-ease) forwards; }
+.toast-in { animation: rein-rise-in var(--motion-base) var(--motion-ease); }
+.toast-out { animation: rein-fade-out var(--motion-base) var(--motion-ease) forwards; }
+.tab-in { animation: rein-grow-in var(--motion-base) var(--motion-ease); }
+.fade-in { animation: rein-fade-in var(--motion-base) var(--motion-ease); }
+
+/* V1 / V7: under reduced motion nothing moves — no animation, no transition. The labels
+   ("Starting rein…", "Checking…") carry the meaning; the progress line is a still line. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
+  .progress-line > span { width: 100%; transform: none; }
 }
 .hidden { display: none; }
 .fatal { position: absolute; z-index: 10; margin: 1em; color: #fb4934; background: #282828; white-space: pre-wrap; }

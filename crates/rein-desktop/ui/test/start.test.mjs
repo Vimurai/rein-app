@@ -26,7 +26,12 @@ test("open and check buttons, numbered recent projects, missing marked, five hin
   assert.deepEqual(startScreen([], null, NOW).recent, []);
   // Windows without WSL: the reason, the command and "check again" (E-45).
   const blocked = startScreen([], { reason: "WSL is not installed", command: "wsl --install" }, NOW);
-  assert.deepEqual(blocked.setup, { reason: "WSL is not installed", command: "wsl --install", again: { name: "health.show" } });
+  assert.deepEqual(blocked.setup, { reason: "WSL is not installed", command: "wsl --install", again: { name: "health.show" }, checking: false });
+  // V7 (E-54): the WSL card says it is checking while a check runs; the recent list shows
+  // skeleton rows until it has arrived.
+  assert.equal(startScreen([], { reason: "x", command: "y" }, NOW, { checking: true }).setup.checking, true);
+  assert.equal(startScreen([], null, NOW, { loading: true }).loading, true);
+  assert.equal(startScreen([], null, NOW).loading, false);
   // Newcomer path (D-034): opening a project and checking health are buttons as well as keys.
   const plain = startScreen([r(1)], null, NOW);
   assert.deepEqual(

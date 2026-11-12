@@ -13,7 +13,7 @@ export function SelectTrigger({ className, children, ...props }: ComponentProps<
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       className={cn(
-        "inline-flex h-8 min-w-48 items-center justify-between gap-2 rounded-md border border-border bg-background px-3 font-ui text-[13px] text-foreground outline-none transition-colors duration-150 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex h-8 min-w-48 items-center justify-between gap-2 rounded-md border border-border bg-background px-3 font-ui text-[13px] text-foreground outline-none transition-colors duration-[var(--motion-base)] hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
         className,
       )}
       {...props}

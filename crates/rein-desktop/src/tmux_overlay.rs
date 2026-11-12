@@ -140,6 +140,12 @@ pub fn run(
     }
 }
 
+/// The words for an overlay that was not applied: the health row and the window's toast say
+/// the same (V6).
+pub fn not_applied(why: &str) -> String {
+    format!("tmux overlay not applied: {why}")
+}
+
 /// A finished run as the host reports it: `Ok` when the script exited 0, else why not.
 pub fn outcome(run: io::Result<Option<i32>>) -> Result<(), String> {
     match run {

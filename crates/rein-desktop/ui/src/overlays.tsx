@@ -208,7 +208,7 @@ export function FirstRun({ onChoose }: { onChoose: (style: "simple" | "modal") =
       type="button"
       autoFocus={autoFocus}
       onClick={() => onChoose(style)}
-      className="flex flex-1 cursor-pointer flex-col items-start gap-3 rounded-lg border border-border bg-background p-4 text-left text-foreground outline-none transition-colors duration-150 hover:border-ring focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex flex-1 cursor-pointer flex-col items-start gap-3 rounded-lg border border-border bg-background p-4 text-left text-foreground outline-none transition-colors duration-[var(--motion-base)] hover:border-ring focus-visible:ring-2 focus-visible:ring-ring"
     >
       <span className="flex size-8 items-center justify-center rounded-md bg-muted text-foreground">
         {style === "simple" ? <MousePointerClick size={16} aria-hidden="true" /> : <Keyboard size={16} aria-hidden="true" />}

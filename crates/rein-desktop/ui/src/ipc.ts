@@ -137,9 +137,10 @@ export const projectChoose = () => invoke<string | null>("project_choose", {});
 /** Only from a user's paste action (desktop.md §Security 6). */
 export const clipboardRead = () => invoke<string>("clipboard_read", {});
 /** The tmux overlay (V6) for `tab`'s session in these colours; the mode is the settings'.
- *  Resolves even when tmux was left alone — the health view says why. */
+ *  Resolves even when tmux was left alone — the health view says why, and so does the answer. */
 export const tabTmux = (tab: number, colours: ReturnType<typeof import("./theme.ts").tmuxColours>) =>
-  invoke<void>("tab_tmux", { tab, colours });
+  // The health row's words when the overlay was not applied; null when it was or the tab closed.
+  invoke<string | null>("tab_tmux", { tab, colours });
 export const uiGet = () => invoke<UiView>("ui_get", {});
 export const uiSet = (field: string, value: unknown) => invoke<UiView>("ui_set", { field, value });
 

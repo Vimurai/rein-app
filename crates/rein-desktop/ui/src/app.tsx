@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fontFamily, keyTable, type ConfigView } from "./config.ts";
 import { clipboardWrite, configGet, listen, uiGet, uiSet, type UiView } from "./ipc.ts";
+import { Exit } from "../components/dialog.tsx";
 import { FirstRun } from "./overlays.tsx";
 import { FONT_MAX, FONT_MIN, SettingsOverlay } from "./settings.tsx";
 import { Shell, type Handlers } from "./shell.tsx";
@@ -160,8 +161,11 @@ export function App({
   return (
     <>
       {shell}
-      {ui && !ui.first_run_done && <FirstRun onChoose={(s) => void chooseStyle(s, true)} />}
-      {ui && settings && (
+      <Exit show={ui !== null && !ui.first_run_done} render={() => <FirstRun onChoose={(s) => void chooseStyle(s, true)} />} />
+      {ui && (
+        <Exit
+          show={settings}
+          render={() => (
         <SettingsOverlay
           ui={ui}
           onSet={(field, value) => void setField(field, value)}
@@ -175,6 +179,8 @@ export function App({
             setSettings(false);
             setSettingsNote(null);
           }}
+        />
+          )}
         />
       )}
     </>

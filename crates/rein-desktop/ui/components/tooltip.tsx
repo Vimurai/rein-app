@@ -1,5 +1,6 @@
 // shadcn/ui Tooltip, new-york look driven only by the theme tokens (desktop.md §Look and feel
-// v2 V2, E-50): a small rounded popover in the UI font. No entry animation (motion is E-54's).
+// v2 V2, E-50): a small rounded popover in the UI font. It drops in and fades out (V7,
+// E-54: the keyframes in src/style.css, keyed on Radix's data-state).
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type { ComponentProps } from "react";
 import { cn } from "../lib/utils.ts";

@@ -1,13 +1,13 @@
 // shadcn/ui Button, new-york look driven only by the theme tokens (desktop.md §Look and feel
 // v2 V1–V2, E-50): UI font, 6 px radius, a focus outline in the accent, set off from the
-// button so it still shows on a primary (accent) button.
+// button so it still shows on a primary (accent) button. A pressed button scales to 0.98 (V7).
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 import { cn } from "../lib/utils.ts";
 
 export const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-ui text-[13px] font-medium whitespace-nowrap select-none transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-ui text-[13px] font-medium whitespace-nowrap select-none transition-[color,background-color,border-color,scale] duration-[var(--motion-fast)] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {

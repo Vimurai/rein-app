@@ -142,3 +142,14 @@ test("a paste with a newline asks first; one line does not", async () => {
   assert.equal(pasteLines("make\nmake install\n"), 3);
   assert.equal(pasteLines("a\r\nb"), 2);
 });
+
+// V6 (E-54): a tmux overlay that was not applied is told once per tab, in a toast with the
+// health row's words; a tab that closed meanwhile, or one already told, gets none.
+test("a failed overlay is one toast; a closed tab none", async () => {
+  const { overlayNotice } = await import("../src/chrome.ts");
+  const why = "tmux overlay not applied: the tab's tmux client was not attached within 60 seconds";
+  assert.equal(overlayNotice(why, true, false), why, "failed, open, not told yet: one toast");
+  assert.equal(overlayNotice(why, true, true), null, "the same tab again (a theme change): none");
+  assert.equal(overlayNotice(why, false, false), null, "the tab closed: none");
+  assert.equal(overlayNotice(null, true, false), null, "applied: none");
+});

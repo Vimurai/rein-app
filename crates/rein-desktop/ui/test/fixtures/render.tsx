@@ -44,3 +44,34 @@ export function command(): string {
     </Command>,
   );
 }
+
+// E-54 (desktop.md V7 "Tests (V7)"): the start screen and a project tab's frame, idle and busy,
+// for the "an idle window runs no animation" check.
+import { StartScreen } from "../../src/start-screen.tsx";
+import { StatusBar, TitleBar } from "../../src/frame.tsx";
+import { startScreen } from "../../src/start.ts";
+import { statusBar, titleBar } from "../../src/chrome.ts";
+
+const runner = { run: () => {}, tip: (c: { name: string }) => c.name };
+const recent = [{ path: "/home/me/Dev/p", name: "p", last_opened: 1_800_000_000 - 7200, exists: true }];
+const ok = { status: "ok" as const, checks: [], reason: null, setup: null, taken_at: 0 };
+
+export function start(busy: boolean): string {
+  const model = startScreen(busy ? [] : recent, null, 1_800_000_000, { loading: busy });
+  return renderToString(
+    <TooltipProvider>
+      <StartScreen model={model} r={runner} />
+    </TooltipProvider>,
+  );
+}
+
+export function tab(busy: boolean): string {
+  const bar = titleBar([{ title: "p", current: true, exited: false, starting: busy }], "0.5.0");
+  const status = statusBar("/home/me/Dev/p", ok, "cd ~/Dev/p && rein start", null, { starting: busy, health: busy });
+  return renderToString(
+    <TooltipProvider>
+      <TitleBar bar={bar} chrome="linux" r={runner} />
+      <StatusBar bar={status} r={runner} />
+    </TooltipProvider>,
+  );
+}

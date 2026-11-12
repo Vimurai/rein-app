@@ -38,8 +38,11 @@ export interface StartRow {
 }
 
 export interface StartScreen {
-  /** Windows without WSL or without a distro (E-45): the reason and the command to run. */
-  setup: { reason: string; command: string; again: ActionCall } | null;
+  /** Windows without WSL or without a distro (E-45): the reason and the command to run;
+   *  `checking` while a check runs (V7: `Checking WSL…`). */
+  setup: { reason: string; command: string; again: ActionCall; checking: boolean } | null;
+  /** The recent projects have not arrived yet (V7: skeleton rows). */
+  loading: boolean;
   open: { label: string; action: ActionCall };
   check: { label: string; action: ActionCall };
   recent: StartRow[];
@@ -63,9 +66,11 @@ export function startScreen(
   recent: readonly RecentView[],
   setup: { reason: string; command: string } | null,
   now: number,
+  state: { loading?: boolean; checking?: boolean } = {},
 ): StartScreen {
   return {
-    setup: setup && { ...setup, again: { name: "health.show" } },
+    setup: setup && { ...setup, again: { name: "health.show" }, checking: state.checking === true },
+    loading: state.loading === true,
     open: { label: OPEN_LABEL, action: { name: "project.open" } },
     check: { label: CHECK_LABEL, action: { name: "health.show" } },
     recent: recent.slice(0, 9).map((r, i) => ({

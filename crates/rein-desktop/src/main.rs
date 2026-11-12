@@ -32,6 +32,7 @@ mod single_instance;
 mod single_instance;
 mod tmux_overlay;
 mod ui_store;
+mod window_bg;
 // The Windows host: plain Rust everywhere, so its tests run on every platform; only the
 // Windows build starts it.
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -174,6 +175,11 @@ fn platform_host(_distro: Option<String>) -> Box<dyn host::Host> {
     return Box::new(wsl_host::WslHost::system(_distro));
 }
 
+/// The window background's alpha for config.toml's `window.opacity` (0.6–1.0).
+fn window_alpha(opacity: f64) -> u8 {
+    (opacity.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let dir = match parse_args(&args, cfg!(windows)) {
@@ -213,12 +219,19 @@ fn main() -> ExitCode {
         &dirs::process_env,
     )));
     let start = config.view().config;
+    // The app's own settings (D-034): ui.json in the state directory. Opened here so the
+    // window can be created in the effective theme's background (V7: no white flash).
+    let ui_store = ui_store::UiStore::open(dirs::state_dir(&dirs::process_env));
+    let theme = ui_store.view(&config.view()).theme.value;
+    let (r, g, b) = window_bg::background(
+        theme.as_str().unwrap_or_default(),
+        start.theme.custom.get("bg").map(String::as_str),
+    );
     let builder = tauri::Builder::default()
         .manage(ipc::Desktop::new(platform_host(start.wsl.distro.clone())))
         .manage(std::sync::Arc::clone(&config))
         .manage(cli_ipc::CliState::default())
-        // The app's own settings (D-034): ui.json in the state directory.
-        .manage(ui_store::UiStore::open(dirs::state_dir(&dirs::process_env)))
+        .manage(ui_store)
         // Recent projects (E-38). On Windows they live inside WSL: not probed per row (W2).
         .manage(std::sync::Arc::new(projects::ProjectStore::open(
             dirs::state_dir(&dirs::process_env),
@@ -251,6 +264,13 @@ fn main() -> ExitCode {
             let window =
                 WebviewWindowBuilder::new(app, MAIN_WINDOW, WebviewUrl::App("index.html".into()))
                     .title("rein-app")
+                    // A transparent window (opacity < 1) keeps its transparency.
+                    .background_color(tauri::window::Color(
+                        r,
+                        g,
+                        b,
+                        window_alpha(start.window.opacity),
+                    ))
                     .inner_size(1100.0, 700.0)
                     .min_inner_size(480.0, 240.0)
                     .on_navigation(security::navigation_allowed)
