@@ -1529,3 +1529,28 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - An existing `ui.json` / `config.toml` that names a theme keeps it; only the default changes.
 ---
+
+---
+## Handoff — 2026-11-12 13:30 UTC
+**From**: Architect → Engineer
+**Trigger**: operator direction — the app brings its own tmux look while open (D-050); E-51 registered
+
+### What was built
+- `.ai/blueprints/desktop.md` §Look and feel v2 **V6** (tmux overlay), V4 last bullet superseded; `.ai/DECISIONS.md` D-050; `plans/rein-window-theme-request.md` rewritten as a notice to rein; `.ai/DIGEST.md`.
+
+### Decisions made
+- **D-050**: session-scoped style options from a closed list, set by one constant `sh` script on stdin (`sh -s -- <tty> <status mode> <colours…>`), undone by a `client-detached` hook. Session found by the client tty. `~/.tmux.conf` never opened.
+- Settings: `[tmux] overlay` (default true), `status` = `hidden` (default) | `app` | `keep`.
+- The "pick the theme your tmux uses" line I asked for in E-50 is **cancelled**; E-50 adds the two tmux rows to Settings instead.
+
+### Blueprint divergence (if any)
+- "The app never configures tmux" in §Core Concept is narrowed by D-050 ruling 2.
+
+### Next action needed
+- Order: E-47 → E-48 → **E-51** → E-49 → E-50.
+- E-51 first step: check whether `rein start` uses tmux's default server socket — stop and report if not.
+
+### Open risks
+- `#{hook_client}` and `source`-less application must be proven against the CI runner's tmux; record its version.
+- rein's Architect has not been told (no session reachable).
+---
