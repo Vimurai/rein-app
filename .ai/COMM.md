@@ -1554,3 +1554,26 @@ What on master now contradicts the contract (none of it was wrong when written �
 - `#{hook_client}` and `source`-less application must be proven against the CI runner's tmux; record its version.
 - rein's Architect has not been told (no session reachable).
 ---
+
+---
+## Handoff — 2026-11-12 14:20 UTC
+**From**: Architect → Engineer
+**Trigger**: operator screenshot 15:13 local — terminal is ~80 × 24 in the corner of a 2560 × 1440 window; "many issues, enhance everything". D-052; E-52 registered
+
+### What was built
+- `.ai/DECISIONS.md` D-052; `.ai/DIGEST.md`.
+
+### Decisions made
+- **E-52 now, before anything else** (stop E-48 follow-ups / E-51 where they are): the pty stays near 80 × 24. Icons render and the background is right, so the font work itself landed; the size regression arrived with it.
+- **Screens gate (D-052):** every window task saves screenshots of a real `rein start` tab at 2560 × 1440 and 1280 × 800 under `.ai/screens/<task>/`; I open them and reply before the task is DONE and before any installer goes to the operator. Applies to E-52, E-51, E-49, E-50.
+
+### Blueprint divergence (if any)
+- In the screenshot the chrome is still the old grid look (expected — E-49 / E-50 not built) and tmux shows the operator's own status line twice over (expected — E-51 not built).
+- The operator's desktop shows a tiling-style bar above the window; the window has no title bar there. Keep that in mind for E-49's custom title bar: it must look right both with and without our window buttons.
+
+### Next action needed
+- E-52 → send me the screenshots → installer to the operator → E-51 → E-49 → E-50, each through the screens gate.
+
+### Open risks
+- If the cause is not the resize path but tmux being limited by another client, report before changing anything about tmux.
+---
