@@ -617,12 +617,12 @@
     {
       "id": "E-41",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Implement the Settings overlay and the app-owned `ui.json`, per .ai/blueprints/desktop.md §Core Concept \"Two ways in\" (Settings paragraph), §Data Model (`ui.json`), §API `ui_get` / `ui_set`, §Security boundary 6 and D-034: store `{schema, input_style, theme, font_size, decorations, first_run_done}` in `$XDG_STATE_HOME/rein-app/ui.json` (temp file + rename; an unreadable file is ignored and the defaults apply); compute each effective setting as the `config.toml` value if set, else `ui.json`, else the default, and never write `config.toml`; build the overlay (menu → Settings, `:settings`) with input style, theme with live preview, font size, title bar on/off and an `Open config file location` button that shows and copies the path; show a row whose value comes from `config.toml` as \"set in config.toml\" and read-only, and refuse `ui_set` for it; `ui_set` accepts only the listed fields with type-checked values; add font zoom (`Ctrl+=`, `Ctrl+-`, `Ctrl+0`, `Ctrl`+wheel) saved to `ui.json`. Finish the window's acceptance: the pointer-parity test that walks the `Action` list and fails when an action has no menu entry or no binding in either key table, and a final `ux_reviewer` pass over the first-run screen, start screen, a project tab, the menu, Settings and every overlay in `gruvbox-dark` and `github-light` at 80×24 and 200×60 cells (text contrast ≥ 4.5:1). Acceptance: §Test Plan \"Pointer parity\" (all rows), \"Newcomer path\" and \"Screens\" green; `cargo test --workspace`, the web test run and hosted CI green.",
       "created_at": "2026-11-11T19:13:56.783Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-12T11:07:28.495Z",
+      "summary": "Settings overlay (menu, :settings, Ctrl+,) over app-owned ui.json: input style, theme with live preview (beats the session :theme), font size and zoom, title bar, config path shown i …[full in LOG.md]",
       "depends_on": [
         "E-37",
         "E-39",
@@ -630,7 +630,7 @@
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-12T10:44:03.729Z"
+      "updated_at": "2026-11-12T11:07:28.495Z"
     },
     {
       "id": "E-42",
@@ -1856,6 +1856,87 @@
       "timestamp": "2026-11-12T10:42:40.052Z",
       "summary": "[TIER_2] E-40 click-first layer: Blueprint aligned (ALIGN_PASS with conditions: Architect must ratify D-046 rfd-instead-of-dialog-plugin and fix its main-thread wording; exclude .ai/start.json from commit) + clean-code gate clear (CLEAN_WARN, 7 P2 warnings ignored)",
       "sha": "466958f18bacda2c350144c8f3d1a7ac8e41c58c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "VIBE_FAIL",
+      "agent": "ux_reviewer",
+      "task_id": "E-41",
+      "timestamp": "2026-11-12T10:53:45.691Z",
+      "summary": "26 screenshots reviewed (2 themes, 23/9 px). Grid, 1-px theme borders, [ text ] buttons and titles in the top border hold; contrast looks fine. Two P2s block a pass. (1) At 23 px checkhealth shows only 14 of about 36 rows and has no scrollbar or \"more\" marker, so a failing check could be hidden. (2) Overlay borders run through the middle of a cell row but the background starts only at the line, so stage text behind is cut in half (Settings, projects, first-run; both themes, both sizes). P3: Settings \"[ on]\" padding and uneven control widths; command line not inset like the statusline; wrapped health lines go back to column 0; no padding at the bottom of the first-run Modal card and the hint row; menu and Settings use different labels for input style. No P1.",
+      "sha": "81f254ee86675bdae64dc6f457b878cd2138deed",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "VIBE_CLEARED",
+      "agent": "ux_reviewer",
+      "task_id": "E-41",
+      "timestamp": "2026-11-12T11:00:17.501Z",
+      "summary": "E-41 re-review PASS. P2-1 fixed: the health list scrolls inside the dialog, is focusable, and rows have a hanging indent. P2-2 fixed: the --bg ring hides the stage glyphs the border cut, seen in final-build captures (gruvbox-dark settings and menu). P3s fixed: labels, switch text, first-run copy and gap, command-line inset. Caveat: the first-run, picker and light-settings captures were taken before the final build (dist 11:57:55), so recapture them. Remaining P3s only: switch widths differ, so the control shifts one cell on toggle; stale comment in switch.tsx; health has no visible scrollbar.",
+      "sha": "81f254ee86675bdae64dc6f457b878cd2138deed",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-41",
+      "timestamp": "2026-11-12T11:00:18.698Z",
+      "summary": "standards-checker PASS — 11 files clean (per-file validate), 0 errors, 0 warnings; largest file shell.tsx 742 lines; no cruft/secrets found",
+      "sha": "81f254ee86675bdae64dc6f457b878cd2138deed",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_FAIL",
+      "agent": "blueprint-aligner-mcp",
+      "task_id": "E-41",
+      "timestamp": "2026-11-12T11:00:30.972Z",
+      "summary": "[TIER_2] E-41 working tree vs desktop.md/D-034: aligner WARN only (ORPHANED_WORK ui_store.rs, false positive; covered by desktop.md §Data Model). Manual check finds deviations: (1) Settings [Open config file location] puts the path in the command row, which sits under the 85%-opaque dialog overlay, so the path is not legibly shown (E-41: shows and copies); (2) after a session :theme, Settings theme choice is masked (theme = themeName ?? ui.theme) and the select shows ui.theme, not the active theme, so no live preview; (3) acceptance missing: pointer-parity test (walk Action list vs menu + both key tables), Newcomer path, Screens ux_reviewer pass.",
+      "sha": "81f254ee86675bdae64dc6f457b878cd2138deed",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_WARN",
+      "agent": "critic_clean_code",
+      "task_id": "E-41",
+      "timestamp": "2026-11-12T11:04:28.637Z",
+      "summary": "E-41 manual review (scripts/standards.mjs absent; .rs/.tsx unchecked) — 0 errors, 1 warning (duplication: font.size config.toml guard message x3 in app.tsx:118-125). Files <=742 lines, no secrets, no non-test unwrap, no swallowed errors. Rust unwrap only in tests (ui_store.rs).",
+      "sha": "81f254ee86675bdae64dc6f457b878cd2138deed",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_FAIL",
+      "agent": "blueprint-aligner",
+      "task_id": "E-41",
+      "timestamp": "2026-11-12T11:05:14.281Z",
+      "summary": "[TIER_2] E-41 re-review: all 3 prior deviations fixed (path/refusals in role=status note inside Settings; Settings theme clears session :theme, select shows themeInUse; pointer-parity + newcomer tests exist, VIBE_CLEARED stamp present). One remaining deviation (P2): `:settings` command missing; COMMANDS in ui/src/commands.ts:15-27 has no \"settings\" entry though E-41 and desktop.md:136 require \"menu → Settings, `:settings`\". Fix: add [\"settings\", {action:\"settings.show\"}] plus a parse test and add `:settings` to the desktop.md:265 command list (Architect). Conditions (P3): recapture the first-run/picker/light-settings screens per the VIBE_CLEARED caveat; the newcomer test does not cover the mouse-only update path (pointer.test covers the version button -> release.update). Aligner WARN ORPHANED_WORK is a false positive.",
+      "sha": "81f254ee86675bdae64dc6f457b878cd2138deed",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-41",
+      "timestamp": "2026-11-12T11:06:42.404Z",
+      "summary": "E-41 pass 3: standards-checker PASS — 14 files clean, 0 errors, 0 warnings (9ms)",
+      "sha": "81f254ee86675bdae64dc6f457b878cd2138deed",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner-mcp",
+      "task_id": "E-41",
+      "timestamp": "2026-11-12T11:06:45.185Z",
+      "summary": "[TIER_2] E-41 pass 3: the last deviation is fixed. `:settings` is in COMMANDS (commands.ts:24) -> settings.show, which is wired in app.tsx:117 and actions.ts:26. A parse test and the command-list assertion were added (modes.test.mjs), and the web suite is 37/37 green. The aligner's WARN ORPHANED_WORK (ui_store.rs, switch.tsx, commands.ts) is a false positive, because desktop.md covers these files. Carried P3s: recapture the first-run/picker/light-settings screens per the VIBE_CLEARED caveat. Architect: add `:settings` to the desktop.md:265 command list.",
+      "sha": "81f254ee86675bdae64dc6f457b878cd2138deed",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-41",
+      "timestamp": "2026-11-12T11:06:51.668Z",
+      "summary": "[TIER_2] E-41 pass 3: blueprint aligned (ALIGN_PASS) and the clean-code gate is clear (CLEAN_PASS, 0 warnings). The `:settings` blocker is fixed and the web suite is 37/37. Open P3s: recapture the first-run/picker/light-settings screens (VIBE_CLEARED caveat). Architect: add `:settings` to the desktop.md:265 command list.",
+      "sha": "81f254ee86675bdae64dc6f457b878cd2138deed",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
