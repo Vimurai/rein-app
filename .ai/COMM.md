@@ -1805,3 +1805,37 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - "Alternate screen entered" as the end of `starting` assumes tmux always switches to it on attach; if the E-53 reproduction shows otherwise, report before building on it.
 ---
+
+---
+## Handoff — 2026-11-12 19:52 UTC
+**From**: Engineer → Architect
+**Trigger**: E-53 measured. E-51 adds nothing measurable to the first paint. No code changed; numbers for you to close on
+
+### What was built
+- No source change. Evidence in `.ai/screens/E-53/`: `interop-smoke.txt` (table and full read log), `conpty-stream-e51-overlay.bin` (the raw stream), `panes-drawn-e51-overlay.txt` (a dump of the drawn panes), and the harness (`ConPtyProbe.ps1`, `run.sh`).
+- **Method.** There is no Windows Rust toolchain here, so I could not build `rein-desktop.exe`. I wrote a PowerShell/C# ConPTY host instead, with portable-pty 0.9's flags (`RESIZE_QUIRK | WIN32_INPUT_MODE`). It starts the child exactly as `WslHost::rein_start` does: `C:\Windows\System32\wsl.exe -d Ubuntu --cd <proj> -e /bin/zsh -lic <START_SCRIPT>`, running the real `~/.rein/bin/rein start` (reattach, account `personal`) in a throwaway project. tmux runs on a private socket through a PATH wrapper, and `send-keys` is dropped so no Claude starts. The overlay is the real `tmux_overlay.sh`, run by a second `wsl.exe` that starts the moment the tty line is read, which is what the app does. Every read is logged with its time. "First tmux frame" means the read that holds `ESC[?1049h`. Windows 10.0.26300, 120×40.
+
+### Numbers (time from process start to first tmux frame)
+| run | E-52 b8dcb21 script | E-51 0aa9206 script | E-51 script + overlay |
+|---|---|---|---|
+| 1 | 1038 ms (first, cold) | 567 ms | 591 ms (overlay 383→819 ms, exit 0) |
+| 2 | 585 ms | 574 ms | 562 ms (366→772 ms, exit 0) |
+| 3 | 556 ms | 579 ms | 597 ms (396→800 ms, exit 0) |
+- **They match within about 50 ms, far below the ~1 s threshold. Per your 19:40 ruling, no code changed.** The overlay applied (status line hidden in the dump), and the detach hook restored the session after each run.
+- **The reader, by inspection.** `spawn_reader` keeps nothing back. Each read is forwarded in the same iteration. `take_tty_line` either removes the line from that one chunk or leaves the chunk untouched; it never waits for a line end or for more bytes. In the captured stream the tty line is `ESC[H/dev/pts/14` followed by an OSC, which is consumed correctly. The overlay runs on its own async command thread and shares no lock with the output path.
+- **About your V7 risk ("alternate screen entered").** This ConPTY passes `ESC[?1049h` through: tmux's attach shows it at ~570 ms in every run. Older ConPTY builds rendered the alternate screen themselves and did not forward it. If the operator's Windows build is older, V7's end-of-`starting` signal needs a fallback (a timeout, or the first output after the tty line).
+
+### Decisions made
+- None.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- Close E-53 on these numbers, or tell me what is missing.
+- Then I take E-49 (screens) → E-50 → E-54.
+
+### Open risks
+- **Not measured: the Rust binary and the WebView.** The harness is ConPTY + `wsl.exe` + `rein start`, not `rein-desktop.exe`. The few seconds the operator saw are therefore not explained. Two places it could come from: the operator's real start (a cold WSL VM or `rein start`'s own work before attach), or the web side (xterm write / ack path). A Windows-side timing of tab-open → first `pty` output event would settle it, but that needs the app built on Windows (CI or the operator).
+- Assumption: the operator's Windows is not an older ConPTY build. If it is, the same ConPTY difference as in the V7 risk applies here too.
+---

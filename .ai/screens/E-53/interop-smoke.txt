@@ -1,0 +1,49 @@
+# E-53 interop smoke — 2026-11-12 19:38 UTC, Windows 10.0.26300.0, WSL Ubuntu, tmux tmux 3.6
+# ConPTY (flags 0x6 = portable-pty 0.9) -> C:\Windows\System32\wsl.exe -d Ubuntu --cd <proj> -e /bin/zsh -lic <START_SCRIPT>; real ~/.rein/bin/rein start (reattach, account personal)
+# private tmux socket (wrapper on PATH, send-keys dropped so no Claude starts); 120x40
+# 'first tmux frame' = time of the read holding ESC[?1049h, from process start
+r1_e52   E-52 b8dcb21 script          first frame  1038 ms  
+r2_e52   E-52 b8dcb21 script          first frame   585 ms  
+r3_e52   E-52 b8dcb21 script          first frame   556 ms  
+r1_e51   E-51 0aa9206 script          first frame   567 ms  
+r2_e51   E-51 0aa9206 script          first frame   574 ms  
+r3_e51   E-51 0aa9206 script          first frame   579 ms  
+r1_ov    E-51 script + overlay run    first frame   591 ms  383 ms  tty /dev/pts/14; overlay started; 819 ms  overlay exited 0
+r2_ov    E-51 script + overlay run    first frame   562 ms  366 ms  tty /dev/pts/14; overlay started; 772 ms  overlay exited 0
+r3_ov    E-51 script + overlay run    first frame   597 ms  396 ms  tty /dev/pts/14; overlay started; 800 ms  overlay exited 0
+
+## full read log, r1_ov
+     17 ms  read     16 bytes at 0
+    383 ms  read     65 bytes at 16
+    383 ms  tty /dev/pts/14; overlay started
+    516 ms  read     51 bytes at 81
+    591 ms  read    180 bytes at 132
+    592 ms  read    221 bytes at 312
+    592 ms  read      5 bytes at 533
+    593 ms  read    103 bytes at 538
+    595 ms  read    162 bytes at 641
+    595 ms  read      5 bytes at 803
+    612 ms  read   4920 bytes at 808
+    623 ms  read      5 bytes at 5728
+    627 ms  read    448 bytes at 5733
+    760 ms  read      5 bytes at 6181
+    760 ms  read   4859 bytes at 6186
+    763 ms  read      5 bytes at 11045
+    768 ms  read      5 bytes at 11050
+    771 ms  read      5 bytes at 11055
+    776 ms  read      5 bytes at 11060
+    779 ms  read      5 bytes at 11065
+    783 ms  read   3390 bytes at 11070
+    785 ms  read      5 bytes at 14460
+    787 ms  read      5 bytes at 14465
+    793 ms  read      5 bytes at 14470
+    795 ms  read      5 bytes at 14475
+    798 ms  read   3390 bytes at 14480
+    801 ms  read      5 bytes at 17870
+    804 ms  read      5 bytes at 17875
+    806 ms  read      5 bytes at 17880
+    809 ms  read      5 bytes at 17885
+    814 ms  read   3077 bytes at 17890
+    819 ms  overlay exited 0 
+  14012 ms  END
+  14016 ms  read     19 bytes at 20967
