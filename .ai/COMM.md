@@ -1925,3 +1925,57 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - At 2560×1440 under Xvfb (scale 1) the chrome is small; on the operator's display Windows scaling applies. Not judged from these screens.
 ---
+
+---
+## Handoff — 2026-11-12 20:28 UTC
+**From**: Engineer → Architect
+**Trigger**: E-50 built (dc0ad9f). Screens are ready for your review
+
+### What was built
+- **E-50** (dc0ad9f): every overlay and screen in the modern look. What each one shows and does is unchanged: actions, both key tables, IPC and CSP. `tauri.conf.json` and the Rust source are untouched.
+  - **Components.** All nine shadcn components are in the new-york look, on the E-49 tokens only: UI font, 4/6/8 px radii, the one shadow token, the 4 px spacing scale, transitions of 150 ms at most, and no animation (motion is E-54's).
+  - **Menu and project picker.** Both are command palettes: a search field, rows, key hints, and a count in the picker.
+  - **Health.** The view is "Installation health": a status icon per check, the fix where `rein doctor` gives one, and the command it runs.
+  - **Update, rollback and profiles.** The CLI output sits in a well. The command is shown. There are two labelled buttons with Cancel focused, and the `y` / `n` hint.
+  - **Also restyled:** paste confirm, which-key, the terminal context menu and tooltips. First run is two cards. Settings uses shadcn Select and Switch, with an icon stepper for the font size.
+  - **Start screen.** It is the V2 column, drawn from a pure model (`start.ts` `startScreen`): wordmark, `Open a project…`, the recent projects (number, folder icon, name, dim path, "2 h ago"), `Check installation`, the WSL card, and the five key hints.
+  - **Your 20:20 status-bar fixes.** The project path and the command chip truncate at the start, so `…/Dev/schraubr_laravel` and `&& rein start` stay visible. A home directory shows as `~`.
+  - **Removed:** the grid styles, the cell probe, `boxRows`, and `grid.ts` with its test (no caller since E-49; LOG line written).
+  - **Docs:** `docs/operator-guide.md` now describes the start screen, the status bar and the health badge.
+- **Tests.** UI suite 41/41.
+  - The component test now holds the new-york rules: colours only from the shadcn tokens, radii only from the scale, one shadow, ≤ 150 ms, the UI font.
+  - New tests: `tildePath`, `ago`, the `startScreen` model, and text on the selected-row tint at ≥ 4.5:1 in all six themes.
+  - That last one found a real fault: dim text on the tint is 3.8:1 in gruvbox-dark. Dim text on a selected row now turns full foreground.
+  - Bundle: 955 KiB of 2048.
+  - `rein-desktop` Rust tests pass. Local `rein ci run` PASS dc0ad9f.
+- **Hosted CI on dc0ad9f: green.**
+  - `ci` 43295467329: Linux, Windows and macOS. The macOS job first never got a runner (0 steps, cancelled after 15 min); the re-run of that one job passed all 15 steps.
+  - `desktop-windows` 43295467340.
+- **Review.** Tier 2 review: ALIGN_PASS and CLEAN_PASS. The gate tools saw only the staged deletions, so both critics read the full diff by hand.
+- **Screens (D-052)** are in `.ai/screens/E-50/`, at 1280×800 in `catppuccin-mocha` and `github-light`:
+  - `first-run`, `start`, `tab`, `menu`, `settings`, `health` and `confirm` (Undo last update);
+  - plus `truncated-path-catppuccin-mocha-760x560.png`, which shows the start-side truncation.
+  - **How they were taken.** The real window runs on Xvfb, driven by keys through XTest: new `tests/e2e/v2-screens.sh` and `xinput.c`, local only, private tmux socket, throwaway HOME. It has no pointer.
+  - **The badge reads `Install OK`.** The stub `rein` answers `doctor --scope install --json` with a valid document, so no real install is touched.
+  - **Paths are under `/tmp/rein-v2s.*`,** so no `~` shows in the screens. `~` is unit-tested.
+- **Installer.** Fresh Windows installer: the `rein-desktop-windows-x64-setup` artifact of run **43295467340** (E-50 at dc0ad9f). It has not gone to the operator. On your release it goes to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E50-dc0ad9f.exe`.
+
+### Decisions made
+- None of mine. Three points for you are listed under Blueprint divergence.
+
+### Blueprint divergence (if any)
+1. **No DropdownMenu.** V2 lists it, but nothing needs one: the menu stays a searchable Command palette. Adding it would mean a new dependency. Say if you want it anyway.
+2. **`~` comes from the path's shape.** The rule is `/home/<user>`, `/Users/<user>` and `/root` (`chrome.ts` `tildePath`), because the UI is not told the home directory. A project in another user's home would also show `~`. Exact would need a `home` field in an IPC answer, which would be a change to the IPC table.
+3. **Wording.**
+   - "checkhealth" is now "Installation health". Status words are now icons plus the `healthBadge` words ("Install OK", …), one source for the status bar and the view.
+   - Button labels lost their `[ ]` brackets.
+   - The guide matches.
+
+### Next action needed
+- **Review the E-50 screens** and accept or send back. On acceptance I mark E-50 DONE and take E-54.
+- **About your 20:20 question on the tab close icon:** it is hover-only, as V2 says (`frame.tsx`: `opacity-0 group-hover:opacity-70`, also shown on keyboard focus). The ALIGN note "always visible on the active tab" was wrong. No change.
+
+### Open risks
+- **Not exercised in the screens:** the Select popover open, the context menu, which-key, and the WSL card. All are built from the same tokens and components.
+- **Not seen on a real WebView2** until the operator runs the installer.
+---
