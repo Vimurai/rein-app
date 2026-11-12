@@ -100,14 +100,24 @@ fn try_acquire(sock: &Path, handoff: Option<&str>) -> std::io::Result<Instance> 
     }
     match UnixStream::connect(sock) {
         Ok(mut s) => {
-            s.write_all(format!("{}\n", handoff.unwrap_or("")).as_bytes())?;
-            // Wait for the window's one-byte reply before closing. A client that closes
-            // before the window reaches `accept` can lose its connection (ECONNABORTED on
-            // macOS), and the reply means "handed off" is true when this returns.
-            s.set_read_timeout(Some(READ_TIMEOUT))?;
-            let mut ack = [0u8; 1];
-            s.read_exact(&mut ack)?;
-            Ok(Instance::HandedOff)
+            let mut hand_off = || -> std::io::Result<()> {
+                s.set_read_timeout(Some(READ_TIMEOUT))?;
+                s.write_all(format!("{}\n", handoff.unwrap_or("")).as_bytes())?;
+                // Wait for the window's one-byte reply before closing. A client that closes
+                // before the window reaches `accept` can lose its connection (ECONNABORTED
+                // on macOS), and the reply means "handed off" is true when this returns.
+                let mut ack = [0u8; 1];
+                s.read_exact(&mut ack)
+            };
+            match hand_off() {
+                Ok(()) => Ok(Instance::HandedOff),
+                // macOS: setsockopt on a socket whose peer already closed is EINVAL, not a
+                // reset. On a stream that connected, it means the window went away.
+                Err(e) if e.kind() == std::io::ErrorKind::InvalidInput => {
+                    Err(std::io::Error::new(std::io::ErrorKind::ConnectionReset, e))
+                }
+                Err(e) => Err(e),
+            }
         }
         // A socket file with nobody listening: left by a window that crashed or closed.
         // Removing it can race another start doing the same; a missing file is fine.
