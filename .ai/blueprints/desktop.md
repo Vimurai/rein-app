@@ -650,6 +650,113 @@ IPC and capability tests unchanged; screens gate (D-052) with the loaders frozen
 **Rollback (V7).** Presentation only: revert the task's UI commit; the tokens and the three
 primitives have no other users. The window background colour can stay.
 
+### V8. The app's own tmux server (revision 2026-11-12, D-055)
+Operator report on the E-54 build: the tab still picks up the tmux **plugins** from their
+own config. Direction: inside rein-app, tmux is in rein-app's scope — none of the user's
+tmux config or plugins applies. (Later, not in this revision: plugins from rein's own
+list, switched on and off in Settings.)
+
+**Why the overlay (V6) cannot do this.** tmux reads its config and starts plugins once,
+when the *server* starts, for every session on it. Session options can hide what a plugin
+draws; they cannot stop the plugin's scripts, key bindings and hooks.
+
+**Core concept: sessions opened in the window live on a separate tmux server that has
+never read the user's config.** The server is the tmux socket named `rein-app`, started
+with rein-app's own config file. The user's own tmux server, `~/.tmux.conf`, plugins and
+sessions are not touched, and `rein start` in an ordinary terminal behaves as before.
+
+**How, without changing rein.** `rein start` runs plain `tmux` (no socket or config
+option; checked in rein 0.5.0). tmux offers no environment variable for the config file,
+so the window puts a small **shim named `tmux`** first on the `PATH` of the tab's process.
+Every `tmux` that `rein start` — and anything in the panes — runs goes through it and
+reaches the app's server. This is the same technique the E-53 / E-56 harness already uses
+with the real `rein start`. A native option in rein (a socket and config named through
+the contract) is requested in `plans/rein-tmux-server-request.md`; when rein ships it the
+shim is dropped.
+
+**Components**
+1. **Tmux home** — the directory `${XDG_STATE_HOME:-$HOME/.local/state}/rein-app/tmux/`
+   (inside WSL on Windows), mode 0700, holding exactly two files written by the app:
+   `bin/tmux` (the shim, 0700) and `tmux.conf` (0600). Both have constant content
+   compiled into the app; they are rewritten (write to a temporary name, rename) whenever
+   they differ. Nothing else is ever read from or written to this directory.
+2. **Shim** (`bin/tmux`, POSIX `sh`, constant). It finds the real `tmux` as the first
+   `tmux` on `PATH` that is not itself, then `exec`s it with `-L rein-app -f <tmux.conf>`
+   before the caller's arguments. If the caller already passed `-L` or `-S`, the arguments
+   go through unchanged. No real tmux → exit 127 with one line on stderr. It reads no
+   other input and never evaluates text.
+3. **Start script** (replaces V6's `tty; exec ~/.rein/bin/rein start`; one constant POSIX
+   script for Linux, macOS and WSL): refuse to continue (exit 126, one line) unless the
+   tmux home is owned by the user and not writable by group or others; ensure the two
+   files; `unset TMUX TMUX_PANE`; prepend `<tmux home>/bin` to `PATH`; print the tty line
+   on Windows as today; `exec ~/.rein/bin/rein start`.
+4. **App config** (`tmux.conf`, a closed list — no `run-shell`, `source-file`, `if-shell`,
+   hook or plugin line): `default-terminal "tmux-256color"`, RGB `terminal-features`,
+   `mouse on`, `escape-time 10`, `focus-events on`, `history-limit 50000`,
+   `set-clipboard on`, `status off`. Everything else is tmux's default (prefix `C-b`).
+   rein's own pane-border lines are set by `rein start` and are not touched.
+5. **Overlay and every other tmux call of the app** (V6's script, the detach hook) use the
+   same server: the real tmux with `-L rein-app`. V6's rules are otherwise unchanged; the
+   "put the user's values back" step now restores the app config's values.
+6. **Setting** `[tmux] server = "app" | "user"` in `config.toml` and Settings ("tmux
+   server: rein-app's own / my own"), default `app`. `user` is today's behaviour: no shim,
+   the user's default server, V6 overlay on top. A change applies to tabs opened after it.
+
+**Data model.** One new enum value pair in `config.toml` / `ui.json` (`tmux.server`). Two
+constant files in the tmux home. No session name, socket path or plugin list is stored.
+
+**Interface contracts.** No IPC command is added. `settings_get` / `settings_set` carry
+the new key under the existing closed key list (the key-list test gains it). The start
+script and shim are constants; the only values put into them are the tmux home path and,
+on Windows, nothing new. From an ordinary terminal the app's sessions are reached with
+`tmux -L rein-app attach` (operator guide).
+
+**Security (Tier 3).** A directory is put first on `PATH` and a script in it runs for
+every `tmux` call, so: the directory and files are created 0700 / 0700 / 0600 with
+`umask 077`; the start script refuses a tmux home it does not own or that others can
+write, and refuses a symlinked home or `bin`; file contents are compiled constants,
+compared and rewritten on every start, so an edited shim does not survive; the shim takes
+nothing from the environment except `PATH` and `HOME` / `XDG_STATE_HOME`; a path with a
+newline or a quote in it is refused rather than escaped. The app config contains no
+command-running line, and the test that asserts this reads the file itself. On Windows
+the process list is still only `wsl.exe` with constant scripts. No network. `security_engineer`
+review required.
+
+**Execution constraints.** The file check adds no measurable start time (two small
+reads). The tab's output never waits on it beyond the script's own run. The app's server
+keeps running after the window closes, like the user's did — sessions survive. The app
+never kills the server.
+
+**Known limits.**
+- A project that already has a session on the user's own tmux server (started before
+  this change, or by `rein start` in a terminal) is **not** found by the window any
+  more: opening it in the window starts a second session, with a second Architect and
+  Engineer, on the app's server. The window cannot detect this without rein's session
+  rules. The operator guide says so; the request to rein asks for a way to detect it.
+- `tmux ls` in an ordinary terminal does not list the window's sessions.
+- The user's prefix key, bindings and mouse settings do not apply in the window.
+- The shim covers programs started from the tab. A program that calls tmux by absolute
+  path bypasses it and reaches the user's server.
+
+**Tests (V8).** Shim: real-tmux lookup skips itself; `-L` / `-S` pass through; exit 127
+without tmux; config has no command-running line. Start script: refuses a home that is
+group-writable, not owned, or a symlink; rewrites an edited shim. End to end
+(`tests/e2e/`, Linux + macOS in CI): with a user `~/.tmux.conf` that sets a marker option,
+binds a key and has a `run-shell` plugin line that creates a file — after a tab starts,
+the session is on the `rein-app` socket, the marker and binding are absent, the file was
+not created, and no session was added to the default server; with `server = "user"` all
+three are present. The V6 overlay cases run against the app's server. Windows: the E-53
+harness through `wsl.exe` with the operator's own config, fresh start, dump under the
+task's screens folder. Screens gate (D-052) with the operator's config in place.
+
+**Rollback (V8).** Set `tmux.server = "user"` (per user, no rebuild), or revert the task's
+commit; the tmux home can be deleted at any time and is recreated. Sessions on the app's
+server keep running and are reachable with `tmux -L rein-app`.
+
+**Deferred: rein's plugins.** A later revision adds tmux plugins from a fixed list
+published by the rein project (pinned commits, checked before use, on/off in Settings,
+loaded only into the app's server). Nothing in V8 downloads or loads a plugin.
+
 ### Tests (v2)
 - Token function: contrast ≥ 4.5:1 for every text pair in every theme; the default theme is
   `catppuccin-mocha`.

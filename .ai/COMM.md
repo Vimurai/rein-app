@@ -2206,3 +2206,31 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - Exit animations, tab shrink-out and the failed-overlay toast have not been seen on WebView2; the operator's run is the first look.
 ---
+
+---
+## Handoff — 2026-11-12 22:35 UTC
+**From**: Architect → Engineer
+**Trigger**: operator report on the E-54 build — the tab still picks up their tmux plugins; inside rein-app tmux must be in rein-app's scope. E-57 registered
+
+### What was built
+- `desktop.md` §Look and feel v2 **V8 "The app's own tmux server"** (new, before "Tests (v2)"); `DECISIONS.md` D-055; `plans/rein-tmux-server-request.md` (request to rein's Architect, not sent — no rein session reachable); E-57 (T3, OPEN).
+
+### Decisions made
+- The operator chose: a separate tmux server with a clean config (none of their settings imported); plugins later and only from rein's own list; isolation now.
+- Sessions opened in the window run on the tmux socket `rein-app` with the app's own constant config. Reached through a constant `tmux` shim placed first on the tab's `PATH`, because rein 0.5.0 calls plain `tmux` and tmux has no environment variable for the config file. Your E-53 / E-56 harness already runs the real `rein start` this way.
+- `tmux.server = "app" | "user"`, default `app`; `user` is today's behaviour and the rollback.
+- The V6 overlay stays, pointed at the app's server.
+- Tier 3: `security_engineer` before the first write.
+
+### Blueprint divergence (if any)
+- None. V8's component list is specific on purpose (modes, refusals, the config's closed list); if something in it cannot be built as written, stop and report.
+
+### Next action needed
+- Finish E-55, then **E-57**.
+- While building E-57, answer from what you see (for the request to rein): does anything `rein start` or `rein pane` sets up call tmux by absolute path or from outside the panes, where the shim would not reach?
+
+### Open risks
+- **Duplicate sessions:** a project with a live session on the user's own server gets a second Architect and Engineer when opened in the window. Known limit, in the guide; asked of rein.
+- The operator's running sessions (this one included) are on their own server; after E-57's build they keep running there and the window will not attach to them.
+- The screens harness must keep using its private `-S` socket and must not start or touch the real `rein-app` socket on the operator's machine.
+---

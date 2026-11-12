@@ -1906,3 +1906,39 @@ A new tab shows one line and a bare cursor for a few seconds before tmux draws; 
 
 ### Rollback
 Revert the E-54 UI commit; presentation only.
+
+## D-055 — Sessions opened in the window run on rein-app's own tmux server; the user's tmux config and plugins do not apply
+
+**Date**: 2026-11-12
+**Task**: operator report on the E-54 build ("it also picks up my tmux plugins … this should be in the scope of rein-app if we are using rein-app"), and their three answers: own server with a clean config; plugins later, from rein's own list only; isolation now. `desktop.md` V8; E-57.
+**Decision**: A tab's `rein start` reaches a separate tmux server (socket `rein-app`, rein-app's own constant config) through a constant `tmux` shim placed first on the tab's `PATH`. The user's server, config, plugins and sessions are untouched.
+
+### Why needed
+tmux reads config and starts plugins once per server. The V6 overlay sets session options and can hide what a plugin draws, but cannot stop its scripts, bindings and hooks. Only a server that never read the user's config is free of them.
+
+### Rulings
+1. Socket name `rein-app`; config is a closed list of options with no command-running line.
+2. The shim, because rein 0.5.0 calls plain `tmux` and tmux has no environment variable for the config file. A native option is requested from rein (`plans/rein-tmux-server-request.md`); the shim goes when rein ships it.
+3. `tmux.server = "app" | "user"`, default `app`; `user` is the previous behaviour and the rollback.
+4. The V6 overlay stays and talks to the app's server.
+5. Tier 3: a directory on `PATH` is a hijack surface — ownership and mode checks, constant contents rewritten on every start, `security_engineer` review.
+6. Plugins (rein's own list, on/off in Settings) are a later revision; nothing here downloads or loads one.
+7. This narrows our reading of rein contract §3.5 further than D-050. rein's Architect is told in the request file.
+
+### Alternatives considered
+1. **`TMUX_TMPDIR` only** — rejected: it moves the socket, but the new server still reads `~/.tmux.conf`.
+2. **Change `HOME` or `XDG_CONFIG_HOME` for the tab** — rejected: it would change the environment of Claude and every tool in the panes.
+3. **Wait for a rein option** — rejected as the only path: it needs a signed rein release; requested in parallel.
+4. **Copy a list of the user's settings into the app's config** — not chosen by the operator.
+5. **Override more options on the shared server** — rejected: cannot stop plugin code.
+
+### Constraints driving this decision
+- rein-app holds no Rein logic and does not edit rein; `rein start` stays the tab's only command.
+- On Windows the app starts only `wsl.exe` with constant scripts.
+
+### Impact
+- Unlocks: E-57; the later plugin revision.
+- Risk if wrong: a project with a live session on the user's own server gets a second session (second Architect and Engineer) when opened in the window; a program calling tmux by absolute path bypasses the shim. Both are documented known limits and questions to rein.
+
+### Rollback
+`tmux.server = "user"`, or revert E-57. Sessions on the app's server stay reachable with `tmux -L rein-app`.

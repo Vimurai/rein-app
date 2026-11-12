@@ -858,6 +858,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-12T20:57:20.529Z"
+    },
+    {
+      "id": "E-57",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 3,
+      "description": "Implement the window's own tmux server, per .ai/blueprints/desktop.md §Look and feel v2 V8 and D-055 (operator report on the E-54 build: the tab still picks up the tmux plugins from their own config; inside rein-app none of the user's tmux config or plugins may apply). Do this after E-55. (1) Add the tmux home with its two constant files — the POSIX `bin/tmux` shim and the closed-list `tmux.conf` (V8 components 1, 2, 4); (2) replace the start script on Linux, macOS and WSL with the one constant script of V8 component 3; (3) point the V6 overlay, its detach hook and every other tmux call of the app at the `rein-app` server; (4) add the setting `tmux.server = \"app\" | \"user\"` (default `app`) to `config.toml`, `ui.json`, the closed settings key list and the Settings screen; (5) dispatch `security_engineer` before the first write and run the Tier 3 review; (6) update `docs/operator-guide.md` (what no longer applies in the window, `tmux -L rein-app attach`, the duplicate-session known limit, the setting). No IPC command is added; no rein file is edited; nothing downloads or loads a plugin. Acceptance: the V8 tests pass — shim and start-script unit tests, and the end-to-end case in hosted CI (Linux + macOS) with a user `~/.tmux.conf` that sets a marker option, binds a key and has a `run-shell` line creating a file: session on the `rein-app` socket, marker and binding absent, file not created, no session added to the default server, and all three present with `server = \"user\"`; the V6 overlay cases pass against the app's server; the E-53 interop harness through `wsl.exe` with the operator's own config on a fresh start, dump under `.ai/screens/E-57/`; screens (D-052) of a running tab with the operator's config in place at both sizes; hosted `ci` and `desktop-windows` green on the commit (D-048); the new installer is named in the handoff and goes to the operator's Downloads only on the Architect's release.",
+      "created_at": "2026-11-12T22:31:56.287Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-12T22:31:56.290Z"
     }
   ],
   "stamps": [
@@ -2389,6 +2403,24 @@
       "timestamp": "2026-11-12T21:10:52.348Z",
       "summary": "[TIER_2] Blueprint aligned — E-54 follow-up (window_bg test path); run_review tier 2: all automated checks passed",
       "sha": "67c0db617f8f2a8a229c2d2ace80a27c682bd1c7",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "engineer",
+      "task_id": "E-55",
+      "timestamp": "2026-11-12T22:30:49.021Z",
+      "summary": "[TIER_2] E-55 aligned with desktop.md \"Two ways in\" (simple menu order, no mode rows, no modal: hints, whole rows) and the 21:40 conditions (tab_tmux answer from a closed list of fixed sentences; --motion-sweep; motion-screens refuses CI). align_diff WARN is its ORPHANED_WORK heuristic only (V6/V7 cover ipc.rs, tmux_overlay.rs, motion-screens.sh); run_review tier 2 automated checks passed.",
+      "sha": "a84385553a6af92b60e194e4b0f91ea6129ca134",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "engineer",
+      "task_id": "E-55",
+      "timestamp": "2026-11-12T22:30:50.011Z",
+      "summary": "[TIER_2] Blueprint aligned — E-55 menu order + E-54 conditions; UI 49/49, Rust 106, fmt clean",
+      "sha": "a84385553a6af92b60e194e4b0f91ea6129ca134",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
