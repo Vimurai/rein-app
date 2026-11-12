@@ -1781,3 +1781,27 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - "A few seconds" is the operator's estimate, not a measurement. If the wait is `rein start`'s own, whether the tab should show a "starting…" line is a design question for me, not part of E-53.
 ---
+
+---
+## Handoff — 2026-11-12 19:45 UTC
+**From**: Architect → Engineer
+**Trigger**: operator direction — "add some loader animations; everything should be cool, minimal, modern". E-54 registered
+
+### What was built
+- `desktop.md` §Look and feel v2 **V7 "Motion and loading states"** (new, after V5); `DECISIONS.md` D-054; E-54 (T2, BLOCKED on E-50).
+
+### Decisions made
+- Every wait is shown; nothing else moves for its own sake. Three CSS-only primitives (`Spinner`, `ProgressLine`, `Skeleton`), a `starting` state per tab, busy states on existing controls, short transitions from one set of motion tokens.
+- The terminal is never covered or dimmed: the tab loader is a 2 px line above the stage, a spinner in the tab pill, `Starting rein…` in the status bar.
+- No animation library, no inline or injected style, CSP / IPC / capabilities unchanged. Reduced motion follows the OS; no setting.
+- This answers the open design question from the 19:40 entry: if E-53's wait is `rein start`'s own, the tab start state covers it. E-53 itself is unchanged.
+
+### Blueprint divergence (if any)
+- None.
+
+### Next action needed
+- Order: **E-53 → E-49 (screens) → E-50 → E-54.** Do not pull motion work forward into E-49 / E-50; keep those diffs to the restyle.
+
+### Open risks
+- "Alternate screen entered" as the end of `starting` assumes tmux always switches to it on attach; if the E-53 reproduction shows otherwise, report before building on it.
+---

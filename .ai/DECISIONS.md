@@ -1874,3 +1874,35 @@ ISC (compatible with the project's Apache-2.0).
 
 ### Rollback
 Remove the dependency and the `lucide-react` imports in `ui/src/` (the icon components are named in one place, `ui/src/icons.ts`). Replace them with inline SVG, or with text labels in the buttons' existing accessible names.
+
+## D-054 — Every wait in the window is shown; motion is small, CSS-only and never delays an action
+
+**Date**: 2026-11-12
+**Task**: operator direction after the E-53 report ("add some loader animations; everything should be cool, minimal, modern"). `desktop.md` V7; E-54.
+**Decision**: The window gets three loading primitives (spinner, 2 px progress line, skeleton), a `starting` state for a tab until tmux has drawn, busy states on the health badge, dialogs, start screen and picker, and short enter / exit transitions — all from one set of motion tokens, in the bundled stylesheet, with no animation library.
+
+### Why needed
+A new tab shows one line and a bare cursor for a few seconds before tmux draws; the operator read it as a blank, broken tab (E-53). The health check and the update dialogs are silent while they run, and the window opens with a flash.
+
+### Rulings
+1. The terminal's content is never covered, dimmed or animated; the tab loader is a 2 px line above the stage, a spinner in the tab pill and a status-bar label.
+2. An animation never delays an action, and a loader is not shown for a wait under 150 ms.
+3. CSS only: classes and keyframes in the bundled stylesheet. No new dependency, no inline or injected style; the CSP is unchanged.
+4. Under `prefers-reduced-motion` nothing moves; text labels carry the meaning. No setting is added for this.
+5. An idle window runs no animation.
+6. E-54 runs after E-50, so it animates the final components, and passes the screens gate (D-052).
+
+### Alternatives considered
+1. **A full-stage "Starting…" overlay over the terminal** — rejected: it would hide a real error printed by `rein start`.
+2. **An animation library (`motion`)** — rejected: a dependency and runtime styles the CSP refuses, for effects CSS covers.
+3. **Fold it into E-49 / E-50** — rejected: E-49 is built and awaiting its screens; mixing motion into the restyle makes both harder to review.
+
+### Constraints driving this decision
+- CSP refuses runtime styles (D-044 ruling 4); bundle ≤ 2 MiB (E-49).
+
+### Impact
+- Unlocks: E-54. If E-53 finds the wait is `rein start`'s own start-up, the tab start state is the answer to it.
+- Risk if wrong: motion that reads as decoration; the reduced-motion path and ruling 5 bound it.
+
+### Rollback
+Revert the E-54 UI commit; presentation only.

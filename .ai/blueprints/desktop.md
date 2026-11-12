@@ -536,6 +536,101 @@ window (and a refused second start) is shown in a native message box instead of 
 every helper process (`wsl.exe`, `rein-app`) is started with `CREATE_NO_WINDOW` — a test
 enumerates the spawn sites; the ConPTY child is unaffected.
 
+### V7. Motion and loading states (revision 2026-11-12, D-054)
+Operator direction: "add some loader animations; everything should be cool, minimal,
+modern." Today every wait is silent — a new tab shows one line and a bare cursor for a few
+seconds before tmux draws (E-53), the health check and the update dialogs give no sign
+they are running, and the window opens with a flash.
+
+**Core concept: every wait is shown, nothing else moves for its own sake.** Motion is
+small (≤ 8 px, ≤ 220 ms), on `transform` and `opacity` only, and never delays an action:
+the action starts at once and the animation runs beside it. The terminal's own content is
+never animated, dimmed or covered — real output (an error from `rein start`) must stay
+readable under any loader.
+
+**Motion tokens** (added to V1's tokens, one place in the stylesheet):
+| Token | Value | Used for |
+|---|---|---|
+| `--motion-fast` | 120 ms | hover, press, icon swap |
+| `--motion-base` | 150 ms | tabs, toast, menus, tooltips |
+| `--motion-slow` | 220 ms | dialogs, first paint of the window |
+| `--motion-ease` | `cubic-bezier(0.2, 0, 0, 1)` | everything that enters or moves |
+| `--motion-spin` | 800 ms linear, infinite | spinners |
+| `--loader-delay` | 150 ms | a loader is not shown for a wait shorter than this |
+
+**Components**
+1. **Loading primitives** (one file, three small components, CSS only):
+   - `Spinner` — the lucide `loader-circle` icon turning at `--motion-spin`; sizes 12 / 14 /
+     16 px; takes the colour of its text.
+   - `ProgressLine` — a 2 px indeterminate line in the accent colour that sweeps left to
+     right across its container.
+   - `Skeleton` — a rounded `muted` block with a slow opacity pulse (1.2 s), for rows whose
+     content has not arrived.
+   Each appears only after `--loader-delay`, so a fast operation shows no flicker.
+2. **Tab start state** (the E-53 wait). A tab is `starting` from `tab_open` until the first
+   of: the terminal switches to the alternate screen (tmux has drawn), the pty exits, the
+   user types into the tab, or 20 s pass. While `starting`: a `ProgressLine` runs along the
+   top edge of the stage directly under the title bar, the tab pill shows a `Spinner` in
+   place of its close icon, and the status bar shows `Starting rein…` where the last
+   command chip sits. The terminal stays fully visible beneath. A pure function
+   `tabPhase(events) → starting | running | exited` holds this rule; the UI only renders it.
+3. **Busy states of existing controls.**
+   - Health badge: `Spinner` + `Checking…` while a health run is in flight; the result
+     icon and colour cross-fade in (`--motion-base`).
+   - Update / rollback / profiles dialogs: after the confirm button is pressed it shows a
+     `Spinner` and its progressive label (`Updating…`, `Rolling back…`, `Applying…`) and is
+     disabled; the other button stays usable where cancelling is possible today.
+   - Start screen: recent projects show three `Skeleton` rows until the list arrives; the
+     WSL card shows `Spinner` + `Checking WSL…` until its check returns.
+   - Project picker (`dir_complete`): a `Spinner` at the right of the input while a
+     completion is pending.
+   - Copy chip: the copy icon swaps to a check for 1.2 s after a copy.
+4. **Transitions.**
+   - Window: created with the theme's background colour on the Rust side (no white
+     flash); the UI root fades in over `--motion-slow` on first paint.
+   - Tabs: a new pill grows in and a closed one shrinks out (`--motion-base`); the accent
+     underline slides between pills.
+   - Dialogs, command palette: fade + scale 0.98 → 1 (`--motion-slow` in, `--motion-fast`
+     out). Menus, tooltips, context menu: fade + 4 px slide (`--motion-base`).
+   - Toast: slides up 8 px and fades in; fades out.
+   - Buttons and rows: background / border colour over `--motion-fast`; pressed buttons
+     scale to 0.98.
+
+**Data model.** No stored data. One derived UI value per tab (`phase`) and one boolean per
+running operation (`busy`), both in memory. No `config.toml` or `ui.json` key is added:
+reduced motion follows the operating system setting only.
+
+**Interface contracts.** No IPC command is added or changed; the capability file is
+unchanged. `tabPhase` reads what the UI already has: the `tab_open` call, the terminal's
+buffer-change event, pty exit, key input. The window background colour is set in the
+existing window builder from the theme already loaded at start.
+
+**Security.** Presentation only. The CSP stays as it is: every animation is a class and a
+keyframe in the bundled stylesheet — no inline `style`, no runtime-injected style, no
+animation library, no new dependency. Loader text is fixed strings; nothing from the pty,
+a path or rein is put into an animated label.
+
+**Execution constraints.**
+- Animate `transform` and `opacity` only (the tab pill's width is the one exception). No
+  animation on or over the terminal canvas; the `ProgressLine` sits in its own 2 px strip.
+- No animation may run while nothing is loading: an idle window has zero running
+  animations (a test counts them).
+- `prefers-reduced-motion: reduce`: no movement, fades become instant; `Spinner` is the
+  still icon, `ProgressLine` a still 2 px accent line, `Skeleton` does not pulse. The
+  text labels (`Starting rein…`, `Checking…`) carry the meaning, with `aria-busy` on the
+  region and `role="status"` on the label.
+- Bundle limit of E-49 (JS + CSS ≤ 2 MiB) still holds.
+
+**Tests (V7).** `tabPhase` unit test for each exit (alternate screen, pty exit, key, 20 s)
+and for output that arrives before the alternate screen; loader-delay test (an operation
+that ends in 100 ms shows no loader); a stylesheet test that every `animation` and
+`transition` is switched off under reduced motion and that an idle start screen and an idle
+project tab have no running animation; pointer-parity, newcomer-path, accessibility-name,
+IPC and capability tests unchanged; screens gate (D-052) with the loaders frozen mid-run.
+
+**Rollback (V7).** Presentation only: revert the task's UI commit; the tokens and the three
+primitives have no other users. The window background colour can stay.
+
 ### Tests (v2)
 - Token function: contrast ≥ 4.5:1 for every text pair in every theme; the default theme is
   `catppuccin-mocha`.
