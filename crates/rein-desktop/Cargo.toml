@@ -23,6 +23,8 @@ serde_json = "1.0.154"
 # clipboard_write (cmd.yank, E-36): text only, no image decoding (D-042).
 arboard = { version = "3.7.0", default-features = false }
 portable-pty = "0.9.0"
+# The folder dialog of `project_choose`, opened by the core (D-046) — no Tauri plugin.
+rfd = { version = "0.17.2", default-features = false, features = ["gtk3"] }
 # The bounded process run and WSL detection, shared with the CLI (D-038).
 rein-platform = { version = "0.1.0", path = "../rein-platform" }
 serde = { version = "1.0.229", features = ["derive"] }

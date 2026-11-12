@@ -5,6 +5,10 @@
 import type { Span } from "./grid.ts";
 import type { ActionCall, KeyTable } from "./keymap.ts";
 
+/** The start screen's buttons (D-034): plain words, the key hints stay beside them. */
+export const OPEN_BUTTON = "[ Open a project… ]";
+export const CHECK_BUTTON = "[ Check installation ]";
+
 export interface RecentView {
   path: string;
   name: string;
@@ -28,12 +32,13 @@ export function startLines(
   const rows: (string | Span)[] = shown.map((r, i) => ({
     text: `${i + 1}  ${r.name.padEnd(width)}  ${r.path}${r.exists === false ? "  (missing)" : ""}`,
     cls: r.exists === false ? "dim" : "",
+    action: { name: "project.open", arg: r.path },
   }));
   const blocker: (string | Span)[] = setup
     ? [
         { text: setup.reason, cls: "error" },
         { text: `run in an administrator terminal:  ${setup.command}`, cls: "" },
-        "c  check again",
+        { text: "c  check again", cls: "", action: { name: "health.show" } },
         "",
       ]
     : [];
@@ -41,6 +46,9 @@ export function startLines(
     ...WORDMARK.map((text) => ({ text, cls: "accent" })),
     "",
     ...blocker,
+    { text: OPEN_BUTTON, cls: "button", action: { name: "project.open" } },
+    { text: CHECK_BUTTON, cls: "button", action: { name: "health.show" } },
+    "",
     ...(rows.length ? rows : ["no recent projects"]),
     "",
     HINTS,

@@ -84,6 +84,10 @@ impl Host for LocalHost {
         complete_dir(prefix)
     }
 
+    fn dialog_start(&self) -> Option<PathBuf> {
+        self.home.clone()
+    }
+
     fn doctor(&self) -> HealthView {
         match &self.home {
             Some(h) => cli::local_doctor(h),

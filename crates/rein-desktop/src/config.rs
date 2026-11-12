@@ -381,6 +381,26 @@ pub struct ConfigView {
     pub path: Option<String>,
     /// The last refusal (the previous good config is the one in `config`).
     pub error: Option<String>,
+    /// The keys config.toml itself sets among those Settings can also set (`theme.name`,
+    /// `font.size`, `window.decorations`): those win over `ui.json` and are read-only in
+    /// Settings (D-034).
+    pub set: Vec<String>,
+}
+
+/// Which of the Settings-visible keys `text` sets (it has already parsed).
+pub fn settings_keys_set(text: &str) -> Vec<String> {
+    let Ok(t) = text.parse::<toml::Table>() else {
+        return Vec::new();
+    };
+    [
+        ("theme", "name"),
+        ("font", "size"),
+        ("window", "decorations"),
+    ]
+    .iter()
+    .filter(|(table, key)| t.get(*table).and_then(|v| v.get(*key)).is_some())
+    .map(|(table, key)| format!("{table}.{key}"))
+    .collect()
 }
 
 /// The loaded config and how to notice a save.
@@ -408,6 +428,7 @@ impl ConfigService {
             config: Config::default(),
             path: path.as_ref().map(|p| p.to_string_lossy().into_owned()),
             error: None,
+            set: Vec::new(),
         };
         let s = Self {
             path,
@@ -441,12 +462,14 @@ impl ConfigService {
                     Ok(c) => {
                         st.0.config = c;
                         st.0.error = None;
+                        st.0.set = settings_keys_set(&text);
                     }
                     Err(e) => st.0.error = Some(e.to_string()),
                 },
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                     st.0.config = Config::default();
                     st.0.error = None;
+                    st.0.set = Vec::new();
                 }
                 Err(e) => st.0.error = Some(format!("{FILE_NAME}: {e}")),
             }
@@ -653,6 +676,20 @@ mod tests {
                 .error
                 .unwrap()
                 .starts_with("cannot create config.toml")
+        );
+    }
+
+    #[test]
+    fn the_settings_keys_a_file_sets_are_known() {
+        assert!(
+            settings_keys_set(DEFAULTS_FILE).is_empty(),
+            "all commented out"
+        );
+        assert_eq!(
+            settings_keys_set(
+                "[theme]\nname = \"nord\"\n[font]\nfamily = \"x\"\n[window]\ndecorations = false\n"
+            ),
+            ["theme.name", "window.decorations"]
         );
     }
 

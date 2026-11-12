@@ -5,15 +5,26 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { fontFamily, keyTable, type ConfigView } from "./config.ts";
-import { clipboardWrite, configGet, listen } from "./ipc.ts";
+import { clipboardWrite, configGet, listen, uiGet, uiSet, type UiView } from "./ipc.ts";
+import { FirstRun } from "./overlays.tsx";
 import { Shell, type Handlers } from "./shell.tsx";
 import { THEMES, resolveTheme } from "./theme.ts";
 
 const WINDOWS = navigator.userAgent.includes("Windows");
 const LINE_HEIGHT = 1.25;
 
-export function App({ initial, startDir }: { initial: ConfigView; startDir: string | null }) {
+export function App({
+  initial,
+  initialUi,
+  startDir,
+}: {
+  initial: ConfigView;
+  /** ui.json as the core sees it (`null` outside the window, e.g. a test page). */
+  initialUi: UiView | null;
+  startDir: string | null;
+}) {
   const [view, setView] = useState(initial);
+  const [ui, setUi] = useState(initialUi);
   /** `:theme NAME` for this session; a save of config.toml takes over again. */
   const [themeName, setThemeName] = useState<string | null>(null);
   const [notice, setNotice] = useState({ text: initial.error ?? "", error: initial.error !== null, seq: 0 });
@@ -27,11 +38,20 @@ export function App({ initial, startDir }: { initial: ConfigView; startDir: stri
   }, []);
 
   const cfg = view.config;
+  // Effective settings (D-034): config.toml if it sets them, else ui.json, else the default.
+  const baseTheme = ui?.theme.value ?? cfg.theme.name;
   const theme = useMemo(
-    () => resolveTheme(themeName ?? cfg.theme.name, cfg.theme.custom),
-    [themeName, cfg.theme.name, cfg.theme.custom],
+    () => resolveTheme(themeName ?? baseTheme, cfg.theme.custom),
+    [themeName, baseTheme, cfg.theme.custom],
   );
-  const keys = useMemo(() => keyTable(cfg), [cfg]);
+  const style = ui?.input_style.value ?? "simple";
+  const keys = useMemo(() => keyTable(cfg, style), [cfg, style]);
+  const fontSize = ui?.font_size.value ?? cfg.font.size;
+
+  const chooseStyle = (s: "simple" | "modal", first: boolean) =>
+    uiSet("input_style", s)
+      .then(() => (first ? uiSet("first_run_done", true) : uiGet()))
+      .then(setUi);
 
   const handlers: Handlers = {
     "config.open": (_call, ui) => {
@@ -56,6 +76,13 @@ export function App({ initial, startDir }: { initial: ConfigView; startDir: stri
         (e: { message?: string }) => ui.say(`E: ${e.message ?? String(e)}`, true),
       );
     },
+    "input.style": (call, cmd) => {
+      const next = call.arg === "simple" || call.arg === "modal" ? call.arg : style === "simple" ? "modal" : "simple";
+      chooseStyle(next, false).then(
+        () => cmd.say(`input style: ${next}${next === "modal" ? " — Ctrl+\\ Ctrl+n leaves the terminal" : ""}`),
+        (e: { message?: string }) => cmd.say(`E: ${e.message ?? String(e)}`, true),
+      );
+    },
     "theme.set": (call, ui) => {
       const name = call.arg ?? "";
       if (!THEMES.has(name)) {
@@ -67,12 +94,12 @@ export function App({ initial, startDir }: { initial: ConfigView; startDir: stri
     },
   };
 
-  return (
+  const shell = (
     <Shell
       theme={theme}
       keys={keys}
       fontFamily={fontFamily(cfg, WINDOWS)}
-      fontSize={cfg.font.size}
+      fontSize={fontSize}
       lineHeight={LINE_HEIGHT}
       opacity={cfg.window.opacity}
       handlers={handlers}
@@ -80,5 +107,13 @@ export function App({ initial, startDir }: { initial: ConfigView; startDir: stri
       startDir={startDir}
       startLast={initial.config.window.start === "last"}
     />
+  );
+  return ui && !ui.first_run_done ? (
+    <>
+      {shell}
+      <FirstRun onChoose={(s) => void chooseStyle(s, true)} />
+    </>
+  ) : (
+    shell
   );
 }

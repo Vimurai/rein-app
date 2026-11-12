@@ -1632,3 +1632,20 @@ The update / rollback flow (check, notes, lock, owner guard, snapshot swap, inst
 
 ### D-045 addendum 1 (2026-11-12) — window health is the install scope, run from the home directory
 Ratified from E-39: `health_get` runs `rein doctor --scope install --json` with cwd = home (on Windows `cd;` before the constant `exec`). Measured: a full `rein doctor --json` from `$HOME` is `fail` on a healthy install because project-scope and host checks judge the cwd; the statusline claims "install ok" and the install scope is the document D-029 already uses for that. The window still recomputes nothing. Per-project health per tab is deferred. Also ratified: profile names must start with a letter or digit (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`); `profiles list` is read as table rows only; no doctor run while a release or profile run is in progress.
+
+## D-046 — Folder dialog for `project_choose` without a Tauri plugin (E-40, dependency_gate, Engineer-recorded)
+
+**Date**: 2026-11-12
+**Task**: E-40 (`[+]` / Ctrl+Shift+O open a project through the system folder dialog — desktop.md §API `project_choose`, §Security 6)
+**Decision**: ADOPT `rfd` 0.17.2 (2026-01-12; MIT) as a direct dependency of `rein-desktop`, default features off, `gtk3` on (Linux: the GTK 3 Tauri already links; Windows: the native COM dialog; macOS: AppKit). The core opens the dialog itself — from the IPC worker thread on Linux and Windows (rfd's GTK backend posts the dialog to the window's own GLib main loop and waits, so calling it *on* the main thread deadlocks the window; found live under Xvfb), on the main thread only on macOS (AppKit requires it) — and passes the chosen path through the same `Host::project` validation as `tab_open`. **No Tauri plugin is added and the capability file gains no plugin permission** — stricter than §Security 6, which allowed exactly one (the dialog plugin's folder-open). Operator, 2026-11-11: "don't ask me for permissions, just build it". The Architect may revise.
+
+### Why
+`tauri-plugin-dialog` is a wrapper around `rfd`; it also pulls `tauri-plugin-fs` into the build and needs a web-side permission. Calling `rfd` from the core keeps the IPC table the only door (`project_choose` takes no input) and the "no Tauri plugin in Cargo.lock" test unchanged.
+
+### Alternatives considered
+1. **`tauri-plugin-dialog`** — the blueprint's choice; adds two plugins to the lockfile and one capability permission.
+2. **`rfd` 0.18.0** — published 2026-11-07, under two weeks old.
+3. **`xdg-portal` backend on Linux** — rfd's default; pulls an async D-Bus stack. GTK 3 is already in the process.
+
+### Rollback
+`project_choose` is one IPC command; removing it leaves `:open DIR` and the picker.

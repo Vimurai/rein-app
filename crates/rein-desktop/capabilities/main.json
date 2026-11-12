@@ -20,6 +20,10 @@
     "allow-release-apply",
     "allow-profiles-plan",
     "allow-profiles-apply",
+    "allow-project-choose",
+    "allow-clipboard-read",
+    "allow-ui-get",
+    "allow-ui-set",
     "core:window:allow-close"
   ]
 }

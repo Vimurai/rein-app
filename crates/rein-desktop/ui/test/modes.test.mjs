@@ -70,6 +70,13 @@ test("the leader waits, and which-key lists what can follow it", () => {
       ["u", "release.update"],
       ["r", "release.rollback"],
       ["s", "profiles.show"],
+      ["S", "profiles.apply"],
+      ["c", "config.open"],
+      ["R", "config.reload"],
+      ["t", "theme.set"],
+      [",", "settings.show"],
+      ["i", "input.style"],
+      ["Space", "menu.show"],
     ]),
   );
   // Esc drops the pending leader; a key that breaks it is tried on its own.

@@ -55,6 +55,10 @@ export function step(table: KeyTable, state: ModeState, key: string): Step {
 }
 
 function terminal(table: KeyTable, state: ModeState, key: string): Step {
+  // A shortcut (Ctrl+Shift+P …) works in TERMINAL too, unless a chord is in progress.
+  const shortcut = state.pending.length === 0 ? table.shortcuts.get(key) : undefined;
+  if (shortcut) return { mode: "TERMINAL", pending: [], forward: [], action: shortcut };
+  if (table.escape.length === 0) return { mode: "TERMINAL", pending: [], forward: [key] };
   const seq = [...state.pending, key];
   if (seq.length === table.escape.length && startsWith(seq, table.escape)) {
     return { mode: "NORMAL", pending: [], forward: [], action: { name: "mode.normal" } };
@@ -81,10 +85,17 @@ function normal(table: KeyTable, state: ModeState, key: string): Step {
     }
     return null;
   };
-  // A key that breaks a pending sequence starts over on its own; an unbound key is ignored.
+  // A key that breaks a pending sequence starts over on its own; then the shortcuts; an
+  // unbound key is ignored.
+  const shortcut = table.shortcuts.get(key);
   return (
     lookup([...state.pending, key]) ??
-    (state.pending.length ? lookup([key]) : null) ?? { mode: "NORMAL", pending: [], forward: [] }
+    (state.pending.length ? lookup([key]) : null) ??
+    (shortcut ? { mode: "NORMAL", pending: [], forward: [], action: shortcut } : null) ?? {
+      mode: "NORMAL",
+      pending: [],
+      forward: [],
+    }
   );
 }
 

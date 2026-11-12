@@ -3,7 +3,7 @@
 // key table for `modes`, the font list. Pure: no DOM.
 
 import { isActionName } from "./actions.ts";
-import { DEFAULT_MODAL, type ActionCall, type KeyTable } from "./keymap.ts";
+import { DEFAULT_MODAL, DEFAULT_SIMPLE, type ActionCall, type KeyTable } from "./keymap.ts";
 
 export interface ConfigFile {
   font: { family: string; size: number };
@@ -40,12 +40,15 @@ function call(binding: string): ActionCall | null {
   return arg === undefined ? { name } : { name, arg };
 }
 
-/** The default keymap with config.toml's escape chord, leader and NORMAL bindings over it. */
-export function keyTable(cfg: ConfigFile): KeyTable {
+/** The key table for the input style: `modal` is the default keymap with config.toml's
+ *  escape chord, leader and NORMAL bindings over it; `simple` has no modes (D-034). Both
+ *  keep the simple shortcuts. */
+export function keyTable(cfg: ConfigFile, style: "simple" | "modal" = "modal"): KeyTable {
+  if (style === "simple") return DEFAULT_SIMPLE;
   const normal = new Map(DEFAULT_MODAL.normal);
   for (const [keys, binding] of Object.entries(cfg.keys.normal)) {
     const c = call(binding);
     if (c) normal.set(keys, c);
   }
-  return { escape: cfg.keys.escape, leader: cfg.keys.leader, normal };
+  return { ...DEFAULT_MODAL, escape: cfg.keys.escape, leader: cfg.keys.leader, normal };
 }

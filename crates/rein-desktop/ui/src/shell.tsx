@@ -5,13 +5,20 @@
 // app, TERMINAL keys go to the pty except the escape chord. Text goes in as React text nodes
 // only, never as HTML.
 
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuShortcut, ContextMenuTrigger } from "../components/context-menu.tsx";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../components/tooltip.tsx";
+import { DEFAULT_MODAL, DEFAULT_SIMPLE } from "./keymap.ts";
+import { describe as describeAction, menuEntries } from "./menu.ts";
+import { pasteNeedsQuestion } from "./paste.ts";
 import type { ActionName } from "./actions.ts";
 import { commonPrefix, complete, parse } from "./commands.ts";
 import { cells, fit, layout, type Row, type ShellData } from "./grid.ts";
 import {
+  clipboardRead,
   clipboardWrite,
   closeWindow,
+  projectChoose,
   dirComplete,
   healthGet,
   listen,
@@ -23,7 +30,7 @@ import { HealthOverlay, ProfilesOverlay, ReleaseOverlay, healthSegment } from ".
 import { keyBytes, keyName } from "./keys.ts";
 import type { ActionCall, KeyTable } from "./keymap.ts";
 import { WHICH_KEY_DELAY_MS, continuations, step, type ModeState } from "./modes.ts";
-import { ProjectPicker, WhichKey, label } from "./overlays.tsx";
+import { MenuOverlay, PasteConfirm, ProjectPicker, WhichKey, label } from "./overlays.tsx";
 import { startLines, withStartKeys, type RecentView } from "./start.ts";
 import { TermTab } from "./term.ts";
 import { THEME_NAMES, cssVariables, type Theme } from "./theme.ts";
@@ -67,11 +74,6 @@ const INITIAL: ShellData = {
 
 /** Actions whose backend arrives with a later task: they say so in one line (E-36). */
 const LATER: Partial<Record<ActionName, string>> = {
-  "menu.show": "E-40",
-  "help.show": "E-40",
-  "input.style": "E-40",
-  "term.copy": "E-40",
-  "term.paste": "E-40",
   "settings.show": "E-41",
   "font.bigger": "E-41",
   "font.smaller": "E-41",
@@ -106,13 +108,33 @@ interface OpenTab {
 }
 
 /** One grid row: spans of text with their style class. */
+/** What a chrome button does and says: the shell's `run` and the action's tooltip. */
+const ButtonCtx = createContext<{ run: (c: ActionCall) => void; tip: (c: ActionCall) => string } | null>(null);
+
+/** One span; with an action it is a button (D-034): hover highlight, tooltip naming the
+ *  action and its shortcut, the same text as its accessible name. Still drawn on the grid. */
+function SpanView({ s }: { s: Row[number] }) {
+  const ctx = useContext(ButtonCtx);
+  if (!s.action || !ctx) return <span className={s.cls || undefined}>{s.text}</span>;
+  const action = s.action;
+  const tip = ctx.tip(action);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className={`chrome-btn ${s.cls}`.trim()} aria-label={tip} onClick={() => ctx.run(action)}>
+          {s.text}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function GridRow({ row, className = "" }: { row: Row; className?: string }) {
   return (
     <div className={`row ${className}`.trim()}>
       {row.map((s, i) => (
-        <span key={i} className={s.cls || undefined}>
-          {s.text}
-        </span>
+        <SpanView key={i} s={s} />
       ))}
     </div>
   );
@@ -139,7 +161,11 @@ export function Shell(props: ShellProps) {
   const [recent, setRecent] = useState<RecentView[]>([]);
   const [picker, setPicker] = useState(false);
   /** The health / update / rollback / profiles overlay, if one is open (E-39). */
-  const [overlay, setOverlay] = useState<"health" | "update" | "rollback" | "profiles" | null>(null);
+  const [overlay, setOverlay] = useState<"health" | "update" | "rollback" | "profiles" | "menu" | null>(null);
+  /** The menu's starting filter (`theme.set` without a name opens it at "Theme"). */
+  const [menuQuery, setMenuQuery] = useState("");
+  /** A paste with several lines, waiting for its question (D-034). */
+  const [pasteText, setPasteText] = useState<string | null>(null);
   const [health, setHealth] = useState<HealthView | null>(null);
   const [modeView, setModeView] = useState<ModeState>({ mode: "NORMAL", pending: [] });
   const [cmdText, setCmdText] = useState("");
@@ -152,9 +178,11 @@ export function Shell(props: ShellProps) {
   /** The current tab's terminal, read like a ref. */
   const tab = { get current(): TermTab | null { return tabs.current[cur.current]?.term ?? null; } };
   const pickerRef = useRef(false);
-  pickerRef.current = picker || overlay !== null;
+  pickerRef.current = picker || overlay !== null || pasteText !== null;
   // No tab open: the start screen's keys (p o h u q, digits) join the keymap.
   const keys = tabs.current.length ? projectKeys : withStartKeys(projectKeys);
+  /** The other input style's table: the menu and tooltips name its key when this one has none. */
+  const otherTable = projectKeys.style === "simple" ? DEFAULT_MODAL : DEFAULT_SIMPLE;
   const modeRef = useRef<ModeState>(modeView);
   const cmdRef = useRef("");
   const lastCommand = useRef<string | null>(null);
@@ -318,6 +346,10 @@ export function Shell(props: ShellProps) {
         own(call, { say, showCommand });
         return;
       }
+      if (keys.style === "simple" && (call.name === "mode.normal" || call.name === "mode.command")) {
+        say("modes belong to the modal input style — menu → Input style: modal");
+        return;
+      }
       switch (call.name) {
         case "mode.normal":
           setMode({ mode: "NORMAL", pending: [] });
@@ -334,12 +366,58 @@ export function Shell(props: ShellProps) {
         case "project.open":
           if (call.arg) open(call.arg);
           else {
-            setMode({ mode: "COMMAND", pending: [] });
-            setCmd("open ");
+            // The system folder dialog; its answer is validated like `tab_open`.
+            say("choose a project folder in the dialog…");
+            projectChoose().then(
+              (path) => {
+                if (path) open(path);
+                else say("no folder chosen");
+              },
+              (e: { message?: string }) => say(`E: ${e.message ?? String(e)}`, true),
+            );
           }
           return;
         case "tab.detach":
-          detach();
+          // `×` names its tab; the key form closes the current one.
+          detach(call.arg ? Number(call.arg) - 1 : cur.current);
+          return;
+        case "menu.show":
+        case "help.show":
+          setMode({ mode: "NORMAL", pending: [] });
+          setMenuQuery("");
+          setOverlay("menu");
+          return;
+        case "theme.set":
+          if (!call.arg) {
+            setMenuQuery("Theme");
+            setOverlay("menu");
+            return;
+          }
+          break;
+        case "term.copy": {
+          const text = tab.current?.selection() ?? "";
+          if (!text) {
+            say("nothing is selected");
+            return;
+          }
+          clipboardWrite(text.slice(0, 64 * 1024)).then(
+            () => say("copied"),
+            (e: { message?: string }) => say(`E: cannot copy: ${e.message ?? String(e)}`, true),
+          );
+          return;
+        }
+        case "term.paste":
+          if (!tab.current) {
+            say("no terminal to paste into");
+            return;
+          }
+          clipboardRead().then(
+            (text) => {
+              if (pasteNeedsQuestion(text)) setPasteText(text);
+              else tab.current?.paste(text);
+            },
+            (e: { message?: string }) => say(`E: cannot paste: ${e.message ?? String(e)}`, true),
+          );
           return;
         case "tab.next":
         case "tab.prev": {
@@ -410,7 +488,7 @@ export function Shell(props: ShellProps) {
         }
       }
     },
-    [open, detach, say, setMode, setCmd, showCommand, handlers, showTab, recent, refreshRecent],
+    [open, detach, say, setMode, setCmd, showCommand, handlers, showTab, recent, refreshRecent, keys.style],
   );
 
   /** TERMINAL keys, seen by xterm first: hold a chord prefix, take the chord, pass the rest. */
@@ -468,6 +546,8 @@ export function Shell(props: ShellProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (pickerRef.current) return; // the picker's own keys (j k C-n C-p Enter Esc Del)
+      // Any open dialog or menu owns its keys (the first-run choice, Radix menus …).
+      if (e.target instanceof Element && e.target.closest('[role="dialog"], [role="menu"], [role="listbox"]')) return;
       const k = keyName(e);
       if (!k) return;
       if (modeRef.current.mode === "TERMINAL") {
@@ -556,8 +636,12 @@ export function Shell(props: ShellProps) {
     {
       ...data,
       tabs: tabs.current.map((t, i) => ({ name: t.title, current: i === cur.current })),
-      segments: current ? [current.title, healthSegment(health)] : [healthSegment(health)],
-      mode: modeView.mode,
+      segments: [
+        ...(current ? [{ text: current.title, cls: "", action: { name: "project.pick" } as ActionCall }] : []),
+        { text: healthSegment(health), cls: "", action: { name: "health.show" } },
+      ],
+      // The `simple` style has no modes, so no mode segment (D-034).
+      mode: keys.style === "modal" ? modeView.mode : null,
       clock,
       commandLine: "",
       stageLines: termOpen
@@ -587,7 +671,7 @@ export function Shell(props: ShellProps) {
   }, [cell, cols, stage.length]);
 
   return (
-    <>
+    <ButtonCtx.Provider value={{ run, tip: (c) => describeAction(c, keys, otherTable) }}>
       <div id="grid" role="application" aria-label="rein-app">
         <GridRow row={shell.tabline} className="bar" />
         {stage.map((r, i) => (
@@ -596,7 +680,45 @@ export function Shell(props: ShellProps) {
         <GridRow row={shell.statusline} className="bar" />
         <GridRow row={commandRow} />
       </div>
-      <div id="term" ref={termsEl} className={termOpen ? undefined : "hidden"} />
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div id="term" ref={termsEl} className={termOpen ? undefined : "hidden"} />
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={() => run({ name: "term.copy" })}>
+            Copy<ContextMenuShortcut>Ctrl+Shift+C</ContextMenuShortcut>
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => run({ name: "term.paste" })}>
+            Paste<ContextMenuShortcut>Ctrl+Shift+V</ContextMenuShortcut>
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => tab.current?.selectAll()}>Select all</ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      {overlay === "menu" && (
+        <MenuOverlay
+          entries={menuEntries(keys, otherTable, { tabs: tabs.current.length })}
+          initialQuery={menuQuery}
+          onRun={(c) => {
+            closeOverlay();
+            run(c);
+          }}
+          onClose={closeOverlay}
+        />
+      )}
+      {pasteText !== null && (
+        <PasteConfirm
+          text={pasteText}
+          onPaste={() => {
+            tab.current?.paste(pasteText);
+            setPasteText(null);
+            tab.current?.focus();
+          }}
+          onClose={() => {
+            setPasteText(null);
+            tab.current?.focus();
+          }}
+        />
+      )}
       {whichKey && <WhichKey leader={keys.leader} next={continuations(keys, modeView.pending)} />}
       {overlay === "health" && <HealthOverlay health={health} onClose={closeOverlay} />}
       {(overlay === "update" || overlay === "rollback") && (
@@ -619,6 +741,6 @@ export function Shell(props: ShellProps) {
           }}
         />
       )}
-    </>
+    </ButtonCtx.Provider>
   );
 }

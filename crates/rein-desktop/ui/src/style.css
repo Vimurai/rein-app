@@ -30,6 +30,17 @@ html, body {
 .mode-normal { background: var(--mode-normal); color: var(--bg); font-weight: bold; }
 .mode-command { background: var(--mode-command); color: var(--bg); font-weight: bold; }
 .cursor { background: var(--fg); color: var(--bg); }
+/* Chrome buttons (D-034): drawn on the grid like any text, highlighted under the pointer. */
+.chrome-btn {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.chrome-btn:hover, .chrome-btn:focus-visible { background: var(--accent); color: var(--bg); outline: none; }
 /* The which-key overlay sits on the stage, just above the statusline. */
 .which-key {
   position: absolute;

@@ -119,6 +119,24 @@ export const releaseApply = (kind: "update" | "rollback", output: Channel<string
 export const profilesPlan = (names: string[]) => invoke<ProfilesRun>("profiles_plan", { names });
 export const profilesApply = (names: string[]) => invoke<ProfilesRun>("profiles_apply", { names });
 
+export interface Effective<T> {
+  value: T;
+  source: "config" | "ui" | "default";
+}
+export interface UiView {
+  input_style: Effective<"simple" | "modal">;
+  theme: Effective<string>;
+  font_size: Effective<number>;
+  decorations: Effective<boolean>;
+  first_run_done: boolean;
+}
+/** The system folder dialog; `null` when cancelled; the path is validated like `tab_open`. */
+export const projectChoose = () => invoke<string | null>("project_choose", {});
+/** Only from a user's paste action (desktop.md §Security 6). */
+export const clipboardRead = () => invoke<string>("clipboard_read", {});
+export const uiGet = () => invoke<UiView>("ui_get", {});
+export const uiSet = (field: string, value: unknown) => invoke<UiView>("ui_set", { field, value });
+
 /** Close the window (`:qa`, after every tab is detached): Tauri's core window command. */
 export const closeWindow = () => invoke<void>("plugin:window|close", { label: "main" });
 export const configGet = (reload = false) =>

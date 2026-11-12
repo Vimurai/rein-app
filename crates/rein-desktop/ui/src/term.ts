@@ -120,6 +120,20 @@ export class TermTab {
     for (const piece of splitInput(data)) ptyWrite(this.#tab.pty, piece).catch(() => {});
   }
 
+  /** Copy / Paste / Select all (E-40). `paste` goes through xterm, so bracketed paste and
+   *  the same input path as typing apply. */
+  selection(): string {
+    return this.term.getSelection();
+  }
+
+  selectAll(): void {
+    this.term.selectAll();
+  }
+
+  paste(text: string): void {
+    this.term.paste(text);
+  }
+
   focus(): void {
     this.term.focus();
   }

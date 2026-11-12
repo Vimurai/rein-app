@@ -15,6 +15,7 @@ mod host;
 mod ipc;
 #[cfg(unix)]
 mod local_host;
+mod pointer_ipc;
 mod project_path;
 mod projects;
 mod pty;
@@ -25,6 +26,7 @@ mod single_instance;
 #[cfg(windows)]
 #[path = "single_instance_windows.rs"]
 mod single_instance;
+mod ui_store;
 // The Windows host: plain Rust everywhere, so its tests run on every platform; only the
 // Windows build starts it.
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -36,8 +38,7 @@ use std::process::ExitCode;
 
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
-/// The window label the capability file names.
-const MAIN_WINDOW: &str = "main";
+use ipc::MAIN_WINDOW;
 /// Event carrying a DIR handed over by a second start: on Linux / macOS it passed
 /// `project_path::check`, on Windows `check_text` (printable, bounded); either way `tab_open`
 /// validates it again through the host before anything runs.
@@ -141,6 +142,8 @@ fn main() -> ExitCode {
         .manage(ipc::Desktop::new(platform_host(start.wsl.distro.clone())))
         .manage(std::sync::Arc::clone(&config))
         .manage(cli_ipc::CliState::default())
+        // The app's own settings (D-034): ui.json in the state directory.
+        .manage(ui_store::UiStore::open(dirs::state_dir(&dirs::process_env)))
         // Recent projects (E-38). On Windows they live inside WSL: not probed per row (W2).
         .manage(std::sync::Arc::new(projects::ProjectStore::open(
             dirs::state_dir(&dirs::process_env),
@@ -161,7 +164,11 @@ fn main() -> ExitCode {
             cli_ipc::release_check,
             cli_ipc::release_apply,
             cli_ipc::profiles_plan,
-            cli_ipc::profiles_apply
+            cli_ipc::profiles_apply,
+            pointer_ipc::project_choose,
+            pointer_ipc::clipboard_read,
+            pointer_ipc::ui_get,
+            pointer_ipc::ui_set
         ]);
     let result = builder
         .setup(move |app| {

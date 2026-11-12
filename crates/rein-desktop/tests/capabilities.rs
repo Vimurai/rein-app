@@ -31,6 +31,11 @@ const ALLOWED: &[&str] = &[
     "allow-release-apply",
     "allow-profiles-plan",
     "allow-profiles-apply",
+    // E-40: the folder dialog (opened by the core — no plugin, D-046), paste, ui.json.
+    "allow-project-choose",
+    "allow-clipboard-read",
+    "allow-ui-get",
+    "allow-ui-set",
 ];
 
 fn json(rel: &str) -> serde_json::Value {

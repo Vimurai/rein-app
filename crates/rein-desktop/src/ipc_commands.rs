@@ -17,4 +17,8 @@ pub const COMMANDS: &[&str] = &[
     "release_apply",
     "profiles_plan",
     "profiles_apply",
+    "project_choose",
+    "clipboard_read",
+    "ui_get",
+    "ui_set",
 ];

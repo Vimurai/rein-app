@@ -353,6 +353,13 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
         self.distro_name()
     }
 
+    /// `\\wsl.localhost\<distro>\home\<user>` (W3): the dialog starts in the Linux home; the
+    /// folder picked there maps back through `wsl_path`.
+    fn dialog_start(&self) -> Option<PathBuf> {
+        let d = self.probe_distro().ok()?;
+        Some(PathBuf::from(unc_of(&d.name, &d.home)))
+    }
+
     fn rein_start(&self, project: &Path) -> Result<ChildSpec, IpcError> {
         let d = self.probe_distro()?;
         let project = project.to_string_lossy();
@@ -387,6 +394,14 @@ pub fn wsl_exe(system_root: Option<String>) -> String {
         .filter(|r| crate::dirs::is_drive_path(r))
         .unwrap_or_else(|| "C:\\Windows".into());
     format!("{}\\System32\\wsl.exe", root.trim_end_matches('\\'))
+}
+
+/// The Windows UNC form of a Linux path in `distro` (the inverse of `wsl_path::to_linux`).
+pub fn unc_of(distro: &str, linux: &str) -> String {
+    format!(
+        "\\\\wsl.localhost\\{distro}{}",
+        linux.trim_end_matches('/').replace('/', "\\")
+    )
 }
 
 /// The probe's three lines: distro name, home, shell (empty → `/bin/sh`).
@@ -955,6 +970,22 @@ mod tests {
                 .unwrap()
                 .is_empty(),
             "WSL absent"
+        );
+    }
+
+    #[test]
+    fn the_dialog_starts_in_the_linux_home_and_maps_back() {
+        let h = host(ready());
+        let start = h.dialog_start().unwrap();
+        assert_eq!(start, PathBuf::from("\\\\wsl.localhost\\Ubuntu\\home\\me"));
+        assert_eq!(
+            wsl_path::to_linux(&start.to_string_lossy(), "Ubuntu").unwrap(),
+            "/home/me"
+        );
+        assert_eq!(
+            host(Stub::default()).dialog_start(),
+            None,
+            "WSL absent: the system default"
         );
     }
 

@@ -28,6 +28,8 @@ pub const ROWS: std::ops::RangeInclusive<u32> = 2..=200;
 /// desktop.md §Execution Constraints.
 pub const MAX_TABS: usize = 16;
 pub const EVENT_PTY_EXIT: &str = "pty_exit";
+/// The window label the capability file names.
+pub const MAIN_WINDOW: &str = "main";
 /// `clipboard_write` (desktop.md §API): the most text one copy may carry.
 pub const MAX_CLIPBOARD: usize = 64 * 1024;
 

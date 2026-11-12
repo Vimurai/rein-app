@@ -26,6 +26,14 @@ test("wordmark, numbered recent projects, missing dimmed, five hints", () => {
   assert.equal(bt[3], "WSL is not installed");
   assert.match(bt[4], /wsl --install$/);
   assert.equal(bt[5], "c  check again");
+  // Newcomer path (D-034): opening a project and checking health are buttons as well as keys.
+  const plain = startLines([r(1)]);
+  const acts = plain.filter((l) => typeof l !== "string" && l.action).map((l) => [l.text, l.action.name, l.action.arg ?? null]);
+  assert.deepEqual(acts, [
+    ["[ Open a project… ]", "project.open", null],
+    ["[ Check installation ]", "health.show", null],
+    [rows[0].text, "project.open", "/home/me/p1"],
+  ]);
 });
 
 test("start-screen keys: p o h u q, digits open recent N", () => {

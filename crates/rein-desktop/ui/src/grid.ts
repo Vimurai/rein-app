@@ -1,10 +1,14 @@
 // The cell grid (desktop.md §Core Concept rule 1, "Screen"): every row is exactly `cols`
 // cells; borders are box-drawing glyphs. Pure functions — no DOM — so they test under Node.
 
-/** A run of cells with one style class ("" for the row's default). */
+import type { ActionCall } from "./keymap.ts";
+
+/** A run of cells with one style class ("" for the row's default). A span with an action is
+ *  a button (D-034): a click runs the same action as its key. */
 export interface Span {
   text: string;
   cls: string;
+  action?: ActionCall;
 }
 export type Row = Span[];
 
@@ -19,7 +23,8 @@ export interface ShellData {
   version: string;
   /** `null` in the `simple` input style: no mode segment (D-034). */
   mode: string | null;
-  segments: string[];
+  /** Plain text, or a span whose action a click runs (health → the health view …). */
+  segments: (string | Span)[];
   clock: string;
   /** Centred in the stage frame: plain text is drawn dim; a span keeps its own class. */
   stageLines: (string | Span)[];
@@ -54,7 +59,7 @@ export function fit(r: Row, cols: number, fillCls = ""): Row {
   for (const s of r) {
     if (left <= 0) break;
     const t = clip(s.text, left);
-    out.push({ text: t, cls: s.cls });
+    out.push({ ...s, text: t });
     left -= width(t);
   }
   if (left > 0) out.push({ text: " ".repeat(left), cls: fillCls });
@@ -73,17 +78,19 @@ export function tabline(d: ShellData, cols: number): Row {
   const left: Row = [];
   d.tabs.forEach((t, i) => {
     const cls = t.current ? "tab-current" : "";
-    left.push({ text: ` ${i + 1}:${t.name}${t.current ? "*" : ""} `, cls });
-    left.push({ text: "×", cls: t.current ? "tab-current button" : "button" });
+    const n = String(i + 1);
+    left.push({ text: ` ${i + 1}:${t.name}${t.current ? "*" : ""} `, cls, action: { name: "tab.goto", arg: n } });
+    // `×` closes this tab (the tab's number rides along; the key form closes the current one).
+    left.push({ text: "×", cls: t.current ? "tab-current button" : "button", action: { name: "tab.detach", arg: n } });
     left.push({ text: " ", cls });
   });
-  left.push({ text: "  ", cls: "" }, { text: "[+]", cls: "button" });
+  left.push({ text: "  ", cls: "" }, { text: "[+]", cls: "button", action: { name: "project.open" } });
   const menu: Row = [
-    { text: "[≡]", cls: "button" },
+    { text: "[≡]", cls: "button", action: { name: "menu.show" } },
     { text: " ", cls: "" },
   ];
   const version: Row = [
-    { text: `rein ${d.version}`, cls: "dim" },
+    { text: `rein ${d.version}`, cls: "dim", action: { name: "release.update" } },
     { text: "  ", cls: "" },
   ];
   // The menu is the newcomer's way in (D-034): on a narrow window the version goes first.
@@ -109,7 +116,7 @@ export function stage(lines: readonly (string | Span)[], cols: number, rows: num
     out.push([
       { text: "│", cls: "frame v" },
       { text: " ".repeat(l), cls: "" },
-      { text, cls: typeof line === "string" ? "dim" : line.cls },
+      typeof line === "string" ? { text, cls: "dim" } : { ...line, text },
       { text: " ".repeat(pad - l), cls: "" },
       { text: "│", cls: "frame v" },
     ]);
@@ -124,7 +131,8 @@ export function statusline(d: ShellData, cols: number): Row {
   if (d.mode !== null) left.push({ text: ` ${d.mode} `, cls: `mode-${d.mode.toLowerCase()}` });
   d.segments.forEach((s, i) => {
     if (i > 0 || d.mode !== null) left.push({ text: " │", cls: "bar dim" });
-    left.push({ text: ` ${s}`, cls: "bar" });
+    if (typeof s === "string") left.push({ text: ` ${s}`, cls: "bar" });
+    else left.push({ text: " ", cls: "bar" }, { ...s, cls: `bar ${s.cls}`.trim() });
   });
   return split(left, [{ text: ` ${d.clock} `, cls: "bar" }], cols, "bar");
 }

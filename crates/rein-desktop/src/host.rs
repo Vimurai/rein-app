@@ -69,4 +69,8 @@ pub trait Host: Send + Sync {
     fn distro(&self) -> Option<String> {
         None
     }
+
+    /// Where the folder dialog opens (E-40): the home directory; on Windows the Linux home
+    /// as `\\wsl.localhost\<distro>\home\<user>` (W3).
+    fn dialog_start(&self) -> Option<PathBuf>;
 }

@@ -7,7 +7,7 @@ import { TooltipProvider } from "../components/tooltip.tsx";
 import { App } from "./app.tsx";
 import { DEFAULT_CONFIG, type ConfigView } from "./config.ts";
 import { hardenPrototypes } from "./harden.ts";
-import { configGet } from "./ipc.ts";
+import { configGet, uiGet } from "./ipc.ts";
 
 // Every import above has run; nothing untrusted has been handled yet.
 hardenPrototypes();
@@ -21,11 +21,13 @@ const initial: ConfigView = await configGet().catch((e: { message?: string }) =>
   error: `config: ${e.message ?? String(e)}`,
 }));
 
+const initialUi = await uiGet().catch(() => null);
+
 const mount = document.getElementById("root");
 if (mount) {
   createRoot(mount).render(
     <TooltipProvider>
-      <App initial={initial} startDir={startDir} />
+      <App initial={initial} initialUi={initialUi} startDir={startDir} />
     </TooltipProvider>,
   );
 }
