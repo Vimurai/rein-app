@@ -202,18 +202,26 @@ mod tests {
     #[test]
     fn a_missing_path_is_kept_and_marked_and_forget_removes_it() {
         let t = tempfile::tempdir().unwrap();
-        let live = tempfile::tempdir().unwrap();
-        let live_path = live.path().to_str().unwrap().to_string();
         let s = store(t.path());
         s.touch("/no/such/project", None).unwrap();
-        s.touch(&live_path, None).unwrap();
-        let l = s.list();
-        assert_eq!(l[0].exists, Some(true));
-        assert_eq!(l[1].exists, Some(false), "kept, shown dimmed");
+        s.touch("/no/other/project", None).unwrap();
+        assert_eq!(s.list()[1].exists, Some(false), "kept, shown dimmed");
         s.forget("/no/such/project").unwrap();
         assert_eq!(s.list().len(), 1);
         let unchecked = ProjectStore::open(Some(t.path().to_path_buf()), false);
         assert_eq!(unchecked.list()[0].exists, None, "Windows: not probed");
+    }
+
+    /// Only a POSIX path is stored (on Windows they are WSL paths and never probed), so a
+    /// live directory on this machine exists only where the temp dir is a POSIX path.
+    #[cfg(unix)]
+    #[test]
+    fn a_live_path_is_marked_present() {
+        let t = tempfile::tempdir().unwrap();
+        let live = tempfile::tempdir().unwrap();
+        let s = store(t.path());
+        s.touch(live.path().to_str().unwrap(), None).unwrap();
+        assert_eq!(s.list()[0].exists, Some(true));
     }
 
     #[test]
