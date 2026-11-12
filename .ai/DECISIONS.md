@@ -1553,3 +1553,48 @@ Maintained by 1Password; no RustSec advisory known to the Engineer. The IPC inpu
 
 ### Rollback
 Remove `clipboard_write` and the dependency; `y` then reports that copying is unavailable.
+
+## D-043 — `toml` for config.toml (E-37, dependency_gate, Engineer-recorded)
+
+**Date**: 2026-11-12
+**Task**: E-37 (`Config` service — desktop.md §Components 4, §Data Model `ConfigFile`, §Security 4)
+**Decision**: ADOPT `toml` 1.2.1 (MIT OR Apache-2.0) as a direct dependency of `rein-desktop` — the version Tauri's own build already pulls into `Cargo.lock`, so no new code enters the tree. Named in desktop.md §Execution Constraints. `notify` is **not** added: config.toml is re-read when its modification time or size changes, polled every 500 ms, as the Windows handoff directory is (D-038 addendum, Architect: "keep the 200 ms polling"). Recorded by the Engineer; the Architect may revise.
+
+### Why needed
+The config file is TOML (§Core Concept rule 5). Validation must report file, line and reason; `toml`'s errors carry a byte span, which gives the line.
+
+### Alternatives considered
+A hand-written TOML subset parser — a second parser of a format with string escapes, tables and arrays is where bugs and divergence come from.
+
+### Rollback
+`Config` is one module; removing it returns the window to its built-in defaults.
+
+## D-044 — Rulings on the E-42 / E-36 report: `dir_complete`, `arboard`, the prototype freeze, refused Radix styles, polling instead of `notify`
+
+**Date**: 2026-11-12
+**Task**: E-42 (b3b40e6) and E-36 (0bf9edd) accepted on the Engineer's report; amends `desktop.md` §API, §Security 1, §Components 4, §Execution Constraints, §Windows window W4
+**Decision**: Six items the Engineer raised are ruled as follows.
+
+### Rulings
+1. **`dir_complete` is added to the closed IPC table** as built (absolute checked prefix, ≤ 50, directories only, through the `Host` seam). On Windows it gets one more fixed `wsl.exe` call shape (`ls -1Ap` in `--cd <parent>`, with the `/` guard except when the parent is `/`), built in E-45.
+2. **`arboard` (D-042) is ratified** for `clipboard_write`, text only. It keeps the clipboard out of the web view's capabilities.
+3. **D-040 is ratified**: the UI freezes `Object.prototype` after its modules load and before the first untrusted input; Tauri's `freezePrototype` stays off.
+4. **Refused runtime `<style>` from Radix is acceptable** while nothing the user sees or does depends on it. The CSP is not loosened; a component that breaks without the style is dropped (D-037 ruling 4 stands). E-40 verifies each mounted component with the CSP active.
+5. **No `notify` dependency.** `config.toml` reload polls the modification time every 500 ms, as the Windows handoff directory polls every 200 ms. E-37's task text naming `notify` is superseded.
+6. Hints for actions not yet wired show the real CLI command; own class names must not collide with Tailwind utilities (tested).
+
+### Alternatives considered
+1. **Let the web view list directories through an fs plugin** — rejected: D-033 ruling 7, no `fs` capability.
+2. **`notify` for config reload** — rejected: a native watcher dependency on three platforms for one small file; half a second of latency is not noticeable after a save.
+3. **`style-src 'unsafe-inline'` for Radix** — rejected: it would also allow injected styles from terminal-derived text.
+4. **No directory completion on Windows** — rejected: `:open` with a typed Linux path is the keyboard way to open a project there.
+
+### Constraints driving this decision
+- D-033 ruling 7 (closed IPC table, strict CSP), D-038 (fixed `wsl.exe` argv shapes, constant scripts).
+
+### Impact
+- Unlocks: E-37 without `notify`; E-45 gains directory completion on Windows.
+- Risk if wrong: a `wsl.exe` call per Tab press may feel slow on a cold VM (5-second limit, empty list on failure); a file name containing a newline can yield a completion that does not exist — it fails validation when opened.
+
+### Rollback
+Remove the `dir_complete` row and command (completion falls back to command and theme names); swap polling for a watcher behind the same `Config` interface.

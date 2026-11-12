@@ -155,7 +155,8 @@ sixteen colours are given to xterm.js, so the chrome and the terminal always mat
 3. **`ProjectStore`** — the recent-projects list in the app's own state file. A directory
    is a project when it contains `.ai/`; the app reads nothing inside `.ai/`. Entries are
    canonical absolute paths; a path that no longer exists is shown dimmed, not removed.
-4. **`Config`** — loads, validates and watches `config.toml`. An invalid file keeps the
+4. **`Config`** — loads, validates and re-reads `config.toml` when its modification time
+   changes (polled every 500 ms; no watcher dependency — D-044). An invalid file keeps the
    previous good config and shows the error (file, line, reason) on the command line.
    A key may be bound only to an action from the closed list; the file cannot name a
    program to run.
@@ -223,7 +224,8 @@ else (no `shell`, `fs`, `http` or `opener` plugin).
 | `release_check` | — | installed version, newest version, notes | offline |
 | `release_apply` | `update` \| `rollback` | progress lines (channel), then the Phase 1 exit code | lock held · every Phase 1 refusal, text unchanged |
 | `profiles_plan` / `profiles_apply` | profile names | per-profile diff of the three allowed keys / result | Phase 1 errors, text unchanged |
-| `clipboard_write` | text (≤ 64 KiB) | — | — |
+| `clipboard_write` | text (≤ 64 KiB); text only, through `arboard` (D-042) | — | — |
+| `dir_complete` | absolute path prefix that passes the project-path check | at most 50 directory paths (directories only; hidden ones only when the typed stem starts with `.`; names failing the display-text rule dropped), through the `Host` seam | unsafe or relative prefix → empty list |
 | `clipboard_read` | — (only on a paste action started by the user) | text (≤ 1 MiB) | — |
 | `project_choose` | — | a directory picked in the system folder dialog, then validated exactly as `tab_open` validates | cancelled · same as `tab_open` |
 | `ui_get` / `ui_set` | — / one field of `ui.json`, value checked against its type | effective settings, each marked `config` \| `ui` \| `default` | field set in `config.toml` (read-only) |
@@ -243,7 +245,10 @@ Trust boundaries added by the window:
 1. **Web view → core.** The web view loads only the bundled UI (`tauri://`), with a CSP of
    `default-src 'self'`, no remote origin, no `eval`, no inline script. Navigation and new
    windows are refused. Every IPC input is validated in Rust against the types above; the
-   web side is treated as untrusted even though we ship it.
+   web side is treated as untrusted even though we ship it. `Object.prototype` is frozen
+   by the UI itself right after its bundled modules load and before any pty output, IPC
+   reply or event is handled (D-040, ratified D-044) — Tauri's `freezePrototype` stays off
+   because xterm.js assigns over a prototype property while loading.
 2. **Core → processes.** The only programs the window starts are `rein` from the installed
    tree (argv fixed per action: `start`, `doctor --json`, and what the Phase 1 library
    already runs). The app does **not** start `$EDITOR`: `:config` shows the file's path on
@@ -286,13 +291,18 @@ No secret is read, stored or shown. The window makes no network call of its own;
   Node and notarization / code signing are later revisions and are not started by any task
   below.
 - Dependencies each pass `skill: dependency_gate`: `tauri` 2, `portable-pty`, `toml`,
-  `notify`; web: `@xterm/xterm`, `@xterm/addon-fit`, `@xterm/addon-webgl`, `esbuild`,
+  `arboard` (text clipboard, D-042; `notify` is not used — D-044); web: `@xterm/xterm`, `@xterm/addon-fit`, `@xterm/addon-webgl`, `esbuild`,
   `typescript`, and (D-037) `react`, `react-dom`, `tailwindcss` (compiled at build time to
   one static stylesheet), the `@radix-ui/*` primitives of the components actually used,
   `cmdk`, `class-variance-authority`, `clsx`, `tailwind-merge`. Only the shadcn components
   named in §Components 6 are copied in; no icon set (glyphs are text), no other component
   library. The CSP is unchanged: a component that needs an inline `<style>` or script
-  element is not used. Web bundle ≤ 1.5 MiB uncompressed, xterm.js included. The web
+  element is not used. One narrowing (D-044): Radix Dialog / Context Menu / Select try to
+  insert a `<style>` element at runtime (scroll lock); the CSP refuses it and that is
+  accepted **as long as nothing the user sees or does depends on the refused style** —
+  the one rule that matters is shipped statically. A component that misbehaves without it
+  is dropped, as before. Our own class names must not collide with a Tailwind utility
+  (`border` did; a test fails on any class defined by both). Web bundle ≤ 1.5 MiB uncompressed, xterm.js included. The web
   bundle is built in CI from a committed lockfile.
 - Hosted CI builds and tests `rein-desktop` on Linux, macOS and (from E-43) Windows.
 
@@ -367,6 +377,12 @@ W4. **Health, release, profiles on Windows** — never the Windows binary's own
    | `release_check` | `exec rein-app update --check` | the CLI's lines, escaped, unchanged |
    | `release_apply update` / `rollback` | `exec rein-app update --yes` / `exec rein-app rollback` | lines streamed; the CLI's exit code |
    | `profiles_plan` / `profiles_apply` | `exec rein-app profiles apply --dry-run --profile N…` / without `--dry-run` | the CLI's lines; exit code |
+   **Directory completion on Windows (`dir_complete`, part of E-45):** one more fixed call
+   shape, 5-second limit, 64 KiB cap — `wsl.exe -d D --cd <parent> -e sh -c 'case $PWD in /) exit 5;; esac; ls -1Ap'`,
+   and for the parent `/` itself the same call with the script `ls -1Ap` (the `--cd`
+   fallback cannot mislead there). Only lines ending in `/` are kept, then the same
+   filter and 50-entry cut as on Linux. Any failure → an empty list, never an error line.
+   Until E-45 `WslHost` returns none.
    Profile names are checked against `[A-Za-z0-9._-]{1,64}` and against the list from
    `rein-app profiles list` before they are placed in an argv. If `rein-app` is missing
    inside WSL (exit 127), the overlay says "rein-app is not installed inside WSL — install
@@ -488,7 +504,9 @@ release artifact carries the window until a task adds it to the dist configurati
   the child, detach reaps it, exit code is reported, back-pressure pauses reading. A test
   asserts the argv is exactly `[rein, start]` and the cwd is the project.
 - **IPC validation:** one refused case per command (oversized write, resize out of range,
-  path with a control character, path without `.ai/`, unknown pty).
+  path with a control character, path without `.ai/`, unknown pty). `dir_complete`: a
+  relative prefix and a prefix with a control character return nothing; more than 50
+  matches are cut to 50; a file is never returned.
 - **Config:** defaults file parses to the built-in defaults; unknown key, bad colour,
   binding to an unknown action and an oversized file are each refused with file and line,
   and the previous config stays active; a save triggers `config_changed`.
