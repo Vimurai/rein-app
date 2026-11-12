@@ -11,6 +11,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { concat, splitInput } from "./chunks.ts";
 import { Channel, ptyAck, ptyResize, ptyWrite, tabDetach, tabOpen, type Tab } from "./ipc.ts";
+import { PtySize } from "./pty-size.ts";
 import { xtermTheme, type Theme } from "./theme.ts";
 
 export interface TermOptions {
@@ -35,6 +36,10 @@ export class TermTab {
   #gen = 0;
   /** Bytes consumed before `tab_open` returned (no pty id yet): acknowledged once it does. */
   #owed = 0;
+  /** The pty's size: a resize while `tab_open` is pending is sent once it returns (E-52). */
+  readonly #size = new PtySize((pty, cols, rows) => {
+    ptyResize(pty, cols, rows).catch(() => {});
+  });
   /** Called with the tab once open, and with an error message if opening fails. */
   onOpen: (tab: Tab) => void = () => {};
   onError: (message: string) => void = () => {};
@@ -69,9 +74,7 @@ export class TermTab {
     document.fonts?.addEventListener("loadingdone", this.#fontsLoaded);
     this.term.attachCustomKeyEventHandler((e) => this.keyFilter(e));
     this.term.onData((s) => this.#input(s));
-    this.term.onResize(({ cols, rows }) => {
-      if (this.#tab) ptyResize(this.#tab.pty, cols, rows).catch(() => {});
-    });
+    this.term.onResize(({ cols, rows }) => this.#size.resized(cols, rows));
   }
 
   readonly #fontsLoaded = (): void => {
@@ -92,16 +95,32 @@ export class TermTab {
     cancelAnimationFrame(this.#frame);
     this.#frame = 0;
     this.#queue = [];
+    this.#size.reset();
+    // A pane created this frame has no measured cell yet, and the fit would leave xterm's
+    // default 80 × 24: fit after the next frame, so the pty opens at the stage's size.
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    if (gen !== this.#gen) return;
     this.#fit.fit();
     const output = new Channel<ArrayBuffer>((buf) => {
       if (gen === this.#gen) this.#output(new Uint8Array(buf));
     });
     try {
-      this.#tab = await tabOpen(this.#project, this.term.cols, this.term.rows, output);
+      const { cols, rows } = this.term;
+      const opened = await tabOpen(this.#project, cols, rows, output);
+      if (gen !== this.#gen) {
+        // Closed (or restarted) while opening: this pty belongs to no terminal.
+        await tabDetach(opened.id).catch(() => {});
+        return;
+      }
+      this.#tab = opened;
+      // The stage may have changed size while the pty was opening (seconds on Windows).
+      this.#fit.fit();
+      this.#size.opened(this.#tab.pty, cols, rows, this.term);
       this.#ack(0);
       this.term.focus();
       this.onOpen(this.#tab);
     } catch (e) {
+      if (gen !== this.#gen) return; // closed or restarted meanwhile: not this tab's error
       const msg = (e as { message?: string }).message ?? String(e);
       this.onError(msg);
     }
@@ -167,6 +186,8 @@ export class TermTab {
 
   /** Detach: close the pty (the tmux session keeps running) and drop the terminal. */
   async detach(): Promise<void> {
+    this.#gen++; // a start still waiting for its first frame opens nothing
+    this.#size.reset();
     cancelAnimationFrame(this.#frame);
     if (this.#tab) await tabDetach(this.#tab.id).catch(() => {});
     this.#tab = null;

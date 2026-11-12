@@ -70,3 +70,11 @@ jobs:
       - name: test
         shell: bash
         run: cargo test $CRATES --locked
+      # D-052 r3 (E-52): the window under Xvfb opens a tab and the app's tmux client must
+      # fill a 2560 x 1440 window, also when the open is held 3 s as wsl.exe holds it.
+      - name: window end-to-end — the terminal fills the window (Linux, Xvfb)
+        if: matrix.desktop && runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y --no-install-recommends xvfb tmux libx11-dev
+          cargo build -p rein-desktop --locked
+          bash crates/rein-desktop/tests/e2e/terminal-size.sh target/debug/rein-desktop

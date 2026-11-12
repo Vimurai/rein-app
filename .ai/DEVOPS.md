@@ -384,3 +384,16 @@ A fresh throwaway clone with the artifact regenerated; the assertions are unchan
 - **D-031:** side A re-runs `install-rein.sh`, as a clone operator updates.
 - **Run 2: GREEN, 1 passed, 157 s.** rein-app's install exited 0 in case 2.
 - E-9 is closed. CI wiring comes later, with E-32 (D-028, D-029).
+
+### 2026-11-12 — E-52: window end-to-end size check in hosted CI (D-052 r3)
+**What / why**
+- `.github/workflows/ci.yml`, `test` job, Linux only: new last step `window end-to-end — the terminal fills the window`. It installs `xvfb tmux libx11-dev`, builds the debug `rein-desktop`, and runs `crates/rein-desktop/tests/e2e/terminal-size.sh`. On a 2560 x 1440 Xvfb screen the script opens a project tab four times: fast and slow open, maximised and default window. A slow open is held for 3 s by an `LD_PRELOAD` `realpath()` shim (`slow-open.c`), standing in for `wsl.exe` on Windows. The app's tmux client must end at the same size as on a fast open, and above 200 x 50 when maximised. On the broken `term.ts` (HEAD ddd58a5) the slow runs end at 80x24 and the script fails. On the fix it passes: 318x62 and 135x29.
+- Hermetic: temp HOME and XDG dirs. The `~/.rein/bin/rein` is a stand-in (`new-session -d`, then `attach`). A `tmux` wrapper pins every tmux call to a socket inside the temp dir. No tmux server outside the temp dir is touched.
+
+**Security implications**
+- No secrets or permissions. Three apt packages from the runner's Ubuntu mirror, which the job already uses for WebKitGTK. The shim and the resize helper are compiled from source in the repo and are loaded only into the window under test. Nothing is published.
+
+**Rollback**
+- Delete the step; nothing else depends on it.
+
+**Local run:** `bash crates/rein-desktop/tests/e2e/terminal-size.sh [binary]` (build the UI first). `KEEP=1` keeps the temp dir; `SHOT_DIR=<dir>` saves screenshots (ffmpeg). On WSL, Xvfb listens on its abstract socket only (WSLg's `/tmp/.X11-unix` is read-only). The script accepts an Xvfb that is still running after 1.5 s.
