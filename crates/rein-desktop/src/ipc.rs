@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
@@ -16,6 +17,10 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::host::Host;
 use crate::pty::{ChildSpec, Events, PtyError, PtyHost, PtyId, Size};
+use crate::tmux_overlay::{self, Colours, OverlayHealth};
+
+/// How long `tab_tmux` waits for a tab's tty (V6).
+pub const TTY_WAIT: Duration = Duration::from_secs(10);
 
 #[cfg(all(test, unix))]
 mod commands {
@@ -97,6 +102,12 @@ pub struct Desktop {
     pub host: PtyHost,
     tabs: Mutex<HashMap<u32, Tab>>,
     next_tab: AtomicU32,
+    /// The last tmux overlay failure, shown in the health view (V6).
+    pub overlay: OverlayHealth,
+    /// One overlay script at a time, and per tab only the newest request runs: an older one
+    /// still waiting is dropped (security review of E-51, F4).
+    overlay_run: Mutex<()>,
+    overlay_seq: Mutex<HashMap<u32, u64>>,
 }
 
 impl Desktop {
@@ -106,6 +117,9 @@ impl Desktop {
             host: PtyHost::default(),
             tabs: Mutex::new(HashMap::new()),
             next_tab: AtomicU32::new(0),
+            overlay: OverlayHealth::default(),
+            overlay_run: Mutex::new(()),
+            overlay_seq: Mutex::new(HashMap::new()),
         }
     }
 
@@ -169,6 +183,48 @@ impl Desktop {
         Ok(self.host.ack(pty, bytes)?)
     }
 
+    /// Style the tmux session `tab` shows (V6, D-050): `mode` is a status mode or `off`. The
+    /// tab's tty is waited for (on Windows the start script prints it) at most
+    /// [`TTY_WAIT`]. `None`: the tab is not open (closed meanwhile) — nothing to report.
+    pub fn tmux_overlay(
+        &self,
+        tab: u32,
+        mode: &str,
+        colours: &Colours,
+    ) -> Option<Result<(), String>> {
+        let pty = self.tabs().get(&tab)?.pty;
+        let seq = |f: &mut dyn FnMut(&mut HashMap<u32, u64>) -> u64| {
+            f(&mut self.overlay_seq.lock().unwrap_or_else(|e| e.into_inner()))
+        };
+        let mine = seq(&mut |m| {
+            let n = m.entry(tab).or_default();
+            *n += 1;
+            *n
+        });
+        let deadline = Instant::now() + TTY_WAIT;
+        let tty = loop {
+            match self.host.tty(pty) {
+                Ok(Some(t)) => break t,
+                Ok(None) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(100))
+                }
+                Ok(None) => return Some(Err("the tab's tty was not seen".into())),
+                Err(_) => return None,
+            }
+        };
+        let args = match tmux_overlay::args(&tty, mode, colours) {
+            Ok(a) => a,
+            Err(why) => return Some(Err(why)),
+        };
+        let _one = self.overlay_run.lock().unwrap_or_else(|e| e.into_inner());
+        if seq(&mut |m| m.get(&tab).copied().unwrap_or_default()) != mine {
+            return None; // a newer request for this tab runs instead
+        }
+        let outcome = self.platform.tmux_overlay(&args);
+        // A tab closed while the script ran restored itself through the hook.
+        self.tabs().contains_key(&tab).then_some(outcome)
+    }
+
     /// The window is closing: detach every tab and reap every child before the process ends.
     pub fn detach_all(&self) {
         self.tabs().clear();
@@ -180,6 +236,10 @@ impl Desktop {
         if let Some(t) = self.tabs().remove(&tab) {
             let _ = self.host.detach(t.pty);
         }
+        self.overlay_seq
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&tab);
     }
 }
 
@@ -269,6 +329,40 @@ pub fn pty_ack(state: State<'_, Desktop>, pty: PtyId, bytes: u32) -> Result<(), 
 #[tauri::command(async)]
 pub fn tab_detach(state: State<'_, Desktop>, tab: u32) {
     state.detach(tab);
+}
+
+/// The overlay mode the settings ask for: a status mode, or `off` when the overlay is off.
+pub fn overlay_mode(ui: &crate::ui_store::UiView) -> String {
+    match (
+        ui.tmux_overlay.value.as_bool(),
+        ui.tmux_status.value.as_str(),
+    ) {
+        (Some(false), _) => "off".into(),
+        (_, Some(m)) => m.into(),
+        _ => "hidden".into(),
+    }
+}
+
+/// `tab_tmux` (desktop.md §Look and feel v2 V6, D-050): apply the window's tmux look to the
+/// session `tab` shows, in the active theme's `colours` — after the tab opens and on a
+/// theme or setting change. Only the colours come from the web side, each checked as
+/// `#rrggbb`; the mode comes from the settings. A failure is never an error here: tmux stays
+/// as the user has it and the health view says why.
+#[tauri::command(async)]
+pub fn tab_tmux(
+    state: State<'_, Desktop>,
+    ui: State<'_, crate::ui_store::UiStore>,
+    config: State<'_, Arc<crate::config::ConfigService>>,
+    tab: u32,
+    colours: Colours,
+) -> Result<(), IpcError> {
+    let mode = overlay_mode(&ui.view(&config.view()));
+    // Colours first: a refusal here is the web side's mistake, not tmux's.
+    tmux_overlay::args("/dev/pts/0", &mode, &colours).map_err(|why| err("bad_value", why))?;
+    if let Some(outcome) = state.tmux_overlay(tab, &mode, &colours) {
+        state.overlay.record(&outcome);
+    }
+    Ok(())
 }
 
 /// `config_get` (desktop.md §API, E-37): the active config, the file's path and the last
@@ -436,6 +530,7 @@ mod tests {
             cwd: Some(proj.path().into()),
             env_remove: crate::local_host::ENV_REMOVED,
             env_set: crate::local_host::ENV_SET,
+            tty_line: false,
         };
         let tab = d
             .open_spec(
@@ -472,6 +567,7 @@ mod tests {
             cwd: Some(proj.path().into()),
             env_remove: crate::local_host::ENV_REMOVED,
             env_set: crate::local_host::ENV_SET,
+            tty_line: false,
         };
         let handles: Vec<_> = (0..24)
             .map(|_| {
@@ -491,6 +587,96 @@ mod tests {
             .count();
         assert_eq!(opened, MAX_TABS);
         d.detach_all();
+    }
+
+    /// A host that records the overlay's words and answers with `answer`.
+    struct OverlayHost {
+        seen: Arc<Mutex<Vec<Vec<String>>>>,
+        answer: Result<(), String>,
+    }
+    impl Host for OverlayHost {
+        fn project(&self, _: &str) -> Result<std::path::PathBuf, IpcError> {
+            unreachable!()
+        }
+        fn rein_start(&self, _: &Path) -> Result<ChildSpec, IpcError> {
+            unreachable!()
+        }
+        fn complete_dir(&self, _: &str) -> Result<Vec<String>, IpcError> {
+            unreachable!()
+        }
+        fn doctor(&self) -> crate::cli::HealthView {
+            unreachable!()
+        }
+        fn run_cli(
+            &self,
+            _: &crate::cli::CliAction,
+            _: &mut dyn FnMut(String),
+        ) -> Result<Option<i32>, IpcError> {
+            unreachable!()
+        }
+        fn tmux_overlay(&self, args: &[String]) -> Result<(), String> {
+            self.seen.lock().unwrap().push(args.to_vec());
+            self.answer.clone()
+        }
+        fn dialog_start(&self) -> Option<std::path::PathBuf> {
+            None
+        }
+    }
+
+    #[test]
+    fn the_overlay_is_run_for_the_tabs_own_tty_and_never_for_a_closed_tab() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let d = Desktop::new(Box::new(OverlayHost {
+            seen: Arc::clone(&seen),
+            answer: Err("tmux is older than 3.2".into()),
+        }));
+        let proj = project();
+        let spec = ChildSpec {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), "cat".into()],
+            cwd: Some(proj.path().into()),
+            env_remove: crate::local_host::ENV_REMOVED,
+            env_set: crate::local_host::ENV_SET,
+            tty_line: false,
+        };
+        let q: Arc<dyn Events> = Arc::new(Quiet(Mutex::new(None)));
+        let tab = d
+            .open_spec(&spec, proj.path(), Size { cols: 80, rows: 24 }, q)
+            .unwrap();
+        let c = Colours {
+            bg: "#1e1e2e".into(),
+            fg: "#cdd6f4".into(),
+            muted: "#a6adc8".into(),
+            border: "#6c7086".into(),
+            accent: "#cba6f7".into(),
+        };
+        let out = d.tmux_overlay(tab.id, "app", &c);
+        assert_eq!(out, Some(Err("tmux is older than 3.2".into())));
+        let words = seen.lock().unwrap()[0].clone();
+        assert_eq!(Some(words[0].clone()), d.host.tty(tab.pty).unwrap());
+        assert_eq!(&words[1..3], ["app", "#1e1e2e"]);
+        // A bad colour never reaches the host.
+        let mut bad = c.clone();
+        bad.bg = "#1e1e2e; kill-server".into();
+        assert!(matches!(d.tmux_overlay(tab.id, "app", &bad), Some(Err(_))));
+        assert_eq!(seen.lock().unwrap().len(), 1);
+        d.detach(tab.id);
+        assert_eq!(d.tmux_overlay(tab.id, "app", &c), None, "a closed tab");
+        assert_eq!(seen.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn the_overlay_mode_follows_the_settings() {
+        let t = tempfile::tempdir().unwrap();
+        let ui = crate::ui_store::UiStore::open(Some(t.path().to_path_buf()));
+        let cfg = crate::config::ConfigService::open(Some(t.path().to_path_buf())).view();
+        assert_eq!(overlay_mode(&ui.view(&cfg)), "hidden");
+        ui.set(&cfg, "tmux_status", &serde_json::Value::from("keep"))
+            .unwrap();
+        assert_eq!(overlay_mode(&ui.view(&cfg)), "keep");
+        ui.set(&cfg, "tmux_overlay", &serde_json::Value::from(false))
+            .unwrap();
+        assert_eq!(overlay_mode(&ui.view(&cfg)), "off");
     }
 
     #[test]

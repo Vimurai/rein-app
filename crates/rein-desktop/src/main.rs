@@ -30,6 +30,7 @@ mod single_instance;
 #[cfg(windows)]
 #[path = "single_instance_windows.rs"]
 mod single_instance;
+mod tmux_overlay;
 mod ui_store;
 // The Windows host: plain Rust everywhere, so its tests run on every platform; only the
 // Windows build starts it.
@@ -198,6 +199,7 @@ fn main() -> ExitCode {
             ipc::pty_resize,
             ipc::pty_ack,
             ipc::tab_detach,
+            ipc::tab_tmux,
             ipc::clipboard_write,
             ipc::dir_complete,
             ipc::config_get,

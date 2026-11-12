@@ -79,11 +79,25 @@ pub fn health_get(
     cli_state: State<'_, CliState>,
     refresh: bool,
 ) -> HealthView {
-    let (view, fresh) = cli_state.health(desktop.platform.as_ref(), refresh);
+    let (mut view, fresh) = cli_state.health(desktop.platform.as_ref(), refresh);
+    with_overlay(&mut view, desktop.overlay.failure());
     if fresh {
         let _ = app.emit(EVENT_HEALTH_CHANGED, view.clone());
     }
     view
+}
+
+/// The tmux overlay's last failure as one health line (V6): a warning, never a failure —
+/// tmux simply looks as the user has it.
+pub fn with_overlay(view: &mut HealthView, failure: Option<String>) {
+    if let Some(why) = failure {
+        view.checks.push(crate::cli::HealthCheck {
+            id: "tmux_overlay".into(),
+            status: "warn",
+            line: format!("tmux overlay not applied: {why}"),
+            fix: None,
+        });
+    }
 }
 
 #[tauri::command(async)]

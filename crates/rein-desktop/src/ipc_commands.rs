@@ -7,6 +7,7 @@ pub const COMMANDS: &[&str] = &[
     "pty_resize",
     "pty_ack",
     "tab_detach",
+    "tab_tmux",
     "clipboard_write",
     "dir_complete",
     "config_get",

@@ -26,6 +26,9 @@ pub struct UiFile {
     pub theme: Option<String>,
     pub font_size: Option<u32>,
     pub decorations: Option<bool>,
+    /// The tmux overlay (V6, D-050): on / off, and the status-line mode.
+    pub tmux_overlay: Option<bool>,
+    pub tmux_status: Option<String>,
     pub first_run_done: bool,
 }
 
@@ -37,6 +40,8 @@ impl Default for UiFile {
             theme: None,
             font_size: None,
             decorations: None,
+            tmux_overlay: None,
+            tmux_status: None,
             first_run_done: false,
         }
     }
@@ -56,6 +61,8 @@ pub struct UiView {
     pub theme: Effective,
     pub font_size: Effective,
     pub decorations: Effective,
+    pub tmux_overlay: Effective,
+    pub tmux_status: Effective,
     pub first_run_done: bool,
 }
 
@@ -128,6 +135,18 @@ impl UiStore {
                 d.decorations.map(Value::from),
                 Value::from(c.window.decorations),
             ),
+            tmux_overlay: pick(
+                "tmux.overlay",
+                Value::from(c.tmux.overlay),
+                d.tmux_overlay.map(Value::from),
+                Value::from(c.tmux.overlay),
+            ),
+            tmux_status: pick(
+                "tmux.status",
+                Value::from(c.tmux.status.clone()),
+                d.tmux_status.clone().map(Value::from),
+                Value::from(c.tmux.status.clone()),
+            ),
             first_run_done: d.first_run_done,
         }
     }
@@ -180,6 +199,23 @@ impl UiStore {
                 d.decorations = match value {
                     Value::Null => None,
                     v => Some(v.as_bool().ok_or_else(bad)?),
+                };
+            }
+            "tmux_overlay" => {
+                refuse_config("tmux.overlay")?;
+                d.tmux_overlay = match value {
+                    Value::Null => None,
+                    v => Some(v.as_bool().ok_or_else(bad)?),
+                };
+            }
+            "tmux_status" => {
+                refuse_config("tmux.status")?;
+                d.tmux_status = match value {
+                    Value::Null => None,
+                    v => match v.as_str() {
+                        Some(m) if crate::tmux_overlay::STATUS_MODES.contains(&m) => Some(m.into()),
+                        _ => return Err(bad()),
+                    },
                 };
             }
             "first_run_done" => d.first_run_done = value.as_bool().ok_or_else(bad)?,
@@ -294,6 +330,26 @@ mod tests {
                 source: "ui"
             }
         );
+        // The tmux overlay settings (V6): defaults, a choice, config.toml winning.
+        assert_eq!(
+            s.view(&c).tmux_status,
+            Effective {
+                value: Value::from("hidden"),
+                source: "default"
+            }
+        );
+        s.set(&c, "tmux_status", &Value::from("app")).unwrap();
+        s.set(&c, "tmux_overlay", &Value::from(false)).unwrap();
+        assert_eq!(s.view(&c).tmux_status.value, "app");
+        assert_eq!(s.view(&c).tmux_overlay.value, false);
+        let t = cfg(&["tmux.status"]);
+        assert_eq!(
+            s.set(&t, "tmux_status", &Value::from("keep"))
+                .unwrap_err()
+                .kind,
+            "set_in_config"
+        );
+        assert_eq!(s.view(&t).tmux_status.source, "config");
     }
 
     #[test]
@@ -306,6 +362,8 @@ mod tests {
             ("theme", Value::from("solarized-light")),
             ("font_size", Value::from(200)),
             ("decorations", Value::from("no")),
+            ("tmux_overlay", Value::from("on")),
+            ("tmux_status", Value::from("off")),
             ("first_run_done", Value::from(1)),
         ] {
             assert_eq!(s.set(&c, f, &v).unwrap_err().kind, "bad_value", "{f}");

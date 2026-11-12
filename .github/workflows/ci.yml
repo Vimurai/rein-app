@@ -78,3 +78,15 @@ jobs:
           sudo apt-get install -y --no-install-recommends xvfb tmux libx11-dev
           cargo build -p rein-desktop --locked
           bash crates/rein-desktop/tests/e2e/terminal-size.sh target/debug/rein-desktop
+      # D-050 (E-51): the window's tmux overlay script against a real tmux server on private
+      # sockets — applied to the app client's session only, undone when that client detaches.
+      - name: tmux overlay against a real tmux (Linux, macOS)
+        if: matrix.desktop && runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get install -y --no-install-recommends tmux
+          else
+            brew install tmux
+          fi
+          bash crates/rein-desktop/tests/e2e/tmux-overlay.sh

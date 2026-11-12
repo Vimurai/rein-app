@@ -37,6 +37,7 @@ pub struct Config {
     pub theme: Theme,
     pub window: Window,
     pub keys: Keys,
+    pub tmux: Tmux,
     pub wsl: Wsl,
 }
 
@@ -115,6 +116,25 @@ impl Default for Keys {
     }
 }
 
+/// The tmux overlay (desktop.md §Look and feel v2 V6, D-050).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Tmux {
+    /// The window styles the tmux session it shows while attached.
+    pub overlay: bool,
+    /// `hidden` | `app` | `keep` (`tmux_overlay::STATUS_MODES`).
+    pub status: String,
+}
+
+impl Default for Tmux {
+    fn default() -> Self {
+        Self {
+            overlay: true,
+            status: "hidden".into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Wsl {
@@ -149,6 +169,10 @@ pub const DEFAULTS_FILE: &str = r##"# rein-app window configuration (desktop.md)
 #   [keys.normal]         # NORMAL-mode bindings, added or replacing: "keys" = "action"
 #   "g t" = "tab.next"
 #   "<leader> 1" = "tab.goto 1"
+
+# [tmux]                  # the window's look on the tmux session a tab shows, while it is open
+# overlay = true          # false: tmux looks as your own ~/.tmux.conf has it (never touched)
+# status = "hidden"       # hidden | app (the window list in the window's colours) | keep (yours)
 
 # [wsl]                   # Windows only
 #   distro = "Ubuntu"     # unset: WSL's default distro
@@ -303,6 +327,13 @@ fn validate(c: &Config) -> Result<(), Refusal> {
             return r("keys.normal", keys, why);
         }
     }
+    if !crate::tmux_overlay::STATUS_MODES.contains(&c.tmux.status.as_str()) {
+        return r(
+            "tmux",
+            "status",
+            format!("status {:?} — hidden, app or keep", c.tmux.status),
+        );
+    }
     if let Some(d) = &c.wsl.distro
         && crate::wsl_host::check_name(d).is_err()
     {
@@ -383,8 +414,8 @@ pub struct ConfigView {
     /// The last refusal (the previous good config is the one in `config`).
     pub error: Option<String>,
     /// The keys config.toml itself sets among those Settings can also set (`theme.name`,
-    /// `font.size`, `window.decorations`): those win over `ui.json` and are read-only in
-    /// Settings (D-034).
+    /// `font.size`, `window.decorations`, `tmux.overlay`, `tmux.status`): those win over
+    /// `ui.json` and are read-only in Settings (D-034).
     pub set: Vec<String>,
 }
 
@@ -397,6 +428,8 @@ pub fn settings_keys_set(text: &str) -> Vec<String> {
         ("theme", "name"),
         ("font", "size"),
         ("window", "decorations"),
+        ("tmux", "overlay"),
+        ("tmux", "status"),
     ]
     .iter()
     .filter(|(table, key)| t.get(*table).and_then(|v| v.get(*key)).is_some())
@@ -590,6 +623,8 @@ mod tests {
             ),
             ("[theme]\nname = \"solarized-light\"\n", 2, "unknown theme"),
             ("[wsl]\ndistro = \"a b\"\n", 2, "not a WSL distro name"),
+            ("[tmux]\nstatus = \"off\"\n", 2, "hidden, app or keep"),
+            ("[tmux]\noverlay = \"yes\"\n", 2, "expected a boolean"),
             ("[keys]\nescape = []\n", 2, "escape is"),
             ("this is not toml\n", 1, "expected"),
         ];

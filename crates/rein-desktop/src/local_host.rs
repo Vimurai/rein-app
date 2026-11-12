@@ -10,6 +10,7 @@ use crate::host::Host;
 use crate::ipc::{IpcError, err};
 use crate::project_path;
 use crate::pty::ChildSpec;
+use crate::tmux_overlay;
 
 /// Variables removed from the child's environment. `CLAUDECODE` marks a Claude Code
 /// session (desktop.md §Components 2); `TMUX`/`TMUX_PANE` would make `rein start` run
@@ -32,6 +33,7 @@ impl ChildSpec {
             cwd: Some(project.to_path_buf()),
             env_remove: ENV_REMOVED,
             env_set: ENV_SET,
+            tty_line: false,
         }
     }
 }
@@ -82,6 +84,18 @@ impl Host for LocalHost {
 
     fn complete_dir(&self, prefix: &str) -> Result<Vec<String>, IpcError> {
         complete_dir(prefix)
+    }
+
+    /// `/bin/sh -s -- <args>` with the constant script on stdin, in `/`, with the same
+    /// variables removed as for `rein start` — so it reaches the tmux server `rein start` does.
+    fn tmux_overlay(&self, args: &[String]) -> Result<(), String> {
+        let mut cmd = std::process::Command::new("/bin/sh");
+        cmd.args(["-s", "--"]).args(args).current_dir("/");
+        for k in ENV_REMOVED {
+            cmd.env_remove(k);
+        }
+        rein_platform::process::hide_console(&mut cmd); // a no-op here; one rule for every site
+        tmux_overlay::outcome(tmux_overlay::run(&mut cmd, tmux_overlay::LIMIT))
     }
 
     fn dialog_start(&self) -> Option<PathBuf> {

@@ -128,12 +128,18 @@ export interface UiView {
   theme: Effective<string>;
   font_size: Effective<number>;
   decorations: Effective<boolean>;
+  tmux_overlay: Effective<boolean>;
+  tmux_status: Effective<"hidden" | "app" | "keep">;
   first_run_done: boolean;
 }
 /** The system folder dialog; `null` when cancelled; the path is validated like `tab_open`. */
 export const projectChoose = () => invoke<string | null>("project_choose", {});
 /** Only from a user's paste action (desktop.md §Security 6). */
 export const clipboardRead = () => invoke<string>("clipboard_read", {});
+/** The tmux overlay (V6) for `tab`'s session in these colours; the mode is the settings'.
+ *  Resolves even when tmux was left alone — the health view says why. */
+export const tabTmux = (tab: number, colours: ReturnType<typeof import("./theme.ts").tmuxColours>) =>
+  invoke<void>("tab_tmux", { tab, colours });
 export const uiGet = () => invoke<UiView>("ui_get", {});
 export const uiSet = (field: string, value: unknown) => invoke<UiView>("ui_set", { field, value });
 

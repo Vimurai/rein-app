@@ -21,6 +21,7 @@ import {
   projectChoose,
   dirComplete,
   healthGet,
+  tabTmux,
   listen,
   projectsForget,
   projectsList,
@@ -33,7 +34,7 @@ import { WHICH_KEY_DELAY_MS, continuations, step, type ModeState } from "./modes
 import { MenuOverlay, PasteConfirm, ProjectPicker, WhichKey, label } from "./overlays.tsx";
 import { startLines, withStartKeys, type RecentView } from "./start.ts";
 import { TermTab } from "./term.ts";
-import { THEME_NAMES, cssVariables, type Theme } from "./theme.ts";
+import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
 
 /** What an action handler supplied by the app may do on the command line. */
 export interface Ui {
@@ -51,6 +52,9 @@ export interface ShellProps {
   lineHeight: number;
   /** Window opacity (0.6–1.0, config.toml); applies where the window is transparent. */
   opacity: number;
+  /** The tmux overlay settings (V6) as one key: a change re-applies the overlay to every
+   *  open tab, as a theme change does. */
+  tmuxKey: string;
   /** Actions the app owns (config, theme — E-37); everything else the shell runs. */
   handlers: Handlers;
   /** A line to show on the command line (a config.toml reload or refusal); `seq` changes
@@ -147,7 +151,7 @@ function useViewport(): { w: number; h: number } {
 }
 
 export function Shell(props: ShellProps) {
-  const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, handlers, notice, startDir, startLast } =
+  const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, tmuxKey, handlers, notice, startDir, startLast } =
     props;
   const [cell, setCell] = useState({ w: 0, h: 0 });
   const view = useViewport();
@@ -217,6 +221,17 @@ export function Shell(props: ShellProps) {
   useEffect(() => {
     if (notice.text) say(notice.text, notice.error);
   }, [notice, say]);
+
+  // The theme a tab opening later styles tmux with, and every open tab restyled when the
+  // theme or the tmux settings change (V6).
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
+  useEffect(() => {
+    for (const t of tabs.current) {
+      const tab = t.term.tab;
+      if (tab) void tabTmux(tab.id, tmuxColours(theme)).catch(() => {});
+    }
+  }, [theme, tmuxKey]);
 
   /** Show the exact command an action ran or stands for; `y` copies it. */
   const showCommand = useCallback(
@@ -292,8 +307,12 @@ export function Shell(props: ShellProps) {
         showCommand(`cd ${shellWord(opened.project)} && rein start`);
         setMode({ mode: "TERMINAL", pending: [] });
         refreshRecent();
-        // Health is checked when a tab opens (desktop.md §Components 5).
-        healthGet(true).then(setHealth, () => {});
+        // The window's tmux look on the session the tab shows (V6, D-050), then health —
+        // which is checked when a tab opens (desktop.md §Components 5) and carries the
+        // overlay's failure, if any.
+        void tabTmux(opened.id, tmuxColours(themeRef.current))
+          .catch(() => {})
+          .then(() => healthGet(true).then(setHealth, () => {}));
       };
       term.onError = (msg) => {
         void term.detach();

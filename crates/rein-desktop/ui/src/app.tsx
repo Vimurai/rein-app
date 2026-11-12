@@ -33,6 +33,8 @@ export function App({
     void listen<ConfigView>("config_changed", (v) => {
       setView(v);
       setThemeName(null);
+      // What config.toml sets wins over ui.json: the effective settings change with it.
+      uiGet().then(setUi, () => {});
       setNotice((n) => ({ text: v.error ?? "config.toml reloaded", error: v.error !== null, seq: n.seq + 1 }));
     });
   }, []);
@@ -148,6 +150,7 @@ export function App({
       fontSize={fontSize}
       lineHeight={LINE_HEIGHT}
       opacity={cfg.window.opacity}
+      tmuxKey={`${ui?.tmux_overlay.value ?? cfg.tmux.overlay}:${ui?.tmux_status.value ?? cfg.tmux.status}`}
       handlers={handlers}
       notice={notice}
       startDir={startDir}

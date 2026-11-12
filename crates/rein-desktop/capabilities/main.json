@@ -10,6 +10,7 @@
     "allow-pty-resize",
     "allow-pty-ack",
     "allow-tab-detach",
+    "allow-tab-tmux",
     "allow-clipboard-write",
     "allow-dir-complete",
     "allow-config-get",

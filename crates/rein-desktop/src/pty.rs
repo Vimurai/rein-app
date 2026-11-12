@@ -23,6 +23,7 @@ use std::time::Duration;
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 
 use crate::pty_sys::{self, Killer};
+use crate::tmux_overlay::{TTY_LINE_WINDOW, drawing_started, take_tty_line};
 
 /// Largest chunk sent to the web side at once.
 pub const MAX_CHUNK: usize = 64 * 1024;
@@ -45,6 +46,9 @@ pub struct ChildSpec {
     pub cwd: Option<PathBuf>,
     pub env_remove: &'static [&'static str],
     pub env_set: &'static [(&'static str, &'static str)],
+    /// The child prints its tty as its first line (Windows, where ConPTY has no slave name
+    /// to ask): take it out of the output and keep it as the tab's tty (V6, D-050).
+    pub tty_line: bool,
 }
 
 impl ChildSpec {
@@ -157,6 +161,9 @@ struct Session {
     killer: Killer,
     exited: Arc<AtomicBool>,
     flow: Arc<Flow>,
+    /// The tty the child's tmux client runs on, once known (the tmux overlay finds the
+    /// client by it).
+    tty: Arc<Mutex<Option<String>>>,
 }
 
 /// Where a session's output and exit go.
@@ -200,8 +207,22 @@ impl PtyHost {
         let flow = Arc::new(Flow::default());
         let exited = Arc::new(AtomicBool::new(false));
         let killer = Killer::of(&*child);
+        #[cfg(unix)]
+        let named = pair
+            .master
+            .tty_name()
+            .map(|p| p.to_string_lossy().into_owned());
+        #[cfg(not(unix))]
+        let named = None;
+        let tty = Arc::new(Mutex::new(named));
 
-        let drained = spawn_reader(id, reader, Arc::clone(&flow), Arc::clone(&events));
+        let drained = spawn_reader(
+            id,
+            reader,
+            Arc::clone(&flow),
+            Arc::clone(&events),
+            spec.tty_line.then(|| Arc::clone(&tty)),
+        );
         {
             let exited = Arc::clone(&exited);
             let flow = Arc::clone(&flow);
@@ -224,6 +245,7 @@ impl PtyHost {
                 killer,
                 exited,
                 flow,
+                tty,
             },
         );
         Ok(id)
@@ -248,6 +270,13 @@ impl PtyHost {
         s.master
             .resize(size.into())
             .map_err(|e| PtyError::Io(e.to_string()))
+    }
+
+    /// The tty of the pty's child, once known: the slave's name on Linux / macOS, the line
+    /// the child printed on Windows.
+    pub fn tty(&self, id: PtyId) -> Result<Option<String>, PtyError> {
+        let slot = Arc::clone(&self.lock().get(&id).ok_or(PtyError::UnknownPty)?.tty);
+        Ok(slot.lock().unwrap_or_else(|e| e.into_inner()).clone())
     }
 
     /// The web side has written `bytes` of this pty's output into the terminal.
@@ -309,6 +338,7 @@ fn close(s: Session) -> Reaper {
         killer,
         exited,
         flow,
+        tty: _,
     } = s;
     drop(writer);
     drop(master);
@@ -345,17 +375,35 @@ fn spawn_reader(
     mut reader: Box<dyn Read + Send>,
     flow: Arc<Flow>,
     events: Arc<dyn Events>,
+    mut tty_line: Option<Arc<Mutex<Option<String>>>>,
 ) -> std::sync::mpsc::Receiver<()> {
     let (done, drained) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let mut buf = vec![0u8; MAX_CHUNK];
+        let mut seen = 0usize;
         loop {
             flow.wait_for_room();
             match reader.read(&mut buf) {
                 Ok(0) | Err(_) => break, // EOF / EIO: the child side closed
                 Ok(n) => {
-                    flow.sent(n);
-                    events.output(id, buf[..n].to_vec());
+                    let mut bytes = buf[..n].to_vec();
+                    if seen < TTY_LINE_WINDOW
+                        && let Some(slot) = &tty_line
+                    {
+                        if let Some((tty, rest)) = take_tty_line(&bytes) {
+                            *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(tty);
+                            bytes = rest;
+                            tty_line = None;
+                        } else if drawing_started(&bytes) {
+                            tty_line = None; // past the start script: pane text is not searched
+                        }
+                    }
+                    seen = seen.saturating_add(n);
+                    if !bytes.is_empty() {
+                        // Only what the web side gets is counted: it acknowledges that.
+                        flow.sent(bytes.len());
+                        events.output(id, bytes);
+                    }
                 }
             }
         }
@@ -404,10 +452,44 @@ mod tests {
             cwd: Some(std::env::temp_dir()),
             env_remove: ENV_REMOVED,
             env_set: ENV_SET,
+            tty_line: false,
         }
     }
 
     const SIZE: Size = Size { cols: 80, rows: 24 };
+
+    #[test]
+    fn the_tty_is_the_one_the_child_runs_on() {
+        let host = PtyHost::default();
+        let (c, rx) = capture();
+        let id = host.open(&sh("tty; cat"), SIZE, c.clone()).unwrap();
+        let tty = host.tty(id).unwrap().expect("a unix pty has a name");
+        assert!(crate::tmux_overlay::tty_ok(&tty), "{tty}");
+        assert!(
+            wait_for(&c, &tty),
+            "the child's own `tty` names the same device"
+        );
+        host.detach(id).unwrap();
+        rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert_eq!(host.tty(id), Err(PtyError::UnknownPty));
+    }
+
+    #[test]
+    fn a_printed_tty_line_is_kept_and_not_shown() {
+        // Windows' start script prints `tty` first (V6); here a stand-in prints a fixed one.
+        let host = PtyHost::default();
+        let (c, rx) = capture();
+        let mut spec = sh("printf '/dev/pts/77\\n'; sleep 0.2; printf 'after\\n'");
+        spec.tty_line = true;
+        let id = host.open(&spec, SIZE, c.clone()).unwrap();
+        assert!(wait_for(&c, "after"));
+        assert_eq!(host.tty(id).unwrap().as_deref(), Some("/dev/pts/77"));
+        let out = String::from_utf8_lossy(&c.out.lock().unwrap()).into_owned();
+        assert!(!out.contains("/dev/pts/77"), "{out:?}");
+        // Every byte shown is counted, and nothing more: the stripped line is not owed.
+        assert_eq!(host.unacked(id).unwrap(), out.len() as u64);
+        rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    }
 
     fn wait_for(c: &Capture, needle: &str) -> bool {
         let deadline = Instant::now() + Duration::from_secs(5);

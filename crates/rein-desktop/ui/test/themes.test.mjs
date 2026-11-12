@@ -61,3 +61,16 @@ test("catppuccin-mocha is the default, and the terminal background is the window
     assert.equal(xtermTheme(custom).background, "#123456", `${name} with [theme.custom] bg`);
   }
 });
+
+// E-51 (V6): the tmux overlay is painted from the theme. Extends the palette checks above:
+// the core takes only `#rrggbb` in lower case, so a custom colour in upper case still passes.
+test("the tmux overlay colours are the theme's, lower case, in every theme", async () => {
+  const { tmuxColours } = await import("../src/theme.ts");
+  for (const t of THEMES.values()) {
+    const c = tmuxColours(t);
+    assert.deepEqual(c, { bg: t.bg, fg: t.fg, muted: t.dim, border: t.border, accent: t.accent }, t.name);
+  }
+  const custom = tmuxColours(resolveTheme("nord", { accent: "#ABCDEF" }));
+  assert.equal(custom.accent, "#abcdef");
+  for (const v of Object.values(custom)) assert.match(v, /^#[0-9a-f]{6}$/);
+});

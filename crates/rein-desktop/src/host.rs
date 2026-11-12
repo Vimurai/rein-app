@@ -65,6 +65,11 @@ pub trait Host: Send + Sync {
         line: &mut dyn FnMut(String),
     ) -> Result<Option<i32>, IpcError>;
 
+    /// Run the tmux overlay script (V6, D-050) with `args`, which
+    /// [`tmux_overlay::args`](crate::tmux_overlay::args) validated: on Linux / macOS
+    /// `/bin/sh -s`, on Windows `sh -ls` inside WSL. `Err` says why it was not applied.
+    fn tmux_overlay(&self, args: &[String]) -> Result<(), String>;
+
     /// The WSL distro a project belongs to, recorded with recent projects (Windows only).
     fn distro(&self) -> Option<String> {
         None

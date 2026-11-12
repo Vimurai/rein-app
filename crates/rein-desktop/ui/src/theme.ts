@@ -172,6 +172,14 @@ const ANSI_KEYS = [
   "brightBlue", "brightMagenta", "brightCyan", "brightWhite",
 ] as const;
 
+/** The colours the tmux overlay paints (desktop.md §Look and feel v2 V6): borders, the accent
+ *  for the active border, selection and message line, and the optional status line. The
+ *  core accepts `#rrggbb` in lower case only; a `[theme.custom]` colour may be upper case. */
+export function tmuxColours(t: Theme): { bg: string; fg: string; muted: string; border: string; accent: string } {
+  const c = (s: string) => s.toLowerCase();
+  return { bg: c(t.bg), fg: c(t.fg), muted: c(t.dim), border: c(t.border), accent: c(t.accent) };
+}
+
 /** The theme's sixteen colours, given to xterm so chrome and terminal match. The
  *  terminal's background is the theme's `bg`: the window's background (E-48). */
 export function xtermTheme(t: Theme): ITheme {

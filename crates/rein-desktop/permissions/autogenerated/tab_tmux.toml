@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tab-tmux"
+description = "Enables the tab_tmux command without any pre-configured scope."
+commands.allow = ["tab_tmux"]
+
+[[permission]]
+identifier = "deny-tab-tmux"
+description = "Denies the tab_tmux command without any pre-configured scope."
+commands.deny = ["tab_tmux"]

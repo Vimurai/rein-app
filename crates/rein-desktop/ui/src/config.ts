@@ -11,6 +11,7 @@ export interface ConfigFile {
   theme: { name: string; custom: Record<string, string> };
   window: { decorations: boolean; opacity: number; start: "dashboard" | "last" };
   keys: { escape: string[]; leader: string; normal: Record<string, string> };
+  tmux: { overlay: boolean; status: "hidden" | "app" | "keep" };
   wsl: { distro: string | null };
 }
 
@@ -25,6 +26,7 @@ export const DEFAULT_CONFIG: ConfigFile = {
   theme: { name: "catppuccin-mocha", custom: {} },
   window: { decorations: true, opacity: 1, start: "dashboard" },
   keys: { escape: ["C-\\", "C-n"], leader: "Space", normal: {} },
+  tmux: { overlay: true, status: "hidden" },
   wsl: { distro: null },
 };
 

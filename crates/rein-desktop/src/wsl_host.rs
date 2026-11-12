@@ -19,6 +19,7 @@ use rein_platform::wsl::{self, Shell, ShellOut, WslState};
 use crate::host::Host;
 use crate::ipc::{IpcError, err};
 use crate::pty::ChildSpec;
+use crate::tmux_overlay;
 use crate::wsl_path::{self, PathError};
 
 /// Learns the distro's name, the Linux home and the login shell (W2). `%s\\n` is `%s\n` once
@@ -28,8 +29,10 @@ pub const PROBE_SCRIPT: &str = "printf %s\\\\n $WSL_DISTRO_NAME $HOME $SHELL";
 /// runs the command in `/` instead — D-038 addendum 1), 3 no `.ai/`, 4 rein not installed,
 /// else `pwd -P`.
 pub const VALIDATE_SCRIPT: &str = "case $PWD in /) exit 5;; esac; [ -d .ai ] || exit 3; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P";
-/// The pty child's script, run by the user's login + interactive shell (W2).
-pub const START_SCRIPT: &str = "exec ~/.rein/bin/rein start";
+/// The pty child's script, run by the user's login + interactive shell (W2). `tty` names the
+/// pty first: the tmux overlay finds the app's client by it (V6, D-050), and the host takes
+/// that line out of what the terminal shows (`tmux_overlay::take_tty_line`).
+pub const START_SCRIPT: &str = "tty; exec ~/.rein/bin/rein start";
 /// Health inside WSL, from the Linux home (W4, D-045 addendum 1).
 pub const DOCTOR_SCRIPT: &str = "cd; exec ~/.rein/bin/rein doctor --scope install --json";
 /// `:open` completion under a parent other than `/` (W4): the `/` guard, then the listing.
@@ -88,6 +91,15 @@ pub trait WslShell: Shell {
         limit: Duration,
         cap: u64,
     ) -> io::Result<ShellOut>;
+
+    /// Run `program args` with the tmux overlay script on stdin (V6), output discarded: the
+    /// exit code, `None` when it did not finish within `limit`.
+    fn run_script(
+        &self,
+        program: &str,
+        args: &[OsString],
+        limit: Duration,
+    ) -> io::Result<Option<i32>>;
 }
 
 pub struct WslHost<S: WslShell + Send + Sync> {
@@ -382,7 +394,23 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
             cwd: None,
             env_remove: ENV_REMOVED,
             env_set: &[],
+            tty_line: true,
         })
+    }
+
+    /// `wsl.exe -d D -e sh -ls -- <args>` with the constant script on stdin: the login shell's
+    /// `PATH` finds the tmux `rein start` runs. Only the validated words follow `--`.
+    fn tmux_overlay(&self, args: &[String]) -> Result<(), String> {
+        let d = self.probe_distro().map_err(|e| e.message)?;
+        let mut argv: Vec<OsString> = ["-d", d.name.as_str(), "-e", "sh", "-ls", "--"]
+            .into_iter()
+            .map(OsString::from)
+            .collect();
+        argv.extend(args.iter().map(OsString::from));
+        tmux_overlay::outcome(
+            self.shell
+                .run_script(&self.wsl_exe, &argv, tmux_overlay::LIMIT),
+        )
     }
 }
 
@@ -457,12 +485,7 @@ impl WslShell for SystemWsl {
         limit: Duration,
         cap: u64,
     ) -> io::Result<ShellOut> {
-        let mut cmd = Command::new(program);
-        cmd.args(args).stderr(Stdio::null());
-        for k in ENV_REMOVED {
-            cmd.env_remove(k);
-        }
-        hide_console(&mut cmd);
+        let mut cmd = Self::command(program, args);
         match rein_platform::process::output(&mut cmd, limit, cap)? {
             Some((code, stdout)) => Ok(ShellOut { code, stdout }),
             None => Err(io::Error::new(
@@ -470,6 +493,27 @@ impl WslShell for SystemWsl {
                 "wsl.exe did not finish in time",
             )),
         }
+    }
+
+    fn run_script(
+        &self,
+        program: &str,
+        args: &[OsString],
+        limit: Duration,
+    ) -> io::Result<Option<i32>> {
+        tmux_overlay::run(&mut Self::command(program, args), limit)
+    }
+}
+
+impl SystemWsl {
+    fn command(program: &str, args: &[OsString]) -> Command {
+        let mut cmd = Command::new(program);
+        cmd.args(args).stderr(Stdio::null());
+        for k in ENV_REMOVED {
+            cmd.env_remove(k);
+        }
+        hide_console(&mut cmd);
+        cmd
     }
 }
 
@@ -515,6 +559,16 @@ mod tests {
         ) -> io::Result<ShellOut> {
             self.limits.lock().unwrap().push(limit);
             self.run(program, args)
+        }
+
+        fn run_script(
+            &self,
+            program: &str,
+            args: &[OsString],
+            limit: Duration,
+        ) -> io::Result<Option<i32>> {
+            self.limits.lock().unwrap().push(limit);
+            self.run(program, args).map(|o| o.code)
         }
     }
 
@@ -749,13 +803,40 @@ mod tests {
                 "-e",
                 "/usr/bin/zsh",
                 "-lic",
-                "exec ~/.rein/bin/rein start"
+                "tty; exec ~/.rein/bin/rein start"
             ]
         );
+        assert!(spec.tty_line, "the tty line is taken out of the output");
         assert_eq!(spec.cwd, None);
         let cmd = spec.command();
         assert_eq!(cmd.get_env("WSLENV"), None);
         assert!(spec.env_set.is_empty(), "TERM comes from WSL, not from us");
+    }
+
+    #[test]
+    fn the_overlay_runs_sh_ls_inside_wsl_with_only_the_validated_words() {
+        let words: Vec<String> = [
+            "/dev/pts/3",
+            "hidden",
+            "#1e1e2e",
+            "#cdd6f4",
+            "#a6adc8",
+            "#6c7086",
+            "#cba6f7",
+        ]
+        .map(String::from)
+        .to_vec();
+        let mut want = vec!["-d", "Ubuntu", "-e", "sh", "-ls", "--"];
+        want.extend(words.iter().map(String::as_str));
+        let h = host(ready().on(&want, 0, b""));
+        assert_eq!(h.tmux_overlay(&words), Ok(()));
+        assert_eq!(h.shell.calls().last().unwrap(), &want);
+        assert_eq!(
+            h.shell.limits.lock().unwrap().last(),
+            Some(&tmux_overlay::LIMIT)
+        );
+        let h = host(ready().on(&want, 4, b""));
+        assert_eq!(h.tmux_overlay(&words), Err("tmux is older than 3.2".into()));
     }
 
     #[test]

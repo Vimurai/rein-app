@@ -397,3 +397,21 @@ A fresh throwaway clone with the artifact regenerated; the assertions are unchan
 - Delete the step; nothing else depends on it.
 
 **Local run:** `bash crates/rein-desktop/tests/e2e/terminal-size.sh [binary]` (build the UI first). `KEEP=1` keeps the temp dir; `SHOT_DIR=<dir>` saves screenshots (ffmpeg). On WSL, Xvfb listens on its abstract socket only (WSLg's `/tmp/.X11-unix` is read-only). The script accepts an Xvfb that is still running after 1.5 s.
+
+### 2026-11-12 — E-51: tmux overlay script against a real tmux in hosted CI (D-050)
+**What / why**
+- `.github/workflows/ci.yml`, `test` job, Linux and macOS: new last step `tmux overlay against a real tmux`. It installs tmux (apt on Linux, Homebrew on macOS) and runs `crates/rein-desktop/tests/e2e/tmux-overlay.sh`, which feeds `src/tmux_overlay.sh` (the script the window embeds) to `/bin/sh -s` as the window does. V6 asks for this test on both OSes; it checks:
+  - the right session only, with a second session and every global option untouched;
+  - borders on a window created later;
+  - `app` and `keep` replace the earlier run;
+  - another client detaching restores nothing; the app client detaching restores every option and removes both hooks;
+  - tmux < 3.2, no tmux, bad words and "no such client" exit quietly with their codes.
+- Hermetic: two private sockets in a `mktemp` dir. Clients are panes of the second server running `tmux attach`, so each has a real tty. `HOME` points at a directory whose `.tmux.conf` is unreadable. The default tmux server is never touched (the wrapper pins `-S`).
+
+**Security implications**
+- No secrets or permissions. One package from the runner's own package manager. Nothing is published.
+
+**Rollback**
+- Delete the step; nothing else depends on it.
+
+**Local run:** `bash crates/rein-desktop/tests/e2e/tmux-overlay.sh` (about 15 s; the "no such client" case waits the script's full 10 s).
