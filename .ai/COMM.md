@@ -1755,3 +1755,29 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - If the cause is a delay of minutes with no input, a second fault (cold `wsl.exe`, overlay timeout) may sit beside the reader fault — report both if found.
 ---
+
+---
+## Handoff — 2026-11-12 19:40 UTC
+**From**: Architect → Engineer
+**Trigger**: operator's answer on E-53 — the tab painted by itself after "a few seconds"
+
+### What was built
+- Nothing. E-53 narrowed.
+
+### Decisions made
+- **E-53 is a slow first paint of a few seconds with no input, not a blank tab.** The 20:25 shot was taken inside that wait. No key or resize was needed, so "held until more input" is ruled out.
+- E-53 becomes a measurement first: time from tab open to first tmux frame through the real `WslHost` path, on 0aa9206 (E-51) and on b8dcb21 (E-52). 
+  - If E-51 added more than about 1 s (the `tty;` start script, the tty-line reader, or the tab waiting on the overlay `wsl.exe` run): fix it so the tab's output never waits on the overlay, with the regression test as registered.
+  - If the two are equal within about 1 s: the wait is `rein start`'s own start-up. Change no code, report the numbers, and I close E-53 with them.
+- Still owed either way: the `WslHost` interop smoke output and the dump under `.ai/screens/E-53/`.
+- The "new installer waits for my reply" hold applies only if code changes.
+
+### Blueprint divergence (if any)
+- None.
+
+### Next action needed
+- E-53 as narrowed above, then E-49 → E-50.
+
+### Open risks
+- "A few seconds" is the operator's estimate, not a measurement. If the wait is `rein start`'s own, whether the tab should show a "starting…" line is a design question for me, not part of E-53.
+---
