@@ -698,16 +698,16 @@
     {
       "id": "E-46",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 1,
       "description": "Write the operator documentation for the desktop window, per .ai/blueprints/desktop.md (§Core Concept \"Two ways in\", §Data Model file locations, §Windows window W2–W7 and \"Security (Windows)\" accepted residual risks) and D-038 / D-045 / D-047: add a \"Desktop window\" section to `docs/operator-guide.md` and a short pointer in `README.md` covering (1) status — a test build, not part of any release, unsigned; (2) Windows: where to download the installer artifact (`desktop-windows` workflow, `gh run download` command), the SmartScreen warning, that Rein and projects stay inside WSL2, the accepted project path forms (`/home/…`, `\\\\wsl.localhost\\<distro>\\…`; drive paths refused), the `wsl.distro` key, that the Linux `rein-app` must be installed inside WSL for update / rollback / profiles, the `[interop] appendWindowsPath=false` note for `/etc/wsl.conf`, and uninstall (Windows Settings + `%APPDATA%\\rein-app`, `%LOCALAPPDATA%\\rein-app`); (3) Linux / macOS: build from source and `rein-app window [DIR]`, and that WSLg is not supported; (4) the two input styles, the menu, Settings, `config.toml` and `ui.json` locations and which one wins; (5) what the health segment means (install scope only). Describe only behaviour that exists in the code at the time of writing — check each statement against the source. Acceptance: every command and path in the section is verified against the code or a run; no claim that a release ships the window; hosted CI green on the commit.",
       "created_at": "2026-11-12T12:19:37.193Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-12T13:07:04.428Z",
+      "summary": "Desktop window section in docs/operator-guide.md + README pointer (85f9002), every claim checked against source. Hosted CI green at f7a8974 after fixing a macOS single-instance EINVAL flake.",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-12T12:19:37.196Z"
+      "updated_at": "2026-11-12T13:07:04.431Z"
     }
   ],
   "stamps": [
