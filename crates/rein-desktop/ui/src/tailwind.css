@@ -1,0 +1,63 @@
+/* Tailwind, compiled at build time into one static stylesheet (dist/tw.css; D-037, desktop.md
+   §Components 6). Tailwind's own palette, shadows and radii are switched off: a component can
+   only name the theme's colours, which are CSS variables set from theme.ts, so a theme change
+   restyles every component live. */
+@import "tailwindcss";
+@source "../src";
+@source "../components";
+
+@theme {
+  --color-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --radius-*: initial;
+  --font-*: initial;
+  --animate-*: initial;
+  /* One grid cell: a character wide, a text row high. */
+  --spacing: 1ch;
+}
+
+@theme inline {
+  --font-mono: var(--font-family);
+  --color-fg: var(--fg);
+  --color-bg: var(--bg);
+  --color-accent: var(--accent);
+  --color-bar-bg: var(--bar-bg);
+  --color-bar-fg: var(--bar-fg);
+  --color-dim: var(--dim);
+  --color-bar-dim: var(--bar-dim);
+  --color-border: var(--border);
+  --color-ansi-0: var(--ansi-0);
+  --color-ansi-1: var(--ansi-1);
+  --color-ansi-2: var(--ansi-2);
+  --color-ansi-3: var(--ansi-3);
+  --color-ansi-4: var(--ansi-4);
+  --color-ansi-5: var(--ansi-5);
+  --color-ansi-6: var(--ansi-6);
+  --color-ansi-7: var(--ansi-7);
+  --color-ansi-8: var(--ansi-8);
+  --color-ansi-9: var(--ansi-9);
+  --color-ansi-10: var(--ansi-10);
+  --color-ansi-11: var(--ansi-11);
+  --color-ansi-12: var(--ansi-12);
+  --color-ansi-13: var(--ansi-13);
+  --color-ansi-14: var(--ansi-14);
+  --color-ansi-15: var(--ansi-15);
+}
+
+@utility h-cell {
+  height: var(--cell-h);
+}
+
+/* Radix Select and Scroll Area insert a <style> element to hide the native scrollbar of their
+   viewport; the CSP (default-src 'self') refuses it, so the same rule ships here instead. */
+[data-radix-select-viewport],
+[data-radix-scroll-area-viewport] {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+[data-radix-select-viewport]::-webkit-scrollbar,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar {
+  display: none;
+}

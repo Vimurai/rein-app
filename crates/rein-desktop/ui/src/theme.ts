@@ -46,6 +46,8 @@ export function cssVariables(t: Theme): Record<string, string> {
     "--border": t.border,
     "--ok": t.ansi[10] ?? t.fg,
     "--green": t.ansi[10] ?? t.fg,
+    // The sixteen terminal colours, for the Tailwind theme tokens (`text-ansi-1`, …).
+    ...Object.fromEntries(t.ansi.map((c, i) => [`--ansi-${i}`, c])),
   };
 }
 

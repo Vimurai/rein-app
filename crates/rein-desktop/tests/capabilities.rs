@@ -75,17 +75,17 @@ fn the_csp_is_default_src_self_with_no_escape_hatch() {
     }
     assert_eq!(conf["app"]["withGlobalTauri"], false);
     // Object.prototype is frozen by the UI itself once its libraries have loaded (ui/src/
-    // harden.ts): Tauri's `freezePrototype` freezes it before xterm.js loads, which breaks
+    // harden.ts, called from main.tsx): Tauri's `freezePrototype` freezes it before xterm.js loads, which breaks
     // xterm (security review of E-35). Either way it is frozen before untrusted data arrives.
     assert!(sec.get("freezePrototype").is_none());
     let main = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/src/main.ts"),
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/src/main.tsx"),
     )
     .unwrap()
     .replace("\r\n", "\n"); // a Windows checkout has CRLF line endings
     assert!(
         main.contains("\nhardenPrototypes();\n"),
-        "main.ts must freeze Object.prototype at start"
+        "main.tsx must freeze Object.prototype at start"
     );
     assert_eq!(
         conf["app"]["windows"],

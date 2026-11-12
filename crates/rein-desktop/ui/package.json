@@ -3,20 +3,37 @@
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
-  "description": "The rein-app window's web UI: TypeScript, no framework (desktop.md §Components 6).",
+  "description": "The rein-app window's web UI: TypeScript + React, shadcn/ui restyled to the grid, Tailwind at build time (desktop.md §Components 6, D-037).",
   "scripts": {
     "build": "node build.mjs",
     "check": "tsc --noEmit -p .",
     "test": "node --test \"test/*.test.mjs\""
   },
   "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
     "@tauri-apps/cli": "2.11.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "esbuild": "0.28.2",
+    "tailwindcss": "4.3.3",
     "typescript": "7.0.2"
   },
   "dependencies": {
+    "@radix-ui/react-context-menu": "2.4.1",
+    "@radix-ui/react-dialog": "1.3.1",
+    "@radix-ui/react-scroll-area": "1.4.0",
+    "@radix-ui/react-select": "2.4.1",
+    "@radix-ui/react-slot": "1.5.0",
+    "@radix-ui/react-switch": "1.4.1",
+    "@radix-ui/react-tooltip": "1.4.1",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/addon-webgl": "0.19.0",
-    "@xterm/xterm": "6.0.0"
+    "@xterm/xterm": "6.0.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "cmdk": "1.1.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tailwind-merge": "3.7.0"
   }
 }

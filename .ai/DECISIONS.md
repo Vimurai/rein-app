@@ -1484,7 +1484,7 @@ Remove `desktop-windows.yml` and `WslHost`; `LocalHost` behind the seam is the p
 
 **Date**: 2026-11-11
 **Task**: E-35 (security review P2: `freezePrototype` removed from `tauri.conf.json`)
-**Decision**: Keep Tauri's `freezePrototype` off and freeze `Object.prototype` in `ui/src/harden.ts`, called from `main.ts` right after the imports, before any pty output, IPC reply or event is handled. The Architect may revise.
+**Decision**: Keep Tauri's `freezePrototype` off and freeze `Object.prototype` in `ui/src/harden.ts`, called from `main.tsx` right after the imports, before any pty output, IPC reply or event is handled. The Architect may revise.
 
 ### Why
 With `freezePrototype: true` the window fails at start: `TypeError: Attempted to assign to readonly property` (seen under Xvfb, E-35). xterm.js 6.0.0 bundles VS Code's `KeyCodeUtils` namespace, which assigns `toString` on a plain object while its module loads; under a frozen `Object.prototype` that assignment throws in strict mode (the "override mistake").
@@ -1494,7 +1494,7 @@ With `freezePrototype: true` the window fails at start: `TypeError: Attempted to
 2. **Leave the prototype unfrozen** — rejected: the review's point stands; the IPC bridge and the pty data path should not be pollutable.
 
 ### Effect
-Same scope as Tauri's option (`Object.prototype` only). The difference is when: Tauri freezes before any script; we freeze after the bundled modules have evaluated and before the first untrusted input. Tests: `ui/test/harden.test.mjs` (a `obj["__proto__"][k] = v` gadget throws and pollutes nothing), `tests/capabilities.rs` (no `freezePrototype` in the config, `main.ts` calls `hardenPrototypes()`).
+Same scope as Tauri's option (`Object.prototype` only). The difference is when: Tauri freezes before any script; we freeze after the bundled modules have evaluated and before the first untrusted input. Tests: `ui/test/harden.test.mjs` (a `obj["__proto__"][k] = v` gadget throws and pollutes nothing), `tests/capabilities.rs` (no `freezePrototype` in the config, `main.tsx` calls `hardenPrototypes()`).
 
 ### Rollback
 Re-enable `freezePrototype` once xterm.js no longer assigns over prototype properties at load; delete `harden.ts`.
