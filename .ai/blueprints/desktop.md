@@ -427,17 +427,18 @@ is rebuilt when fonts finish loading. Budget: fonts ≤ 3 MiB in total; the JS +
 limit rises from 1.5 to 2 MiB.
 
 ### V4. Theme and tmux
-- A new built-in theme **`rein`** becomes the default: its sixteen colours, background and
-  accent are taken from the colours rein's own tmux status line and pane borders use (the
-  operator's screenshot shows a blue / mauve palette on a dark blue-grey — read the exact
-  values from rein's tmux theme at the vendored rein commit; if they equal an existing
-  built-in theme, alias it). With it the tmux status line, pane borders and the chrome
-  share one palette out of the box. The other six themes stay.
-- **What the window cannot do alone:** tmux's status line and borders are drawn by rein's
-  tmux configuration with fixed colours, so they do not follow when the user picks another
-  window theme, and the project name appears both in a window tab and in tmux's status
-  line. Changing that is rein's (contract §3.5: the app never configures tmux). The
-  request to rein is in `plans/rein-window-theme-request.md` and in §Open Questions 4.
+- **Corrected 2026-11-12 (D-049 addendum 1):** rein ships **no** tmux colours (searched at
+  rein 3994640). The status line in the operator's screenshot is the operator's own
+  `~/.tmux.conf` (the catppuccin plugin, flavour mocha). So there is no `rein` theme.
+- **The default theme becomes `catppuccin-mocha`** (already built in; it replaces
+  `gruvbox-dark` as the default). The terminal background equals the window background
+  in every theme. The six themes are unchanged.
+- **tmux looks like part of the window when the window theme matches the user's tmux
+  theme.** tmux's status line and borders are the user's own configuration; the app never
+  configures tmux (contract §3.5) and rein does not either, so there is nothing to ask
+  rein for. The first-run screen and Settings say so in one line beside the theme
+  choice: "Pick the theme your tmux uses — the window will match it." The request file
+  `plans/rein-window-theme-request.md` is withdrawn.
 
 ### V5. Windows: no console window
 `rein-desktop.exe` is built for the Windows GUI subsystem (release builds), so no console
@@ -698,13 +699,7 @@ release artifact carries the window until a task adds it to the dist configurati
 3. May an app display the latest handoff line of a project (a one-line status source such
    as `rein status --json`)? The app will not read `.ai/` files itself.
 
-4. (D-049) Can `rein start` take the look from the app that hosts it? Requested: when an
-   environment variable such as `REIN_HOST_THEME` carries a palette (or a theme name),
-   rein's tmux status line and pane borders use it; and when `REIN_HOST=window` is set,
-   rein's status line drops the session-name pill the window's tab already shows. The
-   window would pass exactly those variables (on Windows through `WSLENV`, listing only
-   them). Detail: `plans/rein-window-theme-request.md`. Until answered the default `rein`
-   theme matches rein's fixed colours.
+4. (D-049) Withdrawn 2026-11-12 — it assumed rein themes tmux; it does not (addendum 1).
 
 ## E-## Task Breakdown (registered IDs)
 | ID | Scope | Tier | Depends on |

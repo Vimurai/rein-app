@@ -1740,3 +1740,6 @@ The grid restyle was the Architect's choice in D-033 / D-037, not the operator's
 
 ### Rollback
 Presentation only — revert the UI commits to return to the grid chrome; fonts, the `rein` theme and the GUI-subsystem fix are independent and can stay.
+
+### D-049 addendum 1 (2026-11-12) — there is no rein tmux theme; the default theme is `catppuccin-mocha`
+E-48 finding: rein at 3994640 sets no tmux colours; the blue / mauve status line in the operator's screenshot is the operator's own `~/.tmux.conf` (catppuccin plugin, flavour mocha). Ruling 4 and ruling 5's request were built on the Architect's unverified reading of a screenshot and are corrected: (1) no `rein` theme is added; (2) `catppuccin-mocha` replaces `gruvbox-dark` as the default; (3) the terminal background equals the window background in every theme; (4) the theme choice (first run, Settings) carries one line telling the user to pick the theme their tmux uses; (5) `plans/rein-window-theme-request.md` is withdrawn — nothing is asked of rein. Rejected: an alias named `rein` (it would present the operator's dotfile as rein's look). E-48's task text on the `rein` theme is superseded.
