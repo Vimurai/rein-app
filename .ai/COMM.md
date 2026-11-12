@@ -2030,3 +2030,55 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - Not known whether the status line also stays after closing and reopening the tab (a reattach). Asked the operator; do not wait.
 ---
+
+---
+## Handoff — 2026-11-12 21:00 UTC
+**From**: Engineer → Architect
+**Trigger**: E-56 built (9dd6fe5); cause named. Hosted `ci` ×3, `desktop-windows` and local `rein ci run` green
+
+### What was built
+- **Cause: the overlay script stopped waiting for the tab's tmux client after 10 s** (50 × 0.2 s). It then exited 5 quietly; the whole run was capped at 15 s. A fresh `rein start` attaches only once it has built the layout and each pane's shell is ready (it waits up to 5 s per pane for the prompt before `send-keys`). That can be later than 10 s, and then the user's own status line stays.
+  - **Not the restyle:** the `tab_tmux` call sites are identical at 0aa9206 (E-51) and dc0ad9f (E-50), and nothing in the Rust diff between them touches the overlay.
+  - **Not the user's config:** read-only look at the operator's tmux. `~/.tmux.conf` sets `status-position top` and global `status 2`. No hook or plugin writes a session's `status`, and `rein` never does.
+- **Shown on the real Windows path.** `.ai/screens/E-56/interop-smoke.txt` and four screen dumps. ConPTY → `wsl.exe` → real `rein start`, **fresh start each run**, the private server loading the operator's own `~/.tmux.conf`, the real script started the moment the tty line is read:
+
+  | run | attach | overlay | user's status line |
+  |---|---|---|---|
+  | control, no overlay | 1.6 s | none | **shown** (`󱙺 proj … 1: proj … 󰅐 21:4…`) |
+  | fix | 1.6 s | exit 0 at 1.9 s | gone |
+  | fix, attach held back 15 s | 16.5 s | exit 0 at 16.7 s | gone |
+  | **dc0ad9f script, attach held back 15 s** | 16.5 s | **exit 5 at 11.2 s** | **shown**, as in the operator's screenshot |
+- **What I could not confirm.** On this machine a normal fresh start attaches at 1.6 s. The operator's had real Claude panes on the real server, which I did not start. So "their attach came after 10 s" is the cause that fits, not one I measured on their machine.
+  - **Their health view can confirm it.** It lists the overlay's reason as a warning row: `tmux overlay not applied: the tab's tmux client was not attached …` (exit 5).
+  - Note that `with_overlay` adds that row without changing the summary status, so the badge said `Install OK` even with a failed overlay.
+- **Fix (9dd6fe5):**
+  - `tmux_overlay.sh` waits up to **60 s** for the client (`CLIENT_WAIT`); the run's limit is 75 s.
+  - The run and the wait for the tab's tty before it stop at once when the tab closes or its terminal ends (`alive`, through `Host::tmux_overlay` → `WslShell::run_script` → `tmux_overlay::run`; `PtyHost::alive`). Nothing is recorded for a terminal that is gone.
+  - The tab's output never waits on the overlay (its own thread, unchanged).
+- **Tests.**
+  - Rust (103 pass):
+    - the script's client wait is ≥ 30 s and equals `CLIENT_WAIT`, read from the script itself. This **fails on dc0ad9f** (10 s);
+    - a run is killed as soon as `alive` turns false;
+    - `Desktop` stops a waiting overlay when the tab's terminal ends.
+  - `tests/e2e/tmux-overlay.sh` gains a **slow-start case: the client attaches 12 s after the overlay starts.** It asserts exit 0, `status off`, and the user's values back on detach.
+    - It **fails on dc0ad9f** (exit 5, status not off — verified) and passes on the fix.
+    - The task said 5 s, but 5 s also passes on dc0ad9f, whose wait was 10 s, so it could not catch this.
+    - The suite now takes about 77 s, because "no client" waits the full 60 s.
+- **Review.** Tier 2: ALIGN_PASS (the aligner's WARN was its "file not in architect.md" heuristic; V6 covers it), CLEAN_PASS, CRITIC_STAMP. `run_review` tier 2 passed. rustfmt and clippy clean.
+- **Installer:** `desktop-windows` run **43303736226** (E-56 at 9dd6fe5). It has not gone to the operator. On your release it goes to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E56-9dd6fe5.exe`.
+
+### Decisions made
+- None of mine.
+
+### Blueprint divergence (if any)
+1. desktop.md V6 step 2 says the script "waits up to 10 s for a client". It is now **60 s**, ended early when the tab's terminal ends, and the run limit is 75 s, not 15 s. Your file; please update it.
+2. **Known limit.** Overlay runs still go one at a time (`overlay_run` lock). A second tab opened while the first tab's overlay is still waiting gets its overlay only after the first one's ends: at most 60 s, sooner if that tab's terminal ends. Its terminal output is not delayed.
+
+### Next action needed
+- Review E-56 and accept or send back. On release, the installer above goes to Downloads.
+- If you want proof from the operator's machine, ask them to click the health badge on the E-50 build and read the `tmux_overlay` row.
+- Then: E-54 (parked on branch `engineer/e54-motion` at 8326813, not reviewed; I rebase it onto 9dd6fe5 and finish it), then E-55.
+
+### Open risks
+- A health warning that leaves the badge at `Install OK` hid this failure from the operator. Showing a failed overlay on the badge (or as a toast) would be a design change: yours to decide.
+---
