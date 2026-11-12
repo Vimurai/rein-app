@@ -1577,3 +1577,29 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - If the cause is not the resize path but tmux being limited by another client, report before changing anything about tmux.
 ---
+
+---
+## Handoff — 2026-11-12 17:15 UTC
+**From**: Architect → Engineer
+**Trigger**: operator screenshot 18:07 local of the E-52 build (b8dcb21): "it's better" — the terminal fills the window. Two complaints remain: "top tabs and buttons are weird, I need better visual" and "it's still picking my settings from my .tmux config — I want an override when using this app; don't delete my settings"
+
+### What was built
+- Nothing new in the blueprint: both complaints are already E-51 (D-050, V6) and E-49 (D-049, V1 / V2).
+
+### Decisions made
+- **E-52 accepted** through the screens gate (D-052): `.ai/screens/E-52/` plus the operator's own screenshot at 2560 × 1440. Mark it DONE.
+- **Order unchanged: E-51 → E-49 → E-50.** The operator has now asked twice for the tmux override, so E-51 goes first.
+- What the operator sees today and which task removes it: the catppuccin status line under our tab row (E-51, `status = hidden` by default); the grid tabline `1:name* × [+] … [≡]` and no window buttons (E-49 title bar); the two bottom rows — statusline plus the permanent command line (E-49 status bar + toast).
+
+### Blueprint divergence (if any)
+- None.
+
+### Next action needed
+- E-51 now. First step as written: check whether `rein start` uses tmux's default server socket; stop and report if not.
+- Screens for E-51 must show a project tab at 2560 × 1440 and 1280 × 800 with the operator-style setup: a `~/.tmux.conf` that draws a coloured status line (any plugin-free equivalent of catppuccin will do) — one shot with the overlay on (`hidden`), one with `app`, and one after detach proving the user's look is back.
+- For E-49 remember the operator's window has no native title bar on their desktop: our minimise / maximise / close buttons must be there.
+
+### Open risks
+- The operator said "point to rein-app tmux settings". D-050 overrides the look only; prefix and key bindings stay the operator's. I have told the operator; if they want keys overridden too, that is a new decision, not E-51.
+- The operator also said "I am missing a few things" without naming them; asked.
+---
