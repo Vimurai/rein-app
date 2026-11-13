@@ -3162,3 +3162,57 @@ E-63 rework → E-65 → E-64 → E-60 → E-61. E-65 goes before more UI work b
 ### Next action needed
 - E-65 DONE, then E-64 (Project sheet with the team, Tier 3, `security_engineer`), then E-60, E-61.
 ---
+
+## Handoff — 2026-11-13 21:51 UTC
+**From**: Engineer → Architect
+**Trigger**: E-65 DONE (14e4b9e). The DEVOPS note that `release.yml`'s `shell: bash` must survive a dist regeneration is added (81d57fe). **E-64: the read of rein 0.5.0 is done, and it differs from V10 in four ways that change the design. Stopped before any write, as the task says.** Nothing built, no claim.
+
+### E-64 read of rein 0.5.0
+Sources: `rein` usage, `shared/cli-state.mjs`, `mcp/shared/team.mjs`, `mcp/shared/record-migrate.mjs`; the read-only commands were run on this repo.
+- **`rein team show`:** prose, exit 0.
+  - With no `.ai/team.json`, one fixed line: `no .ai/team.json — ids are allocated max+1 (single-operator project)`.
+  - With a team: `planner: <email>   claim_ttl_days: <n>   shared_log: <bool>`, then one line per developer: `  <email>[ (planner)]  E:425-524 (3/100 used), …`.
+  - Regular, but rows only by parsing prose. No `--json`.
+- **`rein trunk`:** one line, the resolved name (`master` here), exit 0; or `[NO_TRUNK] …`, exit 1. **It lists no branches.**
+- **`rein team add <email> --range <P>:<from>-<to>`:**
+  - **Refused outside team mode:** exit 1, `rein team: not a team project — run: rein state migrate --team`.
+  - In team mode without `team.json`, it creates the file with the git user's email as planner.
+  - **rein's own checks:** prefix `^[A-Z]{1,4}$` (any, not a fixed list); `0 < from ≤ to` (no upper bound); e-mail `^[^\\s@"'\\\\]{1,64}@[^\\s@"'\\\\]{1,190}$`, looser than V10's, so V10's pattern is a strict subset.
+  - **Answers:** exit 2 for a bad `--range` shape; `✗ [RANGE_OVERLAP] <who> <P:a-b> overlaps …`, `[BAD_EMAIL]`, `[BAD_RANGE]` with exit 1; `✓ … added … — commit it …` with exit 0.
+- **`rein state migrate --team [--trunk <name>]`:**
+  - **Needs:** a git worktree (`NOT_A_GIT_REPO`); **a clean worktree** for tracked files (`DIRTY_WORKTREE`, listing them); `git config user.email` (`NO_GIT_EMAIL`); and, when there is no `team.json` yet, a resolvable trunk (`NO_TRUNK`). `--trunk` only overrides discovery.
+  - **Writes:** one record file per task and stamp; archived tasks moved; `.ai/.gitattributes`; an ignore block; `.ai/team.json` (you as planner, first ranges E:100 and P:20 after every id in use, the trunk); `.ai/project.json` last (the team-mode marker). It untracks TASKS.md and the other generated views.
+  - **Does not commit:** it prints `next: git add .ai && git commit …`. Idempotent: "already a team project — nothing to do."
+- **`rein state migrate --legacy`:** the inverse.
+  - Needs the same clean worktree.
+  - **Removes `.ai/team.json`, printing its contents (the ranges are gone)**, and the record files; renders and tracks the views again; does not commit.
+- **Task prefixes:** any `[A-Z]{1,4}`; rein mints E and P, and `team.json` may hold any.
+- **Team mode itself is reported by no rein command except as prose.** `isRecordStore` keys on `.ai/project.json`, which the app must not read. `rein state health` says only "in step with HEAD". `team show` tells it only by its first line, `planner:` or the fixed "no .ai/team.json" line.
+
+### Where V10 does not fit, and a proposal for each
+1. **Mode** (`team_get → mode`). Proposal: decide it by matching `team show`'s output against its **two fixed shapes**:
+   - exactly rein's fixed line → single-developer;
+   - first line `planner: ` → team;
+   - anything else → unknown: the text is shown, and no mode button is offered.
+   
+   This is a fixed-string match, not row parsing; the rest stays text. Asked of rein: `rein team show --json` with `mode`.
+2. **Add a developer only works in team mode.** Proposal: in single-developer mode the form is replaced by one line, "Developers can be added once team mode is on."
+3. **Trunk picker:** rein reports no branch names, so there is nothing to pick from. Proposal:
+   - "Turn on team mode" runs `rein state migrate --team` **without `--trunk`**, and rein discovers the trunk itself;
+   - on `NO_TRUNK`, rein's message is shown and nothing else is offered;
+   - `--trunk` is not built (no free typing, per V10). Asked of rein: a branch list, or `--trunk` choices.
+4. **The confirm's text "from rein's own description":** rein has no dry-run or description for migrate. Proposal: fixed app sentences written from this read.
+   - **--team:** "rein turns this project's task list into one file per task, writes .ai/team.json with you as the planner, and stops tracking TASKS.md. Your worktree must have no uncommitted changes. Commit the result afterwards. The side-menu Tasks panel does not read team projects yet."
+   - **--legacy:** "rein folds the task files back into state.json and **removes .ai/team.json with every developer's range**. Your worktree must have no uncommitted changes. Commit the result afterwards."
+
+### Transport (for the ruling; my proposal, not built)
+- **Linux / macOS:** `rein team add <email> --range <P>:<a>-<b>`, each value its own argv word, no shell.
+- **Windows:** `wsl.exe -d D --cd P -e <shell> -lic <constant> rein-app <email> <P>:<a>-<b>`.
+  - The constant (quote-free, V8) re-validates `$1` and `$2` with `case` patterns and runs `exec ~/.rein/bin/rein team add $1 --range $2`.
+  - The values are their own argv words after the script, as positional parameters. The accepted charset (`[A-Za-z0-9._%+@:-]`) holds no space, quote or glob character, so Windows argv quoting and the shell's word splitting cannot change them.
+  - The interop output will show hostile values refused in Rust before any process, and accepted values arriving as one word each.
+  - If you prefer V10's stdin variant, that works too.
+
+### Next action needed
+- Your ruling on 1–4 and the transport. Then I dispatch `security_engineer` (Tier 3) before the first write and build E-64.
+---
