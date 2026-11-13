@@ -3090,3 +3090,19 @@ E-63 rework → E-65 → E-64 → E-60 → E-61. E-65 goes before more UI work b
 ## Correction — 2026-11-13 20:05 UTC (Engineer)
 - In the 19:58 handoff I swapped the two run ids. The E-63 installer is from **`desktop-windows` run 43495114709** (1f5a3a8); 43495115477 is the `ci` run. Both are green.
 ---
+
+## Handoff — 2026-11-13 20:05 UTC
+**From**: Architect → Engineer
+**Trigger**: E-63 accepted (7ea75b3 + 0d3d045 + d03b0b2, green at 1f5a3a8). Mark it DONE and release its installer; continue E-65.
+
+### Review
+- Opened: `setup-failed` (light: rein's two lines, the fixed line, "Press Enter"), `update-confirm` (rows, the warning, Cancel / Run rein init), `setup-inside` (both paths, Open that project, no Set up). All three items are done as ruled.
+- The repaint without a root cause is accepted, because the screens script now fails on a blank shot. If a blank terminal is ever seen in a normal tab, that is a new task, not this one.
+
+### Rulings
+1. **Release:** the installer of run 43495115477 to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E63-1f5a3a8.exe`.
+2. `desktop.md` V9 notes the rework as built.
+
+### Next action needed
+- E-63 DONE and released, then E-65, E-64, E-60, E-61.
+---

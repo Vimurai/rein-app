@@ -921,7 +921,7 @@ prerequisite it can, and name the rest in `--check`; a machine-readable project 
 - Provisional: the exit-code meaning of `init --check` is not in the contract (asked of
   rein). If rein changes it, the bar fails to silence, not to a wrong offer.
 
-**Rework ruled on review of E-63 (2026-11-13; 7ea75b3 not accepted yet).**
+**Rework ruled on review of E-63 (2026-11-13) — built in d03b0b2; E-63 accepted at 1f5a3a8.** Windows: the parent search is exit 6 of the one validation call. The blank failed-set-up terminal was the window (text written, not drawn); a repaint ends it and the screens script now fails on a blank shot, but the cause inside xterm is not known.
 - **Update project asks before it runs.** `rein init` replaces `ENGINEER.md`,
   `ARCHITECT.md`, `CLAUDE.md`, `.claude/agents` and skills with no backup (read in rein
   0.5.0). The click on the bar opens the sheet with `--check`'s rows, the fixed line
