@@ -130,6 +130,8 @@ export interface UiView {
   decorations: Effective<boolean>;
   tmux_overlay: Effective<boolean>;
   tmux_status: Effective<"hidden" | "app" | "keep">;
+  /** V8: the tmux server new tabs open on — rein-app's own, or the user's. */
+  tmux_server: Effective<"app" | "user">;
   first_run_done: boolean;
 }
 /** The system folder dialog; `null` when cancelled; the path is validated like `tab_open`. */

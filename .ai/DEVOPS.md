@@ -415,3 +415,26 @@ A fresh throwaway clone with the artifact regenerated; the assertions are unchan
 - Delete the step; nothing else depends on it.
 
 **Local run:** `bash crates/rein-desktop/tests/e2e/tmux-overlay.sh` (about 15 s; the "no such client" case waits the script's full 10 s).
+
+### 2026-11-13 — E-57: the window's own tmux server, tested in hosted CI (D-055, desktop.md V8)
+**What / why**
+- `.github/workflows/ci.yml`, `test` job, Linux and macOS: a new step `tmux server (the window's own)` after the overlay step. It runs `crates/rein-desktop/tests/e2e/tmux-server.sh`, which tests these at the process boundary they are made for:
+  - the setup script (`src/tmux_setup.sh` with the shim and config put in, as the app builds it);
+  - the shim (`src/tmux_shim.sh`);
+  - the app config (`src/tmux_app.conf`);
+  - the start constant (`src/tmux_start.sh`): under `sh`, `bash` and `zsh` when present.
+- **The end-to-end case** uses a user `~/.tmux.conf` with a marker option, a key binding and a `run-shell` line. It shows that none of them reaches the `rein-app` server, and that all of them apply with `server = "user"`.
+- The existing step's `tmux-overlay.sh` now runs twice internally: `SERVER=user` on the private `-S` socket as before, and `SERVER=app` on `-L rein-app` under a private `TMUX_TMPDIR`. So the overlay cases run against the app's server too, as V8 asks.
+
+**Security implications**
+- No secrets, no permissions, no network.
+- The step uses the tmux the overlay step installed. Nothing is published.
+- **Hermetic.**
+  - Every HOME is a `mktemp` dir.
+  - Every tmux server lives under a private `TMUX_TMPDIR`, with `TMUX` unset, or on a private `-S` socket.
+  - The runner's own default server and any real `rein-app` socket are never reached.
+
+**Rollback**
+- Delete the step. `tmux-overlay.sh` can be run with `SERVER=user` alone.
+
+**Local run:** `bash crates/rein-desktop/tests/e2e/tmux-server.sh` (about 5 s). `bash crates/rein-desktop/tests/e2e/tmux-overlay.sh` (about 2.5 min: both servers, each with the 60 s "no client" wait).

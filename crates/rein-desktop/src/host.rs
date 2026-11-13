@@ -46,8 +46,17 @@ pub trait Host: Send + Sync {
     fn project(&self, input: &str) -> Result<PathBuf, IpcError>;
 
     /// The pty child that runs `rein start` in `project`, which [`project`](Self::project)
-    /// returned.
-    fn rein_start(&self, project: &Path) -> Result<ChildSpec, IpcError>;
+    /// returned, reaching `server` (V8): the app's own through the shim, or the user's.
+    fn rein_start(
+        &self,
+        project: &Path,
+        server: crate::tmux_server::Server,
+    ) -> Result<ChildSpec, IpcError>;
+
+    /// Make or check the tmux home before a tab opens on the app's server (V8 3a): the
+    /// constant setup script on stdin — `/bin/sh -s` here, `sh -s` inside WSL on Windows.
+    /// `Err` is the app's fixed sentence for why not.
+    fn tmux_setup(&self) -> Result<(), &'static str>;
 
     /// `:open` Tab completion (E-36): directories whose path starts with `prefix`, each ending
     /// in `/`, a bounded number, sorted. Hidden ones only when the typed name

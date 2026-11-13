@@ -98,6 +98,7 @@ pub trait WslShell: Shell {
         &self,
         program: &str,
         args: &[OsString],
+        script: &str,
         limit: Duration,
         alive: &dyn Fn() -> bool,
     ) -> io::Result<Option<i32>>;
@@ -373,21 +374,23 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
         Some(PathBuf::from(unc_of(&d.name, &d.home)))
     }
 
-    fn rein_start(&self, project: &Path) -> Result<ChildSpec, IpcError> {
+    fn rein_start(
+        &self,
+        project: &Path,
+        server: crate::tmux_server::Server,
+    ) -> Result<ChildSpec, IpcError> {
         let d = self.probe_distro()?;
+        // V8: the app's own server through the shim, or the user's (the script before E-57).
+        let script = match server {
+            crate::tmux_server::Server::App => crate::tmux_server::start_script_wsl(),
+            crate::tmux_server::Server::User => START_SCRIPT.to_string(),
+        };
         let project = project.to_string_lossy();
         wsl_path::check_linux(&project).map_err(|e| err("unsafe_path", e.to_string()))?;
         Ok(ChildSpec {
             program: PathBuf::from(&self.wsl_exe),
             args: [
-                "-d",
-                &d.name,
-                "--cd",
-                &project,
-                "-e",
-                &d.shell,
-                "-lic",
-                START_SCRIPT,
+                "-d", &d.name, "--cd", &project, "-e", &d.shell, "-lic", &script,
             ]
             .iter()
             .map(OsString::from)
@@ -397,6 +400,25 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
             env_set: &[],
             tty_line: true,
         })
+    }
+
+    /// `wsl.exe -d D -e sh -s` with the setup script on stdin (V8 3a): the tmux home inside
+    /// WSL. Only the distro's name is put in argv; the script is a constant.
+    fn tmux_setup(&self) -> Result<(), &'static str> {
+        let d = self
+            .probe_distro()
+            .map_err(|_| crate::tmux_server::setup_reason(Some(-1)))?;
+        let argv: Vec<OsString> = ["-d", d.name.as_str(), "-e", "sh", "-s"]
+            .into_iter()
+            .map(OsString::from)
+            .collect();
+        crate::tmux_server::setup_outcome(self.shell.run_script(
+            &self.wsl_exe,
+            &argv,
+            &crate::tmux_server::setup_script(),
+            crate::tmux_server::SETUP_LIMIT,
+            &|| true,
+        ))
     }
 
     /// `wsl.exe -d D -e sh -ls -- <args>` with the constant script on stdin: the login shell's
@@ -411,6 +433,7 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
         tmux_overlay::outcome(self.shell.run_script(
             &self.wsl_exe,
             &argv,
+            tmux_overlay::SCRIPT,
             tmux_overlay::LIMIT,
             alive,
         ))
@@ -502,10 +525,11 @@ impl WslShell for SystemWsl {
         &self,
         program: &str,
         args: &[OsString],
+        script: &str,
         limit: Duration,
         alive: &dyn Fn() -> bool,
     ) -> io::Result<Option<i32>> {
-        tmux_overlay::run(&mut Self::command(program, args), limit, alive)
+        tmux_overlay::run_stdin(&mut Self::command(program, args), script, limit, alive)
     }
 }
 
@@ -569,6 +593,7 @@ mod tests {
             &self,
             program: &str,
             args: &[OsString],
+            _script: &str,
             limit: Duration,
             _alive: &dyn Fn() -> bool,
         ) -> io::Result<Option<i32>> {
@@ -791,7 +816,9 @@ mod tests {
     #[test]
     fn the_pty_child_is_wsl_exe_with_the_constant_script_and_no_wslenv() {
         let h = host(ready());
-        let spec = h.rein_start(Path::new("/home/me/p")).unwrap();
+        let spec = h
+            .rein_start(Path::new("/home/me/p"), crate::tmux_server::Server::User)
+            .unwrap();
         assert_eq!(spec.program, PathBuf::from(EXE));
         let argv: Vec<String> = spec
             .args
@@ -816,6 +843,40 @@ mod tests {
         let cmd = spec.command();
         assert_eq!(cmd.get_env("WSLENV"), None);
         assert!(spec.env_set.is_empty(), "TERM comes from WSL, not from us");
+    }
+
+    /// E-57 (V8 3b): on the app's server the argv start script is the quote-free constant with
+    /// the tty line, and nothing else changes in the child.
+    #[test]
+    fn the_app_server_start_is_the_quote_free_constant() {
+        let h = host(ready());
+        let spec = h
+            .rein_start(Path::new("/home/me/p"), crate::tmux_server::Server::App)
+            .unwrap();
+        let argv: Vec<String> = spec
+            .args
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            &argv[..7],
+            [
+                "-d",
+                "Ubuntu",
+                "--cd",
+                "/home/me/p",
+                "-e",
+                "/usr/bin/zsh",
+                "-lic"
+            ]
+        );
+        assert_eq!(argv[7], crate::tmux_server::start_script_wsl());
+        assert!(
+            !argv[7].contains(['\'', '"']),
+            "argv rule: no quote character"
+        );
+        assert!(spec.tty_line);
+        assert_eq!(spec.command().get_env("WSLENV"), None);
     }
 
     #[test]

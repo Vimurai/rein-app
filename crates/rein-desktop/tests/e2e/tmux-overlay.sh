@@ -8,8 +8,17 @@
 # client has a real tty (`#{pane_tty}` in `b`) and is detached by killing its pane.
 # HOME points at a directory whose .tmux.conf would touch a sentinel file if any tmux read it
 # (a server started by the script would load it): the script must never start one.
+# E-57 (V8): the script takes the tab's tmux server as its last word. The suite runs twice:
+# SERVER=user — the sessions' server is the private socket `a`, as before; SERVER=app — tmux
+# is isolated by a private TMUX_TMPDIR and every call names `-L rein-app`, the socket the
+# window's own server uses, so the script's `tmux -L rein-app` path is what reaches it.
 # Needs: tmux >= 3.2.
 set -euo pipefail
+if [ -z "${SERVER:-}" ]; then
+  SERVER=user "$0" && SERVER=app "$0"
+  exit $?
+fi
+echo "== server: $SERVER"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$HERE/../../src/tmux_overlay.sh"
@@ -18,21 +27,33 @@ W="$(mktemp -d /tmp/rein-ov.XXXXXX)"
 cleanup() {
   "$REAL" -S "$W/b.sock" kill-server 2>/dev/null || true # private sockets only
   "$REAL" -S "$W/a.sock" kill-server 2>/dev/null || true
+  TMUX_TMPDIR="$W/tmpdir" "$REAL" -L rein-app kill-server 2>/dev/null || true
   chmod 600 "$W/home/.tmux.conf" 2>/dev/null || true
   rm -rf "$W"
 }
 trap cleanup EXIT
 unset TMUX TMUX_PANE
 
-mkdir -p "$W/bin" "$W/home" "$W/old"
+mkdir -p "$W/bin" "$W/home" "$W/old" "$W/tmpdir"
+chmod 700 "$W/tmpdir"
 printf 'run-shell "touch %s/conf-was-read"\n' "$W" >"$W/home/.tmux.conf"
-cat >"$W/bin/tmux" <<EOF
+if [ "$SERVER" = app ]; then
+  # The app's server: socket rein-app under a private TMUX_TMPDIR (inherited by every tmux,
+  # the clients' panes included).
+  export TMUX_TMPDIR="$W/tmpdir"
+  cat >"$W/bin/tmux" <<EOF
+#!/bin/sh
+exec "$REAL" -L rein-app "\$@"
+EOF
+else
+  cat >"$W/bin/tmux" <<EOF
 #!/bin/sh
 exec "$REAL" -S "$W/a.sock" "\$@"
 EOF
+fi
 cat >"$W/old/tmux" <<'EOF'
 #!/bin/sh
-[ "$1" = -V ] && { echo "tmux 3.1c"; exit 0; }
+for a in "$@"; do [ "$a" = -V ] && { echo "tmux 3.1c"; exit 0; }; done # also after -L rein-app
 exit 1
 EOF
 chmod +x "$W/bin/tmux" "$W/old/tmux"
@@ -50,7 +71,7 @@ C='#1e1e2e #cdd6f4 #a6adc8 #6c7086 #cba6f7'
 overlay() { # overlay <tty> <mode> → exit code
   local code=0
   # shellcheck disable=SC2086
-  HOME="$W/home" /bin/sh -s -- "$1" "$2" $C <"$SCRIPT" >/dev/null 2>&1 || code=$?
+  HOME="$W/home" /bin/sh -s -- "$1" "$2" $C "$SERVER" <"$SCRIPT" >/dev/null 2>&1 || code=$?
   echo "$code"
 }
 sopt() { tmux show-options -t "$1" -v "$2" 2>/dev/null || true; }
@@ -85,10 +106,11 @@ wait_for attached 2 || { echo "clients did not attach" >&2; exit 1; }
 app_tty="$(b display-message -p -t app '#{pane_tty}')"
 echo "app client: $app_tty"
 
-check "bad arguments exit 2" 2 "$(HOME="$W/home" /bin/sh -s -- /dev/sda hidden $C <"$SCRIPT" >/dev/null 2>&1; echo $?)"
-check "a colour that is not #rrggbb exits 2" 2 "$(HOME="$W/home" /bin/sh -s -- "$app_tty" hidden red '#000000' '#000000' '#000000' '#000000' <"$SCRIPT" >/dev/null 2>&1; echo $?)"
+check "bad arguments exit 2" 2 "$(HOME="$W/home" /bin/sh -s -- /dev/sda hidden $C "$SERVER" <"$SCRIPT" >/dev/null 2>&1; echo $?)"
+check "a server word other than app or user exits 2" 2 "$(HOME="$W/home" /bin/sh -s -- /dev/pts/1 hidden $C mine <"$SCRIPT" >/dev/null 2>&1; echo $?)"
+check "a colour that is not #rrggbb exits 2" 2 "$(HOME="$W/home" /bin/sh -s -- "$app_tty" hidden red '#000000' '#000000' '#000000' '#000000' "$SERVER" <"$SCRIPT" >/dev/null 2>&1; echo $?)"
 check "tmux older than 3.2 exits 4, nothing set" 4 "$(PATH="$W/old:/usr/bin:/bin" overlay "$app_tty" hidden)"
-check "no tmux exits 3" 3 "$(PATH=/nonexistent HOME="$W/home" /bin/sh -s -- "$app_tty" hidden $C <"$SCRIPT" >/dev/null 2>&1; echo $?)"
+check "no tmux exits 3" 3 "$(PATH=/nonexistent HOME="$W/home" /bin/sh -s -- "$app_tty" hidden $C "$SERVER" <"$SCRIPT" >/dev/null 2>&1; echo $?)"
 check "  ... and left session one alone" "" "$(sopt one status)"
 
 check "hidden: exit 0" 0 "$(overlay "$app_tty" hidden)"

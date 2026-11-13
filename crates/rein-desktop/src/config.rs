@@ -124,6 +124,9 @@ pub struct Tmux {
     pub overlay: bool,
     /// `hidden` | `app` | `keep` (`tmux_overlay::STATUS_MODES`).
     pub status: String,
+    /// `app` | `user` (`tmux_server::SERVER_WORDS`, V8): rein-app's own tmux server, or the
+    /// user's. Applies to tabs opened after a change.
+    pub server: String,
 }
 
 impl Default for Tmux {
@@ -131,6 +134,7 @@ impl Default for Tmux {
         Self {
             overlay: true,
             status: "hidden".into(),
+            server: "app".into(),
         }
     }
 }
@@ -334,6 +338,13 @@ fn validate(c: &Config) -> Result<(), Refusal> {
             format!("status {:?} — hidden, app or keep", c.tmux.status),
         );
     }
+    if !crate::tmux_server::SERVER_WORDS.contains(&c.tmux.server.as_str()) {
+        return r(
+            "tmux",
+            "server",
+            format!("server {:?} — app or user", c.tmux.server),
+        );
+    }
     if let Some(d) = &c.wsl.distro
         && crate::wsl_host::check_name(d).is_err()
     {
@@ -414,7 +425,7 @@ pub struct ConfigView {
     /// The last refusal (the previous good config is the one in `config`).
     pub error: Option<String>,
     /// The keys config.toml itself sets among those Settings can also set (`theme.name`,
-    /// `font.size`, `window.decorations`, `tmux.overlay`, `tmux.status`): those win over
+    /// `font.size`, `window.decorations`, `tmux.overlay`, `tmux.status`, `tmux.server`): those win over
     /// `ui.json` and are read-only in Settings (D-034).
     pub set: Vec<String>,
 }
@@ -430,6 +441,7 @@ pub fn settings_keys_set(text: &str) -> Vec<String> {
         ("window", "decorations"),
         ("tmux", "overlay"),
         ("tmux", "status"),
+        ("tmux", "server"),
     ]
     .iter()
     .filter(|(table, key)| t.get(*table).and_then(|v| v.get(*key)).is_some())
@@ -624,6 +636,7 @@ mod tests {
             ("[theme]\nname = \"solarized-light\"\n", 2, "unknown theme"),
             ("[wsl]\ndistro = \"a b\"\n", 2, "not a WSL distro name"),
             ("[tmux]\nstatus = \"off\"\n", 2, "hidden, app or keep"),
+            ("[tmux]\nserver = \"mine\"\n", 2, "app or user"),
             ("[tmux]\noverlay = \"yes\"\n", 2, "expected a boolean"),
             ("[keys]\nescape = []\n", 2, "escape is"),
             ("this is not toml\n", 1, "expected"),
@@ -726,6 +739,11 @@ mod tests {
                 "[theme]\nname = \"nord\"\n[font]\nfamily = \"x\"\n[window]\ndecorations = false\n"
             ),
             ["theme.name", "window.decorations"]
+        );
+        // E-57 (V8): tmux.server is one of the keys Settings can also set.
+        assert_eq!(
+            settings_keys_set("[tmux]\nserver = \"user\"\nstatus = \"app\"\n"),
+            ["tmux.status", "tmux.server"]
         );
     }
 

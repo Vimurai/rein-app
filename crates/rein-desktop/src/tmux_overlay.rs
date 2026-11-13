@@ -66,7 +66,12 @@ pub fn colour_ok(s: &str) -> bool {
 }
 
 /// The script's positional words, every one validated. `mode` is a settings word or `off`.
-pub fn args(tty: &str, mode: &str, c: &Colours) -> Result<Vec<String>, String> {
+pub fn args(
+    tty: &str,
+    mode: &str,
+    c: &Colours,
+    server: crate::tmux_server::Server,
+) -> Result<Vec<String>, String> {
     if !tty_ok(tty) {
         return Err("the terminal's tty is not one tmux would name".into());
     }
@@ -82,6 +87,7 @@ pub fn args(tty: &str, mode: &str, c: &Colours) -> Result<Vec<String>, String> {
     }
     let mut v = vec![tty.to_string(), mode.to_string()];
     v.extend(colours.into_iter().cloned());
+    v.push(server.word().to_string());
     Ok(v)
 }
 
@@ -142,6 +148,17 @@ pub fn run(
     limit: Duration,
     alive: &dyn Fn() -> bool,
 ) -> io::Result<Option<i32>> {
+    run_stdin(cmd, SCRIPT, limit, alive)
+}
+
+/// [`run`] for any constant script on stdin — the overlay's, or the tmux home setup's
+/// (`tmux_server`, V8 3a).
+pub fn run_stdin(
+    cmd: &mut Command,
+    script: &str,
+    limit: Duration,
+    alive: &dyn Fn() -> bool,
+) -> io::Result<Option<i32>> {
     let deadline = Instant::now() + limit;
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -151,8 +168,9 @@ pub fn run(
         // On its own thread: the script is larger than a Windows pipe's buffer, and a child
         // that does not read (a WSL VM still booting) must not hold this past `limit`. A
         // child killed at the deadline closes the pipe and ends the write.
+        let script = script.to_owned();
         std::thread::spawn(move || {
-            let _ = stdin.write_all(SCRIPT.as_bytes());
+            let _ = stdin.write_all(script.as_bytes());
         });
     }
     loop {
@@ -261,6 +279,7 @@ fn line_start(before: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use crate::tmux_server::Server;
     /// E-56: a fresh `rein start` attaches seconds after the tab opens; the script waits for
     /// the client at least 30 s (dc0ad9f: 10 s), as long as `CLIENT_WAIT` says, and the run's
     /// limit leaves time to style the session after that.
@@ -315,7 +334,7 @@ mod tests {
     #[test]
     fn only_validated_words_reach_the_script() {
         assert_eq!(
-            args("/dev/pts/3", "hidden", &mocha()).unwrap(),
+            args("/dev/pts/3", "hidden", &mocha(), Server::App).unwrap(),
             [
                 "/dev/pts/3",
                 "hidden",
@@ -323,11 +342,17 @@ mod tests {
                 "#cdd6f4",
                 "#a6adc8",
                 "#6c7086",
-                "#cba6f7"
+                "#cba6f7",
+                "app"
             ]
         );
-        assert!(args("/dev/ttys004", "app", &mocha()).is_ok());
-        assert!(args("/dev/pts/3", "off", &mocha()).is_ok());
+        // E-57 (V8): the last word is the tab's tmux server, from a closed pair.
+        assert_eq!(
+            args("/dev/pts/3", "hidden", &mocha(), Server::User).unwrap()[7],
+            "user"
+        );
+        assert!(args("/dev/ttys004", "app", &mocha(), Server::App).is_ok());
+        assert!(args("/dev/pts/3", "off", &mocha(), Server::App).is_ok());
         for tty in [
             "",
             "/dev/pts/",
@@ -340,24 +365,34 @@ mod tests {
             "/dev/pts/../sda",
             "/tmp/pts/3",
         ] {
-            assert!(args(tty, "hidden", &mocha()).is_err(), "{tty:?}");
+            assert!(
+                args(tty, "hidden", &mocha(), Server::App).is_err(),
+                "{tty:?}"
+            );
         }
         for mode in ["", "Hidden", "on", "keep;", "app "] {
-            assert!(args("/dev/pts/3", mode, &mocha()).is_err(), "{mode:?}");
+            assert!(
+                args("/dev/pts/3", mode, &mocha(), Server::App).is_err(),
+                "{mode:?}"
+            );
         }
         for bad in [
             "#1E1E2E", "#1e1e2", "1e1e2e1", "#1e1e2g", "red", "#1e1e2e;", "",
         ] {
             let mut c = mocha();
             c.accent = bad.into();
-            assert!(args("/dev/pts/3", "app", &c).is_err(), "{bad:?}");
+            assert!(
+                args("/dev/pts/3", "app", &c, Server::App).is_err(),
+                "{bad:?}"
+            );
         }
     }
 
     #[test]
     fn the_script_is_the_constant_file_and_its_hook_text_is_safe_for_tmux_and_sh() {
         assert!(SCRIPT.contains("client-detached[4271]"));
-        assert!(SCRIPT.contains("[ $# -eq 7 ] || exit 2"));
+        assert!(SCRIPT.contains("[ $# -eq 8 ] || exit 2"));
+        assert!(SCRIPT.contains("case $server in app | user) ;; *) exit 2 ;; esac"));
         // The restore text sits inside tmux single quotes in the hook: none may appear in it.
         let line = SCRIPT
             .lines()

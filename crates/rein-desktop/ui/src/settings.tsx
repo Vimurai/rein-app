@@ -39,7 +39,7 @@ export function SettingsOverlay({
 }: {
   ui: UiView;
   /** One ui.json field; `null` clears it (the default applies again). */
-  onSet: (field: "input_style" | "theme" | "font_size" | "decorations", value: unknown) => void;
+  onSet: (field: "input_style" | "theme" | "font_size" | "decorations" | "tmux_server", value: unknown) => void;
   onOpenConfig: () => void;
   onClose: () => void;
   /** The theme on screen: a session's `:theme NAME` wins over the saved one until changed here. */
@@ -99,6 +99,17 @@ export function SettingsOverlay({
             <Button variant="ghost" size="icon" aria-label="Reset font size" disabled={ro("font_size")} onClick={() => onSet("font_size", null)}>
               <RotateCcw size={14} aria-hidden="true" />
             </Button>
+          </Row>
+          <Row label="tmux server" fromConfig={ro("tmux_server")}>
+            <Select value={ui.tmux_server.value} onValueChange={(v) => onSet("tmux_server", v)} disabled={ro("tmux_server")}>
+              <SelectTrigger aria-label="tmux server">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="app">rein-app's own — new tabs</SelectItem>
+                <SelectItem value="user">My own — new tabs</SelectItem>
+              </SelectContent>
+            </Select>
           </Row>
           <Row label="Title bar" fromConfig={ro("decorations")}>
             <Switch

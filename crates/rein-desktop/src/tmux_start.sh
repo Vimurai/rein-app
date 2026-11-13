@@ -1,0 +1,1 @@
+set -f; H=$HOME/.local/state/rein-app/tmux; for p in $HOME/.local $HOME/.local/state $HOME/.local/state/rein-app $H $H/bin; do [ -O $p ] && [ -d $p ] && [ ! -L $p ] || exit 126; done; for p in $H/bin/tmux $H/tmux.conf; do [ -O $p ] && [ -f $p ] && [ ! -L $p ] || exit 126; done; unset TMUX TMUX_PANE; PATH=$H/bin:$PATH; exec ~/.rein/bin/rein start

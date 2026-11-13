@@ -94,6 +94,10 @@ pub struct Tab {
     pub project: String,
     pub pty: PtyId,
     pub title: String,
+    /// The tmux server the tab's `rein start` reaches (V8), as it was when the tab opened;
+    /// the overlay talks to that one. Not sent to the web side.
+    #[serde(skip)]
+    pub server: crate::tmux_server::Server,
 }
 
 /// The window core's state for the terminal stage.
@@ -136,20 +140,41 @@ impl Desktop {
         cols: u32,
         rows: u32,
         events: Arc<dyn Events>,
+        server: crate::tmux_server::Server,
     ) -> Result<Tab, IpcError> {
         let size = validate_size(cols, rows)?;
         let project = self.platform.project(project)?;
-        let spec = self.platform.rein_start(&project)?;
-        self.open_spec(&spec, &project, size, events)
+        // V8 3a: the tmux home is made or checked before the pty opens; on failure the pty
+        // is not opened and the window shows the app's fixed sentence.
+        if server == crate::tmux_server::Server::App {
+            self.platform
+                .tmux_setup()
+                .map_err(|why| err("tmux_setup", crate::tmux_server::setup_message(why)))?;
+        }
+        let spec = self.platform.rein_start(&project, server)?;
+        self.open_spec_on(&spec, &project, size, events, server)
     }
 
     /// The part of [`open`](Self::open) after validation; tests pass stub children here.
+    #[cfg(test)]
     pub fn open_spec(
         &self,
         spec: &ChildSpec,
         project: &Path,
         size: Size,
         events: Arc<dyn Events>,
+    ) -> Result<Tab, IpcError> {
+        self.open_spec_on(spec, project, size, events, crate::tmux_server::Server::App)
+    }
+
+    /// [`open_spec`](Self::open_spec), recording the tmux server the child reaches.
+    pub fn open_spec_on(
+        &self,
+        spec: &ChildSpec,
+        project: &Path,
+        size: Size,
+        events: Arc<dyn Events>,
+        server: crate::tmux_server::Server,
     ) -> Result<Tab, IpcError> {
         // The limit is checked and the tab recorded under one lock, so concurrent opens
         // (commands run on a thread pool) cannot pass it together.
@@ -168,6 +193,7 @@ impl Desktop {
             project: project.to_string_lossy().into_owned(),
             pty,
             title,
+            server,
         };
         tabs.insert(id, tab.clone());
         Ok(tab)
@@ -194,7 +220,11 @@ impl Desktop {
         mode: &str,
         colours: &Colours,
     ) -> Option<Result<(), String>> {
-        let pty = self.tabs().get(&tab)?.pty;
+        let (pty, server) = {
+            let tabs = self.tabs();
+            let t = tabs.get(&tab)?;
+            (t.pty, t.server)
+        };
         let seq = |f: &mut dyn FnMut(&mut HashMap<u32, u64>) -> u64| {
             f(&mut self.overlay_seq.lock().unwrap_or_else(|e| e.into_inner()))
         };
@@ -218,7 +248,7 @@ impl Desktop {
                 Err(_) => return None,
             }
         };
-        let args = match tmux_overlay::args(&tty, mode, colours) {
+        let args = match tmux_overlay::args(&tty, mode, colours, server) {
             Ok(a) => a,
             Err(why) => return Some(Err(why)),
         };
@@ -271,21 +301,29 @@ impl Events for ChannelEvents {
     }
 }
 
+// Tauri hands the command its managed states as arguments; three of the nine are those.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command(async)]
 pub fn tab_open(
     app: AppHandle,
     state: State<'_, Desktop>,
     projects: State<'_, Arc<crate::projects::ProjectStore>>,
+    ui: State<'_, crate::ui_store::UiStore>,
+    config: State<'_, Arc<crate::config::ConfigService>>,
     project: String,
     cols: u32,
     rows: u32,
     output: Channel<InvokeResponseBody>,
 ) -> Result<Tab, IpcError> {
+    // V8: which tmux server this tab reaches, from the settings as they are now.
+    let view = ui.view(&config.view());
+    let server = crate::tmux_server::Server::from_setting(view.tmux_server.value.as_str());
     let tab = state.open(
         &project,
         cols,
         rows,
         Arc::new(ChannelEvents { output, app }),
+        server,
     )?;
     // Recent projects (E-38): the canonical path the tab runs in. A failed save only loses
     // the list entry; the tab is open either way.
@@ -375,7 +413,13 @@ pub fn tab_tmux(
 ) -> Result<Option<String>, IpcError> {
     let mode = overlay_mode(&ui.view(&config.view()));
     // Colours first: a refusal here is the web side's mistake, not tmux's.
-    tmux_overlay::args("/dev/pts/0", &mode, &colours).map_err(|why| err("bad_value", why))?;
+    tmux_overlay::args(
+        "/dev/pts/0",
+        &mode,
+        &colours,
+        crate::tmux_server::Server::App,
+    )
+    .map_err(|why| err("bad_value", why))?;
     let outcome = state.tmux_overlay(tab, &mode, &colours);
     if let Some(o) = &outcome {
         state.overlay.record(o);
@@ -468,28 +512,70 @@ mod tests {
         let q = || -> Arc<dyn Events> { Arc::new(Quiet(Mutex::new(None))) };
         let plain = tempfile::tempdir().unwrap();
         let p = plain.path().to_str().unwrap();
-        assert_eq!(kind(d.open(p, 80, 24, q())), "no_ai");
-        assert_eq!(kind(d.open("/a\u{1b}[2Jb", 80, 24, q())), "unsafe_path");
-        assert_eq!(kind(d.open("/a\u{202e}b", 80, 24, q())), "unsafe_path");
-        assert_eq!(kind(d.open("relative", 80, 24, q())), "unsafe_path");
         assert_eq!(
-            kind(d.open("/definitely/not/here", 80, 24, q())),
+            kind(d.open(p, 80, 24, q(), crate::tmux_server::Server::User)),
+            "no_ai"
+        );
+        assert_eq!(
+            kind(d.open(
+                "/a\u{1b}[2Jb",
+                80,
+                24,
+                q(),
+                crate::tmux_server::Server::User
+            )),
+            "unsafe_path"
+        );
+        assert_eq!(
+            kind(d.open("/a\u{202e}b", 80, 24, q(), crate::tmux_server::Server::User)),
+            "unsafe_path"
+        );
+        assert_eq!(
+            kind(d.open("relative", 80, 24, q(), crate::tmux_server::Server::User)),
+            "unsafe_path"
+        );
+        assert_eq!(
+            kind(d.open(
+                "/definitely/not/here",
+                80,
+                24,
+                q(),
+                crate::tmux_server::Server::User
+            )),
             "not_a_directory"
         );
         let file = plain.path().join("f");
         std::fs::write(&file, "").unwrap();
         assert_eq!(
-            kind(d.open(file.to_str().unwrap(), 80, 24, q())),
+            kind(d.open(
+                file.to_str().unwrap(),
+                80,
+                24,
+                q(),
+                crate::tmux_server::Server::User
+            )),
             "not_a_directory"
         );
         let proj = project();
         // A valid project, but rein is not installed under this home.
         assert_eq!(
-            kind(d.open(proj.path().to_str().unwrap(), 80, 24, q())),
+            kind(d.open(
+                proj.path().to_str().unwrap(),
+                80,
+                24,
+                q(),
+                crate::tmux_server::Server::User
+            )),
             "rein_missing"
         );
         assert_eq!(
-            kind(d.open(proj.path().to_str().unwrap(), 1, 24, q())),
+            kind(d.open(
+                proj.path().to_str().unwrap(),
+                1,
+                24,
+                q(),
+                crate::tmux_server::Server::User
+            )),
             "out_of_range"
         );
     }
@@ -622,7 +708,14 @@ mod tests {
         fn project(&self, _: &str) -> Result<std::path::PathBuf, IpcError> {
             unreachable!()
         }
-        fn rein_start(&self, _: &Path) -> Result<ChildSpec, IpcError> {
+        fn rein_start(
+            &self,
+            _: &Path,
+            _: crate::tmux_server::Server,
+        ) -> Result<ChildSpec, IpcError> {
+            unreachable!()
+        }
+        fn tmux_setup(&self) -> Result<(), &'static str> {
             unreachable!()
         }
         fn complete_dir(&self, _: &str) -> Result<Vec<String>, IpcError> {

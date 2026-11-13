@@ -90,3 +90,9 @@ jobs:
             brew install tmux
           fi
           bash crates/rein-desktop/tests/e2e/tmux-overlay.sh
+      # D-055 (E-57): the window's own tmux server — setup, shim, start constant and the user's
+      # tmux config kept out of the `rein-app` server; tmux comes from the step above.
+      - name: tmux server (the window's own) (Linux, macOS)
+        if: matrix.desktop && runner.os != 'Windows'
+        shell: bash
+        run: bash crates/rein-desktop/tests/e2e/tmux-server.sh

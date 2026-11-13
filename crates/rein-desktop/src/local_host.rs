@@ -25,7 +25,20 @@ pub fn rein_bin(home: &Path) -> PathBuf {
 }
 
 impl ChildSpec {
-    /// `<home>/.rein/bin/rein start` in `project` — the only child `LocalHost` starts.
+    /// `rein start` in `project` on rein-app's own tmux server (V8): the constant start script
+    /// — tmux home checked, the shim first on `PATH` — run by `/bin/sh -c`.
+    pub fn rein_start_app(project: &Path) -> Self {
+        Self {
+            program: PathBuf::from("/bin/sh"),
+            args: vec!["-c".into(), crate::tmux_server::start_script().into()],
+            cwd: Some(project.to_path_buf()),
+            env_remove: ENV_REMOVED,
+            env_set: ENV_SET,
+            tty_line: false,
+        }
+    }
+
+    /// `<home>/.rein/bin/rein start` in `project` on the user's own tmux server.
     pub fn rein_start(home: &Path, project: &Path) -> Self {
         Self {
             program: rein_bin(home),
@@ -73,13 +86,36 @@ impl Host for LocalHost {
         validate_project(input)
     }
 
-    fn rein_start(&self, project: &Path) -> Result<ChildSpec, IpcError> {
+    fn rein_start(
+        &self,
+        project: &Path,
+        server: crate::tmux_server::Server,
+    ) -> Result<ChildSpec, IpcError> {
         let home = self
             .home
             .as_deref()
             .ok_or_else(|| err("rein_missing", "HOME is not set to an absolute path"))?;
         installed_rein(home)?;
-        Ok(ChildSpec::rein_start(home, project))
+        Ok(match server {
+            crate::tmux_server::Server::App => ChildSpec::rein_start_app(project),
+            crate::tmux_server::Server::User => ChildSpec::rein_start(home, project),
+        })
+    }
+
+    /// `/bin/sh -s` with the setup script on stdin, in `/`, the start's variables removed.
+    fn tmux_setup(&self) -> Result<(), &'static str> {
+        let mut cmd = std::process::Command::new("/bin/sh");
+        cmd.arg("-s").current_dir("/");
+        for k in ENV_REMOVED {
+            cmd.env_remove(k);
+        }
+        rein_platform::process::hide_console(&mut cmd);
+        crate::tmux_server::setup_outcome(tmux_overlay::run_stdin(
+            &mut cmd,
+            &crate::tmux_server::setup_script(),
+            crate::tmux_server::SETUP_LIMIT,
+            &|| true,
+        ))
     }
 
     fn complete_dir(&self, prefix: &str) -> Result<Vec<String>, IpcError> {

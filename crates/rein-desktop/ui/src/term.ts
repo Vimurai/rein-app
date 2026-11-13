@@ -12,6 +12,13 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { concat, splitInput } from "./chunks.ts";
 import { Channel, ptyAck, ptyResize, ptyWrite, tabDetach, tabOpen, type Tab } from "./ipc.ts";
 import { START_BYTES, START_LIMIT_MS, tabPhase, type TabPhase } from "./phase.ts";
+
+/** V8 3b: the start script's exit when the tmux home fails its check just before use. */
+export const START_REFUSED = 126;
+export const START_REFUSED_SENTENCE =
+  "tmux check failed: the app's tmux files are not as it wrote them (owner, type or symlink).";
+/** The way out, as the core words it for a failed setup (tmux_server::USE_YOUR_OWN). */
+export const USE_YOUR_OWN = "Settings → tmux server → my own uses your own tmux instead.";
 import { PtySize } from "./pty-size.ts";
 import { xtermTheme, type Theme } from "./theme.ts";
 
@@ -49,6 +56,8 @@ export class TermTab {
   #limit: ReturnType<typeof setTimeout> | undefined;
   /** The phase may have changed (alternate screen, 4 KiB, a key, the exit, 20 s). */
   onPhase: () => void = () => {};
+  /** The tab's tmux home failed its setup (V8 3a): no pty was opened, the tab says why. */
+  onRefused: () => void = () => {};
   /** Called with the tab once open, and with an error message if opening fails. */
   onOpen: (tab: Tab) => void = () => {};
   onError: (message: string) => void = () => {};
@@ -185,6 +194,12 @@ export class TermTab {
     } catch (e) {
       if (gen !== this.#gen) return; // closed or restarted meanwhile: not this tab's error
       const msg = (e as { message?: string }).message ?? String(e);
+      // V8 3a: the tmux home setup failed — the tab stays, says why in the core's fixed
+      // sentence and how to use the user's own tmux instead; Enter tries again.
+      if ((e as { kind?: string }).kind === "tmux_setup") {
+        this.#refuse(msg);
+        return;
+      }
       this.onError(msg);
     }
   }
@@ -253,7 +268,22 @@ export class TermTab {
     // The core reports the exit after the last output; draw that output first.
     cancelAnimationFrame(this.#frame);
     this.#flush();
+    // V8 3b: the start script refused the tmux home just before use (exit 126, before tmux
+    // ever drew) — a fixed sentence, not a bare exit code.
+    if (code === START_REFUSED && !this.#alt) {
+      this.term.write(`\r\n\x1b[7m ${START_REFUSED_SENTENCE} \x1b[0m\r\n${USE_YOUR_OWN} Press Enter to try again.\r\n`);
+      return;
+    }
     this.term.write(`\r\n\x1b[7m rein start exited with code ${code} — press Enter to restart \x1b[0m\r\n`);
+  }
+
+  /** No pty: the tmux setup was refused (`message` is the core's fixed sentence). */
+  #refuse(message: string): void {
+    this.#exited = true;
+    clearTimeout(this.#limit);
+    this.term.write(`\x1b[7m ${message} \x1b[0m\r\nPress Enter to try again.\r\n`);
+    this.onPhase();
+    this.onRefused();
   }
 
   /** Detach: close the pty (the tmux session keeps running) and drop the terminal. */
@@ -277,6 +307,8 @@ export class TermTab {
         tabDetach(old.id)
           .catch(() => {})
           .then(() => this.start());
+      } else if (s === "\r") {
+        void this.start(); // a refused setup opened no pty: start again
       }
       return;
     }

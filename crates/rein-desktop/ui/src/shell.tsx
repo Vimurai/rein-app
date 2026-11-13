@@ -310,6 +310,10 @@ export function Shell(props: ShellProps) {
       tabs.current.push(entry);
       term.keyFilter = (e) => terminalKeyRef.current(e);
       term.onPhase = () => rerender(); // starting → running / exited (V7)
+      term.onRefused = () => {
+        entry.exited = true; // V8: the tmux setup was refused; the tab says why
+        rerender();
+      };
       term.onOpen = (opened) => {
         entry.open = true;
         entry.exited = false;

@@ -31,6 +31,7 @@ mod single_instance;
 #[path = "single_instance_windows.rs"]
 mod single_instance;
 mod tmux_overlay;
+mod tmux_server;
 mod ui_store;
 mod window_bg;
 // The Windows host: plain Rust everywhere, so its tests run on every platform; only the

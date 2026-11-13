@@ -1,5 +1,8 @@
 # rein-app tmux overlay (desktop.md §Look and feel v2 V6, D-050). A constant script, fed on
-# stdin:   sh -s -- <client tty> <hidden|app|keep|off> <bg> <fg> <muted> <border> <accent>
+# stdin:   sh -s -- <client tty> <hidden|app|keep|off> <bg> <fg> <muted> <border> <accent> <app|user>
+# The last word is the tmux server the tab's session runs on (V8, E-57): `app` — rein-app's own
+# (socket rein-app; the script then calls `tmux -L rein-app` and never starts a server), `user`
+# — the user's default server.
 # It styles the session the client on <client tty> is attached to with a closed list of
 # session options (and window options per window of that session), and installs a
 # `client-detached` hook that puts the user's own values back when that client detaches.
@@ -12,8 +15,9 @@
 # session. Exit: 0 done, 2 bad arguments, 3 no tmux, 4 tmux older than 3.2, 5 no client on
 # that tty within 60 s, 6 tmux refused an option.
 
-[ $# -eq 7 ] || exit 2
-tty=$1 mode=$2 bg=$3 fg=$4 muted=$5 border=$6 accent=$7
+[ $# -eq 8 ] || exit 2
+tty=$1 mode=$2 bg=$3 fg=$4 muted=$5 border=$6 accent=$7 server=$8
+case $server in app | user) ;; *) exit 2 ;; esac
 case $tty in
   /dev/pts/*) n=${tty#/dev/pts/} ;;
   /dev/ttys*) n=${tty#/dev/ttys} ;;
@@ -26,6 +30,11 @@ for c in "$bg" "$fg" "$muted" "$border" "$accent"; do
 done
 
 command -v tmux >/dev/null 2>&1 || exit 3
+# Every tmux call below reaches the tab's server. (Commands run by tmux itself — the restore
+# in run-shell and the detach hook — run inside that server and reach it through $TMUX.)
+if [ "$server" = app ]; then
+  tmux() { command tmux -L rein-app "$@"; }
+fi
 v=$(tmux -V 2>/dev/null) || exit 3
 v=${v#tmux }
 v=${v#next-}

@@ -29,6 +29,8 @@ pub struct UiFile {
     /// The tmux overlay (V6, D-050): on / off, and the status-line mode.
     pub tmux_overlay: Option<bool>,
     pub tmux_status: Option<String>,
+    /// The tmux server tabs open on (V8): `app` | `user`.
+    pub tmux_server: Option<String>,
     pub first_run_done: bool,
 }
 
@@ -42,6 +44,7 @@ impl Default for UiFile {
             decorations: None,
             tmux_overlay: None,
             tmux_status: None,
+            tmux_server: None,
             first_run_done: false,
         }
     }
@@ -63,6 +66,7 @@ pub struct UiView {
     pub decorations: Effective,
     pub tmux_overlay: Effective,
     pub tmux_status: Effective,
+    pub tmux_server: Effective,
     pub first_run_done: bool,
 }
 
@@ -147,6 +151,12 @@ impl UiStore {
                 d.tmux_status.clone().map(Value::from),
                 Value::from(c.tmux.status.clone()),
             ),
+            tmux_server: pick(
+                "tmux.server",
+                Value::from(c.tmux.server.clone()),
+                d.tmux_server.clone().map(Value::from),
+                Value::from(c.tmux.server.clone()),
+            ),
             first_run_done: d.first_run_done,
         }
     }
@@ -214,6 +224,16 @@ impl UiStore {
                     Value::Null => None,
                     v => match v.as_str() {
                         Some(m) if crate::tmux_overlay::STATUS_MODES.contains(&m) => Some(m.into()),
+                        _ => return Err(bad()),
+                    },
+                };
+            }
+            "tmux_server" => {
+                refuse_config("tmux.server")?;
+                d.tmux_server = match value {
+                    Value::Null => None,
+                    v => match v.as_str() {
+                        Some(m) if crate::tmux_server::SERVER_WORDS.contains(&m) => Some(m.into()),
                         _ => return Err(bad()),
                     },
                 };
@@ -350,6 +370,30 @@ mod tests {
             "set_in_config"
         );
         assert_eq!(s.view(&t).tmux_status.source, "config");
+        // E-57 (V8): the tmux server — rein-app's own by default, the user's by choice, and
+        // config.toml winning.
+        assert_eq!(
+            s.view(&c).tmux_server,
+            Effective {
+                value: Value::from("app"),
+                source: "default"
+            }
+        );
+        s.set(&c, "tmux_server", &Value::from("user")).unwrap();
+        assert_eq!(
+            s.view(&c).tmux_server,
+            Effective {
+                value: Value::from("user"),
+                source: "ui"
+            }
+        );
+        let t = cfg(&["tmux.server"]);
+        assert_eq!(
+            s.set(&t, "tmux_server", &Value::from("app"))
+                .unwrap_err()
+                .kind,
+            "set_in_config"
+        );
     }
 
     #[test]
@@ -364,6 +408,7 @@ mod tests {
             ("decorations", Value::from("no")),
             ("tmux_overlay", Value::from("on")),
             ("tmux_status", Value::from("off")),
+            ("tmux_server", Value::from("mine")),
             ("first_run_done", Value::from(1)),
         ] {
             assert_eq!(s.set(&c, f, &v).unwrap_err().kind, "bad_value", "{f}");

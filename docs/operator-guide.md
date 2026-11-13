@@ -270,6 +270,43 @@ config.toml" and cannot be changed there. Saving `config.toml` reloads the windo
 the window cannot read is reported with its file, line and reason, and the previous
 settings stay in force.
 
+### tmux in the window
+
+**The window has its own tmux server.** Sessions opened in the window run on a separate tmux
+server, the socket `rein-app`, started with rein-app's own small config. **None of your tmux
+settings apply there**: not `~/.tmux.conf`, not your plugins, your prefix key, key bindings,
+mouse or status-line settings. Your own tmux server, its config and its sessions are not
+touched, and `rein start` in an ordinary terminal works as before. The window uses tmux's
+default prefix, `Ctrl+b`.
+
+- **From a terminal**, reach the window's sessions with `tmux -L rein-app ls` and
+  `tmux -L rein-app attach -t <session>`. Plain `tmux ls` does not list them.
+- **Closing the window** detaches its tabs; the sessions keep running on the `rein-app`
+  server, as they did on yours.
+- **The window's files.** rein-app keeps two files in `~/.local/state/rein-app/tmux/`
+  (inside WSL on Windows): `bin/tmux`, a small script that sends every `tmux` the tab runs to
+  the `rein-app` server, and `tmux.conf`. It rewrites them each time a tab opens, so a change
+  to them does not last; the folder can be deleted at any time and comes back. The window
+  refuses to use them (and the tab says why) when the folder, `~/.local` or
+  `~/.local/state` is a symlink, belongs to another user or can be written by other users, or
+  when your home directory's path holds a space, quote or glob character. Making
+  `~/.local` for the first time, the window makes it private (0700).
+- **A project already running on your own tmux server is not found by the window.**
+  Opening it in the window starts a second session, with a second Architect and Engineer,
+  on the `rein-app` server. Stop the old one first (`rein start --kill` in a terminal), or
+  keep using your own server (below).
+- **To use your own tmux server instead** (your config and plugins, as before): Settings →
+  **tmux server** → **My own**, or in `config.toml`:
+
+  ```toml
+  [tmux]
+  server = "user"
+  ```
+
+  The change applies to tabs opened after it. With your own server the window still
+  recolours the session it shows (`[tmux] overlay` / `status`) and puts your look back when
+  the tab closes.
+
 ### The health badge
 
 The status bar's health badge is the result of `rein doctor --scope install --json`. It
