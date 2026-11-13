@@ -3045,3 +3045,44 @@ E-63 rework → E-65 → E-64 → E-60 → E-61. E-65 goes before more UI work b
 ### Next action needed
 - The three rework items, then hand off E-63 again.
 ---
+
+## Handoff — 2026-11-13 19:58 UTC
+**From**: Engineer → Architect
+**Trigger**: E-63 rework done (d03b0b2, stamps 1f5a3a8). Tier 2: run_review + align_diff, stamps.
+- **CI on 1f5a3a8:** hosted `ci` ×3 green and `desktop-windows` green (43495115477); local `rein ci run` PASS.
+
+### Rework (your 19:40 items)
+1. **The empty `setup-failed` screen was the window, not the capture.**
+   - **Reproduced:** in 8 runs of the failed scenario, 4 shots were blank (13 KB against 24 KB), and every one showed init's output and the fixed line after a resize. The text was written but not drawn.
+   - **Fix:** a set-up tab's pane is now repainted the way a shown tab is (`shown()`: fit and a full refresh), once the set-up pty opens and again after the init-failed line is written. The same loop afterwards: 8/8 drawn.
+   - **Not proven:** the root cause inside xterm. No WebGL context loss is logged. What is shown is the symptom and that a repaint ends it.
+   - **Guard:** `project-screens.sh` now fails if the failed screen is blank. It compares the shot with the same screen redrawn by a resize; the sizes must be within 10 %. Both screens were replaced; the stand-in prints two lines before it fails.
+2. **Update project asks before it runs.**
+   - The bar's click opens the sheet in a confirm step: `Runs rein init`, rein's rows, then the fixed line "rein init replaces the files it lists as refresh. Edits you made in those files are lost — commit them first."
+   - Buttons: **Run rein init** / **Cancel**, with Cancel focused (Escape and the default both cancel). The app names no file and parses no row.
+   - The screens run checks that the call log holds no `init` until Run rein init. New screen: `update-confirm`, both themes.
+3. **A folder inside a Rein project gets no set-up offer.**
+   - `Host::project_dir` → `(path, Found::{Project, Inside(parent), Plain})`.
+   - **Linux / macOS:** the nearest parent with `.ai/` (`Path::ancestors`).
+   - **Windows:** inside the same single validate call. After `pwd -P`, a constant loop runs with `IFS=; set -f` (no unquoted path is ever split or globbed) and prints the parent with `cd $d && pwd -P`, exit 6. It stays quote-free, with no backslash.
+   - My first loop printed the parent with `printf %s\\n` at one escape level too few. The new process test caught it before the commit, which is why the line now uses `pwd -P`.
+   - **Interop** through the real `wsl.exe`, argv shown: a folder with a space in its name answers exit 6, its path, then the project's, in 150 ms; the project itself answers exit 0 in 144 ms.
+   - **The card:** "This folder is inside a Rein project.", the folder, "The project" and its path, then **Open that project** (primary; it closes this tab and opens the project), Open another folder, Close tab. There is no Set up button and rein is not asked.
+   - **In the core:** `project_setup` and `project_check` refuse such a tab with `inside_project`. New screen: `setup-inside` (catppuccin-mocha).
+
+### Tests
+- **Rust: 141.** New:
+  - the validate script run through `sh` on real directories: exits 0 / 6 / 3; a name with a space, `*` and `?`; a decoy `my projX/.ai` that a glob would match is never reported;
+  - WSL exit 6 maps to `Inside`;
+  - a set-up tab inside a project refuses set-up and check.
+- **Node: 55.**
+- **Window run** (`project-screens.sh`): 22 checks pass in both themes. New checks: not blank; inside — rein not asked, nothing started; confirm — nothing ran before.
+- **Screens:** all of `.ai/screens/E-63/` recaptured.
+
+### Blueprint divergence (if any)
+- None against the rework ruling. One note on item 1: the fix is a repaint, not a root cause inside xterm (see above).
+
+### Next action needed
+- Review the E-63 rework. On acceptance and release, its installer (run 43495115477) goes to Downloads.
+- I continue with **E-65** (the hidden Windows UI test failures, `ci_gate`), then E-64.
+---
