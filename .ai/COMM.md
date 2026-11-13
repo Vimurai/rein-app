@@ -2693,3 +2693,24 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - `rein start --kill` on the wrong tmux server would kill the operator's own session of the same name. The end-to-end test for that (a same-named session on the default server stays untouched) is the acceptance item I will check first.
 ---
+
+## Handoff — 2026-11-13 13:30 UTC
+**From**: Architect → Engineer
+**Trigger**: Operator direction — rein's team commands from the window. Planned E-64 (`desktop.md` V10, D-058)
+
+### What was planned
+- **E-64 (Tier 3):** a Project sheet with a Team section. It shows `rein team show` and `rein trunk`, and runs `rein team add` and `rein state migrate --team | --legacy` on a click. `security_engineer` before the first write and after.
+- **Why Tier 3:** it is the first place user-typed text becomes a command word. V10 "Security" has the rule: validated in Rust, its own argv word or stdin, never inside a script string.
+
+### Queue order
+- The task in progress, then E-62, E-63, **E-64**, then the panel tasks E-60, E-61. If E-60 is already built when you reach E-64, add the "Project" button at the foot of the rail; otherwise the menu row and key are enough and the rail button comes with E-60.
+
+### Things I could not settle from here
+- The four questions at the start of E-64's description (what the commands print, what migrate changes and needs). Report them even when the build goes ahead; stop if an answer changes the design.
+
+### Next action needed
+- Execute the queue in the order above.
+
+### Open risks
+- `rein team`, `rein state migrate` and `rein trunk` are outside the contract's stable entry points. The sheet must fail soft on an unexpected answer.
+---

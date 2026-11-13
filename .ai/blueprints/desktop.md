@@ -898,6 +898,82 @@ in a project.
 pane (or say so in `--status`) when its agent exits; `rein init` should cover every
 prerequisite it can, and name the rest in `--check`; a machine-readable project verdict.
 
+### V10. Project sheet: the team (revision 2026-11-13, D-058)
+Operator direction: rein's team commands (who is on the project, their id ranges, team
+mode) should be usable from the window, "settings or something".
+
+**Where it lives.** Not in Settings: Settings is the app's own, per user; the team is
+one project's, kept by rein in that project (`.ai/team.json`). Not a side-menu panel:
+panels never run a command (`panels.md`). It is a **Project sheet** — the same `Sheet`
+the update and profiles views use — opened for the active tab's project from the menu
+("Project: team…"), a key in both styles, and a "Project" button at the foot of the
+side-menu rail once the rail exists. V10 gives it one section, Team; later
+project-scoped things (accounts bound to the project, gate status) go here too.
+
+**Core concept: the sheet is a form over rein's own team commands.** It shows what
+`rein team show` and `rein trunk` say, and its buttons run `rein team add` and
+`rein state migrate --team | --legacy`. rein-app never reads or writes `.ai/team.json`
+itself and keeps no copy of the team.
+
+**Components**
+1. **Team view** — on open, one run each of `rein team show` and `rein trunk`: the
+   developers with their id ranges, the trunk, and whether the project is in team mode.
+   If rein's output cannot be read as rows without parsing prose, it is shown as rein
+   printed it (escaped text, monospaced) and the form below still works.
+2. **Add a developer** — two fields: e-mail, and id range as prefix + from + to. Checked
+   in the web side for help text and **again in Rust, which is the only check that
+   counts**: e-mail `[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,190}`, no leading `-`;
+   prefix one of rein's task prefixes; `from` ≤ `to`, both 1–99999. Runs
+   `rein team add <email> --range <P>:<from>-<to>`; rein's answer (an overlapping range,
+   an unknown prefix) is shown under the form as rein printed it.
+3. **Team mode switch** — "Turn on team mode" / "Go back to single-developer mode" =
+   `rein state migrate --team [--trunk <name>]` / `--legacy`. A confirm dialog says in
+   plain words what rein will do to the project's files (from rein's own description),
+   that the change must then be committed, and that the side-menu Tasks panel does not
+   read team-mode projects yet. Trunk, when asked for, is picked from the branch names
+   rein reports, never typed freely.
+4. **Not offered, because rein has no command for it:** changing or removing a
+   developer, changing a range. The sheet says so in one line and names the file; the
+   request to rein asks for the commands.
+
+**Data model.** None in the app. No setting. The two value shapes above are the only
+user text that ever becomes a command word.
+
+**Interface contracts.** IPC, project always from the tab's state: `team_get(tab_id)` →
+`{rows | text, trunk, mode}` or a fixed "not available"; `team_add(tab_id, email,
+prefix, from, to)`; `team_mode(tab_id, mode, trunk?)`. Each returns rein's exit code and
+escaped output lines through the existing CLI runner's event stream.
+
+**Security (Tier 3).** This is the first place user-typed text becomes part of a command.
+- Each value is validated in Rust against the closed patterns above and passed as **its
+  own argv word**, never placed inside a script string. Where the transport cannot pass
+  a separate word safely (the Windows `wsl.exe` path — Engineer shows which), the values
+  travel on **stdin** to a constant script that re-validates them with the same patterns
+  before use. No quote character can appear in an accepted value, so V8's argv rule holds.
+- A value starting with `-`, or holding whitespace, a quote, `$`, a backtick, `;`, `|`,
+  `&`, a newline or a non-ASCII character, is refused with a fixed sentence.
+- Every run needs a click; the migrate needs the confirm. rein's output is untrusted
+  text: text nodes only, capped at 200 lines.
+- `security_engineer` review; Windows interop output with hostile values (standing rule).
+
+**Execution constraints.** Commands run off the UI thread through the CLI runner, one at
+a time per project, limit 60 s (migrate 5 min). Nothing runs until the sheet is opened.
+
+**Tests.** Validation table in Rust (accepted and refused values, including every
+character above, a 300-character e-mail, `--range` as an e-mail, a range of `0-0` and
+`5-1`); the argv built for each transport holds the value as one word and no quote; end
+to end with a stand-in `rein` that records its argv: add, an overlap error shown,
+migrate with and without the confirm; the sheet on a project without `.ai/` says "not
+set up" and offers V9's card. Screens gate (D-052): the sheet with a team, the add form
+with an error, the confirm, both themes.
+
+**Rollback.** The sheet only calls rein; reverting the task's commit removes it. A
+migrate is undone by rein's own `--legacy` / `--team`.
+
+**Contract note.** `rein team`, `rein state migrate` and `rein trunk` are not in the
+contract's list of stable entry points (§3.6). The sheet is built against rein 0.5.0 and
+fails soft on a different answer; the request to rein asks to add them, with `--json`.
+
 ### Tests (v2)
 - Token function: contrast ≥ 4.5:1 for every text pair in every theme; the default theme is
   `catppuccin-mocha`.

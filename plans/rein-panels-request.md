@@ -39,6 +39,14 @@ the agents have exited. The window runs only `rein init`, `rein sync` and
 - **c. Restarting one exited agent** without killing the session: is `rein start` on a
   live session meant to do that?
 
+## Also asked of rein — the team (rein-app D-058, `desktop.md` V10)
+The window gets a Project sheet that shows `rein team show` / `rein trunk` and runs
+`rein team add` and `rein state migrate --team | --legacy` on a click.
+- **d. Add `team`, `state migrate`, `trunk` and `task claims` to the contract's stable
+  entry points**, each with `--json`.
+- **e. Commands to change and remove a developer and to change a range.** rein-app will
+  not edit `.ai/team.json` itself.
+
 ## Asked of rein-plugins
 4. **May a plugin carry panel descriptors** (for example `panels/<id>.json`, schema in
    rein-app `panels.md` §Data Model) next to its agents and skills? They hold no code;

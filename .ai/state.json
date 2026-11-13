@@ -956,6 +956,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-13T11:49:08.786Z"
+    },
+    {
+      "id": "E-64",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 3,
+      "description": "Build the Project sheet with its Team section per .ai/blueprints/desktop.md §Look and feel v2 V10 (D-058). Operator direction: rein's team commands should be usable from the window. FIRST read rein 0.5.0 and report in the handoff: what rein team show and rein trunk print (rows or prose), what rein team add does without a .ai/team.json, what rein state migrate --team / --legacy changes and needs (clean tree? a commit?), and the task prefixes rein accepts. Then build: team_get, team_add, team_mode IPC (project from the tab's state); the sheet (menu row \"Project: team…\", a key in both styles, pointer parity) with the team view, the add form (e-mail; prefix + from + to) and the team-mode switch behind a confirm dialog. Validation in Rust is the only one that counts: the closed patterns in V10 component 2; a value starting with - or holding whitespace, a quote, $, a backtick, ; | & a newline or non-ASCII is refused with a fixed sentence. Each value is its own argv word, never inside a script string; where the transport cannot do that safely, values go on stdin to a constant script that re-validates them. rein-app never reads or writes .ai/team.json. Tier 3: dispatch security_engineer before the first write and after. If rein's behaviour differs from V10's assumptions in a way that changes the design, stop and report. Acceptance: V10's validation table and argv tests; end to end with a stand-in rein that records its argv (add, an overlap error shown, migrate with and without the confirm); Windows interop output with hostile values under .ai/screens/<task>/; screens (D-052) of the sheet, the form with an error and the confirm in both themes; hosted ci x3 and desktop-windows green (D-048).",
+      "created_at": "2026-11-13T12:12:35.903Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-13T12:12:35.904Z"
     }
   ],
   "stamps": [

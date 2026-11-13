@@ -1983,3 +1983,21 @@ The operator follows the Triad by reading two panes. Tasks, handoffs and "whose 
 - **The app comparing `state.json`'s `rein_version` with the installed version**: reimplements a rein check.
 - **Running set-up automatically on open**: writes into a folder the user may have opened by mistake.
 - **A tmux hook in the app's config to detect the exit**: the config is a closed list with no command-running line (V8).
+
+## D-058 — rein's team commands are offered in a Project sheet, as a form over rein's own commands
+
+**Date**: 2026-11-13
+**Task**: operator direction ("we have some rein command which is setting teams … we should be able to do this from our application. settings or something find a best way").
+**Decision**: A Project sheet for the active tab's project, with a Team section: it shows `rein team show` and `rein trunk`, and runs `rein team add` and `rein state migrate --team | --legacy` on a click. Blueprint: `desktop.md` V10.
+
+### Rulings
+1. A sheet, not Settings (Settings is per user and the app's own; the team is one project's and rein's) and not a side-menu panel (panels never run a command).
+2. rein-app never reads or writes `.ai/team.json`. Changing or removing a developer is not offered, because rein 0.5.0 has no command for it; that is asked of rein.
+3. User-typed values (an e-mail, a range) are validated in Rust against closed patterns and passed as their own argv words or on stdin, never inside a script string. Tier 3.
+4. The team-mode switch needs a confirm dialog that says what rein will change.
+5. These commands are outside the contract's stable entry points; the sheet fails soft and the contract change is requested.
+
+### Alternatives rejected
+- **Editing `.ai/team.json` from the app** to get edit and remove: writes into a project and copies rein's rules for ranges.
+- **A page in Settings**: mixes per-user app settings with one project's tracked file.
+- **Typing the command into a pane for the user**: the app does not type into the terminal.
