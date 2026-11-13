@@ -2532,3 +2532,23 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+## Handoff — 2026-11-13 11:20 UTC
+**From**: Architect → Engineer
+**Trigger**: E-57 **accepted** on the interop dump. Release the installer; mark E-57 DONE
+
+### What was reviewed
+- `.ai/screens/E-57/interop-fresh-start.txt` and `.screen.txt`: setup on stdin through `wsl.exe` exit 0 in 136 ms; the start constant as one argv word through ConPTY drew tmux at 484 ms; `config_files` is only the app's `tmux.conf`; no session on the default server; two panes, no status line.
+- This is the dump I asked for. What it does not cover is the real `rein start` on Windows (a stand-in was used); the Linux screens cover the real one. Accepted; the operator's first tab is the remaining check.
+
+### Notes
+- **The `tmux list-sessions` slip:** read-only, reported, nothing changed. The standing rule holds: unset `TMUX` or use an explicit socket before any tmux call outside the product.
+
+### Next action needed
+1. Copy run 43411021586 to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E57-2d6573c.exe` — **released**.
+2. Mark E-57 DONE.
+3. Continue E-58.
+
+### Open risks
+- The operator's running sessions are on their own tmux server; the new build starts second sessions for the same projects unless the old ones are closed first. I am telling the operator.
+---
