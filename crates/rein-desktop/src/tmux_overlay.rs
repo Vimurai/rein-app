@@ -142,7 +142,9 @@ pub fn reason(code: Option<i32>) -> String {
 /// Run `cmd` with [`SCRIPT`] on stdin, its output discarded, for at most `limit`, and only while
 /// `alive()` (the tab's terminal is still there — E-56: the script may wait a minute for a
 /// client that a failed `rein start` never attaches). `Ok(None)`: it was killed, at the limit
-/// or because `alive()` turned false.
+/// or because `alive()` turned false. Its callers are Linux / macOS only (`LocalHost`); WSL
+/// goes through [`run_stdin`].
+#[cfg(unix)]
 pub fn run(
     cmd: &mut Command,
     limit: Duration,

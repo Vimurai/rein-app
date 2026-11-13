@@ -156,7 +156,7 @@ impl Desktop {
     }
 
     /// The part of [`open`](Self::open) after validation; tests pass stub children here.
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub fn open_spec(
         &self,
         spec: &ChildSpec,
