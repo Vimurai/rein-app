@@ -2234,3 +2234,40 @@ What on master now contradicts the contract (none of it was wrong when written �
 - The operator's running sessions (this one included) are on their own server; after E-57's build they keep running there and the window will not attach to them.
 - The screens harness must keep using its private `-S` socket and must not start or touch the real `rein-app` socket on the operator's machine.
 ---
+
+---
+## Handoff — 2026-11-13 08:45 UTC
+**From**: Engineer → Architect
+**Trigger**: E-55 built (2651c3d) with the three E-54 conditions. Hosted `ci` ×3, `desktop-windows` and local `rein ci run` green
+
+### What was built
+- **E-55, the menu** (pure model `src/menu.ts`; the `Action` list, both key tables and IPC unchanged):
+  - **`simple`:**
+    - Order: open a project and recent projects; next / previous / go to / close tab; installation health; update / undo update / profiles / apply profile settings; the remaining actions in the list's order; **Settings and Quit last**.
+    - The three mode actions are left out.
+    - A row with no `simple` key shows **no hint** (no `modal:` keys).
+  - **`modal`:** today's list and hints, unchanged.
+  - **Whole rows:** every row is 32 px, and the list's height is rounded down to whole rows (CSS `round()`), so the last visible row is never cut in half. The screens show it in WebKitGTK; WebView2's Chromium has `round()` too.
+- **Your 21:40 conditions:**
+  1. **`tab_tmux` answers only with the app's own fixed sentences** (`tmux_overlay::told`, a closed list): the exit-code words, "the overlay could not start", "the tab's tty was not seen", or "the overlay could not run".
+     - **Yes, outside text could reach it before.** The OS's error was appended to "could not start". A refused colour value was quoted. The WSL probe's message was passed on.
+     - Now none of these get through, and "could not start" no longer keeps the OS's words in the health row either. A test feeds outside text and gets the fallback sentence.
+  2. **`--motion-sweep: 1100ms`** in `style.css` and `MOTION.sweep` in `motion.ts`; the token test covers it.
+  3. **`motion-screens.sh` refuses to run when `CI` is set.** Every tmux call it makes goes through its private socket with an explicit `-S`: the PATH wrapper, the account binding, the cleanup.
+- **Tests.** UI 49/49 (the menu model in both styles: order, no mode rows, no `modal:` hint in simple, every other action present); Rust 106 (fixed sentences only). fmt and clippy clean.
+- **Review.** `run_review` tier 2: automated checks passed **before** the commit this time. `align_diff`: only its WARN on files not named in `architect.md`. I checked the task by hand; ALIGN_PASS and CRITIC_STAMP recorded.
+- **Screens:** `.ai/screens/E-55/menu-{simple,modal}-{catppuccin-mocha,github-light}-1280x800.png`. `v2-screens.sh` takes `INPUT_STYLE=modal` and picks the modal card on first run.
+- **Installer:** `desktop-windows` run **43393915722** (2651c3d). It goes to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E55-2651c3d.exe` only on your release.
+
+### Decisions made
+- None of mine.
+
+### Blueprint divergence (if any)
+- **No menu order is given for actions the task does not name** (copy last command, config, theme, help, input style, font size, copy / paste). They sit between profiles and Settings in the list's order. Say if you want another place.
+
+### Next action needed
+- Review E-55 and accept or send back. Then I take **E-57**, starting with `security_engineer`.
+
+### Open risks
+- None new.
+---
