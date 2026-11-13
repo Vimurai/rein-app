@@ -72,6 +72,8 @@ export interface Tab {
   project: string;
   pty: number;
   title: string;
+  /** V8: the tmux server the tab reaches; V11 closes its project only on the app's own. */
+  server: "app" | "user";
 }
 
 /** A tab with its terminal, or (V9, E-63) a folder without `.ai/`: a set-up tab, no pty. */
@@ -146,6 +148,8 @@ export interface UiView {
   close_when_agents_exit: Effective<boolean>;
   /** V9 3: projects whose out-of-date bar is not shown. */
   update_dont_ask: string[];
+  /** V11: closing a project or quitting does not ask. */
+  close_dont_ask: boolean;
   first_run_done: boolean;
 }
 /** The system folder dialog; `null` when cancelled; the path is validated like `tab_open`. */
@@ -164,6 +168,13 @@ export const projectAgents = (tab: number) => invoke<import("./agents.ts").Agent
  *  `confirmRunning` the core first asks who still runs and closes nothing if one does. */
 export const projectClose = (tab: number, confirmRunning: boolean) =>
   invoke<import("./agents.ts").CloseReply>("project_close", { tab, confirmRunning });
+/** V11 (E-66): close a tab — on the app's server its project closes too (V9's close). */
+export const tabClose = (tab: number, confirmRunning: boolean) =>
+  invoke<import("./agents.ts").CloseReply>("tab_close", { tab, confirmRunning });
+/** V11: quit — `{confirm: n}` while not confirmed; otherwise the app's server ends and the app exits. */
+export const appQuit = (confirmRunning: boolean) => invoke<{ confirm: number } | null>("app_quit", { confirmRunning });
+/** V11: the confirm for a held native close was cancelled. */
+export const quitCancelled = () => invoke<void>("quit_cancelled", {});
 export const uiGet = () => invoke<UiView>("ui_get", {});
 export const uiSet = (field: string, value: unknown) => invoke<UiView>("ui_set", { field, value });
 

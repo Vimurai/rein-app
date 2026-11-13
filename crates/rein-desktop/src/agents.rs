@@ -435,7 +435,10 @@ mod tests {
         ) -> Result<crate::project_file::FileBytes, crate::project_file::Unavailable> {
             unreachable!()
         }
-        fn tmux_setup(&self) -> Result<(), &'static str> {
+        fn tmux_setup(&self, _: bool) -> Result<(), &'static str> {
+            unreachable!()
+        }
+        fn tmux_kill_server(&self) -> bool {
             unreachable!()
         }
         fn complete_dir(&self, _: &str) -> Result<Vec<String>, IpcError> {

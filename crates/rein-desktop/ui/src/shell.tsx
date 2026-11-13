@@ -29,15 +29,17 @@ import { CommandPalette, StatusBar, TitleBar, Toast } from "./frame.tsx";
 import {
   clipboardRead,
   clipboardWrite,
-  closeWindow,
   projectChoose,
   dirComplete,
   healthGet,
   tabTmux,
   listen,
+  appQuit,
   projectAgents,
   projectCheck,
   projectClose,
+  quitCancelled,
+  tabClose,
   projectsForget,
   projectsList,
   type HealthView,
@@ -51,7 +53,8 @@ import { startScreen, withStartKeys, type RecentView } from "./start.ts";
 import { StartScreen } from "./start-screen.tsx";
 import { TermTab } from "./term.ts";
 import { POLL_MS, agentBar, shouldPoll, type Agent } from "./agents.ts";
-import { AgentBar, CloseConfirm } from "./agent-bar.tsx";
+import { AgentBar, CloseConfirm, StopConfirm } from "./agent-bar.tsx";
+import { closeTabText, closedNote, quitText } from "./lifecycle.ts";
 import { shouldCheck, type CheckReply } from "./project.ts";
 import { SetupCard, UpdateBar, UpdateSheet } from "./project-ui.tsx";
 import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
@@ -89,6 +92,9 @@ export interface ShellProps {
   /** V9 component 3: projects whose out-of-date bar is not shown, and how to add one. */
   dontAskUpdate: readonly string[];
   onDontAskUpdate: (project: string) => void;
+  /** V11: closing a project or quitting does not ask; and how to set it. */
+  closeDontAsk: boolean;
+  onCloseDontAsk: () => void;
 }
 
 const VERSION = "0.5.0";
@@ -145,8 +151,12 @@ interface OpenTab {
 }
 
 export function Shell(props: ShellProps) {
-  const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, tmuxKey, handlers, notice, startDir, startLast, closeWhenAgentsExit, dontAskUpdate, onDontAskUpdate } =
+  const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, tmuxKey, handlers, notice, startDir, startLast, closeWhenAgentsExit, dontAskUpdate, onDontAskUpdate, closeDontAsk, onCloseDontAsk } =
     props;
+  /** V11: a stop confirm — closing one project's tab, or quitting with `n` projects. */
+  const [stop, setStop] = useState<{ kind: "tab"; entry: OpenTab; roles: string[] } | { kind: "quit"; n: number } | null>(null);
+  const closeDontAskRef = useRef(closeDontAsk);
+  closeDontAskRef.current = closeDontAsk;
   /** V9 3: Update project, running in its sheet for this tab. */
   const [updateSheet, setUpdateSheet] = useState<{ entry: OpenTab; id: number; rows: string[] } | null>(null);
   const dontAskRef = useRef(dontAskUpdate);
@@ -190,6 +200,7 @@ export function Shell(props: ShellProps) {
   // The set-up card (V9) takes the keyboard like an overlay: Tab and Enter work its buttons.
   pickerRef.current =
     picker ||
+    stop !== null ||
     overlay !== null ||
     pasteText !== null ||
     confirmClose !== null ||
@@ -420,16 +431,26 @@ export function Shell(props: ShellProps) {
     [fontFamily, fontSize, lineHeight, theme, say, showCommand, setMode, showTab, refreshRecent],
   );
 
+  /** The chip shows the current tab's own command again once a sheet closes (E-66: it kept
+   *  `rein init` after Update project). */
+  const restoreChip = useCallback(() => {
+    const t = tabs.current[cur.current];
+    if (t?.term.tab && !t.setup) showCommand(`cd ${shellWord(t.project)} && rein start`);
+  }, [showCommand]);
+
   const closeOverlay = useCallback(() => {
     setOverlay(null);
+    restoreChip();
     if (tabs.current.length) setMode({ mode: "TERMINAL", pending: [] });
-  }, [setMode]);
+  }, [setMode, restoreChip]);
 
   const openRef = useRef(open);
   openRef.current = open;
+  const quitRef = useRef<() => void>(() => {});
 
   /** Close tab `i` (default: the current one); its tmux session keeps running — unless
-   *  `note` says the project was closed (V9). */
+   *  `note` says the project was closed (V9). Only removes the tab from the window: the core
+   *  side is `tab_close` (V11, `closeTab`) or `tab_detach` (`term.detach`). */
   const detach = useCallback(
     (i = cur.current, note?: string) => {
       const t = tabs.current[i];
@@ -447,10 +468,54 @@ export function Shell(props: ShellProps) {
         lastCommand.current = null;
         setLastCmd(null);
       }
+      // Another tab is current now: the chip shows its command, not the closed one's (E-66).
+      else restoreChip();
       say(note ?? `${t.title} closed — its tmux session keeps running`);
     },
-    [say, setMode, showTab],
+    [say, setMode, showTab, restoreChip],
   );
+
+  /** V11 (E-66): close tab `i` — on the app's server its project closes too, with one confirm
+   *  when an agent runs or is not known (unless "Don't ask again"); a set-up tab, an exited one
+   *  and a tab on the user's server close as before. */
+  const closeTab = useCallback(
+    (i = cur.current, confirmed = false) => {
+      const t = tabs.current[i];
+      const tab = t?.term.tab;
+      if (!t || !tab || t.setup) {
+        detach(i);
+        return;
+      }
+      tabClose(tab.id, confirmed || closeDontAskRef.current).then(
+        (r) => {
+          if (!tabs.current.includes(t)) return;
+          if ("confirm" in r) {
+            setStop({ kind: "tab", entry: t, roles: r.confirm });
+            return;
+          }
+          detach(tabs.current.indexOf(t), closedNote(t.title, tab.server));
+        },
+        (e: { message?: string }) => {
+          // The core closed the tab; the kill did not succeed — the next run's sweep ends it.
+          if (tabs.current.includes(t)) detach(tabs.current.indexOf(t), `${t.title} closed — ${e.message ?? String(e)}`);
+        },
+      );
+    },
+    [detach],
+  );
+
+  /** V11: quit — the core counts the projects on its server, asks once (unless "Don't ask
+   *  again"), ends its server and exits. */
+  const quit = useCallback((confirmed = false) => {
+    appQuit(confirmed || closeDontAskRef.current).then(
+      (r) => {
+        if (r && "confirm" in r) setStop({ kind: "quit", n: r.confirm });
+      },
+      () => {},
+    );
+  }, []);
+
+  quitRef.current = () => quit();
 
   /** Close the project of `entry` (V9 component 4): `rein start --kill --yes` on its tmux
    *  server, then the tab closes. Without `confirmed`, a running agent asks first. */
@@ -554,8 +619,8 @@ export function Shell(props: ShellProps) {
           }
           return;
         case "tab.detach":
-          // `×` names its tab; the key form closes the current one.
-          detach(call.arg ? Number(call.arg) - 1 : cur.current);
+          // `×` names its tab; the key form closes the current one (V11: its project too).
+          closeTab(call.arg ? Number(call.arg) - 1 : cur.current);
           return;
         case "menu.show":
         case "help.show":
@@ -615,12 +680,9 @@ export function Shell(props: ShellProps) {
           return;
         }
         case "app.quit":
-          for (const t of [...tabs.current]) {
-            void t.term.detach();
-            t.el.remove();
-          }
-          tabs.current = [];
-          closeWindow().catch(() => say("every tab is closed; close the window to quit"));
+          // V11: the core ends its server (after one confirm) and exits; with no project on
+          // it, it exits at once.
+          quit();
           return;
         case "health.show":
           setMode({ mode: "NORMAL", pending: [] });
@@ -805,6 +867,8 @@ export function Shell(props: ShellProps) {
       rerender();
     });
     void listen<string>("open_dir", (dir) => openRef.current(dir));
+    // V11: a native close held for the confirm.
+    void listen<null>("quit_requested", () => quitRef.current());
     projectsList().then(
       (list) => {
         setRecent(list);
@@ -1006,6 +1070,33 @@ export function Shell(props: ShellProps) {
               }}
               onClose={() => {
                 setUpdateSheet(null);
+                restoreChip();
+                tab.current?.focus();
+              }}
+            />
+          )
+        }
+      />
+      <Exit
+        show={stop !== null}
+        render={() =>
+          stop && (
+            <StopConfirm
+              title={stop.kind === "tab" ? "Close project?" : "Quit rein-app?"}
+              text={stop.kind === "tab" ? closeTabText(stop.roles, stop.entry.title) : quitText(stop.n)}
+              yes={stop.kind === "tab" ? "Close" : "Quit"}
+              onYes={(dontAsk) => {
+                const s = stop;
+                setStop(null);
+                if (dontAsk) onCloseDontAsk();
+                if (s.kind === "tab") {
+                  const i = tabs.current.indexOf(s.entry);
+                  if (i >= 0) closeTab(i, true);
+                } else quit(true);
+              }}
+              onNo={() => {
+                if (stop.kind === "quit") void quitCancelled();
+                setStop(null);
                 tab.current?.focus();
               }}
             />

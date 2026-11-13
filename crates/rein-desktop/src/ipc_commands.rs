@@ -29,4 +29,7 @@ pub const COMMANDS: &[&str] = &[
     "project_setup",
     "project_fix",
     "project_fix_cancel",
+    "tab_close",
+    "app_quit",
+    "quit_cancelled",
 ];

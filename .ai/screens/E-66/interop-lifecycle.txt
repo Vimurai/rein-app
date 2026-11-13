@@ -1,0 +1,23 @@
+date: 2026-11-13T22:12:17Z
+wsl.exe: WSL version: 3.0.5.0; distro: Ubuntu; tmux: tmux 3.8
+private TMUX_TMPDIR: /tmp/rXX.eJpxOW
+
+== start-up sweep: the first tab's V8 setup with the word sweep (no process of its own)
+before: app server: running; default server's demo: running
+$ wsl.exe -d Ubuntu -e sh -s -- sweep   (stdin: tmux_setup.sh with the shim and config in)
+  exit 0 in 154 ms
+after:  app server: gone; default server's demo: running
+
+== a later tab's setup (no sweep word) ends nothing
+before: app server: running; default server's demo: running
+  exit 0 in 139 ms
+after:  app server: running; default server's demo: running
+
+== quit: kill-server on the app's socket (limit 3 s)
+before: app server: running; default server's demo: running
+$ wsl.exe -d Ubuntu -e sh -ls   (stdin: tmux_kill_server.sh)
+  exit 0 in 153 ms
+after:  app server: gone; default server's demo: running
+
+== quit again with no app server: a no-op
+  exit 0 in 137 ms; app server: gone; default server's demo: running

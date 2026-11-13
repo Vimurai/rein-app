@@ -155,9 +155,12 @@ impl Host for LocalHost {
     }
 
     /// `/bin/sh -s` with the setup script on stdin, in `/`, the start's variables removed.
-    fn tmux_setup(&self) -> Result<(), &'static str> {
+    fn tmux_setup(&self, sweep: bool) -> Result<(), &'static str> {
         let mut cmd = std::process::Command::new("/bin/sh");
         cmd.arg("-s").current_dir("/");
+        if sweep {
+            cmd.args(["--", "sweep"]);
+        }
         for k in ENV_REMOVED {
             cmd.env_remove(k);
         }
@@ -172,6 +175,25 @@ impl Host for LocalHost {
 
     fn complete_dir(&self, prefix: &str) -> Result<Vec<String>, IpcError> {
         complete_dir(prefix)
+    }
+
+    /// `/bin/sh -s` with the kill-server constant on stdin, the start's variables removed.
+    fn tmux_kill_server(&self) -> bool {
+        let mut cmd = std::process::Command::new("/bin/sh");
+        cmd.arg("-s").current_dir("/");
+        for k in ENV_REMOVED {
+            cmd.env_remove(k);
+        }
+        rein_platform::process::hide_console(&mut cmd);
+        matches!(
+            tmux_overlay::run_stdin(
+                &mut cmd,
+                crate::tmux_server::KILL_SERVER,
+                crate::tmux_server::QUIT_LIMIT,
+                &|| true,
+            ),
+            Ok(Some(_))
+        )
     }
 
     /// `/bin/sh -s -- <args>` with the constant script on stdin, in `/`, with the same

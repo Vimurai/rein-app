@@ -71,4 +71,13 @@ for f in "$H/bin/tmux" "$H/tmux.conf"; do
   [ -f "$f" ] || exit 22
   [ -O "$f" ] || exit 23
 done
+
+# V11 (D-059, E-66): before the app's first tab on its own server, a server left from an
+# earlier run (a crash, a killed window, Windows closed under WSL) is ended, so `rein start`
+# never meets a live session. Only with the word `sweep`; only the app's socket, never the
+# user's default server.
+if [ "${1-}" = sweep ]; then
+  unset TMUX TMUX_PANE
+  command -v tmux >/dev/null 2>&1 && tmux -L rein-app kill-server >/dev/null 2>&1
+fi
 exit 0

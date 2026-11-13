@@ -95,8 +95,8 @@ pub struct Tab {
     pub pty: PtyId,
     pub title: String,
     /// The tmux server the tab's `rein start` reaches (V8), as it was when the tab opened;
-    /// the overlay talks to that one. Not sent to the web side.
-    #[serde(skip)]
+    /// the overlay talks to that one. Sent read-only (V11: the close wording and the confirm
+    /// depend on it); the web side never names a server in a request.
     pub server: crate::tmux_server::Server,
 }
 
@@ -120,6 +120,12 @@ pub struct Desktop {
     pub agents: crate::agents::AgentWatch,
     /// Set-up tabs and the out-of-date checks (V9 components 1–3, E-63).
     pub projects: crate::project_setup::ProjectState,
+    /// A tab on the app's server has opened in this run: the start-up sweep is done (V11 3).
+    swept: std::sync::atomic::AtomicBool,
+    /// The app's server was ended for this quit (V11 2): the exit does not end it again.
+    pub server_ended: std::sync::atomic::AtomicBool,
+    /// A native close was held for the web side's confirm; a second one goes through.
+    pub close_held: std::sync::atomic::AtomicBool,
 }
 
 impl Desktop {
@@ -135,6 +141,9 @@ impl Desktop {
             panels: crate::panel_ipc::PanelCache::default(),
             agents: crate::agents::AgentWatch::default(),
             projects: crate::project_setup::ProjectState::default(),
+            swept: std::sync::atomic::AtomicBool::new(false),
+            server_ended: std::sync::atomic::AtomicBool::new(false),
+            close_held: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -147,6 +156,14 @@ impl Desktop {
         self.tabs()
             .get(&tab)
             .map(|t| (t.pty, t.server, std::path::PathBuf::from(&t.project)))
+    }
+
+    /// How many open tabs run on the app's own tmux server (V11).
+    pub fn app_tabs(&self) -> usize {
+        self.tabs()
+            .values()
+            .filter(|t| t.server == crate::tmux_server::Server::App)
+            .count()
     }
 
     /// The project a tab of this window runs in, as recorded when it opened — the only path a
@@ -195,8 +212,11 @@ impl Desktop {
         setup: bool,
     ) -> Result<ChildSpec, IpcError> {
         if server == crate::tmux_server::Server::App {
+            // V11 component 3: the first tab on the app's server sweeps a leftover server in
+            // the same setup process; later tabs never do (their sessions are this run's).
+            let sweep = !self.swept.swap(true, Ordering::AcqRel);
             self.platform
-                .tmux_setup()
+                .tmux_setup(sweep)
                 .map_err(|why| err("tmux_setup", crate::tmux_server::setup_message(why)))?;
         }
         if setup {
@@ -935,7 +955,10 @@ mod tests {
         ) -> Result<ChildSpec, IpcError> {
             unreachable!()
         }
-        fn tmux_setup(&self) -> Result<(), &'static str> {
+        fn tmux_setup(&self, _: bool) -> Result<(), &'static str> {
+            unreachable!()
+        }
+        fn tmux_kill_server(&self) -> bool {
             unreachable!()
         }
         fn read_project_file(

@@ -38,6 +38,8 @@ pub struct UiFile {
     pub close_when_agents_exit: Option<bool>,
     /// Projects whose out-of-date bar is not shown ("Don't ask for this project", V9 3).
     pub update_dont_ask: Vec<String>,
+    /// V11 (E-66): closing a project or quitting with agents running does not ask.
+    pub close_dont_ask: bool,
     pub first_run_done: bool,
 }
 
@@ -54,6 +56,7 @@ impl Default for UiFile {
             tmux_server: None,
             close_when_agents_exit: None,
             update_dont_ask: Vec::new(),
+            close_dont_ask: false,
             first_run_done: false,
         }
     }
@@ -78,6 +81,7 @@ pub struct UiView {
     pub tmux_server: Effective,
     pub close_when_agents_exit: Effective,
     pub update_dont_ask: Vec<String>,
+    pub close_dont_ask: bool,
     pub first_run_done: bool,
 }
 
@@ -175,6 +179,7 @@ impl UiStore {
                 Value::from(c.project.close_when_agents_exit),
             ),
             update_dont_ask: d.update_dont_ask.clone(),
+            close_dont_ask: d.close_dont_ask,
             first_run_done: d.first_run_done,
         }
     }
@@ -280,6 +285,7 @@ impl UiStore {
                 }
                 d.update_dont_ask = out;
             }
+            "close_dont_ask" => d.close_dont_ask = value.as_bool().ok_or_else(bad)?,
             "first_run_done" => d.first_run_done = value.as_bool().ok_or_else(bad)?,
             _ => return Err(err("bad_field", "not a setting")),
         }

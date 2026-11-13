@@ -51,7 +51,7 @@ export function describe(call: ActionCall, current: KeyTable, other: KeyTable): 
     call.name === "tab.goto" && call.arg
       ? `Go to tab ${call.arg}`
       : call.name === "tab.detach" && call.arg
-        ? `Close tab ${call.arg} (its session keeps running)`
+        ? `Close project in tab ${call.arg}`
         : call.name === "project.open" && call.arg
           ? `Open ${call.arg}`
           : base;

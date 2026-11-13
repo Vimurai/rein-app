@@ -192,5 +192,28 @@ check "user: the user's own label format applies" USER-FORMAT "$(tm show-options
 for _ in $(seq 1 20); do [ -e "$W/plugin-ran-user" ] && break; sleep 0.1; done
 check "user: the user's run-shell ran" yes "$([ -e "$W/plugin-ran-user" ] && echo yes || echo no)"
 
+# ── lifecycle (V11, D-059, E-66): the start-up sweep and quit reach the app's socket only ──
+# A session `demo` on BOTH servers under a private TMUX_TMPDIR; the default one must survive
+# every path (the standing "never kill the user's tmux" rule).
+KILL="$SRC/tmux_kill_server.sh"
+both() { # both <dir> → a session on the app's socket and one of the same name on the default
+  mkdir -p "$1" && chmod 700 "$1"
+  TMUX_TMPDIR="$1" "$REAL_TMUX" -L rein-app new-session -d -s demo 2>/dev/null
+  TMUX_TMPDIR="$1" "$REAL_TMUX" new-session -d -s demo 2>/dev/null
+}
+alive() { TMUX_TMPDIR="$1" "$REAL_TMUX" ${2:+-L "$2"} has-session -t demo 2>/dev/null && echo yes || echo no; }
+h="$W/ok"
+t="$W/tmp-lc1"
+both "$t"
+check "lifecycle: setup without the sweep word ends nothing" "0 yes yes" "$(HOME="$h" TMUX_TMPDIR="$t" /bin/sh -s <"$SETUP" >/dev/null 2>&1; echo $?) $(alive "$t" rein-app) $(alive "$t")"
+check "lifecycle: setup with sweep ends the app's leftover server" "0 no" "$(HOME="$h" TMUX_TMPDIR="$t" TMUX=/x /bin/sh -s -- sweep <"$SETUP" >/dev/null 2>&1; echo $?) $(alive "$t" rein-app)"
+check "lifecycle: … and the default server's same-named session stays" yes "$(alive "$t")"
+t="$W/tmp-lc2"
+both "$t"
+check "lifecycle: quit's kill-server ends the app's server" "0 no" "$(TMUX_TMPDIR="$t" TMUX=/x /bin/sh -s <"$KILL" >/dev/null 2>&1; echo $?) $(alive "$t" rein-app)"
+check "lifecycle: … and the default server's session stays" yes "$(alive "$t")"
+check "lifecycle: quit with no app server is a no-op (exit 0)" "0 yes" "$(TMUX_TMPDIR="$t" /bin/sh -s <"$KILL" >/dev/null 2>&1; echo $?) $(alive "$t")"
+check "lifecycle: no tmux → exit 0" 0 "$( (PATH=/nonexistent /bin/sh -s <"$KILL" >/dev/null 2>&1); echo $?)"
+
 if [ "$fails" -eq 0 ]; then echo "PASS: tmux server"; else echo "$fails failure(s)"; fi
 [ "$fails" -eq 0 ]

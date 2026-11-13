@@ -502,14 +502,17 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
 
     /// `wsl.exe -d D -e sh -s` with the setup script on stdin (V8 3a): the tmux home inside
     /// WSL. Only the distro's name is put in argv; the script is a constant.
-    fn tmux_setup(&self) -> Result<(), &'static str> {
+    fn tmux_setup(&self, sweep: bool) -> Result<(), &'static str> {
         let d = self
             .probe_distro()
             .map_err(|_| crate::tmux_server::setup_reason(Some(-1)))?;
-        let argv: Vec<OsString> = ["-d", d.name.as_str(), "-e", "sh", "-s"]
+        let mut argv: Vec<OsString> = ["-d", d.name.as_str(), "-e", "sh", "-s"]
             .into_iter()
             .map(OsString::from)
             .collect();
+        if sweep {
+            argv.extend(["--", "sweep"].map(OsString::from));
+        }
         crate::tmux_server::setup_outcome(self.shell.run_script(
             &self.wsl_exe,
             &argv,
@@ -535,6 +538,28 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
             tmux_overlay::LIMIT,
             alive,
         ))
+    }
+
+    /// `wsl.exe -d D -e sh -ls` with the kill-server constant on stdin (the login shell's
+    /// `PATH` finds the tmux the tabs used), at most 3 s.
+    fn tmux_kill_server(&self) -> bool {
+        let Ok(d) = self.probe_distro() else {
+            return false;
+        };
+        let argv: Vec<OsString> = ["-d", d.name.as_str(), "-e", "sh", "-ls"]
+            .into_iter()
+            .map(OsString::from)
+            .collect();
+        matches!(
+            self.shell.run_script(
+                &self.wsl_exe,
+                &argv,
+                crate::tmux_server::KILL_SERVER,
+                crate::tmux_server::QUIT_LIMIT,
+                &|| true,
+            ),
+            Ok(Some(_))
+        )
     }
 
     /// `wsl.exe -d D -e sh -ls -- <args>` with the status script on stdin, as the overlay.
@@ -1085,6 +1110,30 @@ mod tests {
                 .kind,
             "unsafe_path"
         );
+    }
+
+    /// E-66 (V11): quit's kill-server and the sweep go through `wsl.exe` with constant argv;
+    /// the sweep is one more word for the setup process, never a process of its own.
+    #[test]
+    fn quit_and_sweep_are_constant_wsl_calls() {
+        let h = host(
+            ready()
+                .on(&["-d", "Ubuntu", "-e", "sh", "-ls"], 0, b"")
+                .on(&["-d", "Ubuntu", "-e", "sh", "-s"], 0, b"")
+                .on(&["-d", "Ubuntu", "-e", "sh", "-s", "--", "sweep"], 0, b""),
+        );
+        assert!(h.tmux_kill_server());
+        assert_eq!(h.tmux_setup(false), Ok(()));
+        assert_eq!(h.tmux_setup(true), Ok(()));
+        let calls = h.shell.calls();
+        let n = calls.len();
+        assert_eq!(calls[n - 3], ["-d", "Ubuntu", "-e", "sh", "-ls"]);
+        assert_eq!(calls[n - 2], ["-d", "Ubuntu", "-e", "sh", "-s"]);
+        assert_eq!(
+            calls[n - 1],
+            ["-d", "Ubuntu", "-e", "sh", "-s", "--", "sweep"]
+        );
+        assert!(!host(Stub::default()).tmux_kill_server(), "WSL missing");
     }
 
     /// E-63 rework 3: inside a project (exit 6) is told in the same one call, with the parent.

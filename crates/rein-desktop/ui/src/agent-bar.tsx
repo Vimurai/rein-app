@@ -1,7 +1,9 @@
 // The agent-exit bar and the close confirm (desktop.md §Look and feel v2 V9 component 4, E-62),
 // drawn from the pure `agents.ts`. Text goes in as React text nodes only.
 
+import { useState } from "react";
 import { Button } from "../components/button.tsx";
+import { Switch } from "../components/switch.tsx";
 import { Dialog, DialogContent, DialogFooter } from "../components/dialog.tsx";
 import { Spinner } from "../components/loaders.tsx";
 import { confirmText } from "./agents.ts";
@@ -49,6 +51,43 @@ export function CloseConfirm({ running, onYes, onNo }: { running: string[]; onYe
           </Button>
           <Button variant="primary" onClick={onYes}>
             Close project
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** V11 (E-66): closing a project or quitting stops its agents — Close / Cancel (Cancel focused),
+ *  with "Don't ask again". */
+export function StopConfirm({
+  title,
+  text,
+  yes,
+  onYes,
+  onNo,
+}: {
+  title: string;
+  text: string;
+  yes: string;
+  onYes: (dontAskAgain: boolean) => void;
+  onNo: () => void;
+}) {
+  const [dontAsk, setDontAsk] = useState(false);
+  return (
+    <Dialog open onOpenChange={(open) => !open && onNo()}>
+      <DialogContent title={title} aria-describedby={undefined}>
+        <p className="m-0 text-[13px] text-foreground">{text}</p>
+        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+          <Switch aria-label="Don't ask again" checked={dontAsk} onCheckedChange={setDontAsk} />
+          Don't ask again
+        </label>
+        <DialogFooter>
+          <Button autoFocus onClick={onNo}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={() => onYes(dontAsk)}>
+            {yes}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -155,6 +155,8 @@ export function App({
       closeWhenAgentsExit={ui?.close_when_agents_exit.value ?? cfg.project.close_when_agents_exit}
       dontAskUpdate={ui?.update_dont_ask ?? []}
       onDontAskUpdate={(project) => void setField("update_dont_ask", [...(ui?.update_dont_ask ?? []), project])}
+      closeDontAsk={ui?.close_dont_ask ?? false}
+      onCloseDontAsk={() => void setField("close_dont_ask", true)}
       handlers={handlers}
       notice={notice}
       startDir={startDir}

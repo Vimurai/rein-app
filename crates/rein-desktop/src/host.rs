@@ -109,8 +109,13 @@ pub trait Host: Send + Sync {
 
     /// Make or check the tmux home before a tab opens on the app's server (V8 3a): the
     /// constant setup script on stdin — `/bin/sh -s` here, `sh -s` inside WSL on Windows.
-    /// `Err` is the app's fixed sentence for why not.
-    fn tmux_setup(&self) -> Result<(), &'static str>;
+    /// With `sweep` (the app's first tab on its server, V11 component 3) the same process
+    /// also ends a leftover `rein-app` server. `Err` is the app's fixed sentence for why not.
+    fn tmux_setup(&self, sweep: bool) -> Result<(), &'static str>;
+
+    /// Quit (V11 component 2): [`crate::tmux_server::KILL_SERVER`] on stdin, at most
+    /// [`crate::tmux_server::QUIT_LIMIT`]. `false`: it did not finish in time or could not start.
+    fn tmux_kill_server(&self) -> bool;
 
     /// `:open` Tab completion (E-36): directories whose path starts with `prefix`, each ending
     /// in `/`, a bounded number, sorted. Hidden ones only when the typed name

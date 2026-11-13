@@ -9,7 +9,7 @@
     { "name": "tab.next", "arg": null, "label": "Next tab" },
     { "name": "tab.prev", "arg": null, "label": "Previous tab" },
     { "name": "tab.goto", "arg": "n", "label": "Go to tab" },
-    { "name": "tab.detach", "arg": null, "label": "Close tab (the session keeps running)" },
+    { "name": "tab.detach", "arg": null, "label": "Close project" },
     { "name": "app.quit", "arg": null, "label": "Quit (every session keeps running)" },
     { "name": "health.show", "arg": null, "label": "Check installation health" },
     { "name": "release.update", "arg": null, "label": "Update Rein" },

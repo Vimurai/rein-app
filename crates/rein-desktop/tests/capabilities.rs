@@ -49,6 +49,9 @@ const ALLOWED: &[&str] = &[
     "allow-project-setup",
     "allow-project-fix",
     "allow-project-fix-cancel",
+    "allow-tab-close",
+    "allow-app-quit",
+    "allow-quit-cancelled",
 ];
 
 fn json(rel: &str) -> serde_json::Value {

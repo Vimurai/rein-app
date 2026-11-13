@@ -18,6 +18,7 @@ mod dirs;
 mod handoff_dir;
 mod host;
 mod ipc;
+mod lifecycle;
 #[cfg(unix)]
 mod local_host;
 mod panel_ipc;
@@ -270,7 +271,10 @@ fn main() -> ExitCode {
             project_setup::project_check,
             project_setup::project_setup,
             project_setup::project_fix,
-            project_setup::project_fix_cancel
+            project_setup::project_fix_cancel,
+            lifecycle::tab_close,
+            lifecycle::app_quit,
+            lifecycle::quit_cancelled
         ]);
     let result = builder
         .setup(move |app| {
@@ -346,12 +350,26 @@ fn main() -> ExitCode {
         })
         .build(tauri::generate_context!());
     let result = result.map(|app| {
-        app.run(|_app, event| {
-            // Closing the window detaches every tab: the tmux sessions keep running, and
-            // every pty child is reaped before the process ends (desktop.md §Components 2).
-            if let tauri::RunEvent::Exit = event {
-                _app.state::<ipc::Desktop>().detach_all();
+        app.run(|app, event| match event {
+            // V11 (E-66): a native close with projects on the app's server is held once for
+            // the web side's confirm.
+            tauri::RunEvent::WindowEvent {
+                event: tauri::WindowEvent::CloseRequested { api, .. },
+                ..
+            } => {
+                if !lifecycle::on_close_requested(app, &app.state::<ipc::Desktop>()) {
+                    api.prevent_close();
+                }
             }
+            // Every exit: the app's server is ended (V11 2, at most 3 s, once — a confirmed
+            // quit has done it already), then every tab is detached and every pty child reaped
+            // before the process ends (desktop.md §Components 2). The user's server: untouched.
+            tauri::RunEvent::Exit => {
+                let d = app.state::<ipc::Desktop>();
+                lifecycle::end_server(&d);
+                d.detach_all();
+            }
+            _ => {}
         })
     });
     match result {

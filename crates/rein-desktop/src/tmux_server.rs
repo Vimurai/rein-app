@@ -19,11 +19,17 @@ const SETUP_TEMPLATE: &str = include_str!("tmux_setup.sh");
 /// The start script (Linux / macOS): the tmux home checked, the shim first on `PATH`, then
 /// `rein start`. One line, no quote character.
 const START: &str = include_str!("tmux_start.sh");
+/// Quit (V11 component 2): end the app's own server — on stdin, `-L rein-app` only.
+pub const KILL_SERVER: &str = include_str!("tmux_kill_server.sh");
+/// Quit waits at most this long, then exits (V11 "Execution constraints").
+pub const QUIT_LIMIT: Duration = Duration::from_secs(3);
+
 /// How long the setup may run (V8 "Execution constraints").
 pub const SETUP_LIMIT: Duration = Duration::from_secs(15);
 
 /// Which tmux server a tab's `rein start` reaches (`tmux.server`, V8 component 6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Server {
     /// rein-app's own server: the shim, the socket `rein-app`, the app's config.
     App,
