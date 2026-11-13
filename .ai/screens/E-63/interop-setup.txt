@@ -1,0 +1,42 @@
+date: 2026-11-13T13:58:15Z
+wsl.exe: WSL version: 3.0.5.0; distro: Ubuntu; shell: /bin/zsh
+argv rule (no quote character): validate 0, set-up 0
+
+== validate: a folder without .ai/ — exit 3 and the canonical path, in the one call
+$ wsl.exe -d Ubuntu --cd /tmp/reine63nVTC9Wn -e sh -c case $PWD in /) exit 5;; esac; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P; [ -d .ai ] || exit 3
+  | /tmp/reine63nVTC9Wn
+  exit 3 in 168 ms
+
+== the card's rows: rein init --check in that folder
+$ wsl.exe -d Ubuntu --cd /tmp/reine63nVTC9Wn -e /bin/zsh -lic exec ~/.rein/bin/rein init --check
+  | rein init --check: no .ai/ here — rein init would provision a new project.
+  exit 1 in 1113 ms
+
+== the out-of-date verdict: rein init --check in a project (this repository)
+$ wsl.exe -d Ubuntu --cd <repo> -e /bin/zsh -lic exec ~/.rein/bin/rein init --check
+  | rein init --check: project 0.4.0 → installed 0.5.0 — 14 change(s) pending:
+  |   merge    .ai/state.json: project.rein_version 0.4.0 → 0.5.0
+  |   refresh  .claude/agents/critic_tests.md
+  |   refresh  .claude/rules/test-harness.md
+  |   refresh  .claude/skills/rein-handoff/SKILL.md
+  |   refresh  .claude/skills/rein-preflight/SKILL.md
+  |   refresh  .claude/skills/rein-task/SKILL.md
+  |   refresh  .claude/skills/task-planner/SKILL.md
+  |   refresh  ENGINEER.md
+  |   install  .git/hooks/pre-commit
+  |   install  .git/hooks/pre-push
+  |   install  .git/hooks/post-commit
+  |   install  .git/hooks/post-merge
+  |   install  .git/hooks/post-checkout
+  |   install  .git/hooks/post-rewrite
+  | Run: rein init
+  exit 1 in 3179 ms
+
+== set up (user server) in a read-only folder: init fails → 119, start never runs
+$ wsl.exe -d Ubuntu --cd /tmp/reine63rt7OH1k -e /bin/zsh -lic tty; ~/.rein/bin/rein init || exit 119; exec ~/.rein/bin/rein start
+  | not a tty
+  | mkdir: Permission denied
+  | mkdir: Permission denied
+  exit 119 in 459 ms
+
+files in the read-only folder afterwards: []

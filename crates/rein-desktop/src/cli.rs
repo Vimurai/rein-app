@@ -198,7 +198,7 @@ impl Runner for SystemRunner {
     }
 }
 
-fn bounded(l: &str) -> String {
+pub(crate) fn bounded(l: &str) -> String {
     let mut cut = l.len().min(MAX_LINE);
     while !l.is_char_boundary(cut) {
         cut -= 1;

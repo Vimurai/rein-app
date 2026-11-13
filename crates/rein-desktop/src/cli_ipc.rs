@@ -18,7 +18,7 @@ pub const EVENT_HEALTH_CHANGED: &str = "health_changed";
 
 #[derive(Default)]
 pub struct CliState {
-    busy: OneAtATime,
+    pub(crate) busy: OneAtATime,
     health: Mutex<Option<HealthView>>,
 }
 
@@ -81,6 +81,15 @@ pub fn health_get(
 ) -> HealthView {
     let (mut view, fresh) = cli_state.health(desktop.platform.as_ref(), refresh);
     with_overlay(&mut view, desktop.overlay.failure());
+    // V9 (E-63): the out-of-date check that gave no answer, as one warning line.
+    if let Some(why) = desktop.projects.health() {
+        view.checks.push(crate::cli::HealthCheck {
+            id: "project_check".into(),
+            status: "warn",
+            line: why.into(),
+            fix: None,
+        });
+    }
     if fresh {
         let _ = app.emit(EVENT_HEALTH_CHANGED, view.clone());
     }

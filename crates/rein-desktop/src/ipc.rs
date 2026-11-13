@@ -118,6 +118,8 @@ pub struct Desktop {
     pub panels: crate::panel_ipc::PanelCache,
     /// The agent-exit bar's per-tab memory (V9 component 4, E-62).
     pub agents: crate::agents::AgentWatch,
+    /// Set-up tabs and the out-of-date checks (V9 components 1–3, E-63).
+    pub projects: crate::project_setup::ProjectState,
 }
 
 impl Desktop {
@@ -132,6 +134,7 @@ impl Desktop {
             overlay_seq: Mutex::new(HashMap::new()),
             panels: crate::panel_ipc::PanelCache::default(),
             agents: crate::agents::AgentWatch::default(),
+            projects: crate::project_setup::ProjectState::default(),
         }
     }
 
@@ -158,7 +161,8 @@ impl Desktop {
         self.tabs.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// Validate, then start `rein start` in `project` with output going to `events`.
+    /// Validate, then start `rein start` in `project` with output going to `events`. A
+    /// directory without `.ai/` opens as a set-up tab instead, with no pty (V9 component 1).
     pub fn open(
         &self,
         project: &str,
@@ -166,18 +170,80 @@ impl Desktop {
         rows: u32,
         events: Arc<dyn Events>,
         server: crate::tmux_server::Server,
-    ) -> Result<Tab, IpcError> {
+    ) -> Result<crate::project_setup::Opened, IpcError> {
         let size = validate_size(cols, rows)?;
-        let project = self.platform.project(project)?;
-        // V8 3a: the tmux home is made or checked before the pty opens; on failure the pty
-        // is not opened and the window shows the app's fixed sentence.
+        let (project, set_up) = self.platform.project_dir(project)?;
+        if !set_up {
+            return self.open_setup(project, server);
+        }
+        let spec = self.start_spec(&project, server, false)?;
+        self.open_spec_as(&spec, &project, size, events, server, None)
+            .map(crate::project_setup::Opened::Tab)
+    }
+
+    /// The child of a tab: `rein start`, or with `setup` `rein init` first (V9 component 2).
+    /// V8 3a: the tmux home is made or checked before the pty opens; on failure the pty is not
+    /// opened and the window shows the app's fixed sentence.
+    fn start_spec(
+        &self,
+        project: &Path,
+        server: crate::tmux_server::Server,
+        setup: bool,
+    ) -> Result<ChildSpec, IpcError> {
         if server == crate::tmux_server::Server::App {
             self.platform
                 .tmux_setup()
                 .map_err(|why| err("tmux_setup", crate::tmux_server::setup_message(why)))?;
         }
-        let spec = self.platform.rein_start(&project, server)?;
-        self.open_spec_on(&spec, &project, size, events, server)
+        if setup {
+            self.platform.rein_setup(project, server)
+        } else {
+            self.platform.rein_start(project, server)
+        }
+    }
+
+    /// A set-up tab: an id and the project, counted against the tab limit, no process.
+    fn open_setup(
+        &self,
+        project: std::path::PathBuf,
+        server: crate::tmux_server::Server,
+    ) -> Result<crate::project_setup::Opened, IpcError> {
+        let tabs = self.tabs();
+        let mut setup = self
+            .projects
+            .setup
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if tabs.len() + setup.len() >= MAX_TABS {
+            return Err(err("too_many_tabs", "at most 16 tabs are open at once"));
+        }
+        let id = self.next_tab.fetch_add(1, Ordering::Relaxed) + 1;
+        let view = crate::project_setup::SetupView {
+            id,
+            project: project.to_string_lossy().into_owned(),
+            title: title_of(&project),
+        };
+        setup.insert(id, crate::project_setup::SetupTab { project, server });
+        Ok(crate::project_setup::Opened::SetUp { setup: view })
+    }
+
+    /// Set up this project (V9 component 2): the set-up tab `tab` gets its terminal, running
+    /// `rein init` and then the tab's start, under the same id.
+    pub fn setup(
+        &self,
+        tab: u32,
+        cols: u32,
+        rows: u32,
+        events: Arc<dyn Events>,
+    ) -> Result<Tab, IpcError> {
+        let size = validate_size(cols, rows)?;
+        let s = self
+            .projects
+            .setup_tab(tab)
+            .ok_or_else(|| err("unknown_tab", "the tab is not waiting for set-up"))?;
+        let spec = self.start_spec(&s.project, s.server, true)?;
+        // Taken out under the tabs lock in `open_spec_as`, so it counts once throughout.
+        self.open_spec_as(&spec, &s.project, size, events, s.server, Some(tab))
     }
 
     /// The part of [`open`](Self::open) after validation; tests pass stub children here.
@@ -189,30 +255,51 @@ impl Desktop {
         size: Size,
         events: Arc<dyn Events>,
     ) -> Result<Tab, IpcError> {
-        self.open_spec_on(spec, project, size, events, crate::tmux_server::Server::App)
+        self.open_spec_as(
+            spec,
+            project,
+            size,
+            events,
+            crate::tmux_server::Server::App,
+            None,
+        )
     }
 
-    /// [`open_spec`](Self::open_spec), recording the tmux server the child reaches.
-    pub fn open_spec_on(
+    /// [`open_spec`](Self::open_spec), recording the tmux server the child reaches; `setup`:
+    /// the set-up tab this becomes (its id kept).
+    fn open_spec_as(
         &self,
         spec: &ChildSpec,
         project: &Path,
         size: Size,
         events: Arc<dyn Events>,
         server: crate::tmux_server::Server,
+        setup: Option<u32>,
     ) -> Result<Tab, IpcError> {
         // The limit is checked and the tab recorded under one lock, so concurrent opens
         // (commands run on a thread pool) cannot pass it together.
         let mut tabs = self.tabs();
-        if tabs.len() >= MAX_TABS {
+        let mut waiting = self
+            .projects
+            .setup
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if setup.is_some_and(|t| !waiting.contains_key(&t)) {
+            return Err(err("unknown_tab", "the tab is not waiting for set-up"));
+        }
+        let others = waiting.len() - usize::from(setup.is_some());
+        if tabs.len() + others >= MAX_TABS {
             return Err(err("too_many_tabs", "at most 16 tabs are open at once"));
         }
         let pty = self.host.open(spec, size, events)?;
-        let id = self.next_tab.fetch_add(1, Ordering::Relaxed) + 1;
-        let title = project
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "/".into());
+        let id = match setup {
+            Some(t) => {
+                waiting.remove(&t);
+                t
+            }
+            None => self.next_tab.fetch_add(1, Ordering::Relaxed) + 1,
+        };
+        let title = title_of(project);
         let tab = Tab {
             id,
             project: project.to_string_lossy().into_owned(),
@@ -304,7 +391,21 @@ impl Desktop {
             .remove(&tab);
         self.panels.forget(tab);
         self.agents.forget(tab);
+        self.projects.forget(tab);
     }
+}
+
+/// A tab's title: its directory's name.
+fn title_of(project: &Path) -> String {
+    project
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "/".into())
+}
+
+/// The events of a tab that the web side draws: output on `output`, exit as `pty_exit`.
+pub fn channel_events(output: Channel<InvokeResponseBody>, app: AppHandle) -> Arc<dyn Events> {
+    Arc::new(ChannelEvents { output, app })
 }
 
 /// Output to the tab's channel as raw bytes; exit as the `pty_exit` event.
@@ -341,21 +442,17 @@ pub fn tab_open(
     cols: u32,
     rows: u32,
     output: Channel<InvokeResponseBody>,
-) -> Result<Tab, IpcError> {
+) -> Result<crate::project_setup::Opened, IpcError> {
     // V8: which tmux server this tab reaches, from the settings as they are now.
     let view = ui.view(&config.view());
     let server = crate::tmux_server::Server::from_setting(view.tmux_server.value.as_str());
-    let tab = state.open(
-        &project,
-        cols,
-        rows,
-        Arc::new(ChannelEvents { output, app }),
-        server,
-    )?;
-    // Recent projects (E-38): the canonical path the tab runs in. A failed save only loses
-    // the list entry; the tab is open either way.
-    let _ = projects.touch(&tab.project, state.platform.distro());
-    Ok(tab)
+    let opened = state.open(&project, cols, rows, channel_events(output, app), server)?;
+    // Recent projects (E-38): the canonical path the tab runs in — only a project, never a
+    // folder still waiting for set-up. A failed save only loses the list entry.
+    if let crate::project_setup::Opened::Tab(tab) = &opened {
+        let _ = projects.touch(&tab.project, state.platform.distro());
+    }
+    Ok(opened)
 }
 
 /// `projects_list` (desktop.md §API, E-38): the recent projects, newest first.
@@ -537,12 +634,44 @@ mod tests {
     fn tab_open_refuses_bad_projects() {
         let d = Desktop::new(Box::new(LocalHost::new(Some("/nonexistent-home".into()))));
         let q = || -> Arc<dyn Events> { Arc::new(Quiet(Mutex::new(None))) };
+        // V9 (E-63): a directory without `.ai/` is not refused — it opens as a set-up tab,
+        // with no process, counted against the tab limit, forgotten when closed.
         let plain = tempfile::tempdir().unwrap();
         let p = plain.path().to_str().unwrap();
+        let canon = plain.path().canonicalize().unwrap();
+        let id = match d.open(p, 80, 24, q(), crate::tmux_server::Server::User) {
+            Ok(crate::project_setup::Opened::SetUp { setup }) => {
+                assert_eq!(setup.project, canon.to_string_lossy());
+                setup.id
+            }
+            other => panic!("{other:?}"),
+        };
+        assert!(d.tabs().is_empty(), "no pty for a set-up tab");
+        assert!(
+            d.tab_project(id).is_none(),
+            "not a project tab until set up"
+        );
+        for _ in 1..MAX_TABS {
+            d.open(p, 80, 24, q(), crate::tmux_server::Server::User)
+                .unwrap();
+        }
         assert_eq!(
             kind(d.open(p, 80, 24, q(), crate::tmux_server::Server::User)),
-            "no_ai"
+            "too_many_tabs"
         );
+        for t in 0..=MAX_TABS as u32 + 1 {
+            d.detach(t);
+        }
+        assert!(d.projects.setup.lock().unwrap().is_empty());
+        // Set up on a host without rein: refused before any process, the tab still waiting.
+        let id = match d.open(p, 80, 24, q(), crate::tmux_server::Server::User) {
+            Ok(crate::project_setup::Opened::SetUp { setup }) => setup.id,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(kind(d.setup(id, 80, 24, q())), "rein_missing");
+        assert!(d.projects.setup_tab(id).is_some());
+        assert_eq!(kind(d.setup(id + 100, 80, 24, q())), "unknown_tab");
+        d.detach(id);
         assert_eq!(
             kind(d.open(
                 "/a\u{1b}[2Jb",
@@ -732,7 +861,21 @@ mod tests {
         waits: bool,
     }
     impl Host for OverlayHost {
-        fn project(&self, _: &str) -> Result<std::path::PathBuf, IpcError> {
+        fn project_dir(&self, _: &str) -> Result<(std::path::PathBuf, bool), IpcError> {
+            unreachable!()
+        }
+        fn rein_setup(
+            &self,
+            _: &std::path::Path,
+            _: crate::tmux_server::Server,
+        ) -> Result<crate::pty::ChildSpec, IpcError> {
+            unreachable!()
+        }
+        fn rein_command(
+            &self,
+            _: &std::path::Path,
+            _: crate::project_setup::ReinRun,
+        ) -> Result<std::process::Command, IpcError> {
             unreachable!()
         }
         fn rein_start(

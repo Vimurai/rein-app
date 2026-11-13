@@ -17,6 +17,9 @@ use crate::ipc::{IpcError, err};
 pub const FILE_NAME: &str = "ui.json";
 const MAX_BYTES: u64 = 64 * 1024;
 
+/// The most projects "Don't ask for this project" keeps (V9 component 3).
+pub const MAX_DONT_ASK: usize = 500;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiFile {
@@ -33,6 +36,8 @@ pub struct UiFile {
     pub tmux_server: Option<String>,
     /// Every agent exited: close the project without asking (V9 component 5).
     pub close_when_agents_exit: Option<bool>,
+    /// Projects whose out-of-date bar is not shown ("Don't ask for this project", V9 3).
+    pub update_dont_ask: Vec<String>,
     pub first_run_done: bool,
 }
 
@@ -48,6 +53,7 @@ impl Default for UiFile {
             tmux_status: None,
             tmux_server: None,
             close_when_agents_exit: None,
+            update_dont_ask: Vec::new(),
             first_run_done: false,
         }
     }
@@ -71,6 +77,7 @@ pub struct UiView {
     pub tmux_status: Effective,
     pub tmux_server: Effective,
     pub close_when_agents_exit: Effective,
+    pub update_dont_ask: Vec<String>,
     pub first_run_done: bool,
 }
 
@@ -167,6 +174,7 @@ impl UiStore {
                 d.close_when_agents_exit.map(Value::from),
                 Value::from(c.project.close_when_agents_exit),
             ),
+            update_dont_ask: d.update_dont_ask.clone(),
             first_run_done: d.first_run_done,
         }
     }
@@ -254,6 +262,23 @@ impl UiStore {
                     Value::Null => None,
                     v => Some(v.as_bool().ok_or_else(bad)?),
                 };
+            }
+            // The whole list: project paths, each passing the path text rule, at most
+            // MAX_DONT_ASK, duplicates dropped.
+            "update_dont_ask" => {
+                let list = value.as_array().ok_or_else(bad)?;
+                if list.len() > MAX_DONT_ASK {
+                    return Err(bad());
+                }
+                let mut out: Vec<String> = Vec::new();
+                for v in list {
+                    let p = v.as_str().ok_or_else(bad)?;
+                    crate::project_path::check(p).map_err(|_| bad())?;
+                    if !out.iter().any(|o| o == p) {
+                        out.push(p.into());
+                    }
+                }
+                d.update_dont_ask = out;
             }
             "first_run_done" => d.first_run_done = value.as_bool().ok_or_else(bad)?,
             _ => return Err(err("bad_field", "not a setting")),
@@ -451,9 +476,28 @@ mod tests {
             ("tmux_status", Value::from("off")),
             ("tmux_server", Value::from("mine")),
             ("first_run_done", Value::from(1)),
+            // E-63: the don't-ask list holds project paths only.
+            ("update_dont_ask", Value::from("/home/me/p")),
+            ("update_dont_ask", serde_json::json!(["relative/p"])),
+            ("update_dont_ask", serde_json::json!(["/a\u{202e}b"])),
+            ("update_dont_ask", serde_json::json!([7])),
         ] {
             assert_eq!(s.set(&c, f, &v).unwrap_err().kind, "bad_value", "{f}");
         }
+        let many: Vec<String> = (0..=MAX_DONT_ASK).map(|i| format!("/p/{i}")).collect();
+        assert_eq!(
+            s.set(&c, "update_dont_ask", &serde_json::json!(many))
+                .unwrap_err()
+                .kind,
+            "bad_value"
+        );
+        s.set(
+            &c,
+            "update_dont_ask",
+            &serde_json::json!(["/home/me/p", "/home/me/p", "/home/me/q"]),
+        )
+        .unwrap();
+        assert_eq!(s.view(&c).update_dont_ask, ["/home/me/p", "/home/me/q"]);
         assert_eq!(
             s.set(&c, "keys", &Value::from("x")).unwrap_err().kind,
             "bad_field"

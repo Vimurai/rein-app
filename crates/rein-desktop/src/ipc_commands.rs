@@ -25,4 +25,8 @@ pub const COMMANDS: &[&str] = &[
     "panel_data",
     "project_agents",
     "project_close",
+    "project_check",
+    "project_setup",
+    "project_fix",
+    "project_fix_cancel",
 ];

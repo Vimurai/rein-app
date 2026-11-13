@@ -74,8 +74,18 @@ export interface Tab {
   title: string;
 }
 
+/** A tab with its terminal, or (V9, E-63) a folder without `.ai/`: a set-up tab, no pty. */
 export const tabOpen = (project: string, cols: number, rows: number, output: Channel<ArrayBuffer>) =>
-  invoke<Tab>("tab_open", { project, cols, rows, output });
+  invoke<Tab | { setup: import("./project.ts").SetupView }>("tab_open", { project, cols, rows, output });
+/** V9: Set up this project — the set-up tab gets its terminal (`rein init`, then `rein start`). */
+export const projectSetup = (tab: number, cols: number, rows: number, output: Channel<ArrayBuffer>) =>
+  invoke<Tab>("project_setup", { tab, cols, rows, output });
+/** V9: `rein init --check` for a tab — the card's rows, or the out-of-date verdict. */
+export const projectCheck = (tab: number) => invoke<import("./project.ts").CheckReply>("project_check", { tab });
+/** V9: Update project = `rein init`, its lines on `output`; 10 minutes; one run at a time. */
+export const projectFix = (tab: number, output: Channel<string>) =>
+  invoke<import("./project.ts").FixEnd>("project_fix", { tab, which: "init", output });
+export const projectFixCancel = () => invoke<void>("project_fix_cancel", {});
 export const ptyWrite = (pty: number, data: string) => invoke<void>("pty_write", { pty, data });
 export const ptyResize = (pty: number, cols: number, rows: number) =>
   invoke<void>("pty_resize", { pty, cols, rows });
@@ -134,6 +144,8 @@ export interface UiView {
   tmux_server: Effective<"app" | "user">;
   /** V9: every agent exited — close the project without asking. */
   close_when_agents_exit: Effective<boolean>;
+  /** V9 3: projects whose out-of-date bar is not shown. */
+  update_dont_ask: string[];
   first_run_done: boolean;
 }
 /** The system folder dialog; `null` when cancelled; the path is validated like `tab_open`. */

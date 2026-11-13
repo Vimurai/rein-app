@@ -25,6 +25,7 @@ mod panel_sources;
 mod pointer_ipc;
 mod project_file;
 mod project_path;
+mod project_setup;
 mod projects;
 mod pty;
 mod pty_sys;
@@ -265,7 +266,11 @@ fn main() -> ExitCode {
             pointer_ipc::ui_set,
             panel_ipc::panel_data,
             agents::project_agents,
-            agents::project_close
+            agents::project_close,
+            project_setup::project_check,
+            project_setup::project_setup,
+            project_setup::project_fix,
+            project_setup::project_fix_cancel
         ]);
     let result = builder
         .setup(move |app| {

@@ -82,8 +82,51 @@ impl LocalHost {
 }
 
 impl Host for LocalHost {
-    fn project(&self, input: &str) -> Result<PathBuf, IpcError> {
-        validate_project(input)
+    fn project_dir(&self, input: &str) -> Result<(PathBuf, bool), IpcError> {
+        validate_project_dir(input)
+    }
+
+    /// `/bin/sh -c` with the set-up constant: `rein init`, then the tab's own start.
+    fn rein_setup(
+        &self,
+        project: &Path,
+        server: crate::tmux_server::Server,
+    ) -> Result<ChildSpec, IpcError> {
+        let home = self
+            .home
+            .as_deref()
+            .ok_or_else(|| err("rein_missing", "HOME is not set to an absolute path"))?;
+        installed_rein(home)?;
+        Ok(ChildSpec {
+            program: PathBuf::from("/bin/sh"),
+            args: vec![
+                "-c".into(),
+                crate::project_setup::setup_script(server, false).into(),
+            ],
+            cwd: Some(project.to_path_buf()),
+            env_remove: ENV_REMOVED,
+            env_set: ENV_SET,
+            tty_line: false,
+        })
+    }
+
+    /// `<home>/.rein/bin/rein init [--check]` in the project, the start's variables removed.
+    fn rein_command(
+        &self,
+        project: &Path,
+        which: crate::project_setup::ReinRun,
+    ) -> Result<std::process::Command, IpcError> {
+        let home = self
+            .home
+            .as_deref()
+            .ok_or_else(|| err("rein_missing", "HOME is not set to an absolute path"))?;
+        let mut cmd = std::process::Command::new(installed_rein(home)?);
+        cmd.args(which.argv()).current_dir(project);
+        for k in ENV_REMOVED {
+            cmd.env_remove(k);
+        }
+        rein_platform::process::hide_console(&mut cmd);
+        Ok(cmd)
     }
 
     fn rein_start(
@@ -243,7 +286,20 @@ pub fn complete_dir(prefix: &str) -> Result<Vec<String>, IpcError> {
 /// separate steps, so a process that can write to a parent directory could swap a path
 /// component in between. Such a process already runs as the user (the window starts only the
 /// user's own `rein`), so the swap gains it nothing it could not do directly.
+#[cfg(test)]
 pub fn validate_project(s: &str) -> Result<PathBuf, IpcError> {
+    match validate_project_dir(s)? {
+        (p, true) => Ok(p),
+        (_, false) => Err(err(
+            "no_ai",
+            "not a Rein project (no .ai/ directory) — run `rein init` there first",
+        )),
+    }
+}
+
+/// [`validate_project`] without the `.ai/` requirement: the canonical directory and whether
+/// it has `.ai/` (V9 component 1).
+pub fn validate_project_dir(s: &str) -> Result<(PathBuf, bool), IpcError> {
     let unsafe_path = |why: &str| err("unsafe_path", why);
     let p = project_path::check(s).map_err(unsafe_path)?;
     let canon = p
@@ -254,13 +310,8 @@ pub fn validate_project(s: &str) -> Result<PathBuf, IpcError> {
     if !canon.is_dir() {
         return Err(err("not_a_directory", "not a directory"));
     }
-    if !canon.join(".ai").is_dir() {
-        return Err(err(
-            "no_ai",
-            "not a Rein project (no .ai/ directory) — run `rein init` there first",
-        ));
-    }
-    Ok(canon)
+    let set_up = canon.join(".ai").is_dir();
+    Ok((canon, set_up))
 }
 
 /// The installed `rein` launcher, if it is an executable file.

@@ -400,7 +400,21 @@ mod tests {
 
     #[cfg(unix)]
     impl crate::host::Host for AgentsHost {
-        fn project(&self, _: &str) -> Result<std::path::PathBuf, IpcError> {
+        fn project_dir(&self, _: &str) -> Result<(std::path::PathBuf, bool), IpcError> {
+            unreachable!()
+        }
+        fn rein_setup(
+            &self,
+            _: &std::path::Path,
+            _: crate::tmux_server::Server,
+        ) -> Result<crate::pty::ChildSpec, IpcError> {
+            unreachable!()
+        }
+        fn rein_command(
+            &self,
+            _: &std::path::Path,
+            _: crate::project_setup::ReinRun,
+        ) -> Result<std::process::Command, IpcError> {
             unreachable!()
         }
         fn rein_start(

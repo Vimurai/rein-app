@@ -28,7 +28,7 @@ pub const PROBE_SCRIPT: &str = "printf %s\\\\n $WSL_DISTRO_NAME $HOME $SHELL";
 /// Run with `--cd <project>`: exit 5 still in `/` (a failed `--cd` does not fail: `wsl.exe`
 /// runs the command in `/` instead — D-038 addendum 1), 3 no `.ai/`, 4 rein not installed,
 /// else `pwd -P`.
-pub const VALIDATE_SCRIPT: &str = "case $PWD in /) exit 5;; esac; [ -d .ai ] || exit 3; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P";
+pub const VALIDATE_SCRIPT: &str = "case $PWD in /) exit 5;; esac; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P; [ -d .ai ] || exit 3";
 /// The pty child's script, run by the user's login + interactive shell (W2). `tty` names the
 /// pty first: the tmux overlay finds the app's client by it (V6, D-050), and the host takes
 /// that line out of what the terminal shows (`tmux_overlay::take_tty_line`).
@@ -241,7 +241,7 @@ impl<S: WslShell + Send + Sync> WslHost<S> {
 }
 
 impl<S: WslShell + Send + Sync> Host for WslHost<S> {
-    fn project(&self, input: &str) -> Result<PathBuf, IpcError> {
+    fn project_dir(&self, input: &str) -> Result<(PathBuf, bool), IpcError> {
         let d = self.probe_distro()?;
         let linux = wsl_path::to_linux(input, &d.name).map_err(|e| {
             let kind = match e {
@@ -269,17 +269,25 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
             VALIDATE_SCRIPT,
         ]);
         match out {
-            Ok(o) if o.code == Some(0) => {
-                let canon = String::from_utf8(o.stdout)
-                    .map_err(|_| err("not_a_directory", "not a directory"))?;
-                let canon = canon.strip_suffix('\n').unwrap_or(&canon);
-                wsl_path::check_linux(canon).map_err(|e| err("unsafe_path", e.to_string()))?;
-                Ok(PathBuf::from(canon))
+            // 0: a project; 3: a directory without `.ai/` (V9 component 1) — both print the
+            // canonical path first.
+            Ok(o) if matches!(o.code, Some(0 | 3)) => {
+                let set_up = o.code == Some(0);
+                let canon = String::from_utf8(o.stdout).ok();
+                let canon = canon.as_deref().map(|c| c.strip_suffix('\n').unwrap_or(c));
+                match canon {
+                    Some(c) if wsl_path::check_linux(c).is_ok() => Ok((PathBuf::from(c), set_up)),
+                    _ if !set_up => Err(err(
+                        "no_ai",
+                        "not a Rein project (no .ai/ directory) — run `rein init` there first",
+                    )),
+                    Some(c) => Err(err(
+                        "unsafe_path",
+                        wsl_path::check_linux(c).unwrap_err().to_string(),
+                    )),
+                    None => Err(err("not_a_directory", "not a directory")),
+                }
             }
-            Ok(o) if o.code == Some(3) => Err(err(
-                "no_ai",
-                "not a Rein project (no .ai/ directory) — run `rein init` there first",
-            )),
             Ok(o) if o.code == Some(4) => Err(err(
                 "rein_missing",
                 "rein is not installed inside WSL — install it there with `rein-app install`",
@@ -412,6 +420,48 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
             env_set: &[],
             tty_line: true,
         })
+    }
+
+    /// The set-up child (V9 component 2): the tab's own `wsl.exe` start with the set-up
+    /// constant — the tty line first, `rein init`, then the start on `server`.
+    fn rein_setup(
+        &self,
+        project: &Path,
+        server: crate::tmux_server::Server,
+    ) -> Result<ChildSpec, IpcError> {
+        let mut spec = self.rein_start(project, server)?;
+        if let Some(last) = spec.args.last_mut() {
+            *last = OsString::from(crate::project_setup::setup_script(server, true));
+        }
+        Ok(spec)
+    }
+
+    /// `wsl.exe -d D --cd P -e <shell> -lic <constant>`: the start's path, with
+    /// `rein init [--check]` in place of `rein start`.
+    fn rein_command(
+        &self,
+        project: &Path,
+        which: crate::project_setup::ReinRun,
+    ) -> Result<Command, IpcError> {
+        let d = self.probe_distro()?;
+        let project = project.to_string_lossy();
+        wsl_path::check_linux(&project).map_err(|e| err("unsafe_path", e.to_string()))?;
+        let mut cmd = Command::new(&self.wsl_exe);
+        cmd.args([
+            "-d",
+            &d.name,
+            "--cd",
+            &project,
+            "-e",
+            &d.shell,
+            "-lic",
+            which.wsl_script(),
+        ]);
+        for k in ENV_REMOVED {
+            cmd.env_remove(k);
+        }
+        hide_console(&mut cmd);
+        Ok(cmd)
     }
 
     /// The panel files through the distro's UNC path — no process (panels.md §API; measured
@@ -961,6 +1011,75 @@ mod tests {
         let cmd = spec.command();
         assert_eq!(cmd.get_env("WSLENV"), None);
         assert!(spec.env_set.is_empty(), "TERM comes from WSL, not from us");
+    }
+
+    /// E-63 (V9 components 1–2): a directory without `.ai/` is told apart in the same
+    /// validation call (no second process) — exit 3 now carries the canonical path; set-up is
+    /// the tab's own start path with the set-up constant; `rein init [--check]` likewise.
+    #[test]
+    fn a_folder_without_ai_is_known_in_the_one_validation_and_set_up_on_the_start_path() {
+        use crate::project_setup::{ReinRun, setup_script};
+        use crate::tmux_server::Server;
+        let h = host(
+            ready()
+                .on(&validate("/home/me/new"), 3, b"/home/me/new\n")
+                .on(&validate("/home/me/p"), 0, b"/home/me/p\n"),
+        );
+        h.probe_distro().unwrap(); // once per window, not per open
+        let before = h.shell.calls().len();
+        assert_eq!(
+            h.project_dir("/home/me/new").unwrap(),
+            (PathBuf::from("/home/me/new"), false)
+        );
+        assert_eq!(
+            h.project_dir("/home/me/p").unwrap(),
+            (PathBuf::from("/home/me/p"), true)
+        );
+        assert_eq!(h.shell.calls().len(), before + 2, "one call per open");
+        assert!(VALIDATE_SCRIPT.find("pwd -P").unwrap() < VALIDATE_SCRIPT.find(".ai").unwrap());
+        let argv = |a: &[OsString]| -> Vec<String> {
+            a.iter().map(|x| x.to_string_lossy().into_owned()).collect()
+        };
+        for server in [Server::App, Server::User] {
+            let start = argv(
+                &h.rein_start(Path::new("/home/me/new"), server)
+                    .unwrap()
+                    .args,
+            );
+            let setup = h.rein_setup(Path::new("/home/me/new"), server).unwrap();
+            let got = argv(&setup.args);
+            assert_eq!(got[..7], start[..7], "the start's own path");
+            assert_eq!(got[7], setup_script(server, true));
+            assert!(setup.tty_line);
+        }
+        for which in [ReinRun::InitCheck, ReinRun::Init] {
+            let cmd = h.rein_command(Path::new("/home/me/p"), which).unwrap();
+            assert_eq!(cmd.get_program(), EXE);
+            let got: Vec<String> = cmd
+                .get_args()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect();
+            assert_eq!(
+                got,
+                [
+                    "-d",
+                    "Ubuntu",
+                    "--cd",
+                    "/home/me/p",
+                    "-e",
+                    "/usr/bin/zsh",
+                    "-lic",
+                    which.wsl_script()
+                ]
+            );
+            assert!(cmd.get_envs().any(|(k, v)| k == "WSLENV" && v.is_none()));
+        }
+        assert_eq!(
+            h.rein_command(Path::new("/home/me/a\"b"), ReinRun::Init)
+                .unwrap_err()
+                .kind,
+            "unsafe_path"
+        );
     }
 
     /// E-62 (V9 component 4): the status script goes on stdin with only the validated words in

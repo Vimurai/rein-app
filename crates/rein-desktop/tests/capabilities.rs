@@ -45,6 +45,10 @@ const ALLOWED: &[&str] = &[
     "allow-panel-data",
     "allow-project-agents",
     "allow-project-close",
+    "allow-project-check",
+    "allow-project-setup",
+    "allow-project-fix",
+    "allow-project-fix-cancel",
 ];
 
 fn json(rel: &str) -> serde_json::Value {

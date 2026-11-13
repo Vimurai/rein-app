@@ -2,6 +2,7 @@
 // bundle is what the window will ship once E-36..E-41 mount them all.
 import "../../src/main.tsx";
 export * from "../../components/button.tsx";
+export * from "../../components/card.tsx";
 export * from "../../components/command.tsx";
 export * from "../../components/context-menu.tsx";
 export * from "../../components/dialog.tsx";

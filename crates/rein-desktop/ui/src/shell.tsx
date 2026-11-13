@@ -36,6 +36,7 @@ import {
   tabTmux,
   listen,
   projectAgents,
+  projectCheck,
   projectClose,
   projectsForget,
   projectsList,
@@ -51,6 +52,8 @@ import { StartScreen } from "./start-screen.tsx";
 import { TermTab } from "./term.ts";
 import { POLL_MS, agentBar, shouldPoll, type Agent } from "./agents.ts";
 import { AgentBar, CloseConfirm } from "./agent-bar.tsx";
+import { shouldCheck, type CheckReply } from "./project.ts";
+import { SetupCard, UpdateBar, UpdateSheet } from "./project-ui.tsx";
 import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
 
 /** What an action handler supplied by the app may do on the command line. */
@@ -83,6 +86,9 @@ export interface ShellProps {
   startDir: string | null;
   /** V9 component 5: every agent exited — close the project without asking. */
   closeWhenAgentsExit: boolean;
+  /** V9 component 3: projects whose out-of-date bar is not shown, and how to add one. */
+  dontAskUpdate: readonly string[];
+  onDontAskUpdate: (project: string) => void;
 }
 
 const VERSION = "0.5.0";
@@ -128,11 +134,23 @@ interface OpenTab {
   closing?: boolean;
   /** Closing by itself failed once: from then on the bar asks instead. */
   autoFailed?: boolean;
+  /** V9 (E-63): a folder without `.ai/` — the set-up card, no terminal yet. */
+  setup?: { id: number; reply: CheckReply | null } | undefined;
+  /** The out-of-date check ran for this tab (once per open). */
+  asked?: boolean;
+  /** rein's rows when it reported the project out of date; the bar shows while set. */
+  update?: string[] | undefined;
+  /** Not now / Don't ask: the bar is hidden for this tab. */
+  updateHidden?: boolean;
 }
 
 export function Shell(props: ShellProps) {
-  const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, tmuxKey, handlers, notice, startDir, startLast, closeWhenAgentsExit } =
+  const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, tmuxKey, handlers, notice, startDir, startLast, closeWhenAgentsExit, dontAskUpdate, onDontAskUpdate } =
     props;
+  /** V9 3: Update project, running in its sheet for this tab. */
+  const [updateSheet, setUpdateSheet] = useState<{ entry: OpenTab; id: number; rows: string[] } | null>(null);
+  const dontAskRef = useRef(dontAskUpdate);
+  dontAskRef.current = dontAskUpdate;
   /** V9: Close project with an agent still running asks first (default No). */
   const [confirmClose, setConfirmClose] = useState<{ entry: OpenTab; running: string[] } | null>(null);
   const [, rerender] = useReducer((n: number) => n + 1, 0);
@@ -169,7 +187,14 @@ export function Shell(props: ShellProps) {
   /** The current tab's terminal, read like a ref. */
   const tab = { get current(): TermTab | null { return tabs.current[cur.current]?.term ?? null; } };
   const pickerRef = useRef(false);
-  pickerRef.current = picker || overlay !== null || pasteText !== null || confirmClose !== null;
+  // The set-up card (V9) takes the keyboard like an overlay: Tab and Enter work its buttons.
+  pickerRef.current =
+    picker ||
+    overlay !== null ||
+    pasteText !== null ||
+    confirmClose !== null ||
+    updateSheet !== null ||
+    tabs.current[cur.current]?.setup !== undefined;
   // No tab open: the start screen's keys (p o h u q, digits) join the keymap.
   const keys = tabs.current.length ? projectKeys : withStartKeys(projectKeys);
   /** The other input style's table: the menu and tooltips name its key when this one has none. */
@@ -325,7 +350,43 @@ export function Shell(props: ShellProps) {
       const entry: OpenTab = { id: ++tabSeq.current, term, el, requested: project, project, title: project.split(/[/\\]/).pop() || "/", open: false, exited: false };
       tabs.current.push(entry);
       term.keyFilter = (e) => terminalKeyRef.current(e);
-      term.onPhase = () => rerender(); // starting → running / exited (V7)
+      term.onPhase = () => {
+        rerender(); // starting → running / exited (V7)
+        // V9 3: once the tab has started (never delaying it), rein's verdict, once per open.
+        const id = term.tab?.id;
+        const started = entry.open && !entry.exited && term.phase(performance.now()) === "running";
+        if (id === undefined || !shouldCheck({ project: entry.project, started, asked: entry.asked === true }, dontAskRef.current)) return;
+        entry.asked = true;
+        projectCheck(id).then(
+          (r) => {
+            if (!tabs.current.includes(entry) || term.tab?.id !== id || !("out_of_date" in r)) return;
+            entry.update = r.out_of_date;
+            rerender();
+          },
+          () => {},
+        );
+      };
+      term.onSetup = (view) => {
+        // V9 2: a folder without `.ai/` — the card in place of the terminal; rein is asked
+        // what set-up will do.
+        entry.setup = { id: view.id, reply: null };
+        entry.project = view.project;
+        entry.title = view.title;
+        showTab(tabs.current.indexOf(entry));
+        setMode({ mode: "NORMAL", pending: [] });
+        projectCheck(view.id).then(
+          (reply) => {
+            if (entry.setup?.id !== view.id) return;
+            entry.setup.reply = reply;
+            rerender();
+          },
+          () => {
+            if (entry.setup?.id !== view.id) return;
+            entry.setup.reply = { unavailable: "" };
+            rerender();
+          },
+        );
+      };
       term.onRefused = () => {
         entry.exited = true; // V8: the tmux setup was refused; the tab says why
         rerender();
@@ -378,7 +439,12 @@ export function Shell(props: ShellProps) {
       t.el.remove();
       tabs.current = tabs.current.filter((x) => x !== t);
       showTab(Math.min(i, tabs.current.length - 1));
-      if (!tabs.current.length) setMode({ mode: "NORMAL", pending: [] });
+      if (!tabs.current.length) {
+        setMode({ mode: "NORMAL", pending: [] });
+        // No tab: the chip's command belonged to a project that is no longer shown (E-63).
+        lastCommand.current = null;
+        setLastCmd(null);
+      }
       say(note ?? `${t.title} closed — its tmux session keeps running`);
     },
     [say, setMode, showTab],
@@ -789,6 +855,23 @@ export function Shell(props: ShellProps) {
     <>
       <div id="frame" role="application" aria-label="rein-app" className="flex h-full flex-col">
         <TitleBar bar={bar} chrome={CHROME} r={runner} />
+        {current && current.update && !current.updateHidden && !current.exited && !current.setup && (
+          <UpdateBar
+            onUpdate={() => {
+              const id = current.term.tab?.id;
+              if (id !== undefined && current.update) setUpdateSheet({ entry: current, id, rows: current.update });
+            }}
+            onNotNow={() => {
+              current.updateHidden = true;
+              rerender();
+            }}
+            onDontAsk={() => {
+              current.updateHidden = true;
+              onDontAskUpdate(current.project);
+              rerender();
+            }}
+          />
+        )}
         {current && agentView.kind === "bar" && (
           <AgentBar
             text={agentView.text}
@@ -803,7 +886,22 @@ export function Shell(props: ShellProps) {
         <div id="stage" className="relative min-h-0 flex-1" aria-busy={status.starting || undefined}>
           {/* V7: the tab is starting — a 2 px line in the stage's own top padding, never over
               the terminal. */}
-          {status.starting && <ProgressLine className="absolute inset-x-0 top-0 z-10" />}
+          {status.starting && !current?.setup && <ProgressLine className="absolute inset-x-0 top-0 z-10" />}
+          {current?.setup && (
+            <SetupCard
+              project={current.project}
+              reply={current.setup.reply}
+              onSetUp={() => {
+                const s = current.setup;
+                if (!s) return;
+                current.setup = undefined;
+                rerender();
+                void current.term.start(s.id);
+              }}
+              onOpenOther={() => run({ name: "project.open" })}
+              onClose={() => detach(cur.current)}
+            />
+          )}
           {!termOpen && (
             <StartScreen
               model={startScreen(
@@ -886,6 +984,26 @@ export function Shell(props: ShellProps) {
             }}
           />
         )}
+      />
+      <Exit
+        show={updateSheet !== null}
+        render={() =>
+          updateSheet && (
+            <UpdateSheet
+              tab={updateSheet.id}
+              rows={updateSheet.rows}
+              onCommand={showCommand}
+              onDone={(outcome) => {
+                if (!outcome.keepBar) updateSheet.entry.update = undefined;
+                rerender();
+              }}
+              onClose={() => {
+                setUpdateSheet(null);
+                tab.current?.focus();
+              }}
+            />
+          )
+        }
       />
       {whichKey && <WhichKey leader={keys.leader} next={continuations(keys, modeView.pending)} />}
       <Exit show={overlay === "health"} render={() => <HealthOverlay health={health} onClose={closeOverlay} />} />

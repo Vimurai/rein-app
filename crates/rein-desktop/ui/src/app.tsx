@@ -153,6 +153,8 @@ export function App({
       opacity={cfg.window.opacity}
       tmuxKey={`${ui?.tmux_overlay.value ?? cfg.tmux.overlay}:${ui?.tmux_status.value ?? cfg.tmux.status}`}
       closeWhenAgentsExit={ui?.close_when_agents_exit.value ?? cfg.project.close_when_agents_exit}
+      dontAskUpdate={ui?.update_dont_ask ?? []}
+      onDontAskUpdate={(project) => void setField("update_dont_ask", [...(ui?.update_dont_ask ?? []), project])}
       handlers={handlers}
       notice={notice}
       startDir={startDir}

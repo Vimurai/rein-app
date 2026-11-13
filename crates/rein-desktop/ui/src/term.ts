@@ -10,7 +10,8 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { concat, splitInput } from "./chunks.ts";
-import { Channel, ptyAck, ptyResize, ptyWrite, tabDetach, tabOpen, type Tab } from "./ipc.ts";
+import { Channel, projectSetup, ptyAck, ptyResize, ptyWrite, tabDetach, tabOpen, type Tab } from "./ipc.ts";
+import { INIT_FAILED, INIT_FAILED_SENTENCE, type SetupView } from "./project.ts";
 import { START_BYTES, START_LIMIT_MS, tabPhase, type TabPhase } from "./phase.ts";
 
 /** V8 3b: the start script's exit when the tmux home fails its check just before use. */
@@ -152,8 +153,14 @@ export class TermTab {
     });
   }
 
-  /** Start (or restart) `rein start` in the project, sized to the stage. */
-  async start(): Promise<void> {
+  /** A folder without `.ai/` (V9): the tab waits for Set up this project, with no pty. */
+  onSetup: (view: SetupView) => void = () => {};
+  /** The set-up tab's id while it waits (closed through `tab_detach` like any tab). */
+  #setupId: number | null = null;
+
+  /** Start (or restart) `rein start` in the project, sized to the stage. With `setupId`, the
+   *  set-up tab's terminal: `rein init`, then `rein start` (V9 component 2). */
+  async start(setupId?: number): Promise<void> {
     this.#exited = false;
     this.#alt = this.term.buffer.active.type === "alternate";
     this.#bytes = 0;
@@ -178,7 +185,22 @@ export class TermTab {
     });
     try {
       const { cols, rows } = this.term;
-      const opened = await tabOpen(this.#project, cols, rows, output);
+      const answer =
+        setupId === undefined ? await tabOpen(this.#project, cols, rows, output) : await projectSetup(setupId, cols, rows, output);
+      if ("setup" in answer) {
+        this.#setupId = answer.setup.id;
+        if (gen !== this.#gen) {
+          await tabDetach(answer.setup.id).catch(() => {});
+          return;
+        }
+        this.#exited = true; // no child: nothing is starting
+        clearTimeout(this.#limit);
+        this.onPhase();
+        this.onSetup(answer.setup);
+        return;
+      }
+      const opened = answer;
+      this.#setupId = null;
       if (gen !== this.#gen) {
         // Closed (or restarted) while opening: this pty belongs to no terminal.
         await tabDetach(opened.id).catch(() => {});
@@ -270,6 +292,11 @@ export class TermTab {
     this.#flush();
     // V8 3b: the start script refused the tmux home just before use (exit 126, before tmux
     // ever drew) — a fixed sentence, not a bare exit code.
+    // V9 (E-63): Set up's `rein init` failed — rein start never ran; nothing is retried.
+    if (code === INIT_FAILED && !this.#alt) {
+      this.term.write(`\r\n\x1b[7m ${INIT_FAILED_SENTENCE} \x1b[0m\r\nPress Enter to open the folder again.\r\n`);
+      return;
+    }
     if (code === START_REFUSED && !this.#alt) {
       this.term.write(`\r\n\x1b[7m ${START_REFUSED_SENTENCE} \x1b[0m\r\n${USE_YOUR_OWN} Press Enter to try again.\r\n`);
       return;
@@ -293,7 +320,9 @@ export class TermTab {
     this.#size.reset();
     cancelAnimationFrame(this.#frame);
     if (this.#tab) await tabDetach(this.#tab.id).catch(() => {});
+    else if (this.#setupId !== null) await tabDetach(this.#setupId).catch(() => {});
     this.#tab = null;
+    this.#setupId = null;
     document.fonts?.removeEventListener("loadingdone", this.#fontsLoaded);
     this.term.dispose();
     this.#el.replaceChildren();
@@ -301,6 +330,7 @@ export class TermTab {
 
   #input(s: string): void {
     if (this.#exited) {
+      if (this.#setupId !== null) return; // the set-up card answers, not the terminal
       if (s === "\r" && this.#tab) {
         const old = this.#tab;
         this.#tab = null;

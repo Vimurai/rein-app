@@ -50,7 +50,7 @@ export function SettingsOverlay({
   /** The config path once shown, or a refused change; drawn inside the overlay. */
   note: { text: string; error: boolean } | null;
 }) {
-  const ro = (k: keyof Omit<UiView, "first_run_done">) => ui[k].source === "config";
+  const ro = (k: keyof Omit<UiView, "first_run_done" | "update_dont_ask">) => ui[k].source === "config";
   const size = ui.font_size.value;
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>

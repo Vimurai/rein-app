@@ -23,7 +23,7 @@ import {
 const errText = (e: unknown) => (e as { message?: string }).message ?? String(e);
 
 /** A card: the title, the body (scrolls inside the dialog), the buttons. */
-function Panel({
+export function Panel({
   title,
   onClose,
   onKeyDown,
@@ -63,7 +63,7 @@ function Panel({
 }
 
 /** What a CLI printed, as it printed it: mono, in a well. */
-function Output({ lines }: { lines: readonly string[] }) {
+export function Output({ lines }: { lines: readonly string[] }) {
   if (!lines.length) return null;
   return (
     <pre className="m-0 rounded-md border border-border bg-background p-3 font-mono text-[12px] [overflow-wrap:anywhere] whitespace-pre-wrap text-foreground">
@@ -73,7 +73,7 @@ function Output({ lines }: { lines: readonly string[] }) {
 }
 
 /** The command a step runs, shown so the CLI can be learned (rule 4). */
-function Runs({ cmd }: { cmd: string }) {
+export function Runs({ cmd }: { cmd: string }) {
   return (
     <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
       <span>Runs</span>
@@ -83,7 +83,7 @@ function Runs({ cmd }: { cmd: string }) {
 }
 
 /** A status line: an icon in the status colour, the text at full contrast. */
-function StatusLine({ status, children }: { status: "ok" | "warn" | "fail" | "unknown" | "busy"; children: ReactNode }) {
+export function StatusLine({ status, children }: { status: "ok" | "warn" | "fail" | "unknown" | "busy"; children: ReactNode }) {
   const p = { size: 15, "aria-hidden": true, className: "mt-px shrink-0" } as const;
   const icon =
     status === "ok" ? (

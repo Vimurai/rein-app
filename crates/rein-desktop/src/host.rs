@@ -43,7 +43,40 @@ pub trait Host: Send + Sync {
     /// A project as the user gave it (argv, `:open`, the folder dialog, a second start) →
     /// the validated, canonical path the pty child runs in. May start processes (on Windows
     /// it asks inside WSL); call it off the UI thread.
-    fn project(&self, input: &str) -> Result<PathBuf, IpcError>;
+    /// [`project_dir`](Self::project_dir) refusing a directory without `.ai/` — the
+    /// behaviour before V9; the tests of each host's validation use it.
+    #[cfg(test)]
+    fn project(&self, input: &str) -> Result<PathBuf, IpcError> {
+        match self.project_dir(input)? {
+            (p, true) => Ok(p),
+            (_, false) => Err(crate::ipc::err(
+                "no_ai",
+                "not a Rein project (no .ai/ directory) — run `rein init` there first",
+            )),
+        }
+    }
+
+    /// [`project`](Self::project) without the `.ai/` requirement (V9 component 1, E-63): the
+    /// canonical directory and whether it has `.ai/` — asked in the same validation as
+    /// before, so a normal tab open gains no process.
+    fn project_dir(&self, input: &str) -> Result<(PathBuf, bool), IpcError>;
+
+    /// The pty child of Set up this project (V9 component 2): `rein init` in `project`, then
+    /// on exit 0 the tab's ordinary start on `server`, in the same terminal. A failed init
+    /// ends the child with [`crate::project_setup::INIT_FAILED`].
+    fn rein_setup(
+        &self,
+        project: &Path,
+        server: crate::tmux_server::Server,
+    ) -> Result<ChildSpec, IpcError>;
+
+    /// `rein init --check` or `rein init` in `project` as a constant command (V9 components
+    /// 2–3), not yet started; [`crate::project_setup::run_lines`] runs it.
+    fn rein_command(
+        &self,
+        project: &Path,
+        which: crate::project_setup::ReinRun,
+    ) -> Result<std::process::Command, IpcError>;
 
     /// The pty child that runs `rein start` in `project`, which [`project`](Self::project)
     /// returned, reaching `server` (V8): the app's own through the shim, or the user's.
