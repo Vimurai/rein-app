@@ -2001,3 +2001,20 @@ The operator follows the Triad by reading two panes. Tasks, handoffs and "whose 
 - **Editing `.ai/team.json` from the app** to get edit and remove: writes into a project and copies rein's rules for ranges.
 - **A page in Settings**: mixes per-user app settings with one project's tracked file.
 - **Typing the command into a pane for the user**: the app does not type into the terminal.
+
+## D-059 — On the app's own tmux server a project lives only while its tab does; quitting the app ends the server
+
+**Date**: 2026-11-13
+**Task**: operator report and direction ("when I close my rein app tmux is not killed and working in background … when we close app we should close all sessions, that is the rule rein-app should be open to server to work"). Screenshot: reopening the project made rein type `rein pane engineer` / `rein pane architect` into the running agents.
+**Decision**: For `tmux.server = "app"`: closing a tab closes its project, quitting the app runs `tmux -L rein-app kill-server`, and a leftover server is ended at start-up before the first tab. Blueprint: `desktop.md` V11.
+
+### Rulings
+1. This replaces D-034's "closing a tab leaves the session running" on the app's server only. On the user's server nothing changes and nothing is ever killed.
+2. Ending the app's own server is allowed: the app started it and owns it (D-055). It is always addressed by its socket name.
+3. A confirm is shown when agents are running, with "Don't ask again". Quit never waits more than 3 s.
+4. The start-up sweep means the app never runs `rein start` on a live session, so rein's re-send fault (now seen, not only read) cannot be reached from the app. The fault is still reported to rein.
+
+### Alternatives rejected
+- **Reattach to the surviving session on reopen** (keep agents alive across app restarts): it is what tmux is for, but it is the path that triggers rein's re-send, and the operator's rule is the opposite.
+- **Per-project `rein start --kill` only, no `kill-server`**: leaves leftovers after a crash and takes about 1 s per project at quit.
+- **Killing on the user's server too**: those sessions are not the app's.

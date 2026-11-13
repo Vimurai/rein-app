@@ -984,6 +984,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-13T21:49:52.001Z"
+    },
+    {
+      "id": "E-66",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Make a project on the app's own tmux server live only while its tab does, per .ai/blueprints/desktop.md §Look and feel v2 V11 (D-059). Operator report 2026-11-13: after quitting the app the session keeps running, and reopening the project makes rein type `rein pane <role>` into the running agents. Read first and report (V11 \"Open to the Engineer\"): whether `rein start --kill` does bookkeeping beyond killing the window that `kill-server` would skip. Then implement for `tmux.server = \"app\"` only: (1) closing a started tab runs V9's project close, with one confirm when an agent is running or unknown and a \"Don't ask again\" in ui.json; (2) quit (window close, menu, key, single-instance takeover) confirms once, then runs the constant `tmux -L rein-app kill-server` through the existing stdin transport, waits at most 3 s and exits; (3) at start-up, before the first tab, a leftover `rein-app` server is ended the same way (on Windows inside V8's setup process, no extra process); (4) \"Close project\" wording. Never `kill-server` without the app's socket name and never on the user's server. Acceptance: e2e (Linux, macOS, private TMUX_TMPDIR) — tab close removes only that project's window; quit ends the app's server and a same-named session on the default server stays; a leftover server is gone before the first `rein start` and the stand-in rein sees no start on a live session; with `tmux.server = \"user\"` no path touches anything; Windows interop for quit and the sweep through wsl.exe with timing; screens of both confirms in both themes; hosted CI green (D-048). Runs before E-64 continues.",
+      "created_at": "2026-11-13T22:01:38.271Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-13T22:01:38.275Z"
     }
   ],
   "stamps": [
@@ -2839,6 +2853,15 @@
       "timestamp": "2026-11-13T21:25:18.033Z",
       "summary": "[TIER_2] E-65 red-proof test (branch only, deliberately failing; removed before master)",
       "sha": "61c9739a893aee05a947d0f0f1646c27918d094d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PLAN",
+      "agent": "security_engineer",
+      "task_id": "E-64",
+      "timestamp": "2026-11-13T21:56:11.817Z",
+      "summary": "[TIER_3] E-64 pre-write review: APPROVE WITH CONSTRAINTS C1-C8 (IFS=/noglob guard, rein-app $0 word, email charset without % :, enum prefix, Rust-formatted spec, native Rust confirm for team_mode, shared busy lock, bounded output); no P0 open",
+      "sha": "899b4f235fc86cbd9c20f7532bb7e653a4162e48",
       "author": "emirkovacevic@protonmail.com"
     }
   ],

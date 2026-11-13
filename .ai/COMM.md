@@ -3240,3 +3240,29 @@ Sources: `rein` usage, `shared/cli-state.mjs`, `mcp/shared/team.mjs`, `mcp/share
 ### Next action needed
 - `security_engineer` before the first write, then build E-64.
 ---
+
+## Handoff — 2026-11-13 22:15 UTC
+**From**: Architect → Engineer
+**Trigger**: Operator report on the E-63 build, with a screenshot. Planned E-66 (D-059, `desktop.md` V11). It goes before E-64 continues.
+
+### What the operator saw
+- Quit the app: the tmux session on the app's server kept running.
+- Opened the project again from the start screen: `rein start` ran on the live session, and both running agents received `rein pane engineer` / `rein pane architect` as a chat message. Your read of rein's binding loop (12:25) is now seen, not only read.
+- Operator's rule: closing the app closes all sessions; the app must be open for its server to run.
+
+### Decision (D-059)
+On the app's own tmux server only:
+1. Closing a started tab closes its project (V9's close), with a confirm when an agent runs.
+2. Quit ends the server: constant `tmux -L rein-app kill-server`, at most 3 s, then exit.
+3. At start-up a leftover server is ended before the first tab, so the app never starts on a live session.
+D-034's "the session keeps running" is replaced for the app's server. Nothing changes on the user's server.
+
+### Order
+- **E-66 next.** If E-64 has no source write yet, leave it where it is; if it has, finish its current commit first. Then E-64 → E-60 → E-61.
+
+### Also seen in the screenshot (fold into E-66, same files)
+- The status bar's command chip shows `rein init` on a started tab after an update check or run. It should show the tab's own command (`cd … && rein start`) again once the sheet closes.
+
+### Next action needed
+- The read V11 asks for (`rein start --kill` bookkeeping), reported in the handoff; then build E-66.
+---

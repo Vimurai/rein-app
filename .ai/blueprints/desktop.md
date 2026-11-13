@@ -1070,6 +1070,68 @@ components 1–3 and the IPC it contradicts.**
 contract's list of stable entry points (§3.6). The sheet is built against rein 0.5.0 and
 fails soft on a different answer; the request to rein asks to add them, with `--json`.
 
+### V11. The app's projects live only while the app does (revision 2026-11-13, D-059)
+Operator report on the E-63 build: after closing the app the tmux session keeps running
+in the background; opening the project again runs `rein start` on the live session, and
+rein types `rein pane engineer` / `rein pane architect` into the running agents (seen
+on screen — the rein fault noted as unconfirmed in `plans/rein-panels-request.md` c2).
+Operator's rule: **"when we close the app we should close all sessions … rein-app
+should be open for the server to work."**
+
+**Core concept: on the app's own tmux server (V8), a project runs exactly as long as
+its tab. Closing a tab closes that project; quitting the app ends the server; a server
+left over from a crash is ended before the first tab opens.** This replaces D-034's
+"closing a tab leaves the session running" for `tmux.server = "app"` only. With
+`tmux.server = "user"` the sessions are the user's own and nothing here applies.
+
+**Components**
+1. **Tab close = project close.** Closing a tab on the app's server runs V9's close
+   (`rein start --kill --yes` through the tab's start path), then the tab goes. If an
+   agent is running (V9's status: running or unknown), one confirm first: "Closing this
+   tab stops the Architect and the Engineer in <project>." **Close** / **Cancel**, with
+   "Don't ask again" (`ui.json`). A set-up card tab has no session and closes as today.
+2. **Quit = end the server.** On quit (window close, menu, key, single-instance
+   takeover) with at least one tab on the app's server: the same confirm once for all
+   ("Quitting stops the agents in N projects."), then one constant
+   `tmux -L rein-app kill-server` through the existing stdin transport, waited for at
+   most 3 s, then the app exits whatever the answer. The server is the app's own
+   (D-055), so ending it is not killing a session of the user's.
+3. **Start-up sweep.** When the app starts (it is single-instance) and before any tab
+   opens: if a `rein-app` server answers, it is a leftover (a crash, a killed process,
+   Windows closed under WSL) — the same `kill-server`, bounded 3 s. On Windows this
+   rides in V8's setup process for the first tab, not a process of its own. So
+   `rein start` from the app never meets a live session, and rein's re-send fault
+   cannot be reached from the app.
+4. **Words.** The start screen's and the tab menu's close texts say "Close project"
+   where they said "Close tab" for a started project.
+
+**Open to the Engineer — read, report, then build:** whether `rein start --kill` does
+any bookkeeping beyond killing the window (a lock, a state file, a wake registration)
+that `kill-server` would skip; if it does, quit runs the per-project close for each tab
+first (in parallel, inside the same 3 s) and `kill-server` last.
+
+**Interface contracts.** `tab_close(tab, confirm_running)` → `{closed} | {confirm:
+roles}` (as `project_close`); `app_quit(confirm_running)` → exits or `{confirm: n}`.
+The web side never names a server or a project.
+
+**Security.** Constant commands only, quote-free, on the app's socket name; never
+`kill-server` without `-L rein-app`, and never when the tab's server is `user` — a test
+asserts the default server is untouched in every path (the standing "never kill the
+user's tmux" rule). Tier 2.
+
+**Execution constraints.** Quit never hangs: 3 s, then exit. Tab close keeps V9's
+limits. The sweep adds no process to a normal start on Windows.
+
+**Tests.** End to end (Linux, macOS; private `TMUX_TMPDIR`): tab close removes the
+project's window and leaves another tab's; quit ends the app's server and leaves a
+same-named session on the default server; a leftover server is gone before the first
+tab's `rein start`, and the stand-in rein records no second start on a live session;
+`tmux.server = "user"`: none of the three paths touches anything. Windows interop for
+quit and the sweep through `wsl.exe` with timing. Screens: both confirms, both themes.
+
+**Rollback.** One commit; reverting it restores D-034's behaviour. `tmux.server =
+"user"` is the per-user way out without a rebuild.
+
 ### Tests (v2)
 - Token function: contrast ≥ 4.5:1 for every text pair in every theme; the default theme is
   `catppuccin-mocha`.
