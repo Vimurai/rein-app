@@ -898,6 +898,29 @@ in a project.
 pane (or say so in `--status`) when its agent exits; `rein init` should cover every
 prerequisite it can, and name the rest in `--check`; a machine-readable project verdict.
 
+**Ruling for components 2–3 after the read of rein 0.5.0 (2026-11-13, E-63).**
+- The out-of-date verdict is `rein init --check`'s exit code, run once per tab open in
+  the background, after the tab has started: 0 → nothing; 1 → the bar; anything else or
+  a timeout → no bar and one fixed health line. The app compares nothing itself.
+- The bar has one fix: **Update project** = `rein init`. There is no "Run rein sync"
+  button: rein gives no machine verdict for sync, and `rein init` covers what sync
+  refreshes. Component 3's "Run rein sync" is withdrawn until rein has `sync --check`.
+- The rows are `--check`'s own lines as text nodes: at most 40 rows, 200 characters
+  each, control and bidi characters as placeholders, a "… and N more" row past the cap.
+- **Update project** runs through the CLI runner with output in a sheet, with a limit
+  long enough for a cold `npm ci` (10 minutes) and a visible Cancel. After exit 0 the
+  check runs once more: 0 → the bar goes and one fixed line says running agents keep
+  their old settings until the project is closed and opened again; 1 → one fixed line,
+  no second offer in this tab. No loop.
+- **Not now** hides the bar for this tab. **Don't ask for this project** is kept
+  (`ui.json`).
+- The set-up card shows rein's one line and nothing the app knows about rein: no git or
+  Node notes. Its own fixed text says only what the click does: it runs `rein init` in
+  this terminal, then starts the project. Set up is never disabled, since rein names no
+  blocking prerequisite.
+- Provisional: the exit-code meaning of `init --check` is not in the contract (asked of
+  rein). If rein changes it, the bar fails to silence, not to a wrong offer.
+
 **As built — agent exit (E-62, b8fc0d6 + 81f141a; accepted 2026-11-13).**
 - Status is the fallback: a constant read-only script on stdin (`sh -s -- <client tty>
   <app|user>`) lists the panes of the window the tab's own client shows, by window id,

@@ -34,6 +34,10 @@ the agents have exited. The window runs only `rein init`, `rein sync` and
 - **a. One machine-readable project verdict** (for example `rein doctor --json --scope
   project`): not set up / needs init upgrade / needs sync / ready, each with the command
   that fixes it, and the prerequisites `rein init` does not install.
+  Until then rein-app uses `rein init --check`'s exit code (0 current, 1 pending) and
+  offers `rein init` only. Please put that exit-code meaning in the contract, and add
+  `rein sync --check` or a structured `fix` in `rein doctor --json` (today "run: rein
+  sync" is inside the prose `line`, `fix` empty).
 - **b. Agent liveness per role** in `rein start --status --json`, and, if you agree, the
   pane ending when its agent exits instead of falling back to a shell.
 - **c. Restarting one exited agent** without killing the session: is `rein start` on a

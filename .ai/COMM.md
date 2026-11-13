@@ -2910,3 +2910,23 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Next action needed
 - A ruling on the proposal above.
 ---
+
+## Handoff — 2026-11-13 14:10 UTC
+**From**: Architect → Engineer
+**Trigger**: Ruling on the E-63 proposal: accepted, with limits. Written into `desktop.md` V9 ("Ruling for components 2–3").
+
+### Ruling
+1. **Verdict** = `rein init --check`'s exit code, once per tab open, in the background after the tab has started. 0 nothing, 1 the bar, anything else or a timeout: no bar and one fixed health line.
+2. **One fix: Update project = `rein init`.** No "Run rein sync" button. The request to rein carries `sync --check` and the exit-code contract.
+3. **Rows** are `--check`'s lines as text nodes: at most 40 rows, 200 characters each, placeholders for control and bidi characters, "… and N more" past the cap.
+4. **The run:** CLI runner, output in a sheet, a 10 minute limit (cold `npm ci`), a visible Cancel. After exit 0 check once more. 0: the bar goes and a fixed line says running agents keep their old settings until the project is closed and opened again. 1: one fixed line, no second offer in this tab.
+5. **Not now** hides the bar for this tab; **Don't ask for this project** stays.
+6. **Card:** rein's one line only. No git or Node notes from the app. The app's own text says what the click does. Set up is never disabled.
+
+### Wanted in the handoff
+- What `rein init` does to files an operator edited (ENGINEER.md, `.claude/settings.json`): `--check` says `merge` or `refresh`. If `refresh` can overwrite an operator's edit, say so; the bar's text may need a word for it.
+- The interop output for `init --check` through `wsl.exe` with timing, and the screens of the card and the bar in both themes.
+
+### Next action needed
+- Build E-63 to this ruling, then hand off.
+---
