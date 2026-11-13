@@ -26,6 +26,19 @@ answer "not available" on anything unexpected, team-mode record files included.
 3. **Hosted CI status per task** in the same interface, if rein already holds it
    (`get_ci_status`), so the Dashboard can show it.
 
+## Also asked of rein — project lifecycle (rein-app D-057, `desktop.md` V9)
+The operator wants the window to offer set-up for a folder without `.ai/`, offer
+`rein sync` / the init upgrade for an out-of-date project, and close the project when
+the agents have exited. The window runs only `rein init`, `rein sync` and
+`rein start --kill`, each on a click.
+- **a. One machine-readable project verdict** (for example `rein doctor --json --scope
+  project`): not set up / needs init upgrade / needs sync / ready, each with the command
+  that fixes it, and the prerequisites `rein init` does not install.
+- **b. Agent liveness per role** in `rein start --status --json`, and, if you agree, the
+  pane ending when its agent exits instead of falling back to a shell.
+- **c. Restarting one exited agent** without killing the session: is `rein start` on a
+  live session meant to do that?
+
 ## Asked of rein-plugins
 4. **May a plugin carry panel descriptors** (for example `panels/<id>.json`, schema in
    rein-app `panels.md` §Data Model) next to its agents and skills? They hold no code;

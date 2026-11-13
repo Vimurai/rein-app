@@ -792,6 +792,112 @@ server keep running and are reachable with `tmux -L rein-app`.
 published by the rein project (pinned commits, checked before use, on/off in Settings,
 loaded only into the app's server). Nothing in V8 downloads or loads a plugin.
 
+### V9. Project lifecycle: set up, out of date, agent exited (revision 2026-11-13, D-057)
+Operator reports on the E-58 build: (1) `/exit` in a Claude pane leaves a bare shell in
+the tmux pane and the project stays open; the window "should be smart enough to close
+the whole project". (2) Opening a folder with no `.ai/` should say what is missing and
+offer to set it up. (3) A project whose `.ai/` is from an older Rein should offer to
+bring it up to date.
+
+**Core concept: the window notices three project states and offers the one rein command
+that fixes each; it never fixes anything silently.** The rule that bounds all three:
+**the window runs only rein's own entry points (`rein init`, `rein sync`,
+`rein start --kill`), each after the operator's click, as constant commands.** Anything
+else a project needs (a git repository, Node, a `package.json` if rein asks for one) is
+listed with the command to copy, and not run by the window: rein-app writes no file
+inside a project (contract §3.3) and carries no copy of Rein logic. What is missing or
+out of date is **rein's verdict** (`rein init --check`, `rein doctor --json`,
+`rein start --status`), never a comparison made by the app.
+
+**Components**
+1. **Project check** — when a tab opens, before the pty: is there a `.ai/` directory in
+   the project? On Windows this rides in the process that already runs before the pty
+   (V8's setup) when there is one; it never adds a second process to a normal tab open.
+   Present → the tab starts as today. Absent → component 2.
+2. **Set-up card** (in the tab, in place of the terminal; shadcn `Card`): "This folder
+   is not set up for Rein." Then the list of what set-up will do and what is missing, as
+   rein reports it (`rein init --check`; prerequisites rein names), each as a plain row.
+   Buttons: **Set up this project** (primary), **Open another folder**, **Close tab**.
+   Set up runs `rein init` **in the tab's own terminal**, so its output and any question
+   it asks are visible and answerable; on exit 0 the tab goes on to `rein start` in the
+   same terminal; on any other exit the terminal stays with the output and a fixed line
+   above it, and nothing is retried. A prerequisite rein does not install is shown with
+   its command and a copy button; Set up stays disabled until a re-check finds it.
+3. **Out-of-date bar** — after the tab has started (never delaying it), one background
+   run of rein's own check for the project. If rein says the project needs `rein init`
+   (upgrade) or `rein sync`, a one-line bar above the terminal names what rein reported
+   and offers the command rein itself names as the fix: **Run rein sync** / **Update
+   project**, **Not now**, **Don't ask for this project**. The command runs through the
+   existing CLI runner with its output in a sheet (as update / rollback do), not typed
+   into a pane. Whether the agents must be restarted afterwards is said as rein says it.
+   A fix that is not one of the two commands is shown as text only.
+4. **Agent-exit bar** — while a tab is the active one and the window is visible, the
+   window asks rein (or tmux on the tab's own server, see "Open to the Engineer") which
+   role panes still run their agent. When a role's agent has ended:
+   - one of several ended: a bar "The Engineer has exited." with **Close project** and
+     **Keep open**. Nothing else happens by itself.
+   - **all** role agents ended: the project is closed without asking when
+     `[project] close_when_agents_exit = true` (the default); otherwise the same bar.
+   **Close project** = `rein start --kill --yes` for that project on the tab's tmux
+   server, then the tab closes. With an agent still running, Close project first asks
+   "The Architect is still running. Close it too?" (confirm dialog, default No).
+   Closing a tab the ordinary way is unchanged: the session keeps running (D-034).
+5. **Setting** `[project] close_when_agents_exit = true | false` and the per-project
+   "don't ask" list (`ui.json`, project path keys as the recent list already keeps).
+
+**Open to the Engineer — read rein 0.5.0, report, then build** (no guessing):
+- what `rein init` needs beforehand (git? Node? a `package.json`?), whether it asks
+  questions, and what `rein init --check` prints for a folder with no `.ai/`;
+- which of rein's outputs says "needs sync" / "needs init upgrade" for an existing
+  project, and whether it names its own fix;
+- whether `rein start --status` reports per-role agent liveness in a form that can be
+  read without parsing prose; if not, the fallback is one `tmux list-panes -F` with a
+  constant format (`@rein_role`, `pane_current_command`, `pane_dead`) on the tab's
+  server through the overlay's stdin transport — and the gap goes into the rein request;
+- whether `rein start` on a session with one exited agent restarts that agent. If it
+  does, the bar gains **Restart the Engineer**; if not, restart stays out of this
+  revision and is asked of rein.
+
+**Data model.** One config key, one `ui.json` list. No project state is stored; each
+verdict is asked again on the next open.
+
+**Interface contracts.** New IPC, all with the project taken from the tab's state and
+no path or command text from the web side: `project_check(tab_id)` → `ready |
+not_set_up {rows} | unavailable`; `project_setup(tab_id)` (starts `rein init` in the
+tab's pty); `project_fix(tab_id, which)` with `which` ∈ {`sync`, `init`};
+`project_agents(tab_id)` → per role `running | ended | unknown`;
+`project_close(tab_id, confirm_running)`. Rows and reasons that come from rein's output
+are escaped lines, shown as text (the rule the CLI runner already follows).
+
+**Security.** Every command is a constant argv of a rein entry point (V8's argv rule: no
+quote character, no file text). A click is required for each run; nothing in a project's
+files can trigger one. `rein start --kill` is destructive for a running agent, hence the
+confirm. Rein's output is untrusted text: text nodes only, capped. A folder that is not
+a directory the user picked or typed is never offered set-up. Changes on the `WslHost`
+path need interop output (standing rule).
+
+**Execution constraints.** A normal tab open gains no process and no measurable delay.
+The out-of-date check runs once per tab open, off the UI thread, limit 30 s, result
+dropped if the tab closed. The agent poll: active tab only, window visible, at most one
+short process per 5 s, stopped the moment the tab's process ends.
+
+**Tests.** Pure: the bar and card states from each verdict; "all ended" vs "one ended";
+the confirm rule. Rust: the constants are argv-safe; every verdict maps to a fixed
+sentence or an escaped row. End to end (Linux, macOS; a stand-in `rein` as E-57 used):
+a folder without `.ai/` shows the card, Set up runs init then start in the same
+terminal, a failing init stays visible; a stale project shows the bar and runs the named
+command; an exited agent shows the bar; all exited closes the project and kills the
+session on the tab's server only — a session of the same name on the default server is
+untouched. Screens gate (D-052): the card, both bars, the confirm, both themes.
+
+**Rollback.** `close_when_agents_exit = false` and "Don't ask for this project" switch
+the prompts off per user; each task reverts as one commit. No file of the app's is left
+in a project.
+
+**Asked of rein** (added to `plans/rein-panels-request.md`): `rein pane` should end the
+pane (or say so in `--status`) when its agent exits; `rein init` should cover every
+prerequisite it can, and name the rest in `--check`; a machine-readable project verdict.
+
 ### Tests (v2)
 - Token function: contrast ≥ 4.5:1 for every text pair in every theme; the default theme is
   `catppuccin-mocha`.

@@ -1964,3 +1964,22 @@ The operator follows the Triad by reading two panes. Tasks, handoffs and "whose 
 - **Waiting for rein's read interface before building anything**: no rein session is reachable; the four panels are useful now and the parsers fail soft.
 - **A Markdown renderer for handoffs**: turns untrusted file text into markup and links. Plain text with visible structure is enough.
 - **Reading rein's sqlite files or MCP servers from the app**: carries rein's internals into the shell (contract non-goal).
+
+## D-057 — The window offers set-up, update and close for a project, running only rein's own commands on a click
+
+**Date**: 2026-11-13
+**Task**: operator reports on the E-58 build: `/exit` in a Claude pane leaves a shell and the project stays open ("should be smart enough to close whole project"); a folder without `.ai/` should list what is needed and offer to install ("npm init rein init"); a stale `.ai/` should prompt for `rein sync`.
+**Decision**: Three prompts in the tab — a set-up card, an out-of-date bar, an agent-exit bar — each offering one rein entry point (`rein init`, `rein sync`, `rein start --kill`). Blueprint: `desktop.md` V9.
+
+### Rulings
+1. The window runs only rein's entry points, as constant commands, each after a click. It does not run `npm init`, `git init` or any other tool in a project; such prerequisites are listed with the command to copy. Reason: contract §3.3 (rein-app writes no file inside a project) and the non-goal of carrying Rein logic. This differs from the operator's wording ("installs everything npm init"); they have been told, and rein is asked to make `rein init` cover what it can.
+2. What is missing or out of date is rein's verdict, never the app's own comparison of versions or files.
+3. One agent exited: a bar with Close project / Keep open. All agents exited: the project closes by default (`close_when_agents_exit`, default true). Closing with an agent still running asks first.
+4. Close project is `rein start --kill --yes` on the tab's own tmux server. Closing a tab the ordinary way still leaves the session running (D-034).
+5. `rein init` runs in the tab's own terminal so its output and questions are visible.
+
+### Alternatives rejected
+- **Closing the project as soon as any one agent exits**: kills the other agent's running work on a mistaken `/exit`.
+- **The app comparing `state.json`'s `rein_version` with the installed version**: reimplements a rein check.
+- **Running set-up automatically on open**: writes into a folder the user may have opened by mistake.
+- **A tmux hook in the app's config to detect the exit**: the config is a closed list with no command-running line (V8).

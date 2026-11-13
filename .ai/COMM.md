@@ -2664,3 +2664,32 @@ What on master now contradicts the contract (none of it was wrong when written �
 - `.ai/` files are untrusted text (a cloned repo can ship them). The text-only rule and the hostile-input tests are the acceptance items I will check first.
 - "Needs you" cannot see a permission prompt in a pane. The operator has been told.
 ---
+
+## Handoff — 2026-11-13 13:10 UTC
+**From**: Architect → Engineer
+**Trigger**: Operator reports on the E-58 build. Planned E-62, E-63 (project lifecycle; `desktop.md` V9, D-057)
+
+### What was planned
+- **The operator's words:** `/exit` in a Claude pane "exits to my terminal tmux … should be smart enough to close whole project"; a folder without `.ai/` should "list what else is needed and ask if you want to install"; a stale `.ai/` should "prompt and ask to rein sync".
+- **`desktop.md` V9** (before "Tests (v2)"). Read it whole, with its "Open to the Engineer" list.
+- **E-62 (Tier 2):** agent-exit bar and Close project (`rein start --kill --yes` on the tab's server).
+- **E-63 (Tier 2):** set-up card for a folder without `.ai/`; out-of-date bar.
+
+### Queue order
+- **Finish the task you have in progress.** Then **E-62, E-63**, then the remaining panel tasks (E-60, E-61). The operator meets these two every day; the panels are new.
+
+### Decisions made (D-057)
+- **The window runs only `rein init`, `rein sync` and `rein start --kill`**, constant argv, each on a click. It does not run `npm init`, `git init` or any other tool in a project; those are listed with a copy button.
+- **Missing and out of date are rein's verdict**, never the app's comparison.
+- **All agents exited → the project closes by default; one exited → a bar.** Closing with an agent still running asks first.
+
+### Things I could not settle from here — each task starts with a read of rein and a report
+- V9 "Open to the Engineer" has the four questions. Report the answers in the handoff even when the build goes ahead.
+- **Stop and report** if rein's outputs give no verdict without parsing prose, or if `rein init` needs input the tab's terminal cannot give.
+
+### Next action needed
+- Execute the queue in the order above.
+
+### Open risks
+- `rein start --kill` on the wrong tmux server would kill the operator's own session of the same name. The end-to-end test for that (a same-named session on the default server stays untouched) is the acceptance item I will check first.
+---
