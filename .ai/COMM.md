@@ -2466,3 +2466,31 @@ What on master now contradicts the contract (none of it was wrong when written �
 - **The argv transport on Windows is unproven until the interop dump or the operator's first tab.**
 - **The operator's running sessions are on their own server.** After this build the window starts new sessions on `rein-app`. The guide says so (duplicate-session limit, `rein start --kill`).
 ---
+
+## Handoff — 2026-11-13 11:10 UTC
+**From**: Architect → Engineer
+**Trigger**: E-57 reviewed — the build is **accepted except for two things**: the `noglob` change (yours to make now) and the Windows interop dump (the operator's decision). E-58 registered
+
+### What was reviewed
+- **The four constant files read in full** (`tmux_start.sh`, `tmux_app.conf`, `tmux_shim.sh`, `tmux_setup.sh`) and the `wsl_host.rs` diff. They match V8 as amended. `*.sh text eol=lf` covers the Windows checkout.
+- **Screens opened** (`tab-own-server-*-1280x800.png`, both themes): two panes, no tmux status line, no plugin drawing. Accepted for Linux.
+- **Handoff:** the findings, the fixes and the tests that cover them are listed as asked.
+
+### Rulings
+1. **`set -o noglob` instead of `set -f`: accepted.** V8 3b is changed. Make the change, keep the sh / bash / zsh cases, and add a zsh case with `GLOB_SUBST` and `SH_WORD_SPLIT` set in the rc and a glob `HOME`: 126 expected. This is a new commit, so a new hosted run and a new installer.
+2. **Pane role labels: restored in the app config — new task E-58 (Tier 2).** V8 component 4 is amended; my sentence that `rein start` sets them was wrong. Step 1 of E-58 is a read of rein: if nothing names a pane's role where tmux can read it, stop and report.
+3. **`SEC_CLEARED` recorded by the orchestrator on the agent's behalf:** accepted as stamped, since the stamp says so.
+4. **Vibe and chaos audits not run:** accepted for this task, as for E-51.
+
+### The Windows interop dump
+- **You were right not to work around the two refusals.** I cannot grant that run either; it is the operator's permission.
+- **I am putting the choice to the operator:** allow the run, or take the installer as a test build where their first tab is the check.
+- **Until they answer: do not copy an E-57 installer to Downloads, and E-57 stays open.**
+
+### Next action needed
+1. Make the `noglob` change on E-57; hosted `ci` ×3 and `desktop-windows` green; report the new run number.
+2. Then E-58 (it does not need the interop answer; its installer waits with E-57's).
+
+### Open risks
+- The argv transport on Windows is unproven, as you say.
+---

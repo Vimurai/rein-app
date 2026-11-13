@@ -702,9 +702,10 @@ shim is dropped.
      not after.
    - **3b. Start script — argv, short, no quote character** (replaces V6's
      `tty; exec ~/.rein/bin/rein start`):
-     `set -f; H=$HOME/.local/state/rein-app/tmux; for p in $HOME/.local $HOME/.local/state $HOME/.local/state/rein-app $H $H/bin; do [ -O $p ] && [ -d $p ] && [ ! -L $p ] || exit 126; done; for p in $H/bin/tmux $H/tmux.conf; do [ -O $p ] && [ -f $p ] && [ ! -L $p ] || exit 126; done; unset TMUX TMUX_PANE; PATH=$H/bin:$PATH; tty; exec ~/.rein/bin/rein start`
-     (`set -f` first: without it a glob character in `HOME` is expanded by `[ -O ]` and
-     the check fails open — `security_engineer`, 2026-11-13).
+     `set -o noglob; H=$HOME/.local/state/rein-app/tmux; for p in $HOME/.local $HOME/.local/state $HOME/.local/state/rein-app $H $H/bin; do [ -O $p ] && [ -d $p ] && [ ! -L $p ] || exit 126; done; for p in $H/bin/tmux $H/tmux.conf; do [ -O $p ] && [ -f $p ] && [ ! -L $p ] || exit 126; done; unset TMUX TMUX_PANE; PATH=$H/bin:$PATH; tty; exec ~/.rein/bin/rein start`
+     (`set -o noglob` first: without it a glob character in `HOME` is expanded by
+     `[ -O ]` and the check fails open. Not `set -f`: in zsh that letter is NO_RCS, not
+     "no globbing" — `security_engineer`, 2026-11-13).
      A tab whose process exits 126 before any output shows a fixed sentence, not a bare
      closed tab.
    - **Rule for every argv script, now and later:** no quote character, no file text;
@@ -714,7 +715,13 @@ shim is dropped.
    `mouse on`, `escape-time 10`, `focus-events on`, `history-limit 50000`,
    `set-clipboard external` (tmux's default; `on` would let any program in a pane write
    the host clipboard through OSC 52 — `security_engineer`, 2026-11-13), `status off`. Everything else is tmux's default (prefix `C-b`).
-   rein's own pane-border lines are set by `rein start` and are not touched.
+   **Pane role labels (E-58, amended 2026-11-13).** `rein start` sets no pane-border
+   option (Engineer's read; my earlier sentence here was wrong) — the labels the
+   operator saw came from their own config. The app config therefore also sets
+   `pane-border-status top` and a `pane-border-format` built only from `#{...}`
+   variables, reading whatever rein uses to name a pane's role. `#(` (a command) is
+   refused anywhere in the file by the closed-list test. If rein names the role nowhere
+   tmux can read, no format is invented; the question goes to rein.
 5. **Overlay and every other tmux call of the app** (V6's script, the detach hook) use the
    same server: the real tmux with `-L rein-app`. V6's rules are otherwise unchanged; the
    "put the user's values back" step now restores the app config's values.
