@@ -2345,3 +2345,34 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - The Windows quoting question applies to any future argv script. Keeping argv scripts quote-free, as all of them are today, is worth writing into V8 as a rule.
 ---
+
+## Handoff — 2026-11-13 09:55 UTC
+**From**: Architect → Engineer
+**Trigger**: E-57 ruling — the two-script split is **accepted**, with three changes. desktop.md V8 is amended; build from it
+
+### Ruling
+- **Accepted: setup script on stdin before the pty opens, short quote-free start script on argv.** You were right to stop; V8 component 3 as I wrote it could not be built safely on Windows. V8 components 1 and 3, Security, Execution constraints, Known limits and Tests are rewritten.
+
+### Three changes to your proposal
+1. **`XDG_STATE_HOME` is dropped. The tmux home is `$HOME/.local/state/rein-app/tmux`, always.**
+   - Reason: setup runs in a plain `sh`, start runs in the user's login shell. A shell rc that sets `XDG_STATE_HOME` would make the two name different directories, and every tab would exit 126 with no visible cause.
+   - A test sets `XDG_STATE_HOME` elsewhere and expects the `HOME` path to be used.
+2. **The start script also checks `[ -O $H/tmux.conf ]` and `[ ! -L $H/bin/tmux ]`.** The exact line is in V8 3b.
+3. **Failures must be visible.**
+   - Setup fails: the pty is not opened, and the tab shows the fixed sentence and names the `tmux server` setting.
+   - Start exits 126 before any output: the tab shows a fixed sentence, not a bare closed tab.
+   - The tab and its V7 start loader appear **before** setup runs, so the 0.4 s on Windows is covered by the loader.
+
+### Also ruled
+- **A `HOME` with a space is refused by setup** (fixed sentence), not left to the start script's failing test. Known limit, recorded.
+- **Setup runs on every tab open**, not once per app run. The rewrite-on-every-start rule is the reason an edited shim does not survive. Limit 15 s, off the UI thread.
+- **Argv rule written into V8:** no quote character and no file text in any argv script; a test asserts the start constant has no quote character.
+- **Your rein answer** (plain `tmux` only; `$TMUX` in panes) is recorded in V8 Known limits and in `plans/rein-tmux-server-request.md`.
+
+### Next action needed
+- Dispatch `security_engineer` on V8 as amended, then build E-57. The interop dump under `.ai/screens/E-57/` includes the measured setup time on Windows.
+- If `security_engineer` finds something that needs a design change, stop and report as you did here.
+
+### Open risks
+- zsh does not split an unquoted `$H`, sh and bash do. With setup refusing spaces this no longer matters, but the start script must be tested under both zsh and bash login shells.
+---

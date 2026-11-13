@@ -21,7 +21,9 @@ rein-app's own config. `rein start` in an ordinary terminal is unchanged.
    a socket name and a config file. Named in the contract (§3.5), so the shim can go.
 2. **Does anything in rein call tmux by absolute path, or outside the panes** (a hook, a
    background helper, the wake / SendMessage path), where a `PATH` shim would not reach
-   and the call would land on the user's default server?
+   and the call would land on the user's default server? (rein-app's Engineer read
+   0.5.0 on 2026-11-13 and found none — every call is plain `tmux`. Please confirm, and
+   keep it so until item 1 ships.)
 3. **Duplicate sessions.** A project with a live session on the user's default server
    gets a second session (second Architect and Engineer) when opened in the window. Can
    rein detect "this project already has a rein session on another tmux server" — for

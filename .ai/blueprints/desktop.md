@@ -675,8 +675,9 @@ the contract) is requested in `plans/rein-tmux-server-request.md`; when rein shi
 shim is dropped.
 
 **Components**
-1. **Tmux home** — the directory `${XDG_STATE_HOME:-$HOME/.local/state}/rein-app/tmux/`
-   (inside WSL on Windows), mode 0700, holding exactly two files written by the app:
+1. **Tmux home** — the directory `$HOME/.local/state/rein-app/tmux/` (inside WSL on
+   Windows; `XDG_STATE_HOME` is deliberately not read — the setup script and the start
+   script run in different shells and must name the same directory), mode 0700, holding exactly two files written by the app:
    `bin/tmux` (the shim, 0700) and `tmux.conf` (0600). Both have constant content
    compiled into the app; they are rewritten (write to a temporary name, rename) whenever
    they differ. Nothing else is ever read from or written to this directory.
@@ -685,11 +686,25 @@ shim is dropped.
    before the caller's arguments. If the caller already passed `-L` or `-S`, the arguments
    go through unchanged. No real tmux → exit 127 with one line on stderr. It reads no
    other input and never evaluates text.
-3. **Start script** (replaces V6's `tty; exec ~/.rein/bin/rein start`; one constant POSIX
-   script for Linux, macOS and WSL): refuse to continue (exit 126, one line) unless the
-   tmux home is owned by the user and not writable by group or others; ensure the two
-   files; `unset TMUX TMUX_PANE`; prepend `<tmux home>/bin` to `PATH`; print the tty line
-   on Windows as today; `exec ~/.rein/bin/rein start`.
+3. **Two constant scripts, split by transport** (amended 2026-11-13 on the Engineer's
+   report: file text cannot safely pass through a `wsl.exe` argument). The same two on
+   Linux, macOS and WSL.
+   - **3a. Setup script — fed on stdin** (V6's transport: `/bin/sh -s`; on Windows
+     `wsl.exe -d D -e sh -s`), run by the app before it opens the tab's pty, only when
+     `tmux.server = "app"`. `umask 077`; refuses (own exit code each, mapped to fixed
+     sentences as V6's are) a `HOME` with a newline, quote or space, a symlinked home or
+     `bin`, a home not owned by the user or writable by group or others; creates
+     0700 / 0700 / 0600; compares both files with the constants and rewrites those that
+     differ. On failure the pty is not opened; the tab shows the fixed sentence and names
+     the `tmux server` setting. The tab and its V7 start loader appear before setup runs,
+     not after.
+   - **3b. Start script — argv, short, no quote character** (replaces V6's
+     `tty; exec ~/.rein/bin/rein start`):
+     `H=$HOME/.local/state/rein-app/tmux; [ -O $H/bin/tmux ] && [ -O $H/tmux.conf ] && [ ! -L $H ] && [ ! -L $H/bin ] && [ ! -L $H/bin/tmux ] || exit 126; unset TMUX TMUX_PANE; PATH=$H/bin:$PATH; tty; exec ~/.rein/bin/rein start`.
+     A tab whose process exits 126 before any output shows a fixed sentence, not a bare
+     closed tab.
+   - **Rule for every argv script, now and later:** no quote character, no file text;
+     anything longer or carrying content goes on stdin.
 4. **App config** (`tmux.conf`, a closed list — no `run-shell`, `source-file`, `if-shell`,
    hook or plugin line): `default-terminal "tmux-256color"`, RGB `terminal-features`,
    `mouse on`, `escape-time 10`, `focus-events on`, `history-limit 50000`,
@@ -716,14 +731,16 @@ every `tmux` call, so: the directory and files are created 0700 / 0700 / 0600 wi
 `umask 077`; the start script refuses a tmux home it does not own or that others can
 write, and refuses a symlinked home or `bin`; file contents are compiled constants,
 compared and rewritten on every start, so an edited shim does not survive; the shim takes
-nothing from the environment except `PATH` and `HOME` / `XDG_STATE_HOME`; a path with a
-newline or a quote in it is refused rather than escaped. The app config contains no
+nothing from the environment except `PATH` and `HOME`; a path with a newline, quote or
+space in it is refused rather than escaped. Between setup and start only the same user
+can change the files; the start script re-checks owner and symlinks just before use. The app config contains no
 command-running line, and the test that asserts this reads the file itself. On Windows
 the process list is still only `wsl.exe` with constant scripts. No network. `security_engineer`
 review required.
 
-**Execution constraints.** The file check adds no measurable start time (two small
-reads). The tab's output never waits on it beyond the script's own run. The app's server
+**Execution constraints.** Setup is one extra short process per tab open: negligible on
+Linux and macOS, about 0.4 s on Windows (one `wsl.exe` start, by E-53's numbers; to be
+measured in the task's interop dump). It runs off the UI thread with a 15 s limit. The app's server
 keeps running after the window closes, like the user's did — sessions survive. The app
 never kills the server.
 
@@ -736,11 +753,17 @@ never kills the server.
 - `tmux ls` in an ordinary terminal does not list the window's sessions.
 - The user's prefix key, bindings and mouse settings do not apply in the window.
 - The shim covers programs started from the tab. A program that calls tmux by absolute
-  path bypasses it and reaches the user's server.
+  path bypasses it and reaches the user's server. rein 0.5.0 does not (Engineer's read,
+  2026-11-13: every call is plain `tmux`), and inside a pane `$TMUX` already points at
+  the app's server.
+- A `HOME` with a space in it is refused; the user sets `tmux.server = "user"`.
 
 **Tests (V8).** Shim: real-tmux lookup skips itself; `-L` / `-S` pass through; exit 127
-without tmux; config has no command-running line. Start script: refuses a home that is
-group-writable, not owned, or a symlink; rewrites an edited shim. End to end
+without tmux; config has no command-running line. Setup script: refuses a home that is
+group-writable, not owned, or a symlink, and a `HOME` with a space; rewrites an edited
+shim. Start script: exits 126 when the shim is missing, a symlink, or `XDG_STATE_HOME`
+is set to another place (it must still use the `HOME` path); the constant contains no
+quote character. End to end
 (`tests/e2e/`, Linux + macOS in CI): with a user `~/.tmux.conf` that sets a marker option,
 binds a key and has a `run-shell` plugin line that creates a file — after a tab starts,
 the session is on the `rein-app` socket, the marker and binding are absent, the file was
