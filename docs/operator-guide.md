@@ -277,7 +277,8 @@ server, the socket `rein-app`, started with rein-app's own small config. **None 
 settings apply there**: not `~/.tmux.conf`, not your plugins, your prefix key, key bindings,
 mouse or status-line settings. Your own tmux server, its config and its sessions are not
 touched, and `rein start` in an ordinary terminal works as before. The window uses tmux's
-default prefix, `Ctrl+b`.
+default prefix, `Ctrl+b`. Each pane's border shows its rein role and Claude account (for example
+`engineer · personal`), drawn by the window's own config in the window's theme colours.
 
 - **From a terminal**, reach the window's sessions with `tmux -L rein-app ls` and
   `tmux -L rein-app attach -t <session>`. Plain `tmux ls` does not list them.

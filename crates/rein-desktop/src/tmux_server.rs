@@ -186,9 +186,13 @@ mod tests {
                 "set -g history-limit 50000",
                 "set -g set-clipboard external",
                 "set -g status off",
+                "set -g pane-border-status top",
+                "set -g pane-border-format \" #{?#{@rein_role},#{@rein_role} · #{@rein_account},#{pane_index}} \"",
             ],
-            "exactly V8's list"
+            "exactly V8's list (E-58: the pane role labels)"
         );
+        // E-58: no shell substitution anywhere in the file, comments included.
+        assert!(!CONF.contains("#("), "the config holds `#(`");
     }
 
     /// V8 3b and its rule for every argv script: one line, no quote character, no file text.

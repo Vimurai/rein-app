@@ -150,6 +150,7 @@ e2e() { # e2e <label> <app|user> → the stand-in rein starts a session through 
   # The user's config: a marker option, a key binding and a plugin-style run-shell line.
   cat >"$h/.tmux.conf" <<EOF
 set -g @user-marker yes
+set -g pane-border-format "USER-FORMAT"
 bind-key M-y display-message user-binding
 run-shell "touch $W/plugin-ran-$1"
 EOF
@@ -173,11 +174,21 @@ check "app: the user's option is absent" "" "$(tm -L rein-app show-options -gv @
 check "app: the user's binding is absent" 0 "$(tm -L rein-app list-keys | grep -c user-binding)"
 check "app: the user's run-shell did not run" no "$([ -e "$W/plugin-ran-app" ] && echo yes || echo no)"
 check "app: the app's config is in force (status off)" off "$(tm -L rein-app show-options -gv status)"
+# E-58: rein's pane roles as labels, from the app's own config, never the user's format.
+check "app: pane labels on top" top "$(tm -L rein-app show-options -gv pane-border-status)"
+check "app: the label format is the app's" "$(sed -n 's/^set -g pane-border-format "\(.*\)"$/\1/p' "$SRC/tmux_app.conf")" "$(tm -L rein-app show-options -gv pane-border-format)"
+check "app: the user's own label format is absent" 0 "$(tm -L rein-app show-options -g pane-border-format | grep -c USER-FORMAT)"
+p0="$(tm -L rein-app list-panes -t demo -F '#{pane_id}' | head -n1)"
+check "app: a pane without a role shows its index" " 0 " "$(tm -L rein-app display-message -p -t "$p0" '#{E:pane-border-format}')"
+tm -L rein-app set-option -p -t "$p0" @rein_role engineer
+tm -L rein-app set-option -p -t "$p0" @rein_account personal
+check "app: a pane rein named shows its role and account" " engineer · personal " "$(tm -L rein-app display-message -p -t "$p0" '#{E:pane-border-format}')"
 
 e2e user user
 check "user: the session is on the default server" demo "$(tm list-sessions -F '#S')"
 check "user: the user's option is there" yes "$(tm show-options -gv @user-marker)"
 check "user: the user's binding is there" 1 "$(tm list-keys | grep -c user-binding)"
+check "user: the user's own label format applies" USER-FORMAT "$(tm show-options -gv pane-border-format)"
 for _ in $(seq 1 20); do [ -e "$W/plugin-ran-user" ] && break; sleep 0.1; done
 check "user: the user's run-shell ran" yes "$([ -e "$W/plugin-ran-user" ] && echo yes || echo no)"
 
