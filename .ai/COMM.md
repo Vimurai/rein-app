@@ -2299,3 +2299,49 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+---
+## Handoff — 2026-11-13 09:45 UTC
+**From**: Engineer → Architect
+**Trigger**: E-55 DONE; E-57 installer path; **E-57 stopped before the first write** — V8 component 3 cannot be built safely on Windows as written. Proposal below
+
+### What was built
+- **E-55 DONE** (3f69bfe). Installer in Downloads: `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E55-2651c3d.exe` (run 43393915722, sha256 2ae1eccd…1859).
+- **E-57: nothing written yet.** `security_engineer` has not been dispatched; it reviews the design you rule on.
+
+### Why I stopped (V8: "if something in it cannot be built as written, stop and report")
+- V8 component 3 is **one** constant start script that ensures the two files and then starts rein. On Windows it can only reach WSL as a **`wsl.exe` command-line argument**: the tab is a pty running `wsl.exe -d D --cd P -e <shell> -lic <script>`, and the pty's stdin is the terminal.
+- To "ensure the two files" that script must carry the shim's and the config's full text: lines, quotes, `$`, a here-document. That text would go through Windows command-line quoting and then `wsl.exe`'s own argument handling.
+  - We already know that path re-parses: `PROBE_SCRIPT` needs `\\\\n` to arrive as `\n`.
+  - V6 deliberately feeds its script on **stdin** for that reason. Every argv script so far has no quotes at all.
+  - A mangled quote or `$` in a script that writes a file put first on `PATH` is a Tier 3 failure I can't rule out. The only test I have is my own PowerShell harness, which quotes differently from portable-pty.
+
+### Proposal (same behaviour, split into two constant scripts by transport)
+1. **Setup script, fed on stdin** (the V6 transport: `/bin/sh -s` locally, `wsl.exe -d D -e sh -s` on Windows), run by the app **before** it opens the tab's pty. It:
+   - sets `umask 077`;
+   - finds the tmux home from `XDG_STATE_HOME` / `HOME`;
+   - refuses a path with a newline or quote, a symlinked home or `bin`, or a home not owned by the user or writable by group or others;
+   - creates 0700 / 0700 / 0600;
+   - compares the two files with the constant contents and rewrites them (temporary name, rename) when they differ.
+   
+   Exit codes map to fixed sentences, as V6's do. On failure the tab does not open and says why (with `tmux.server = "app"`).
+2. **Start script, argv, short and quote-free** (replaces `tty; exec ~/.rein/bin/rein start`):
+   `H=${XDG_STATE_HOME:-$HOME/.local/state}/rein-app/tmux; [ -O $H/bin/tmux ] && [ ! -L $H ] && [ ! -L $H/bin ] || exit 126; unset TMUX TMUX_PANE; PATH=$H/bin:$PATH; tty; exec ~/.rein/bin/rein start`
+   - It re-checks ownership and symlinks just before use, which narrows setup→start to a same-user race.
+   - An unquoted `$H` with a space fails the test, so it **fails closed** (exit 126) rather than open.
+   - No file text passes through argv.
+   - Linux / macOS use the same two scripts (`/bin/sh -s` for setup, the login shell `-lic` for start), so there is one design everywhere.
+- **Cost:** one extra short process per tab open (`wsl.exe … sh -s` on Windows, about 0.4 s by E-53's numbers), before the pty opens. It does not delay the tab's output once open.
+- **Your other V8 rules are unchanged:** the shim, the closed-list config, the overlay on `-L rein-app`, `tmux.server`, the tests.
+
+### Answer for the rein request (does anything bypass the shim?)
+- **`rein` calls tmux only by name.** Every call is plain `tmux` after `command -v tmux` (`~/.rein/bin/rein`). There is no absolute path in `rein`, its hooks or its scripts.
+- **Inside the panes there is a second safeguard.** tmux sets `$TMUX` to the server's socket, and a plain `tmux` in a pane talks to *that* server even if the pane's shell rc rewrites `PATH` and loses the shim. So `rein pane` and rein's hooks inside the panes reach the app's server either way.
+- **The shim only matters for the first `tmux` call that starts the server** (from `rein start`, before any pane exists). That call is on the start script's `PATH`.
+
+### Next action needed
+- **Rule on the two-script split.** Accept it, or name another transport. I start with `security_engineer` on whichever design you rule, then build.
+
+### Open risks
+- The Windows quoting question applies to any future argv script. Keeping argv scripts quote-free, as all of them are today, is worth writing into V8 as a rule.
+---
