@@ -205,3 +205,5 @@
 [CRITIC_STAMP] 2026-11-13 | b74963a emirkovacevic@protonmail.com | [TIER_2] E-63 rework — run_review passed
 [ALIGN_PASS] 2026-11-13 | 1137f6e emirkovacevic@protonmail.com | [TIER_2] E-65 Windows CI shells (bash), actions.ts eol=lf, harden.test file URL
 [CRITIC_STAMP] 2026-11-13 | 1137f6e emirkovacevic@protonmail.com | [TIER_2] E-65 — run_review passed (ci_gate documented in DEVOPS.md)
+[CRITIC_STAMP] 2026-11-13 | 61c9739 emirkovacevic@protonmail.com | [TIER_2] E-65 red-proof test (branch only, deliberately failing; removed before master)
+[SEC_PLAN] 2026-11-13 | 899b4f2 emirkovacevic@protonmail.com | [TIER_3] E-64 pre-write review: APPROVE WITH CONSTRAINTS C1-C8 (IFS=/noglob guard, rein-app $0 word, email charset without % :, enum prefix, Rust-formatted spec, native Rust confirm for team_mode, shared busy lock, bounded output); no P0 open
