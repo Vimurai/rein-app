@@ -16,6 +16,13 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
 
+# E-65: bash everywhere (Git Bash on Windows, -eo pipefail). The Windows default, PowerShell,
+# does not stop on a native command's non-zero exit, so a multi-line step reported only its
+# last command — `npm test` failed on every Windows run while the job stayed green.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   test:
     name: test (${{ matrix.os }})

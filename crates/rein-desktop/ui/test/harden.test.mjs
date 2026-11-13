@@ -4,13 +4,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const harden = fileURLToPath(new URL("../src/harden.ts", import.meta.url));
+// Imported by file:// URL, not by path: on Windows `import("D:\\…")` is refused (E-65 — the
+// child failed before hardening ran, on every Windows run).
+const hardenUrl = pathToFileURL(harden).href;
 
 test("after hardening, Object.prototype cannot be polluted", () => {
   const script = `
-    const { hardenPrototypes } = await import(${JSON.stringify(harden)});
+    const { hardenPrototypes } = await import(${JSON.stringify(hardenUrl)});
     hardenPrototypes();
     // The classic gadget: a merge that walks attacker-chosen keys into obj["__proto__"].
     const obj = {};

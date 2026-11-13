@@ -158,6 +158,9 @@ jobs:
         run: |
           ${{ matrix.packages_install }}
       - name: Build artifacts
+        # E-65: bash on every runner — under PowerShell (Windows) a failed `dist build` was
+        # followed by a successful `echo`, and the step passed.
+        shell: bash
         run: |
           # Actually do builds and make zips and whatnot
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
