@@ -454,3 +454,22 @@ A fresh throwaway clone with the artifact regenerated; the assertions are unchan
 - Delete the step.
 
 **Local run:** `bash crates/rein-desktop/tests/e2e/agents.sh` (about 3 s).
+
+### 2026-11-13 — E-65: a failing command fails the Windows jobs (bash, not PowerShell)
+**What / why**
+- **Found in E-63.** `test (windows-latest)`'s step "window UI — install, type-check, test, bundle" is a multi-line `run:` under the Windows default shell, PowerShell. PowerShell does not stop when a native command exits non-zero; the step's result is the last command's (`npm run build`). So `npm test` failed on every Windows run (2 tests: `actions.test.mjs`, `harden.test.mjs`) while the job stayed green. D-048 took that green to mean the window UI tests pass on Windows.
+- **Changes:**
+  - `ci.yml` and `desktop-windows.yml` get workflow-level `defaults: run: shell: bash`. On Windows that is Git Bash with `-eo pipefail`: every command in a multi-line step fails the step. Steps with their own shell (the `pwsh` PE-subsystem check) keep it.
+  - `release.yml` (dist-generated, `allow-dirty = ["ci"]`): its one Windows-capable multi-line step that can hide a failure, "Build artifacts" (`dist build … > dist-manifest.json` then `echo`), gets `shell: bash`, as its neighbour "Post-build" already has.
+  - **The two tests' causes**, fixed at the cause:
+    - `.gitattributes` keeps the generated `src/actions.ts` LF on every checkout. The Windows checkout made it CRLF, unequal to the generator's LF.
+    - `harden.test.mjs` imports `harden.ts` by `file://` URL. Node on Windows refuses a bare `D:\…` path in `import()`, so the hardening never ran there.
+- **Proof on a branch first:** a draft PR with a deliberately failing UI test must turn `test (windows-latest)` red. The test is then removed and the PR closed.
+
+**Security implications**
+- No secrets, no new permissions, no network. Bash on Windows is Git Bash, already on the runner and already used by the clippy, test and release-key steps.
+
+**Rollback**
+- Revert the commit. The `defaults:` blocks and the one `shell: bash` line are self-contained.
+
+**Also checked:** `build-linux-packages.yml` and `release.yml`'s Linux-only jobs run bash already (`bash -e` is the default on Linux and macOS). The remaining Windows-capable single-command steps report that command's exit code.

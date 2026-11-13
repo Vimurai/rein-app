@@ -3,6 +3,9 @@
 docs/contract/release-key.pub -text
 # E-22: shell scripts run on Windows runners too (Git Bash); a CRLF checkout breaks bash.
 *.sh text eol=lf
+# E-65: generated and compared byte for byte with its generator's LF output
+# (ui/test/actions.test.mjs); a CRLF checkout on Windows made the test fail there.
+crates/rein-desktop/ui/src/actions.ts text eol=lf
 # E-48: the bundled fonts are checked against their SHA-256 manifest (D-051).
 *.woff2 binary
 *.ttf binary

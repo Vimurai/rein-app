@@ -21,6 +21,12 @@ concurrency:
   group: desktop-windows-${{ github.ref }}
   cancel-in-progress: true
 
+# E-65: bash (Git Bash, -eo pipefail): under the default PowerShell a multi-line step reports
+# only its last command. The PE check keeps its own `shell: pwsh`.
+defaults:
+  run:
+    shell: bash
+
 env:
   CARGO_TERM_COLOR: always
 
