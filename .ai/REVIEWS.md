@@ -203,3 +203,5 @@
 [CRITIC_STAMP] 2026-11-13 | 7cea9f1 emirkovacevic@protonmail.com | [TIER_2] E-63 Windows dead-code fix — run_review passed
 [ALIGN_PASS] 2026-11-13 | b74963a emirkovacevic@protonmail.com | [TIER_2] E-63 rework aligned (V9 "Rework ruled on review of E-63": failed-init paint, update confirm, inside a project)
 [CRITIC_STAMP] 2026-11-13 | b74963a emirkovacevic@protonmail.com | [TIER_2] E-63 rework — run_review passed
+[ALIGN_PASS] 2026-11-13 | 1137f6e emirkovacevic@protonmail.com | [TIER_2] E-65 Windows CI shells (bash), actions.ts eol=lf, harden.test file URL
+[CRITIC_STAMP] 2026-11-13 | 1137f6e emirkovacevic@protonmail.com | [TIER_2] E-65 — run_review passed (ci_gate documented in DEVOPS.md)

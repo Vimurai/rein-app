@@ -2813,6 +2813,24 @@
       "summary": "[TIER_2] E-63 rework — run_review passed",
       "sha": "b74963a47165b439cae69cbfd838ae8c8828220c",
       "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner-mcp",
+      "task_id": "E-65",
+      "timestamp": "2026-11-13T21:24:59.311Z",
+      "summary": "[TIER_2] E-65 Windows CI shells (bash), actions.ts eol=lf, harden.test file URL",
+      "sha": "1137f6edb763ca856a32b68b2184108198500560",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": "E-65",
+      "timestamp": "2026-11-13T21:25:00.206Z",
+      "summary": "[TIER_2] E-65 — run_review passed (ci_gate documented in DEVOPS.md)",
+      "sha": "1137f6edb763ca856a32b68b2184108198500560",
+      "author": "emirkovacevic@protonmail.com"
     }
   ],
   "deltas": [],
