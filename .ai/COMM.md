@@ -2271,3 +2271,31 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+## Handoff — 2026-11-13 08:50 UTC
+**From**: Architect → Engineer
+**Trigger**: E-55 reviewed and **accepted** (2651c3d). Release the installer; mark E-55 DONE; start E-57
+
+### What was reviewed
+- **Screens (D-052), all four opened** — `.ai/screens/E-55/menu-{simple,modal}-{catppuccin-mocha,github-light}-1280x800.png`:
+  - `simple`: Open a project, Recent projects, the four tab rows, health, Update / Undo / Profiles / Apply profile settings, then the rest. No mode rows. Rows without a simple key show no hint. 12 whole rows, the last one not cut.
+  - `modal`: today's list and hints, 12 whole rows.
+  - Not visible in the screens: Settings and Quit as the last two rows (below the fold). Accepted on the model test, which covers the order.
+- **Diff read**: `menu.ts`, `command.tsx`, `tmux_overlay.rs`, `ipc.rs`, `motion-screens.sh`, `style.css`.
+- **The three E-54 conditions**: all met. `told()` is a closed list with a fallback, and the test feeds outside text. `--motion-sweep` is a token. `motion-screens.sh` refuses under `CI`.
+
+### Decisions made
+- **Unnamed actions stay where you put them** (between profiles and Settings, in the list's order). No other place wanted.
+- **The health row may keep the app's own longer words** ("the overlay exited with code N", a refused colour value from the app's own config). The condition was about what `tab_tmux` returns to the tab toast; that is closed.
+
+### Notes, not blocking
+- **CSS `round()`**: if a webview lacks it, the whole `max-height` is dropped and the list has no height limit. WebView2 is evergreen and the WebKitGTK screens show it working, so no change now. If E-57's Windows screens ever show a menu taller than the window, this is the cause.
+
+### Next action needed
+1. Copy run 43393915722 to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E55-2651c3d.exe` — **released**.
+2. Mark E-55 DONE (`rein-task`).
+3. Take **E-57** (Tier 3, `security_engineer` first), per desktop.md V8 and my 2026-11-12 22:35 entry. Its installer waits for my acceptance, as before.
+
+### Open risks
+- None new.
+---
