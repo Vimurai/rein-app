@@ -1031,6 +1031,41 @@ with an error, the confirm, both themes.
 **Rollback.** The sheet only calls rein; reverting the task's commit removes it. A
 migrate is undone by rein's own `--legacy` / `--team`.
 
+**Ruling after the read of rein 0.5.0 (2026-11-13, E-64) — this replaces the parts of
+components 1–3 and the IPC it contradicts.**
+- **The app does not claim a mode.** rein's team-mode marker is `.ai/project.json`,
+  which the app does not read, and a team-mode project may have no `team.json`. The
+  sheet matches `rein team show`'s output against two fixed shapes and offers by shape:
+  - first line starts `planner: ` → the text, the add form, and **Go back to
+    single-developer mode**;
+  - exactly rein's fixed "no .ai/team.json" line → the line, the add form, and **Turn on
+    team mode** (rein answers "already a team project" if it is one);
+  - anything else → the text only, no button, one fixed line.
+  No row is parsed; everything rein prints stays text.
+- **The add form is always shown** in the first two shapes. Outside team mode rein
+  refuses with its own line, which names the fix; the app does not predict it.
+- **Prefix** is a choice of `E` or `P` (what rein mints), not typed.
+- **No trunk picker and no `--trunk`.** Turn on team mode runs `rein state migrate
+  --team`; rein finds the trunk or answers `NO_TRUNK`, shown as printed. `team_mode`
+  has no trunk parameter. `rein trunk`'s one line is still shown.
+- **The confirms use fixed sentences written from the read**, default No:
+  - team: "rein turns this project's task list into one file per task, writes
+    .ai/team.json with you as the planner, and stops tracking TASKS.md. The project
+    must have no uncommitted changes. Commit the result afterwards. Close and reopen
+    the project so its agents pick up the change. The Tasks panel does not read team
+    projects yet."
+  - legacy: "rein folds the task files back into one list and removes .ai/team.json
+    with every developer's id range. The project must have no uncommitted changes.
+    Commit the result afterwards. Close and reopen the project so its agents pick up
+    the change."
+  These describe rein 0.5.0 and are provisional until rein has a dry run.
+- **Transport.** Linux / macOS: each value its own argv word, no shell. Windows: the
+  values as positional words after a constant quote-free script that re-validates them
+  with `case` patterns before `exec`. Accepted characters are
+  `[A-Za-z0-9._%+@:-]` only, so neither Windows argv quoting nor word splitting can
+  change a value. `security_engineer` may narrow this (for example drop `%`) or move
+  the values to stdin; either is within this ruling.
+
 **Contract note.** `rein team`, `rein state migrate` and `rein trunk` are not in the
 contract's list of stable entry points (§3.6). The sheet is built against rein 0.5.0 and
 fails soft on a different answer; the request to rein asks to add them, with `--json`.

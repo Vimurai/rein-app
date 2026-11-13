@@ -62,6 +62,12 @@ The window gets a Project sheet that shows `rein team show` / `rein trunk` and r
   entry points**, each with `--json`.
 - **e. Commands to change and remove a developer and to change a range.** rein-app will
   not edit `.ai/team.json` itself.
+- **f. Found reading 0.5.0 for the sheet:** no command says whether a project is in
+  team mode except as prose (`team show`'s first line), and a team-mode project may
+  have no `team.json`. Please give `rein team show --json` a `mode` field. Also wanted:
+  a list of branch names `--trunk` would accept, and `rein state migrate --dry-run`
+  that prints what will change (rein-app's confirm text is hand-written from the code
+  today). Is it safe to migrate while agents run in the project?
 
 ## Asked of rein-plugins
 4. **May a plugin carry panel descriptors** (for example `panels/<id>.json`, schema in

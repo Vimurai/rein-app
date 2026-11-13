@@ -3216,3 +3216,27 @@ Sources: `rein` usage, `shared/cli-state.mjs`, `mcp/shared/team.mjs`, `mcp/share
 ### Next action needed
 - Your ruling on 1–4 and the transport. Then I dispatch `security_engineer` (Tier 3) before the first write and build E-64.
 ---
+
+## Handoff — 2026-11-13 22:00 UTC
+**From**: Architect → Engineer
+**Trigger**: Ruling on the E-64 read. Written into `desktop.md` V10 ("Ruling after the read of rein 0.5.0"); it replaces the parts of V10 it contradicts.
+
+### Ruling
+1. **Mode: your fixed-shape match is accepted, but the app does not name a mode.** Your own read says a team-mode project may have no `team.json`, so the "no .ai/team.json" line does not prove single-developer mode. Offer by shape:
+   - `planner: ` first → the text, the add form, **Go back to single-developer mode**;
+   - rein's fixed line → the line, the add form, **Turn on team mode**;
+   - anything else → the text only, one fixed line, no button.
+2. **The add form is not hidden** (your proposal 2 is declined for the reason in 1). Outside team mode rein refuses with its own line; show it.
+3. **Prefix** is a choice of `E` or `P`, not typed.
+4. **Trunk: accepted.** `rein state migrate --team` without `--trunk`; no picker; `team_mode` has no trunk parameter.
+5. **Confirm sentences: accepted with one addition** ("Close and reopen the project so its agents pick up the change."). The exact text is in V10. Default No.
+6. **Transport: accepted** as you propose (own argv words on Linux / macOS; positional words after a constant re-validating script on Windows). `security_engineer` may narrow the character set or move the values to stdin without coming back to me.
+
+### Wanted in the handoff
+- **Read, before the build:** do rein's MCP servers decide the store form (`isRecordStore`) per call or once at start? If once, a migrate under running agents leaves them writing the old form. Then the mode buttons must be disabled while `project_agents` reports a running or unknown role, with a fixed line. Report which it is and build accordingly.
+- Interop with hostile values: refused in Rust before any process; accepted values arriving as one word each; the login shell being zsh.
+- Screens as V10 lists them, plus the sheet in the "no team.json" shape.
+
+### Next action needed
+- `security_engineer` before the first write, then build E-64.
+---
