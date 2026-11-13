@@ -121,7 +121,7 @@ check "start: one line" 1 "$(wc -l <"$SRC/tmux_start.sh" | tr -d ' ')"
 for sh in sh bash zsh; do
   command -v "$sh" >/dev/null 2>&1 || { echo "skip $sh (not installed)"; continue; }
   out="$(cd "$W" && env -i HOME="$h" PATH="/usr/bin:/bin" TMUX=/x TMUX_PANE=%1 XDG_STATE_HOME="$W/xdg" "$sh" -c "$START" 2>&1)"
-  check "start ($sh): runs rein start with ~ expanded under set -f" "REIN start" "$(echo "$out" | cut -d' ' -f1-2)"
+  check "start ($sh): runs rein start with ~ expanded under set -o noglob" "REIN start" "$(echo "$out" | cut -d' ' -f1-2)"
   check "start ($sh): the shim first on PATH, TMUX unset, XDG_STATE_HOME ignored" "TMUX=[unset] PATH=$H/bin:/usr/bin:/bin" "$(echo "$out" | cut -d' ' -f3-)"
   # A HOME holding a glob character that would match a ready home next to it.
   mkdir -p "$W/gl" && cp -R "$h" "$W/gl/hax" && g="$W/gl/h?x"
@@ -129,6 +129,11 @@ for sh in sh bash zsh; do
   m="$(home "missing-$sh")"
   check "start ($sh): no shim → exit 126" 126 "$( (env -i HOME="$m" PATH=/usr/bin:/bin "$sh" -c "$START" >/dev/null 2>&1); echo $?)"
 done
+# zsh with GLOB_SUBST and SH_WORD_SPLIT (a user rc can set them): `set -f` would be NO_RCS
+# there and the glob HOME would pass the checks; `set -o noglob` refuses it.
+if command -v zsh >/dev/null 2>&1; then
+  check "start (zsh GLOB_SUBST SH_WORD_SPLIT): a glob in HOME is not expanded (exit 126)" 126 "$( (env -i HOME="$W/gl/h?x" PATH=/usr/bin:/bin zsh -c "setopt GLOB_SUBST SH_WORD_SPLIT; $START" >/dev/null 2>&1); echo $?)"
+fi
 h2="$(home linkshim)"
 setup "$h2" >/dev/null
 H2="$h2/.local/state/rein-app/tmux"

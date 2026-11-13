@@ -196,7 +196,8 @@ mod tests {
     fn the_start_scripts_are_argv_safe() {
         for s in [start_script().to_string(), start_script_wsl()] {
             assert!(!s.contains(['\'', '"', '\n', '`', '\\']), "{s}");
-            assert!(s.starts_with("set -f; H=$HOME/.local/state/rein-app/tmux; "));
+            // set -o noglob, not set -f: in zsh -f is NO_RCS (security_engineer, 2026-11-13).
+            assert!(s.starts_with("set -o noglob; H=$HOME/.local/state/rein-app/tmux; "));
             assert!(s.ends_with("exec ~/.rein/bin/rein start"));
             assert!(
                 s.contains("|| exit 126;")
