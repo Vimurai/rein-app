@@ -42,6 +42,7 @@ const ALLOWED: &[&str] = &[
     "allow-clipboard-read",
     "allow-ui-get",
     "allow-ui-set",
+    "allow-panel-data",
 ];
 
 fn json(rel: &str) -> serde_json::Value {

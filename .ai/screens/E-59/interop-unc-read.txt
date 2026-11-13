@@ -1,0 +1,18 @@
+# E-59 Windows interop — 2026-11-13 11:57 UTC, Windows 10.0.26300, WSL Ubuntu
+# The read path WslHost::read_project_file takes on Windows: the distro's UNC path (\wsl.localhost\<distro>\<project>\.ai\…), no process.
+# Measured from Windows with PowerShell/.NET on the same share (the Rust read is the same file opens; .NET cannot pass FILE_FLAG_OPEN_REPARSE_POINT,
+# which only changes how a link is opened, not the read). Each line: attributes seen, bytes, cumulative ms from the first stat.
+
+this repo (cold): .ai attrs=Directory; state.json attrs=Normal, 233586 B read by 31 ms; COMM.md attrs=Normal, tail 190316 B by 93 ms (total)
+synthetic 2 MiB state + 600 KiB COMM: .ai attrs=Directory; state.json attrs=Normal, 2097726 B read by 16 ms; COMM.md attrs=Normal, tail 524288 B by 32 ms (total)
+this repo (warm): .ai attrs=Directory; state.json attrs=Normal, 233586 B read by 5 ms; COMM.md attrs=Normal, tail 190316 B by 9 ms (total)
+synthetic (warm): .ai attrs=Directory; state.json attrs=Normal, 2097726 B read by 14 ms; COMM.md attrs=Normal, tail 524288 B by 21 ms (total)
+
+# Limit (panels.md §Execution Constraints): 500 ms on Windows for a 2 MiB state.json + the 512 KiB COMM.md tail — met (32 ms cold, 21 ms warm).
+# Parse of a 2 MiB state.json + a 546 KiB COMM.md (Rust, release, panel_sources::tests::parsing_is_fast_enough): 23 ms on Linux (limit 100 ms).
+# For comparison, wsl.exe + a constant read script: about 155 ms per read (launched from WSL; one process per read).
+
+# What the share shows for each file type in place of .ai/state.json or .ai/COMM.md (created in WSL, seen from Windows):
+#   symlink, dangling symlink, directory symlink, FIFO, Unix socket → ReparsePoint (refused: the handle's reparse bit)
+#   directory → Directory (refused); regular file → Normal (read)
+#   (security_engineer re-probed all five ReparsePoint cases from Windows in its pre-write review; a device node needs root and was not made.)

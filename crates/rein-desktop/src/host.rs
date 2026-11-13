@@ -53,6 +53,16 @@ pub trait Host: Send + Sync {
         server: crate::tmux_server::Server,
     ) -> Result<ChildSpec, IpcError>;
 
+    /// Read (or, with `read` false, only stat) one of the two panel files under `project`
+    /// (panels.md §API, E-59): a regular file only, size limits per file; Linux / macOS
+    /// directly, Windows through the distro's UNC path.
+    fn read_project_file(
+        &self,
+        project: &Path,
+        which: crate::project_file::ProjectFile,
+        read: bool,
+    ) -> Result<crate::project_file::FileBytes, crate::project_file::Unavailable>;
+
     /// Make or check the tmux home before a tab opens on the app's server (V8 3a): the
     /// constant setup script on stdin — `/bin/sh -s` here, `sh -s` inside WSL on Windows.
     /// `Err` is the app's fixed sentence for why not.

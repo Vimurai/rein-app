@@ -25,6 +25,7 @@
     "allow-clipboard-read",
     "allow-ui-get",
     "allow-ui-set",
+    "allow-panel-data",
     "core:window:allow-close",
     "core:window:allow-start-dragging",
     "core:window:allow-minimize",

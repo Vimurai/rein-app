@@ -402,6 +402,37 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
         })
     }
 
+    /// The panel files through the distro's UNC path — no process (panels.md §API; measured
+    /// in E-59 against `wsl.exe` + a script). The project is the tab's validated Linux path;
+    /// `.` and `..` segments are refused, since the UNC path is not made canonical.
+    #[allow(unused_variables)] // the read is Windows-only; elsewhere this host only runs in tests
+    fn read_project_file(
+        &self,
+        project: &Path,
+        which: crate::project_file::ProjectFile,
+        read: bool,
+    ) -> Result<crate::project_file::FileBytes, crate::project_file::Unavailable> {
+        use crate::project_file::Unavailable;
+        let p = project.to_string_lossy();
+        // `.`, `..`, and a segment ending in a dot or a space (Windows strips those, so
+        // `proj.` would read `proj`'s files — E-59 review) are refused.
+        let odd = |s: &str| s == "." || s == ".." || s.ends_with('.') || s.ends_with(' ');
+        if wsl_path::check_linux(&p).is_err() || p.split('/').any(odd) {
+            return Err(Unavailable::Unreadable);
+        }
+        let d = self.probe_distro().map_err(|_| Unavailable::Unreadable)?;
+        #[cfg(windows)]
+        {
+            let ai = PathBuf::from(format!("{}\\.ai", unc_of(&d.name, &p)));
+            crate::project_file::read_unc(&ai, which, read)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = d;
+            Err(Unavailable::Unreadable)
+        }
+    }
+
     /// `wsl.exe -d D -e sh -s` with the setup script on stdin (V8 3a): the tmux home inside
     /// WSL. Only the distro's name is put in argv; the script is a constant.
     fn tmux_setup(&self) -> Result<(), &'static str> {

@@ -19,7 +19,10 @@ mod host;
 mod ipc;
 #[cfg(unix)]
 mod local_host;
+mod panel_ipc;
+mod panel_sources;
 mod pointer_ipc;
+mod project_file;
 mod project_path;
 mod projects;
 mod pty;
@@ -258,7 +261,8 @@ fn main() -> ExitCode {
             pointer_ipc::project_choose,
             pointer_ipc::clipboard_read,
             pointer_ipc::ui_get,
-            pointer_ipc::ui_set
+            pointer_ipc::ui_set,
+            panel_ipc::panel_data
         ]);
     let result = builder
         .setup(move |app| {

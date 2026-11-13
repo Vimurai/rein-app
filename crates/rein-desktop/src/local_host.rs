@@ -102,6 +102,15 @@ impl Host for LocalHost {
         })
     }
 
+    fn read_project_file(
+        &self,
+        project: &Path,
+        which: crate::project_file::ProjectFile,
+        read: bool,
+    ) -> Result<crate::project_file::FileBytes, crate::project_file::Unavailable> {
+        crate::project_file::read_local(project, which, read)
+    }
+
     /// `/bin/sh -s` with the setup script on stdin, in `/`, the start's variables removed.
     fn tmux_setup(&self) -> Result<(), &'static str> {
         let mut cmd = std::process::Command::new("/bin/sh");

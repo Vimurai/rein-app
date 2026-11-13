@@ -114,6 +114,8 @@ pub struct Desktop {
     /// still waiting is dropped (security review of E-51, F4).
     overlay_run: Mutex<()>,
     overlay_seq: Mutex<HashMap<u32, u64>>,
+    /// The panels' parsed sources per tab, kept while the file is unchanged (E-59).
+    pub panels: crate::panel_ipc::PanelCache,
 }
 
 impl Desktop {
@@ -126,7 +128,16 @@ impl Desktop {
             overlay: OverlayHealth::default(),
             overlay_run: Mutex::new(()),
             overlay_seq: Mutex::new(HashMap::new()),
+            panels: crate::panel_ipc::PanelCache::default(),
         }
+    }
+
+    /// The project a tab of this window runs in, as recorded when it opened — the only path a
+    /// panel source reads under (panels.md §API: the web side never sends a path).
+    pub fn tab_project(&self, tab: u32) -> Option<std::path::PathBuf> {
+        self.tabs()
+            .get(&tab)
+            .map(|t| std::path::PathBuf::from(&t.project))
     }
 
     fn tabs(&self) -> std::sync::MutexGuard<'_, HashMap<u32, Tab>> {
@@ -277,6 +288,7 @@ impl Desktop {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(&tab);
+        self.panels.forget(tab);
     }
 }
 
@@ -716,6 +728,14 @@ mod tests {
             unreachable!()
         }
         fn tmux_setup(&self) -> Result<(), &'static str> {
+            unreachable!()
+        }
+        fn read_project_file(
+            &self,
+            _: &Path,
+            _: crate::project_file::ProjectFile,
+            _: bool,
+        ) -> Result<crate::project_file::FileBytes, crate::project_file::Unavailable> {
             unreachable!()
         }
         fn complete_dir(&self, _: &str) -> Result<Vec<String>, IpcError> {

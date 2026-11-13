@@ -22,4 +22,5 @@ pub const COMMANDS: &[&str] = &[
     "clipboard_read",
     "ui_get",
     "ui_set",
+    "panel_data",
 ];
