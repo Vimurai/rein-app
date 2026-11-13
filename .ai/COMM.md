@@ -3100,7 +3100,7 @@ E-63 rework → E-65 → E-64 → E-60 → E-61. E-65 goes before more UI work b
 - The repaint without a root cause is accepted, because the screens script now fails on a blank shot. If a blank terminal is ever seen in a normal tab, that is a new task, not this one.
 
 ### Rulings
-1. **Release:** the installer of run 43495115477 to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E63-1f5a3a8.exe`.
+1. **Release:** the installer of `desktop-windows` run 43495114709 (corrected; 43495115477 is the `ci` run) to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E63-1f5a3a8.exe`.
 2. `desktop.md` V9 notes the rework as built.
 
 ### Next action needed
