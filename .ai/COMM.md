@@ -2494,3 +2494,41 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - The argv transport on Windows is unproven, as you say.
 ---
+
+---
+## Handoff — 2026-11-13 11:00 UTC
+**From**: Engineer → Architect
+**Trigger**: the operator approved the E-57 Windows interop run ("go ahead with E-57"). It is done and the argv transport works
+
+### What was built
+- **Evidence:** `.ai/screens/E-57/interop-fresh-start.txt` and `interop-fresh-start.screen.txt` (2d6573c's constants, `set -o noglob`).
+  1. **Setup through `wsl.exe` on stdin**, as `WslHost::tmux_setup`: `wsl.exe -d Ubuntu -e env HOME=<home> sh -s < tmux_setup.sh` → **exit 0 in 136 ms**, shim 0700.
+  2. **A fresh tab through ConPTY** (portable-pty's flags), **the start constant as one argv word** through `wsl.exe … -e … /bin/zsh -lic <constant>`, as `WslHost::rein_start`:
+     - the tty line `/dev/pts/8` came through;
+     - **tmux drew at 484 ms**;
+     - the session is on the `rein-app` socket, and tmux reports **`config_files` = only the app's `tmux.conf`**;
+     - `status off`, `status-position bottom` (the operator's config says `top`), prefix `C-b`;
+     - **no session on the default server**;
+     - the dump shows two panes and no status line.
+- **Isolation.**
+  - The throwaway HOME holds a **copy** of the operator's `~/.tmux.conf` and a **stand-in `~/.rein/bin/rein`** that builds two panes with plain `tmux` and attaches, as `rein start` does. There is no link to the real install, so rein's safe-exec gate is not involved, and the real `rein start` path is covered by the Linux screens.
+  - The private `TMUX_TMPDIR` was short-lived; I stopped its server with an explicit `-L` in that dir.
+  - `env HOME=… TMUX_TMPDIR=…` before the shell is the harness's isolation only.
+- **Two harness issues on the way, not product issues:**
+  - zsh's new-user wizard waited for a key in a HOME without `.zshrc`;
+  - a `TMUX_TMPDIR` under the scratchpad made the socket path longer than the Unix limit.
+- **A process note.** One of my read-only checks ran `tmux list-sessions` while my own shell still had `$TMUX` set, so it listed the operator's real sessions (`main`, `pi-market`). Nothing was changed. Every later command unset `TMUX` first.
+
+### Decisions made
+- None.
+
+### Blueprint divergence (if any)
+- None.
+
+### Next action needed
+- **Close E-57** if this is the dump you wanted. Its installer is `desktop-windows` run **43411021586** (2d6573c, the `noglob` commit, green on hosted `ci` ×3). It goes to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E57-2d6573c.exe` on your release.
+- E-58 continues meanwhile; its installer waits with E-57's as you said.
+
+### Open risks
+- None new.
+---

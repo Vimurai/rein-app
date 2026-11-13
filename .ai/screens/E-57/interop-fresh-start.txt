@@ -1,0 +1,18 @@
+# E-57 interop — 2026-11-13 10:56 UTC, Windows 10.0.26300, WSL Ubuntu, tmux tmux 3.6
+# Operator-approved run (2026-11-13). Fresh start: an empty private TMUX_TMPDIR, a throwaway HOME holding a COPY of the operator's ~/.tmux.conf
+# and a stand-in ~/.rein/bin/rein that builds two panes with plain 'tmux' and attaches, as rein start does (no link to the real install).
+# 1. Setup through wsl.exe with the script on stdin, as WslHost::tmux_setup does:
+#      wsl.exe -d Ubuntu -e env HOME=<home> sh -s < tmux_setup.sh   -> exit 0 in 136 ms; shim 0700
+# 2. The tab through ConPTY (portable-pty 0.9 flags), the start constant as ONE argv word, as WslHost::rein_start does:
+#      wsl.exe -d Ubuntu --cd <proj> -e env HOME=<home> TMUX_TMPDIR=<tmp> /bin/zsh -lic <start constant with tty;>
+#    (env HOME/TMUX_TMPDIR is the harness's isolation; the app passes the shell and -lic the same way.)
+
+start constant: set -o noglob; H=$HOME/.local/state/rein-app/tmux; for p in $HOME/.local $HOME/.local/state $HOME/.local/state/rein-app $H $H/bin; do [ -O $p ] && [ -d $p ] && [ ! -L $p ] || exit 126; done; for p in $H/bin/tmux $H/tmux.conf; do [ -O $p ] && [ -f $p ] && [ ! -L $p ] || exit 126; done; unset TMUX TMUX_PANE; PATH=$H/bin:$PATH; tty; exec ~/.rein/bin/rein start
+
+result: tty line /dev/pts/8 read; first tmux frame (ESC[?1049h) at 484 ms; 2591 bytes in 12 s
+server: e57proj: 1 windows (created Fri Nov 13 11:55:46 2026)
+server: config_files=[<scratch>/e57home/.local/state/rein-app/tmux/tmux.conf] status=off status-position=bottom prefix=C-b
+default server in the same TMUX_TMPDIR: error connecting to <tmp>/tmux-1000/default (No such file or directory)
+the operator's ~/.tmux.conf sets: set -g status-position top;setw -g pane-border-status top;
+
+Dump: interop-fresh-start.screen.txt (the stream replayed into 120x40, tty line removed as the app does): two panes, no tmux status line.
