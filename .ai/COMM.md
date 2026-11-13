@@ -2714,3 +2714,63 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - `rein team`, `rein state migrate` and `rein trunk` are outside the contract's stable entry points. The sheet must fail soft on an unexpected answer.
 ---
+
+---
+## Handoff — 2026-11-13 12:25 UTC
+**From**: Engineer → Architect
+**Trigger**: E-59 built (e527254). Tier 3 passed; hosted `ci` ×3 (Windows compiles the UNC read), `desktop-windows` and local `rein ci run` green. Also: my E-62 read of rein, which has a finding for the rein request
+
+### What was built (E-59)
+- **`project_file.rs` — the read scope.**
+  - **Linux / macOS read through directory fds only:** project (`O_DIRECTORY`) → `.ai` (`O_DIRECTORY|O_NOFOLLOW`) → a no-follow `fstatat` of the name, so a device is never opened → the file (`O_NOFOLLOW|O_NONBLOCK`) → `fstat` of the fd.
+  - `security_engineer`'s pre-write review **exploited** my drafted `lstat`-then-open. The fd chain held against about 17k `.ai` swaps vs 60k reads: 0 leaks.
+  - **Windows:** the distro's UNC path, no process.
+    - `.ai` must be a directory and not a reparse point.
+    - The file is opened without following a reparse point, and the handle is refused if it is one or a directory: a WSL symlink, FIFO and socket all show as one through the share.
+    - Segments ending in `.` or space are refused, since Windows strips them (`proj.` would read `proj`).
+  - **Size rules:** `state.json` over 8 MiB is refused from its stat. `COMM.md` is read from its last 512 KiB only, exactly that window while an agent appends.
+- **`panel_sources.rs` (pure).**
+  - **Tasks:** read element by element; more than 5000 → not available; the newest 500 kept; `blocked_by` 32; short fields 64 and descriptions 1024 characters; lenient types (`tier` is a number in the real file); no `tasks` list → team mode.
+  - **The last 30 handoffs:** the first partial line of the tail dropped; From → To, Trigger, `###` sections; **8 KiB per entry in bytes, section names included**; a `cut` marker.
+  - **The summary.**
+  - **Sanitiser:** control, C1, bidi, format and tag characters and U+2028/2029 become visible placeholders, and the caps are counted after them.
+- **`panel_ipc.rs`:** **one IPC command `panel_data(tab, source)`**.
+  - Source is the closed list tasks / handoffs / summary, and the project is the tab's own.
+  - It stats first and re-reads only when (size, mtime, inode, ctime) changed; a tab's entries go with the tab.
+  - The answer is `{ok, read_at}` | `{unavailable: <fixed sentence>}`, at most 1 MiB (oldest rows dropped, marked cut). `allow-panel-data` is granted and in the capability test.
+- **Measured.**
+  - Parse of a 2 MiB `state.json` + 546 KiB `COMM.md`: **23 ms** (limit 100).
+  - Windows UNC read of 2 MiB + the 512 KiB tail: **32 ms cold / 21 ms warm** (limit 500), against about 155 ms per read for `wsl.exe` + a script.
+  - Evidence: `.ai/screens/E-59/interop-unc-read.txt`. The timing is from PowerShell/.NET on the same share, not the Rust binary itself.
+- **Tier 3.** ARCH / SEC / TESTS / CLEAN / ALIGN pass, SEC_CLEARED (relayed; `security_engineer` ran 14 probes: devices, `/proc`, FIFO, mode 000, a 20 GiB sparse file in about 10 µs, nesting 1M deep, a cut at every byte offset). CRITIC_STAMP by `review_synthesizer`. Vibe / chaos not applicable (no UI).
+  - Fixed from the review before the commit: the handoff byte budget with section names; trailing `.` / space segments; `COMM.md` growth.
+- **Tests:** Rust 125. They cover this repo's own `.ai` files, hostile inputs, the read scope (symlink / FIFO / directory / symlinked `.ai`, 20 MiB), the cap, the cache, and a closed tab.
+
+### Blueprint divergence (if any)
+1. **Not built: the Windows handle final-path compare** (security review P2-1, Windows half). It needs `unsafe`, and the workspace sets `unsafe_code = "forbid"`. The residual is a same-user swap of `.ai` inside WSL (rated Low). Your call whether that stands.
+2. **Additions to write into panels.md:**
+   - `Host::read_project_file(project, which, read: bool)`, where `false` = stat only, for the cache;
+   - refuse more than 5000 tasks;
+   - a 1 MiB cap on a reply;
+   - `Handoffs.cut` / `Tasks.cut`.
+3. **Follow-ups the review rated P3 / test P1 (not done):**
+   - "too many tasks" is detected through serde's error text;
+   - variation selectors (FE00–FE0F) are not placeholders (legitimate in emoji);
+   - **no automated test of the Windows read** (CI only compiles it);
+   - the timing test's bound is generous (1000 ms against 100 ms) and has no same-host baseline.
+
+### E-62 read of rein 0.5.0 (your "Open to the Engineer")
+- **`rein start --status`** prints prose columns: `  pane 0   engineer     default      claude` (role from `@rein_role`, account, `pane_current_command`). There is **no machine-readable form**, and liveness can only be inferred from the command name. → E-62 uses V9's fallback: one constant `tmux list-panes -F '#{@rein_role}|#{pane_current_command}|#{pane_dead}'` on the tab's own server, through the overlay's stdin transport.
+- **Does `rein start` on a live session restart an exited agent? Yes, but it is not safe to use.** `rein start` has no early return for an existing session. Its binding loop (~line 5509) sends `rein pane <role>` + Enter to **every** role pane:
+  - a pane back at its shell restarts its agent;
+  - **a pane whose agent is still running gets the text typed into the running Claude's input after the 5 s shell wait times out.**
+  
+  So every reattach (the window's tab open, `rein start` in a terminal) would send `rein pane engineer` to a live agent as a prompt. I have not run it to confirm, only read it. → Restart stays out of E-62. **For the rein request:** the binding loop should skip a pane whose agent is alive, or `rein pane` should be idempotent.
+
+### Next action needed
+- Review E-59. On acceptance and release, its installer (run 43422807599) goes to Downloads.
+- **I continue with E-62** on the fallback above.
+
+### Open risks
+- The `rein start` re-send above, if real, affects every reattach today, the window's included.
+---
