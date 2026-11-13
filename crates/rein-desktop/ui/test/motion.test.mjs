@@ -37,7 +37,7 @@ test("a loader shows nothing for a wait under --loader-delay (150 ms)", () => {
     }
   }
   const sweep = top.find(([sel]) => sel === ".progress-line > span")?.[1] ?? "";
-  assert.match(sweep, /rein-sweep [^;]*var\(--loader-delay\) infinite/);
+  assert.match(sweep, /rein-sweep var\(--motion-sweep\) [^;]*var\(--loader-delay\) infinite/);
   // An operation that ends in 100 ms unmounts its loader while the hold still hides it.
   assert.ok(parseInt(token("loader-delay"), 10) > 100);
 });
@@ -101,8 +101,8 @@ test("an idle start screen and an idle project tab run no animation", () => {
 test("the script's motion values are the stylesheet's tokens", async () => {
   const { MOTION } = await import("../src/motion.ts");
   assert.deepEqual(
-    [MOTION.fast, MOTION.base, MOTION.slow].map((n) => `${n}ms`),
-    ["motion-fast", "motion-base", "motion-slow"].map(token),
+    [MOTION.fast, MOTION.base, MOTION.slow, MOTION.spin, MOTION.sweep].map((n) => `${n}ms`),
+    ["motion-fast", "motion-base", "motion-slow", "motion-spin", "motion-sweep"].map(token),
   );
   assert.equal(MOTION.ease, token("motion-ease"));
 });

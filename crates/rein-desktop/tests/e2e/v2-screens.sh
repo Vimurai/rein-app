@@ -6,6 +6,7 @@
 # Isolation: HOME, XDG_* and the tmux socket are in a mktemp dir; the `rein` the window finds
 # is a stub (`start` builds a demo session on the private socket, `doctor --scope install
 # --json` answers OK), so no real install, tmux server or Claude is touched.
+# INPUT_STYLE=modal takes the shots in the modal input style (E-55: the menu in both styles).
 # Xvfb note: WebKit there paints an output batch only when the next one arrives, so the
 # terminal shot is preceded by `refresh-client` redraws. Needs Xvfb, tmux, cc, Xlib + XTest
 # headers, ffmpeg.
@@ -83,7 +84,7 @@ launch() { # launch <theme> <first_run_done> [dir]
   local now st="$W/xdg/state/rein-app"
   now=$(date +%s)
   mkdir -p "$st"
-  printf '{"schema":1,"input_style":"simple","first_run_done":%s,"theme":"%s"}' "$2" "$1" >"$st/ui.json"
+  printf '{"schema":1,"input_style":"%s","first_run_done":%s,"theme":"%s"}' "${INPUT_STYLE:-simple}" "$2" "$1" >"$st/ui.json"
   printf '{"schema":1,"recent":[{"path":"%s","last_opened":%d},{"path":"%s","last_opened":%d},{"path":"%s","last_opened":%d}]}' \
     "$W/Dev/schraubr_laravel" $((now - 7200)) "$W/Dev/energy-api" $((now - 90000)) "$W/Dev/rein-app" $((now - 5 * 86400)) >"$st/projects.json"
   env -u TMUX -u TMUX_PANE -u CLAUDECODE \
@@ -109,7 +110,8 @@ for theme in catppuccin-mocha github-light; do
   echo "[$theme ${GW}x${GH}]"
   launch "$theme" false
   shot "first-run-$theme"
-  X key Return # the focused card: simple
+  [ "${INPUT_STYLE:-simple}" = modal ] && X key Tab # the second card: modal
+  X key Return # the focused card
   shot "start-$theme"
   X key 1 # recent project 1
   for _ in $(seq 1 60); do T list-clients 2>/dev/null | grep -q . && break; sleep 0.25; done

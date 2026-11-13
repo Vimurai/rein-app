@@ -66,12 +66,33 @@ test("shortcut key names", () => {
 
 test("the menu lists every action in plain words, with its shortcut", async () => {
   const { menuEntries, showKey } = await import("../src/menu.ts");
-  const entries = menuEntries(DEFAULT_SIMPLE, DEFAULT_MODAL, { tabs: 2 });
-  const names = new Set(entries.map((e) => e.call.name));
+  // modal: every action, in the list's order, with the other style's key named (E-40).
+  const modal = menuEntries(DEFAULT_MODAL, DEFAULT_SIMPLE, { tabs: 2 });
+  const names = new Set(modal.map((e) => e.call.name));
   assert.deepEqual(ACTIONS.map((a) => a.name).filter((n) => !names.has(n)), [], "an action without a menu entry");
+  assert.deepEqual(modal.slice(0, 3).map((e) => e.label), ["Normal mode", "Terminal mode", "Command line"]);
+  assert.equal(modal.find((e) => e.label === "Menu").shortcut, "Ctrl+Shift+P", "the shared shortcuts are modal's own too");
+  // simple (E-55, extends the test above): click-first order, no mode rows, no modal: hints.
+  const entries = menuEntries(DEFAULT_SIMPLE, DEFAULT_MODAL, { tabs: 2 });
   const find = (label) => entries.find((e) => e.label === label);
+  const order = [...new Set(entries.map((e) => e.call.name))];
+  assert.deepEqual(order.slice(0, 11), [
+    "project.open", "project.pick",
+    "tab.next", "tab.prev", "tab.goto", "tab.detach",
+    "health.show",
+    "release.update", "release.rollback", "profiles.show", "profiles.apply",
+  ]);
+  assert.deepEqual(order.slice(-2), ["settings.show", "app.quit"]);
+  const modes = ["mode.normal", "mode.terminal", "mode.command"];
+  assert.deepEqual(entries.filter((e) => modes.includes(e.call.name)), [], "no mode rows in simple");
+  assert.deepEqual(entries.filter((e) => e.shortcut.startsWith("modal:")).map((e) => e.label), [], "no modal: hint in simple");
+  assert.deepEqual(
+    ACTIONS.map((a) => a.name).filter((n) => !modes.includes(n) && !order.includes(n)),
+    [],
+    "every other action is still in the simple menu",
+  );
   assert.equal(find("Menu").shortcut, "Ctrl+Shift+P");
-  assert.equal(find("Check installation health").shortcut, "modal: Space h", "the other style's key, named");
+  assert.equal(find("Check installation health").shortcut, "", "no simple key: no hint");
   assert.equal(find("Go to tab 2").shortcut, "Alt+2");
   assert.ok(find("Theme: nord"));
   assert.ok(find("Input style: modal (vim-style modes)"));

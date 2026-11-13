@@ -6,6 +6,8 @@ export const MOTION = {
   fast: 120,
   base: 150,
   slow: 220,
+  spin: 800,
+  sweep: 1100,
   ease: "cubic-bezier(0.2, 0, 0, 1)",
 } as const;
 

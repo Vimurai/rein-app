@@ -1,6 +1,7 @@
 // The menu (desktop.md "Two ways in", D-034; E-40): one searchable list of every action in
-// plain words, each with its shortcut in the current input style. Pure, so the pointer-parity
-// test can walk it.
+// plain words, each with its shortcut in the current input style. In `simple` style (E-55) it
+// starts with what a click-first user reaches for, leaves out the modes and shows only simple
+// keys. Pure, so the pointer-parity test can walk it.
 
 import { ACTIONS } from "./actions.ts";
 import { expanded, type ActionCall, type KeyTable } from "./keymap.ts";
@@ -61,19 +62,44 @@ export function describe(call: ActionCall, current: KeyTable, other: KeyTable): 
   return key ? `${label}  (${key})` : label;
 }
 
+/** The `simple` style's menu order (E-55, desktop.md "Two ways in"): what a click-first user
+ *  reaches for first. Actions not named here follow, in the list's order, before the last two. */
+export const SIMPLE_FIRST = [
+  "project.open",
+  "project.pick",
+  "tab.next",
+  "tab.prev",
+  "tab.goto",
+  "tab.detach",
+  "health.show",
+  "release.update",
+  "release.rollback",
+  "profiles.show",
+  "profiles.apply",
+] as const;
+export const SIMPLE_LAST = ["settings.show", "app.quit"] as const;
+/** Modes exist only in the `modal` style; a click-first user cannot use them (E-55). */
+export const MODE_ACTIONS = ["mode.normal", "mode.terminal", "mode.command"] as const;
+
 export function menuEntries(
   current: KeyTable,
   other: KeyTable,
   ctx: { tabs: number },
 ): MenuEntry[] {
-  const out: MenuEntry[] = [];
+  const simple = current.style === "simple";
+  const byName = new Map<string, MenuEntry[]>();
   const add = (call: ActionCall, label: string) => {
     const mine = keyFor(current, call);
-    const theirs = mine === null ? keyFor(other, call) : null;
+    // `simple` shows only its own keys: a `modal:` hint is a key a click-first user has not
+    // got (E-55). `modal` names the other style's key, as before.
+    const theirs = mine === null && !simple ? keyFor(other, call) : null;
     const shortcut = mine !== null ? showKey(mine) : theirs !== null ? `${other.style}: ${showKey(theirs)}` : "";
-    out.push({ call, label, shortcut });
+    const list = byName.get(call.name) ?? [];
+    list.push({ call, label, shortcut });
+    byName.set(call.name, list);
   };
   for (const a of ACTIONS) {
+    if (simple && (MODE_ACTIONS as readonly string[]).includes(a.name)) continue;
     const label = LABEL.get(a.name) ?? a.name;
     switch (a.arg) {
       case "n":
@@ -90,5 +116,13 @@ export function menuEntries(
         add({ name: a.name }, label);
     }
   }
-  return out;
+  const named = [...byName.keys()];
+  const order = simple
+    ? [
+        ...SIMPLE_FIRST,
+        ...named.filter((n) => !(SIMPLE_FIRST as readonly string[]).includes(n) && !(SIMPLE_LAST as readonly string[]).includes(n)),
+        ...SIMPLE_LAST,
+      ]
+    : named;
+  return order.flatMap((n) => byName.get(n) ?? []);
 }

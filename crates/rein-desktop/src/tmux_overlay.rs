@@ -85,23 +85,51 @@ pub fn args(tty: &str, mode: &str, c: &Colours) -> Result<Vec<String>, String> {
     Ok(v)
 }
 
+/// The app's own sentences for an overlay that was not applied (desktop.md V7 "Interface
+/// contracts", E-55): the window and the health row are told only these — never text from
+/// tmux, the pty, WSL or the OS. The waits in them are `CLIENT_WAIT` and `LIMIT` (a test).
+pub const BAD_VALUE: &str = "the overlay was given a value it does not accept";
+pub const NO_TMUX: &str = "tmux was not found";
+pub const OLD_TMUX: &str = "tmux is older than 3.2";
+pub const NO_CLIENT: &str = "the tab's tmux client was not attached within 60 seconds";
+pub const REFUSED: &str = "tmux refused an option";
+pub const TIMED_OUT: &str = "the overlay did not finish within 75 seconds";
+/// The run could not be started (no `wsl.exe`, no `/bin/sh`); the OS's words are not passed on.
+pub const COULD_NOT_START: &str = "the overlay could not start";
+/// The tab never named its tty (V6 "Client tty").
+pub const TTY_NOT_SEEN: &str = "the tab's tty was not seen";
+/// Any other reason (another exit code, a WSL probe that failed), as the window is told it.
+pub const OTHER: &str = "the overlay could not run";
+
+const FIXED: [&str; 9] = [
+    BAD_VALUE,
+    NO_TMUX,
+    OLD_TMUX,
+    NO_CLIENT,
+    REFUSED,
+    TIMED_OUT,
+    COULD_NOT_START,
+    TTY_NOT_SEEN,
+    OTHER,
+];
+
+/// The reason as the window is told it: `why` if it is one of the app's own sentences, else
+/// [`OTHER`].
+pub fn told(why: &str) -> &'static str {
+    FIXED.into_iter().find(|f| *f == why).unwrap_or(OTHER)
+}
+
 /// Plain words for the script's exit codes (see its header).
 pub fn reason(code: Option<i32>) -> String {
     match code {
         Some(0) => "applied".into(),
-        Some(2) => "the overlay was given a value it does not accept".into(),
-        Some(3) => "tmux was not found".into(),
-        Some(4) => "tmux is older than 3.2".into(),
-        Some(5) => format!(
-            "the tab's tmux client was not attached within {} seconds",
-            CLIENT_WAIT.as_secs()
-        ),
-        Some(6) => "tmux refused an option".into(),
+        Some(2) => BAD_VALUE.into(),
+        Some(3) => NO_TMUX.into(),
+        Some(4) => OLD_TMUX.into(),
+        Some(5) => NO_CLIENT.into(),
+        Some(6) => REFUSED.into(),
         Some(c) => format!("the overlay exited with code {c}"),
-        None => format!(
-            "the overlay did not finish within {} seconds",
-            LIMIT.as_secs()
-        ),
+        None => TIMED_OUT.into(),
     }
 }
 
@@ -151,7 +179,7 @@ pub fn outcome(run: io::Result<Option<i32>>) -> Result<(), String> {
     match run {
         Ok(Some(0)) => Ok(()),
         Ok(code) => Err(reason(code)),
-        Err(e) => Err(format!("the overlay could not start: {e}")),
+        Err(_) => Err(COULD_NOT_START.into()),
     }
 }
 
@@ -366,6 +394,36 @@ mod tests {
             run(&mut cmd, Duration::from_secs(5), &|| true).unwrap(),
             Some(4)
         );
+    }
+
+    /// V7 "Interface contracts" (E-55): the window is told only the app's own sentences.
+    #[test]
+    fn the_window_is_told_only_fixed_sentences() {
+        for code in [Some(2), Some(3), Some(4), Some(5), Some(6), None] {
+            let words = reason(code);
+            assert_eq!(told(&words), words.as_str(), "exit {code:?}");
+        }
+        for fixed in [COULD_NOT_START, TTY_NOT_SEEN] {
+            assert_eq!(told(fixed), fixed);
+        }
+        // Outside text never passes: tmux's stderr, the OS, a colour from the web side.
+        for outside in [
+            "can't find session: $1",
+            "the overlay could not start: No such file or directory (os error 2)",
+            "colour \"#1e1e2e; kill-server\" is not #rrggbb",
+            "the overlay exited with code 9",
+            "",
+        ] {
+            assert_eq!(told(outside), OTHER, "{outside:?}");
+        }
+        assert_eq!(
+            outcome(Err(io::Error::other("os words"))),
+            Err(COULD_NOT_START.to_string()),
+            "the OS's words are not kept"
+        );
+        // The waits named in the words are the real ones.
+        assert!(NO_CLIENT.contains(&format!("{} seconds", CLIENT_WAIT.as_secs())));
+        assert!(TIMED_OUT.contains(&format!("{} seconds", LIMIT.as_secs())));
     }
 
     #[test]

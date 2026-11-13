@@ -21,6 +21,7 @@ html, body {
   --motion-slow: 220ms;
   --motion-ease: cubic-bezier(0.2, 0, 0, 1);
   --motion-spin: 800ms;
+  --motion-sweep: 1100ms;
   --loader-delay: 150ms;
 }
 /* The UI fades in once on first paint; the window behind it already has the theme's
@@ -76,7 +77,7 @@ html, body {
   width: 40%;
   border-radius: 9999px;
   background: var(--primary);
-  animation: rein-sweep 1100ms var(--motion-ease) var(--loader-delay) infinite;
+  animation: rein-sweep var(--motion-sweep) var(--motion-ease) var(--loader-delay) infinite;
 }
 .skeleton {
   border-radius: 6px;

@@ -16,7 +16,11 @@
 # wrappers: doctor 8 s, start 4 s before attaching, `rein-app rollback` 30 s, the recent list
 # 6 s (REIN_DESKTOP_SLOW_LIST_MS, debug builds only).
 # Needs: Xvfb, tmux, cc, Xlib + XTest headers, ffmpeg, a debug build and the real rein install.
+# Refuses to run when CI is set. Every tmux call goes to its private socket with an explicit -S
+# (the PATH wrapper and cleanup), never the operator's server.
 set -uo pipefail
+# A local tool only (Architect, 21:40): it runs the real `rein start` with the operator's HOME.
+if [ -n "${CI:-}" ]; then echo "motion-screens.sh: not in CI (it uses the operator's real HOME)" >&2; exit 2; fi
 OUT=$1
 GW=${2:-1280} GH=${3:-800}
 REPO="$(cd "$(dirname "$0")/../../../.." && pwd)"

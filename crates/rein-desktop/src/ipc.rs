@@ -214,7 +214,7 @@ impl Desktop {
                 Ok(None) if Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(100))
                 }
-                Ok(None) => return Some(Err("the tab's tty was not seen".into())),
+                Ok(None) => return Some(Err(tmux_overlay::TTY_NOT_SEEN.into())),
                 Err(_) => return None,
             }
         };
@@ -380,9 +380,10 @@ pub fn tab_tmux(
     if let Some(o) = &outcome {
         state.overlay.record(o);
     }
+    // Only the app's own fixed sentences reach the window (V7, E-55).
     Ok(outcome
         .and_then(Result::err)
-        .map(|why| tmux_overlay::not_applied(&why)))
+        .map(|why| tmux_overlay::not_applied(tmux_overlay::told(&why))))
 }
 
 /// `config_get` (desktop.md §API, E-37): the active config, the file's path and the last

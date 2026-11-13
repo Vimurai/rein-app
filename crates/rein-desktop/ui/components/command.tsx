@@ -34,7 +34,9 @@ export function CommandList({ className, ...props }: ComponentProps<typeof Comma
   return (
     <CommandPrimitive.List
       data-slot="command-list"
-      className={cn("max-h-[min(400px,60vh)] scroll-py-1 overflow-y-auto p-1", className)}
+      // Whole rows only (E-55): the height is rounded down to a multiple of the 32 px row, plus
+      // the list's 4 px padding top and bottom, so the last visible row is never cut in half.
+      className={cn("max-h-[calc(round(down,min(400px,60vh)-8px,32px)+8px)] scroll-py-1 overflow-y-auto p-1", className)}
       {...props}
     />
   );
@@ -62,7 +64,7 @@ export function CommandItem({ className, ...props }: ComponentProps<typeof Comma
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
-        "group flex min-h-8 cursor-default items-center gap-2 rounded-sm px-2 py-1 select-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-primary/15",
+        "group flex h-8 cursor-default items-center gap-2 rounded-sm px-2 select-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-primary/15",
         className,
       )}
       {...props}
