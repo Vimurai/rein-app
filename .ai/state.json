@@ -970,6 +970,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-13T12:12:35.904Z"
+    },
+    {
+      "id": "E-65",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Fix the Windows `ci` job so a failing window-UI test fails the job, and fix the two UI tests it has been hiding. Found in E-63 (COMM 2026-11-13 18:57 UTC): the step \"window UI — install, type-check, test, bundle\" in .github/workflows/ci.yml is a multi-line `run:` under PowerShell, which does not stop on `npm test`'s non-zero exit, so `test (windows-latest)` stays green while `actions.test.mjs` (\"src/actions.ts is generated from actions.json and is not stale\") and `harden.test.mjs` (\"after hardening, Object.prototype cannot be polluted\") fail on every run. Do: (1) `skill: ci_gate` first; (2) make every command in that step fail the job (`shell: bash`, as the clippy step already has) and check every other multi-line `run:` in all workflows for the same fault, desktop-windows included; (3) find the cause of each failing test on Windows and fix the cause, not the assertion — if the hardening test shows a real gap on Windows, stop and report it to the Architect before changing anything (it would be Tier 3); (4) report whether any earlier \"green\" Windows run hid other failures. Acceptance: a deliberately failing UI test turns `test (windows-latest)` red (show the run, then remove the test); hosted ci x3 and desktop-windows green with both tests passing on Windows; DEVOPS.md CI entry updated. D-048 applies. Run before E-64.",
+      "created_at": "2026-11-13T19:33:24.053Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-13T19:33:24.057Z"
     }
   ],
   "stamps": [

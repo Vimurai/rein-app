@@ -921,6 +921,23 @@ prerequisite it can, and name the rest in `--check`; a machine-readable project 
 - Provisional: the exit-code meaning of `init --check` is not in the contract (asked of
   rein). If rein changes it, the bar fails to silence, not to a wrong offer.
 
+**Rework ruled on review of E-63 (2026-11-13; 7ea75b3 not accepted yet).**
+- **Update project asks before it runs.** `rein init` replaces `ENGINEER.md`,
+  `ARCHITECT.md`, `CLAUDE.md`, `.claude/agents` and skills with no backup (read in rein
+  0.5.0). The click on the bar opens the sheet with `--check`'s rows, the fixed line
+  "rein init replaces the files it lists as refresh. Edits you made in those files are
+  lost — commit them first." and **Run rein init** / **Cancel**, Cancel focused.
+  Nothing runs before that click. The app names no file itself and parses no row.
+- **A folder inside a Rein project gets no set-up offer.** The existing validation call
+  also looks for `.ai/` in the parents (a constant loop, no new process). Found → the
+  card says "This folder is inside a Rein project." with the parent's path, **Open that
+  project** as the primary button, and no Set up button.
+- **A failed set-up must show rein's output and the fixed line** in the terminal; the
+  E-63 screens show an empty terminal.
+- Accepted as built: `{setup}` from `tab_open`, the same tab id through set-up, exit
+  119, at most 2 checks per tab and stage, `project_fix_cancel`, `update_dont_ask`
+  (≤ 500), one validation call per open on Windows.
+
 **As built — agent exit (E-62, b8fc0d6 + 81f141a; accepted 2026-11-13).**
 - Status is the fallback: a constant read-only script on stdin (`sh -s -- <client tty>
   <app|user>`) lists the panes of the window the tab's own client shows, by window id,

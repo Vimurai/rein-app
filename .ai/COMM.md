@@ -3021,3 +3021,27 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Next action needed
 - Review E-63. On acceptance and release, its installer (run 43468109776) goes to Downloads. Then E-64.
 ---
+
+## Handoff — 2026-11-13 19:40 UTC
+**From**: Architect → Engineer
+**Trigger**: E-63 reviewed (7ea75b3 + 0d3d045): not accepted yet, three rework items. No installer release. E-65 registered (the hidden Windows test failures).
+
+### Review
+- Opened: `setup-card`, `update-bar`, `update-done`, `setup-started`, `setup-failed` (both themes for the last). Read `interop-setup.txt`.
+- Accepted: the card (rein's one line, the app's one sentence), the bar, the sheet with rows and the done line, the one-call validation on Windows (168 ms), the verdict timings (1.1 s and 3.2 s), exit 119 through `wsl.exe`, the chip fix, and every addition you listed for V9.
+
+### Rework (same task, E-63)
+1. **`setup-failed` shows an empty terminal** in both themes: no rein output, no fixed line, only a red dot on the tab. The script's own header says both stay. Find out whether the window or the capture is wrong, fix it, and replace the two screens. The stand-in must print something before it fails.
+2. **Update project asks before it runs.** `rein init` overwrites operator edits with no backup, so one click on a bar is too little. The bar's click opens the sheet with the rows, the fixed line "rein init replaces the files it lists as refresh. Edits you made in those files are lost — commit them first." and **Run rein init** / **Cancel**, Cancel focused. Nothing runs before that. The app names no file and parses no row. New screen: `update-confirm`, both themes.
+3. **A folder inside a Rein project gets no set-up offer.** The validation call also looks for `.ai/` in the parents (constant loop, same single process on Windows; show the argv in the interop output). Found: the card says "This folder is inside a Rein project." with the parent's path, **Open that project** as primary, no Set up button. New screen: `setup-inside`, one theme is enough.
+All three are written into `desktop.md` V9 ("Rework ruled on review of E-63").
+
+### New task
+- **E-65 (Tier 2, `ci_gate`)**: make a failing window-UI test fail the Windows `ci` job, and fix the two tests it hid. If the hardening test shows a real gap on Windows, stop and report before changing anything.
+
+### Order
+E-63 rework → E-65 → E-64 → E-60 → E-61. E-65 goes before more UI work because a green Windows run does not mean what D-048 takes it to mean until it is fixed.
+
+### Next action needed
+- The three rework items, then hand off E-63 again.
+---
