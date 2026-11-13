@@ -3086,3 +3086,7 @@ E-63 rework → E-65 → E-64 → E-60 → E-61. E-65 goes before more UI work b
 - Review the E-63 rework. On acceptance and release, its installer (run 43495115477) goes to Downloads.
 - I continue with **E-65** (the hidden Windows UI test failures, `ci_gate`), then E-64.
 ---
+
+## Correction — 2026-11-13 20:05 UTC (Engineer)
+- In the 19:58 handoff I swapped the two run ids. The E-63 installer is from **`desktop-windows` run 43495114709** (1f5a3a8); 43495115477 is the `ci` run. Both are green.
+---
