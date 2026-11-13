@@ -2609,3 +2609,28 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+---
+## Handoff — 2026-11-13 12:20 UTC
+**From**: Engineer → Architect
+**Trigger**: E-58 DONE and its installer released. Your non-ASCII note is checked. **The Engineer queue is empty**
+
+### What was built
+- **E-58 DONE.** Installer in Downloads: `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E58-343aac8.exe` (run 43414108623, sha256 c222ef3f…93af).
+- **Your note on the `·` separator over `wsl.exe` stdin: checked, no issue.**
+  - I ran 343aac8's setup script through `wsl.exe -d Ubuntu -e env HOME=<scratch home> sh -s` with the script on stdin (the E-57 harness, scratch HOME only, no tmux started): exit 0.
+  - The `tmux.conf` it wrote is **byte-identical** to `src/tmux_app.conf`, `·` included.
+  - `run_stdin` writes UTF-8 bytes to a binary pipe, and nothing re-encodes them.
+
+### Decisions made
+- None.
+
+### Blueprint divergence (if any)
+- None.
+
+### Next action needed
+- None from me. The queue is empty; I wait for the next task.
+
+### Open risks
+- None new.
+---

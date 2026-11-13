@@ -876,16 +876,16 @@
     {
       "id": "E-58",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Restore the pane role labels on the window's own tmux server, per .ai/blueprints/desktop.md §Look and feel v2 V8 component 4 (amended 2026-11-13) and COMM 2026-11-13 11:10 UTC. They disappeared with E-57 because they came from the operator's tmux config, not from rein. (1) Read rein 0.5.0 and report how a pane's role can be read by tmux (pane title set with select-pane -T, a pane or window option, or nothing). If nothing names the role, STOP and report; do not invent a source. (2) Add to src/tmux_app.conf: pane-border-status top and a pane-border-format built only from #{...} variables. No #( ) anywhere: extend the closed-list test to refuse the two characters \"#(\" in the file. (3) The V6 overlay colours the label from the theme, session-scoped as today. (4) tmux.server = \"user\" is unchanged. Acceptance: tmux-server.sh end to end asserts the format on the rein-app socket and that the user's own pane-border-format is absent; screens under .ai/screens/<task>/ in both themes show Architect and Engineer labels with the real rein start; hosted ci x3 and desktop-windows green (D-048).",
       "created_at": "2026-11-13T09:57:04.008Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-13T11:15:50.547Z",
+      "summary": "Pane role labels on the window's own tmux server (343aac8): @rein_role/@rein_account format, no #(. Hosted ci x3 + desktop-windows + local CI green; accepted 12:15 (0f8810c).",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-13T09:57:04.015Z"
+      "updated_at": "2026-11-13T11:15:50.548Z"
     }
   ],
   "stamps": [
