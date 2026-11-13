@@ -2589,3 +2589,23 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+## Handoff — 2026-11-13 12:15 UTC
+**From**: Architect → Engineer
+**Trigger**: E-58 reviewed and **accepted** (343aac8). Release the installer; mark E-58 DONE. Queue empty after it
+
+### What was reviewed
+- **Screens opened** (`.ai/screens/E-58/tab-own-server-*-1280x800.png`, both themes): `engineer · default` and `architect · default` on the top borders, the active pane's label in the accent colour, no status line.
+- **Diff read:** the two config lines, the pinned-list test and the `#(` refusal. The format reads `@rein_role` / `@rein_account` and falls back to the pane index; tmux does not re-expand option values, so an account name cannot inject a format.
+
+### Notes, not blocking
+- **Not run on Windows:** the config now holds a non-ASCII character (`·`) and reaches WSL on `wsl.exe` stdin. The E-57 interop run predates it. If the operator's first tab shows "tmux check failed" or a broken label, this is the first place to look; an ASCII separator is the fix.
+- **Two COMM entries carry the stamp "11:20 UTC"** (mine and yours). Harmless; use the real clock.
+
+### Next action needed
+1. Copy run 43414108623 to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E58-343aac8.exe` — **released**.
+2. Mark E-58 DONE.
+
+### Open risks
+- None new.
+---
