@@ -2802,3 +2802,57 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+## Handoff — 2026-11-13 13:36 UTC
+**From**: Engineer → Architect
+**Trigger**: E-62 built (b8fc0d6, test fix 81f141a). Tier 2: run_review + align_diff, stamps. Hosted `ci` ×3 and `desktop-windows` (43428671228) green on 81f141a; local `rein ci run` PASS 81f141a.
+
+### What was built (E-62, V9 components 4–5)
+- **Status (`project_agents(tab)`)** — V9's fallback, since `rein start --status` is prose only.
+  - `src/tmux_agents.sh` is a constant, read-only script fed on stdin as `sh -s -- <client tty> <app|user>`. It finds the window shown by the tab's own client tty and runs `list-panes -F '#{@rein_role}|#{pane_current_command}|#{pane_dead}'` on it, on the tab's server. Exit codes: 2 bad arguments, 3 no tmux, 5 no client.
+  - **An agent is `ended` only after it was seen `running` in this tab.** While `rein start` builds the layout the panes show a shell, and that must never read as "exited". A shell (`SHELLS`, a leading `-` allowed) or a dead pane means not running; a pane that was seen running and is now gone also counts as ended.
+  - Roles are checked against `[a-z][a-z0-9_-]{0,31}`, at most 16. Every failure is a fixed sentence.
+  - **One process per 5 s, window-wide**, enforced in Rust; between runs the last answer is returned. Nothing runs once the tab's process has ended, and a closed tab keeps nothing.
+- **Close (`project_close(tab, confirm_running)`)** — runs `rein start --kill --yes` in the tab's project on the tab's server, the same path its start took.
+  - App server: `tmux_server::kill_script()`, which is the start constant plus ` --kill --yes`, so the shim checks and PATH are the same. User server: `rein start --kill --yes`.
+  - On WSL: `wsl.exe -d D --cd P -e <shell> -lic <script>`, quote-free (`KILL_SCRIPT` for the user server).
+  - Without `confirm_running`, the core asks for the status first. If a role still runs, or the status is not known, it answers `{confirm: [roles]}` and kills nothing.
+- **`Host::tmux_agents` / `Host::rein_kill`**, plus `rein_platform::process::output_with_stdin` (the bounded output run with a constant script on stdin) and `WslShell::run_script_output`.
+- **UI**
+  - `agents.ts` (pure): `agentBar`, `confirmText`, `shouldPoll`.
+  - `agent-bar.tsx`: the bar ("The Engineer has exited." — Keep open / Close project) and the confirm ("The Architect is still running. Close it too?", No focused).
+  - `shell.tsx` polls the active tab every 5 s, only while the window is visible and the tab's process runs.
+  - When all agents have ended and the setting is on, the project closes by itself. If that close finds an agent running again, it shows the bar instead and never asks by itself.
+  - Keep open hides the bar until the set of ended roles changes.
+- **Setting `[project] close_when_agents_exit`** (default true): config.toml, a ui.json field, a Settings switch; read-only when config.toml sets it.
+- **Tests**
+  - Rust: 132 tests, including states, the gate, close with confirm on the tab's own server, a closed tab, and the WSL argv for both calls.
+  - Node: a table of bar states (`agents.test.mjs`).
+  - **`tests/e2e/agents.sh` in CI (Linux, macOS)**, 18 checks. The status script changes nothing in tmux; the kill removes the window from the app's server only, and a same-named window on the default server stays; an ordinary tab close leaves the session running. CI gate entry in DEVOPS.md.
+  - The first macOS run failed: BSD grep has no `\|` in basic regexes. Fixed with `grep -E`.
+- **Windows interop** (`.ai/screens/E-62/interop-agents.{txt,sh}`): both calls went through the real `wsl.exe`.
+  - Status: 162 ms, and the Engineer's exit is seen; exit 5 with no client.
+  - Close: the real rein killed only the project's window in 1.2 s.
+  - Set-up: a private `TMUX_TMPDIR` carried by `WSLENV` for this run only, and a throwaway project.
+- **Screens (D-052), both themes:** `agent-bar-*`, `close-confirm-*`, `all-exited-closed-*` (No keeps it; the Architect then exits, the project closes and the start screen is back). Captured with `tests/e2e/agents-screens.sh` (local only, stand-in rein).
+
+### Blueprint divergence (if any)
+1. **Restart is out**, as agreed (the `rein start` re-send finding of 12:25).
+2. **Additions for desktop.md V9:**
+   - `ended` means seen running first;
+   - the window-wide 5 s gate in the core;
+   - `project_close` answers `{closed} | {confirm: roles}`, and "not known" also asks;
+   - auto-close never asks;
+   - "Keep open" is per set of ended roles.
+3. **Not built here:** the per-project "don't ask" list in component 5. Only the out-of-date bar (E-63) asks "don't ask for this project".
+
+### Findings for the rein request
+- **`rein start --kill` writes files.** Before it kills, it regenerates missing `.claude/settings.<role>.json` in the project (interop output shows it). That is a project write behind a "kill".
+- **A project folder with a `.` in its name.** rein names the window after the folder, and tmux reads `name.x` as window.pane. rein resolves the window by id; any manual `-t session:name` breaks.
+
+### Open risks
+- **Pane role labels.** They were not visible in the screen run (stand-in rein, app's server). I did not check whether this is the stand-in or an E-58 regression; worth a look in the next real run.
+
+### Next action needed
+- Review E-62. On acceptance and release, its installer (run 43428671228) goes to Downloads. Then E-63.
+---
