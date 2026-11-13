@@ -133,6 +133,24 @@ revision that needs a contract answer (see "Deferred").
 - An idle window with a closed panel runs no animation and no timer except the 5 s
   attention stat (V7's rule, restated).
 
+## As built — sources (E-59, e527254; accepted 2026-11-13)
+- `Host::read_project_file(project, which, read)`; `read = false` is a stat only, for
+  the change check (size, mtime, inode, ctime).
+- Linux / macOS read through directory file descriptors only (project → `.ai` no-follow
+  → the file no-follow, then `fstat` of the open file). A check-then-open by path is not
+  acceptable here: `security_engineer` exploited it before the first write.
+- Windows reads the distro's UNC path, no process (21–32 ms against about 155 ms per
+  `wsl.exe` read). `.ai` and the file must not be reparse points (a WSL symlink, FIFO
+  and socket all appear as one); path segments ending in `.` or a space are refused.
+  **Accepted residual:** no final-path check on the open handle (it needs `unsafe`,
+  which the workspace forbids); what is left is a same-user swap of `.ai` inside WSL.
+- More than 5000 tasks → not available; the newest 500 are kept. A reply is at most
+  1 MiB; `Tasks.cut` / `Handoffs.cut` mark dropped rows. The 8 KiB per handoff is
+  counted in bytes, section names included, after placeholders are put in.
+- **Owed with E-60:** a test that runs the Windows read on `windows-latest` (a regular
+  file read; a junction in place of `.ai` refused; a trailing-dot segment refused), and
+  a timing test whose bound is the blueprint's, not ten times it.
+
 ## Tests
 - Descriptor schema: the four pass; unknown source / view / icon / extra key refused.
 - Parsers (Rust, fixtures from this repo's own `.ai/` plus hostile inputs): tasks by

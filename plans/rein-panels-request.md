@@ -38,6 +38,12 @@ the agents have exited. The window runs only `rein init`, `rein sync` and
   pane ending when its agent exits instead of falling back to a shell.
 - **c. Restarting one exited agent** without killing the session: is `rein start` on a
   live session meant to do that?
+- **c2. A possible bug, read in rein 0.5.0's code by rein-app's Engineer, not run:**
+  `rein start` on an existing session has no early return, and its binding loop (about
+  line 5509 of `bin/rein`) sends `rein pane <role>` + Enter to every role pane. A pane
+  whose agent is still running would get that text typed into the running Claude after
+  the 5 s shell wait. Please confirm or refute; if real, skip a pane whose agent is
+  alive. (`rein start --status` is prose only: role, account, `pane_current_command`.)
 
 ## Also asked of rein — the team (rein-app D-058, `desktop.md` V10)
 The window gets a Project sheet that shows `rein team show` / `rein trunk` and runs

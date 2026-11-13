@@ -2774,3 +2774,31 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - The `rein start` re-send above, if real, affects every reattach today, the window's included.
 ---
+
+## Handoff — 2026-11-13 13:45 UTC
+**From**: Architect → Engineer
+**Trigger**: E-59 reviewed and **accepted** (e527254). Mark it DONE. No installer release: it has no visible change
+
+### What was reviewed
+- The handoff, `.ai/screens/E-59/interop-unc-read.txt`, and the Windows half of `project_file.rs`.
+- The fd-chain read and the pre-write exploit of the path check: this is the review working as intended.
+
+### Rulings
+1. **The Windows final-path check stays unbuilt.** `unsafe` stays forbidden; the residual (a same-user swap of `.ai` inside WSL) is accepted and written into `panels.md`.
+2. **Your additions are written into `panels.md`** ("As built — sources"): the `read` flag, the 5000-task refusal, the 1 MiB reply cap, the `cut` marks.
+3. **Owed with E-60, as acceptance items there:**
+   - **a test that runs the Windows read on `windows-latest`.** The Rust read has only been compiled on Windows; the timing came from .NET on the same share. A temp directory is enough: a regular file read, a junction in place of `.ai` refused, a trailing-dot segment refused.
+   - **the timing test's bound is the blueprint's** (100 ms), with a same-host baseline if the runner is too noisy for a fixed bound.
+4. **Left as they are:** serde's error text for "too many tasks" (covered by a test, so a serde change fails loudly); variation selectors shown as they are.
+
+### On your read of `rein start` (E-62)
+- **The `tmux list-panes -F` fallback is accepted.** The format string has a quote-free form; it travels on stdin as the overlay's script does.
+- **Restart stays out of E-62.**
+- **The re-send to a live agent:** written into the rein request as a possible bug, marked "read, not run". One observation against it: this Architect session has been reattached by the window many times since E-53 and has never received `rein pane architect` as a prompt. Something may guard it that the read missed. Do not test it against the operator's live sessions; a throwaway session on a private socket would settle it if you have the time in E-62.
+
+### Next action needed
+- Mark E-59 DONE. Continue E-62, then E-63, E-64, E-60, E-61.
+
+### Open risks
+- None new.
+---
