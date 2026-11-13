@@ -3106,3 +3106,39 @@ E-63 rework → E-65 → E-64 → E-60 → E-61. E-65 goes before more UI work b
 ### Next action needed
 - E-63 DONE and released, then E-65, E-64, E-60, E-61.
 ---
+
+## Handoff — 2026-11-13 21:42 UTC
+**From**: Engineer → Architect
+**Trigger**: E-65 built (f54f798, stamps 6287d05). Tier 2, `ci_gate` (DEVOPS.md entry first).
+- **CI on 6287d05:** hosted `ci` ×3 green (43511680832), with **Windows UI tests 55 pass / 0 fail**; `desktop-windows` green (43511680718); local `rein ci run` PASS.
+
+### What was built
+- **A failing command now fails the Windows jobs.**
+  - `ci.yml` and `desktop-windows.yml` get workflow-level `defaults: run: shell: bash`: Git Bash with `-eo pipefail` on Windows; on Linux and macOS this adds `pipefail` to what already ran bash. The pwsh PE-subsystem check keeps its own `shell: pwsh`.
+  - **Every multi-line `run:` in all four workflows was checked** for the same fault:
+    - `ci.yml`: "Install Rust toolchain" and "window UI" were affected on Windows.
+    - `desktop-windows.yml`: the same two steps.
+    - `release.yml` (dist-generated, `allow-dirty = ["ci"]`): **"Build artifacts"** was affected. It runs `dist build … > dist-manifest.json` then `echo`, so a failed build would pass under PowerShell. It now has `shell: bash`, like its neighbour "Post-build".
+    - `build-linux-packages.yml` and `release.yml`'s Linux-only jobs already run `bash -e`.
+    - The remaining Windows-capable single-command steps report that command's exit code.
+- **The two hidden tests, fixed at the cause** (no assertion changed):
+  - `actions.test.mjs`: the Windows checkout made the generated `src/actions.ts` CRLF, unequal to the generator's LF. `.gitattributes`: `crates/rein-desktop/ui/src/actions.ts text eol=lf`.
+  - `harden.test.mjs`: the child did `import("D:\\…\\harden.ts")`, and Node on Windows refuses a bare path (`ERR_UNSUPPORTED_ESM_URL_SCHEME`). The hardening **never ran** on Windows. It is now imported by `pathToFileURL(…).href`.
+  - **The hardening is not a real gap on Windows:** with the import fixed it runs and holds there (threw, not polluted, frozen) in the proof run and on master.
+- **Proof** (acceptance: "a deliberately failing UI test turns `test (windows-latest)` red"):
+  - Branch `e65-windows-ci-red-proof` = the fix + `ui/test/red-proof.test.mjs`; draft PR #2 ran `ci` **43510586056**.
+  - `test (windows-latest)` **failure** on that test only ("ℹ pass 55 · ℹ fail 1", "##[error]Process completed with exit code 1"); Linux and macOS red on it too.
+  - The PR was closed and the branch deleted. The fix reached master by cherry-picking the two commits **without** the red-proof commit.
+  - The branch push used the recorded `REIN_CI_SKIP` (reason: a deliberately failing test, never merged).
+
+### Earlier "green" Windows runs: what they hid (task item 4)
+- I scanned the window-UI step of **all 23 green `ci` runs on master back to 2026-11-12** (from 0aa9206).
+- Each hid **exactly these two failures** (`ℹ fail 2`: actions, harden), nothing else. The other steps (clippy, test) already ran under bash and could not hide a failure.
+- **For D-048:** every Windows acceptance before 6287d05 rested on a window-UI suite that was 2 tests short on Windows. The two were a checkout artefact and a test-harness path, not product behaviour. The hardening itself was never exercised on Windows until now.
+
+### Blueprint divergence (if any)
+- None. DEVOPS.md has the entry (what, why, security, rollback, the proof).
+
+### Next action needed
+- Review E-65 (no visible change, no installer). Then I continue with **E-64**.
+---
