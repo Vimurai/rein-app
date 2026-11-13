@@ -1942,3 +1942,25 @@ tmux reads config and starts plugins once per server. The V6 overlay sets sessio
 
 ### Rollback
 `tmux.server = "user"`, or revert E-57. Sessions on the app's server stay reachable with `tmux -L rein-app`.
+
+## D-056 — The window gets a side menu of data-only panels; first Dashboard, Communication, Tasks and "Needs you"
+
+**Date**: 2026-11-13
+**Task**: operator direction ("we should have side menu with those plugins … tasks, communication, issue tracking"), and their answer to my question: "data-only is fine, start with dashboard, communication, tasks and needs you".
+**Decision**: A rail on the window's left edge opens one panel beside the terminal. A panel is a descriptor naming a source and a view from closed lists compiled into the app; it holds no code. The four first panels are compiled in. Blueprint: `.ai/blueprints/panels.md`.
+
+### Why needed
+The operator follows the Triad by reading two panes. Tasks, handoffs and "whose turn" already exist as files in each project's `.ai/`; nothing shows them.
+
+### Rulings
+1. Data-only: no panel code, HTML, URL or path comes from a descriptor. File text is drawn as text nodes only.
+2. Sources read two constant paths (`.ai/state.json`, the tail of `.ai/COMM.md`), read-only, bounded, and answer "not available" on anything unexpected. Both formats are outside the contract, so the parsers are provisional; a stable interface is requested from rein (`plans/rein-panels-request.md`).
+3. Descriptors from `rein-plugins` are deferred until its Architect and rein's answer. A panel from outside may only combine existing sources and views; a new source is always an app release.
+4. "Needs you" shows only what the app can know. A permission prompt in a pane is not visible without a signal from rein; this gap is stated in the panel's design and to the operator.
+5. The unit is called a "panel", to keep it apart from Claude Code plugins and tmux plugins.
+
+### Alternatives rejected
+- **Panels that ship their own UI code**: every panel would need a sandbox, pinning and a signature check. The operator chose data-only.
+- **Waiting for rein's read interface before building anything**: no rein session is reachable; the four panels are useful now and the parsers fail soft.
+- **A Markdown renderer for handoffs**: turns untrusted file text into markup and links. Plain text with visible structure is enough.
+- **Reading rein's sqlite files or MCP servers from the app**: carries rein's internals into the shell (contract non-goal).

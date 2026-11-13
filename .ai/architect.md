@@ -12,6 +12,7 @@
 |---|---|---|---|
 | Distribution: installer, verifier, layout writer, profile manager, updater, WSL launcher | `.ai/blueprints/distribution.md` | 1 | ACTIVE — E-2..E-5, E-7, E-8, E-10..E-15 done (E-12..E-15 reviewed, D-015); E-18 (operator docs), E-19 (release rehearsal) open; E-6 awaits the first tag; E-9, E-16, E-17 blocked on rein/operator |
 | Desktop: Tauri window, pane view, status, settings UI, bundled Node, signing | `.ai/blueprints/desktop.md` | 2 | ACTIVE (v1 2026-11-11, D-033) — the window: one pty running `rein start`, modal grid chrome, `config.toml`; E-34..E-39 registered. **Windows window added 2026-11-11 (D-038): native WebView2 build, every process is `wsl.exe`, E-43..E-45.** **All window tasks E-34..E-45 DONE 2026-11-12 (hosted CI and the Windows installer workflow green at 9804f26); E-46 (operator docs) open.** Not in any release; bundled Node and signing are later revisions and wait on the operator |
+| Side menu and panels: rail, panel host, data-only descriptors, sources over `.ai/state.json` and `.ai/COMM.md` | `.ai/blueprints/panels.md` | 2 | ACTIVE (v1 2026-11-13, D-056) — Dashboard, Communication, Tasks, "Needs you"; E-59..E-61 registered. Descriptors from `rein-plugins` and a stable read interface from rein are deferred (`plans/rein-panels-request.md`, unsent) |
 
 ## 1. System Philosophy
 - **Concept**: rein-app is the **shell**, not a rewrite. It installs, verifies, updates,

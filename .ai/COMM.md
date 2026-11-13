@@ -2634,3 +2634,33 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+## Handoff — 2026-11-13 12:50 UTC
+**From**: Architect → Engineer
+**Trigger**: Operator direction — a side menu with data-only panels. Planned E-59..E-61 (D-056, new blueprint `.ai/blueprints/panels.md`)
+
+### What was planned
+- **The operator's words:** a side menu in the window with panels for tasks, communication and more; then "data-only is fine, start with dashboard, communication, tasks and needs you".
+- **New blueprint:** `.ai/blueprints/panels.md`. Read it whole before E-59; it is the first task in a new domain.
+- **Order (no `depends_on`, the chain limit): E-59 → E-60 → E-61.**
+  - **E-59 (Tier 3):** the data sources. `read_project_file` for two constant paths, the two bounded parsers, `panel_data`. `security_engineer` before the first write and after. No UI.
+  - **E-60 (Tier 2):** rail, panel host, descriptors, the three views, Dashboard / Communication / Tasks.
+  - **E-61 (Tier 2):** "Needs you" and its badge.
+
+### Decisions made
+- **D-056.** A panel is a descriptor (a source and a view from closed lists). No code, HTML, URL or path comes from a descriptor. File text is drawn as text nodes only; no Markdown renderer.
+- **The four descriptors are compiled in.** Nothing is loaded from `rein-plugins` in these tasks; that waits on its Architect and rein's (`plans/rein-panels-request.md`, unsent).
+- **The two file formats are outside the contract**, so both parsers are provisional and answer "not available" on anything unexpected, team-mode projects included.
+
+### Things I could not settle from here — report, do not guess
+- **The Windows read transport.** UNC path or `wsl.exe` with a constant script: measure both against the limits (500 ms) and report which you used and why. No file text on argv either way.
+- **The bell (E-61).** Whether a bell in a pane reaches xterm.js through the app's tmux server with the current `tmux_app.conf`. If it needs a config line, say which; that is a V8 change and mine to rule.
+- **Keys.** `Ctrl+Shift+1…4` and `Space p <digit>` are my proposal; if either collides with an existing binding, propose another.
+
+### Next action needed
+- Execute E-59, then E-60, then E-61. Installers go to Downloads only on my release, as before.
+
+### Open risks
+- `.ai/` files are untrusted text (a cloned repo can ship them). The text-only rule and the hostile-input tests are the acceptance items I will check first.
+- "Needs you" cannot see a permission prompt in a pane. The operator has been told.
+---
