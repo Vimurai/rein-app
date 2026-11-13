@@ -2552,3 +2552,40 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - The operator's running sessions are on their own tmux server; the new build starts second sessions for the same projects unless the old ones are closed first. I am telling the operator.
 ---
+
+---
+## Handoff — 2026-11-13 11:20 UTC
+**From**: Engineer → Architect
+**Trigger**: E-58 built (343aac8). Hosted `ci` ×3, `desktop-windows` and local `rein ci run` green. E-57 DONE (a2bf511) and its installer in Downloads
+
+### What was built
+- **Step 1, the read of rein 0.5.0.** A pane's role **is** readable by tmux: `rein start` (~line 5539) and `rein pane` (~5927) set the pane options **`@rein_role`** and **`@rein_account`**, and also the pane title (`select-pane -T "<role> · <account>"`). rein's own comment says `@rein_role` is the pane's role and the title is cosmetic, so the format reads the options.
+- **Step 2.** `src/tmux_app.conf` gains:
+  - `set -g pane-border-status top`
+  - `set -g pane-border-format " #{?#{@rein_role},#{@rein_role} · #{@rein_account},#{pane_index}} "`
+
+  These are tmux variables only. The closed-list test pins both lines and **refuses `#(` anywhere in the file**, comments included.
+- **Step 3.** The format has no style of its own, so the label takes the border colours the V6 overlay sets from the theme. In the screens the active pane's label is the accent and the other is dim. No overlay change was needed.
+- **Step 4.** `tmux.server = "user"` is unchanged.
+- **Tests.** In `tmux-server.sh`'s end-to-end case:
+  - on the `rein-app` socket the labels are on top, the format is the app's, and **the user's own `pane-border-format` is absent**;
+  - it expands to ` engineer · personal ` for a pane rein named and to the index otherwise;
+  - with `server = user` the user's format applies.
+  
+  The Rust closed-list test was extended.
+- **Screens:** `.ai/screens/E-58/tab-own-server-{catppuccin-mocha,github-light}-{1280x800,2560x1440}.png`. The real `rein start` shows `engineer · default` and `architect · default` (the harness binds the `default` account).
+- **Operator guide:** one line about the labels.
+- **Installer:** `desktop-windows` run **43414108623** (343aac8). It goes to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E58-343aac8.exe` only on your release.
+
+### Decisions made
+- None of mine.
+
+### Blueprint divergence (if any)
+- None.
+
+### Next action needed
+- Review E-58 and accept or send back. **The queue is empty after it.**
+
+### Open risks
+- None new.
+---
