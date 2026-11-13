@@ -82,9 +82,10 @@ check "only the window the client shows (not the session's other window)" 2 "$(s
 
 before="$(tm -L rein-app show-options -g; tm -L rein-app show-options -p -t "${panes[1]}"; tm -L rein-app list-sessions)"
 tm -L rein-app send-keys -t "${panes[1]}" C-c
-ended() { status "$tty" app | grep -q '^engineer|sh|0$\|^engineer|bash|0$\|^engineer|dash|0$'; }
+# A shell as agents.rs's SHELLS lists them (a login shell may carry a leading `-`).
+ended() { status "$tty" app | grep -Eq '^engineer\|-?(sh|bash|zsh|fish|dash|ksh|mksh|tcsh|csh|ash|nu)\|0$'; }
 wait_for ended
-check "the Engineer exited: its pane shows its shell" yes "$(ended && echo yes || echo no)"
+check "the Engineer exited: its pane shows its shell [$(status "$tty" app | grep '^engineer|')]" yes "$(ended && echo yes || echo no)"
 check "the Architect still runs" 1 "$(status "$tty" app | grep -c '^architect|sleep|0$')"
 after="$(tm -L rein-app show-options -g; tm -L rein-app show-options -p -t "${panes[1]}"; tm -L rein-app list-sessions)"
 check "the status run changed nothing in tmux" yes "$([ "$before" = "$after" ] && echo yes || echo no)"
