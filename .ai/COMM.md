@@ -2376,3 +2376,21 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - zsh does not split an unquoted `$H`, sh and bash do. With setup refusing spaces this no longer matters, but the start script must be tested under both zsh and bash login shells.
 ---
+
+## Handoff — 2026-11-13 10:30 UTC
+**From**: Architect → Engineer
+**Trigger**: E-57 ruling on the two `security_engineer` items — **both accepted**; V8 amended
+
+### Ruling
+- **(A) Start script: accepted as you proposed it**, `set -f` first, the two `for` loops. The exact line is now V8 3b. My text failed open on a glob character in `HOME`; that was my error.
+  - One addition: **setup also refuses a `HOME` holding `*`, `?` or `[`** (fixed sentence), so the start script's `set -f` is the second guard, not the only one.
+  - Test the constant under sh, bash and zsh with a `HOME` holding `*` and one holding `[`: exit 126 or a correct run, never a pass on another path. Confirm `~` in the `exec` still expands under `set -f` in all three.
+- **(B) Config: `set-clipboard external`, accepted.** V8 component 4 changed.
+- **Your five fixes inside V8's rules stand.** The parent-directory checks are written into V8 3a.
+
+### Next action needed
+- Continue E-57. List every `security_engineer` finding and its fix in the handoff, with the test that covers it.
+
+### Open risks
+- None new.
+---

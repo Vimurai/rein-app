@@ -692,7 +692,9 @@ shim is dropped.
    - **3a. Setup script — fed on stdin** (V6's transport: `/bin/sh -s`; on Windows
      `wsl.exe -d D -e sh -s`), run by the app before it opens the tab's pty, only when
      `tmux.server = "app"`. `umask 077`; refuses (own exit code each, mapped to fixed
-     sentences as V6's are) a `HOME` with a newline, quote or space, a symlinked home or
+     sentences as V6's are) a `HOME` with a newline, quote, space or glob character
+     (`*`, `?`, `[`), a parent directory (`.local`, `.local/state`, `rein-app`) that is
+     not the user's, is a symlink or is writable by group or others, a symlinked home or
      `bin`, a home not owned by the user or writable by group or others; creates
      0700 / 0700 / 0600; compares both files with the constants and rewrites those that
      differ. On failure the pty is not opened; the tab shows the fixed sentence and names
@@ -700,7 +702,9 @@ shim is dropped.
      not after.
    - **3b. Start script — argv, short, no quote character** (replaces V6's
      `tty; exec ~/.rein/bin/rein start`):
-     `H=$HOME/.local/state/rein-app/tmux; [ -O $H/bin/tmux ] && [ -O $H/tmux.conf ] && [ ! -L $H ] && [ ! -L $H/bin ] && [ ! -L $H/bin/tmux ] || exit 126; unset TMUX TMUX_PANE; PATH=$H/bin:$PATH; tty; exec ~/.rein/bin/rein start`.
+     `set -f; H=$HOME/.local/state/rein-app/tmux; for p in $HOME/.local $HOME/.local/state $HOME/.local/state/rein-app $H $H/bin; do [ -O $p ] && [ -d $p ] && [ ! -L $p ] || exit 126; done; for p in $H/bin/tmux $H/tmux.conf; do [ -O $p ] && [ -f $p ] && [ ! -L $p ] || exit 126; done; unset TMUX TMUX_PANE; PATH=$H/bin:$PATH; tty; exec ~/.rein/bin/rein start`
+     (`set -f` first: without it a glob character in `HOME` is expanded by `[ -O ]` and
+     the check fails open — `security_engineer`, 2026-11-13).
      A tab whose process exits 126 before any output shows a fixed sentence, not a bare
      closed tab.
    - **Rule for every argv script, now and later:** no quote character, no file text;
@@ -708,7 +712,8 @@ shim is dropped.
 4. **App config** (`tmux.conf`, a closed list — no `run-shell`, `source-file`, `if-shell`,
    hook or plugin line): `default-terminal "tmux-256color"`, RGB `terminal-features`,
    `mouse on`, `escape-time 10`, `focus-events on`, `history-limit 50000`,
-   `set-clipboard on`, `status off`. Everything else is tmux's default (prefix `C-b`).
+   `set-clipboard external` (tmux's default; `on` would let any program in a pane write
+   the host clipboard through OSC 52 — `security_engineer`, 2026-11-13), `status off`. Everything else is tmux's default (prefix `C-b`).
    rein's own pane-border lines are set by `rein start` and are not touched.
 5. **Overlay and every other tmux call of the app** (V6's script, the detach hook) use the
    same server: the real tmux with `-L rein-app`. V6's rules are otherwise unchanged; the
