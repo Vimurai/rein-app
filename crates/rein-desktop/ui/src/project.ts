@@ -8,6 +8,8 @@ export interface SetupView {
   id: number;
   project: string;
   title: string;
+  /** The Rein project this folder is inside (E-63 rework 3): no set-up, open that instead. */
+  inside: string | null;
 }
 
 /** `project_check`'s answer. */
@@ -30,7 +32,14 @@ export const SETUP_CARD = {
   does: "Set up runs rein init here, in this tab's terminal, then rein start.",
   checking: "Asking rein what set-up will do…",
   noAnswer: "rein did not say what set-up will do.",
+  /** A folder inside a Rein project (E-63 rework 3). */
+  insideTitle: "This folder is inside a Rein project.",
+  insideDoes: "Open that project to work in it; this folder is part of it.",
 } as const;
+
+/** The confirm before Update project runs (E-63 rework 2): rein init overwrites edits. */
+export const UPDATE_CONFIRM =
+  "rein init replaces the files it lists as refresh. Edits you made in those files are lost — commit them first.";
 
 /** The card's rows from `project_check` on a set-up tab: rein's lines, or none. */
 export function cardRows(reply: CheckReply | null): { rows: string[]; note: string | null } {

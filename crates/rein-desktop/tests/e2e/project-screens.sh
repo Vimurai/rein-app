@@ -4,9 +4,15 @@
 #   setup-card     — a folder without .ai/: the card with rein's own line, nothing started;
 #   setup-started  — Set up this project: `rein init` then `rein start` in the tab's terminal
 #                    (checked: init ran before start, the session exists);
-#   setup-failed   — `rein init` fails: its output and the fixed line stay; start never ran;
+#   setup-failed   — `rein init` fails: its output and the fixed line stay; start never ran
+#                    (checked: the screen is not blank — it matches the same screen redrawn by
+#                    a resize, the E-63 review's empty terminal);
+#   setup-inside   — a folder inside a Rein project: the project and Open that project, no
+#                    set-up and rein never asked (catppuccin-mocha only);
 #   update-bar     — a project rein reports out of date: the bar after the tab started;
-#   update-done    — Update project: `rein init` in the sheet, the check once more, the line.
+#   update-confirm — Update project clicked: rein's rows, the fixed line, Cancel focused —
+#                    nothing has run (E-63 rework 2);
+#   update-done    — Run rein init: `rein init` in the sheet, the check once more, the line.
 # The `rein` is a stand-in in a throwaway HOME that keeps rein's contracts: `init --check`
 # exits 0 current / 1 pending (rows, `Run: rein init`; one fixed line with no .ai/), `init`
 # makes .ai/ and clears the pending state, `start` builds a session through plain `tmux` and
@@ -141,7 +147,24 @@ for theme in catppuccin-mocha github-light; do
   sleep 3
   shot "setup-failed-$theme"
   check "failed init: start never ran" "init --check,init" "$(calls "fail-$theme")"
+  # Not blank: the same screen redrawn by a resize must look the same (sizes within 10 %).
+  "$W/bin/xresize" rein $((GW - 80)) $((GH - 40)); sleep 1.2
+  "$W/bin/xresize" rein "$GW" "$GH"; sleep 1.2
+  shot "dbg-redrawn-$theme" >/dev/null
+  a=$(stat -c %s "$OUT/setup-failed-$theme-${GW}x${GH}.png") b=$(stat -c %s "$OUT/dbg-redrawn-$theme-${GW}x${GH}.png")
+  rm -f "$OUT/dbg-redrawn-$theme-${GW}x${GH}.png"
+  check "failed init: drawn without a redraw (not blank)" yes "$([ $((a * 10)) -ge $((b * 9)) ] && echo yes || echo "no ($a vs $b bytes)")"
   quit
+  # A folder inside a Rein project: no set-up, rein not asked.
+  if [ "$theme" = catppuccin-mocha ]; then
+    p="$W/Dev/whole-project"; mkdir -p "$p/.ai" "$p/inner"
+    app "$theme" "$p/inner"
+    sleep 4
+    shot "setup-inside-$theme"
+    check "inside: rein was not asked about the inner folder" "" "$(calls inner)"
+    check "inside: nothing started" "" "$(calls whole-project)"
+    quit
+  fi
   # 4–5: a project rein reports out of date — the bar, then Update project.
   p="$W/Dev/stale-$theme"; mkdir -p "$p/.ai"; touch "$p/.ai/stale"
   app "$theme" "$p"
@@ -149,6 +172,11 @@ for theme in catppuccin-mocha github-light; do
   shot "update-bar-$theme"
   check "stale: start, then the one check" "start,init --check" "$(calls "stale-$theme")"
   X click $((GW - 68)) 58 # Update project, at the bar's right end
+  sleep 1.5
+  shot "update-confirm-$theme"
+  check "confirm: nothing ran before the confirm" "start,init --check" "$(calls "stale-$theme")"
+  X key Tab # Cancel has the focus; Run rein init is next
+  X key Return
   sleep 5
   shot "update-done-$theme"
   check "update: init, then the check once more" "start,init --check,init,init --check" "$(calls "stale-$theme")"

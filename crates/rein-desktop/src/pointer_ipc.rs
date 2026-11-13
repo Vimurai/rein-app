@@ -29,7 +29,8 @@ pub fn project_choose(
     let Some(path) = pick_folder(&app, start)? else {
         return Ok(None);
     };
-    // A folder without `.ai/` is accepted: the tab offers set-up (V9 component 1).
+    // A folder without `.ai/` is accepted: the tab offers set-up, or the project it is
+    // inside (V9 component 1).
     let (project, _) = desktop.platform.project_dir(&path.to_string_lossy())?;
     Ok(Some(project.to_string_lossy().into_owned()))
 }

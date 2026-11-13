@@ -135,7 +135,7 @@ interface OpenTab {
   /** Closing by itself failed once: from then on the bar asks instead. */
   autoFailed?: boolean;
   /** V9 (E-63): a folder without `.ai/` — the set-up card, no terminal yet. */
-  setup?: { id: number; reply: CheckReply | null } | undefined;
+  setup?: { id: number; reply: CheckReply | null; inside: string | null } | undefined;
   /** The out-of-date check ran for this tab (once per open). */
   asked?: boolean;
   /** rein's rows when it reported the project out of date; the bar shows while set. */
@@ -369,11 +369,13 @@ export function Shell(props: ShellProps) {
       term.onSetup = (view) => {
         // V9 2: a folder without `.ai/` — the card in place of the terminal; rein is asked
         // what set-up will do.
-        entry.setup = { id: view.id, reply: null };
+        entry.setup = { id: view.id, reply: null, inside: view.inside };
         entry.project = view.project;
         entry.title = view.title;
         showTab(tabs.current.indexOf(entry));
         setMode({ mode: "NORMAL", pending: [] });
+        // Inside a Rein project: nothing to ask rein — the card offers that project.
+        if (view.inside !== null) return;
         projectCheck(view.id).then(
           (reply) => {
             if (entry.setup?.id !== view.id) return;
@@ -891,6 +893,11 @@ export function Shell(props: ShellProps) {
             <SetupCard
               project={current.project}
               reply={current.setup.reply}
+              inside={current.setup.inside}
+              onOpenInside={(parent) => {
+                detach(cur.current, `${current.title} closed — opening the project it is inside`);
+                open(parent);
+              }}
               onSetUp={() => {
                 const s = current.setup;
                 if (!s) return;

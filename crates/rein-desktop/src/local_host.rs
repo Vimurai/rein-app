@@ -82,7 +82,7 @@ impl LocalHost {
 }
 
 impl Host for LocalHost {
-    fn project_dir(&self, input: &str) -> Result<(PathBuf, bool), IpcError> {
+    fn project_dir(&self, input: &str) -> Result<(PathBuf, crate::host::Found), IpcError> {
         validate_project_dir(input)
     }
 
@@ -289,17 +289,17 @@ pub fn complete_dir(prefix: &str) -> Result<Vec<String>, IpcError> {
 #[cfg(test)]
 pub fn validate_project(s: &str) -> Result<PathBuf, IpcError> {
     match validate_project_dir(s)? {
-        (p, true) => Ok(p),
-        (_, false) => Err(err(
+        (p, crate::host::Found::Project) => Ok(p),
+        _ => Err(err(
             "no_ai",
             "not a Rein project (no .ai/ directory) — run `rein init` there first",
         )),
     }
 }
 
-/// [`validate_project`] without the `.ai/` requirement: the canonical directory and whether
-/// it has `.ai/` (V9 component 1).
-pub fn validate_project_dir(s: &str) -> Result<(PathBuf, bool), IpcError> {
+/// [`validate_project`] without the `.ai/` requirement: the canonical directory and what it is
+/// to Rein — a project, inside one (the nearest parent with `.ai/`), or neither (V9 1).
+pub fn validate_project_dir(s: &str) -> Result<(PathBuf, crate::host::Found), IpcError> {
     let unsafe_path = |why: &str| err("unsafe_path", why);
     let p = project_path::check(s).map_err(unsafe_path)?;
     let canon = p
@@ -310,8 +310,16 @@ pub fn validate_project_dir(s: &str) -> Result<(PathBuf, bool), IpcError> {
     if !canon.is_dir() {
         return Err(err("not_a_directory", "not a directory"));
     }
-    let set_up = canon.join(".ai").is_dir();
-    Ok((canon, set_up))
+    use crate::host::Found;
+    let found = if canon.join(".ai").is_dir() {
+        Found::Project
+    } else {
+        match canon.ancestors().skip(1).find(|p| p.join(".ai").is_dir()) {
+            Some(parent) => Found::Inside(parent.to_path_buf()),
+            None => Found::Plain,
+        }
+    };
+    Ok((canon, found))
 }
 
 /// The installed `rein` launcher, if it is an executable file.

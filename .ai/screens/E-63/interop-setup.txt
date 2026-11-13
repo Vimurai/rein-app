@@ -1,16 +1,27 @@
-date: 2026-11-13T13:58:15Z
+date: 2026-11-13T19:43:55Z
 wsl.exe: WSL version: 3.0.5.0; distro: Ubuntu; shell: /bin/zsh
 argv rule (no quote character): validate 0, set-up 0
 
 == validate: a folder without .ai/ — exit 3 and the canonical path, in the one call
-$ wsl.exe -d Ubuntu --cd /tmp/reine63nVTC9Wn -e sh -c case $PWD in /) exit 5;; esac; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P; [ -d .ai ] || exit 3
-  | /tmp/reine63nVTC9Wn
-  exit 3 in 168 ms
+$ wsl.exe -d Ubuntu --cd /tmp/reine63nozoCS1 -e sh -c case $PWD in /) exit 5;; esac; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P; [ -d .ai ] && exit 0; IFS=; set -f; d=$(pwd -P); while [ $d != / ]; do d=${d%/*}; [ -z $d ] && d=/; [ -d $d/.ai ] && cd $d && pwd -P && exit 6; done; exit 3
+  | /tmp/reine63nozoCS1
+  exit 3 in 171 ms
+
+== validate: a folder inside a Rein project (a space in its name) — exit 6, its path, then the project's, in the one call
+$ wsl.exe -d Ubuntu --cd /tmp/reine63nozoCS1/proj/inner dir -e sh -c case $PWD in /) exit 5;; esac; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P; [ -d .ai ] && exit 0; IFS=; set -f; d=$(pwd -P); while [ $d != / ]; do d=${d%/*}; [ -z $d ] && d=/; [ -d $d/.ai ] && cd $d && pwd -P && exit 6; done; exit 3
+  | /tmp/reine63nozoCS1/proj/inner dir
+  | /tmp/reine63nozoCS1/proj
+  exit 6 in 150 ms
+
+== validate: the project itself — exit 0
+$ wsl.exe -d Ubuntu --cd /tmp/reine63nozoCS1/proj -e sh -c case $PWD in /) exit 5;; esac; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P; [ -d .ai ] && exit 0; IFS=; set -f; d=$(pwd -P); while [ $d != / ]; do d=${d%/*}; [ -z $d ] && d=/; [ -d $d/.ai ] && cd $d && pwd -P && exit 6; done; exit 3
+  | /tmp/reine63nozoCS1/proj
+  exit 0 in 144 ms
 
 == the card's rows: rein init --check in that folder
-$ wsl.exe -d Ubuntu --cd /tmp/reine63nVTC9Wn -e /bin/zsh -lic exec ~/.rein/bin/rein init --check
+$ wsl.exe -d Ubuntu --cd /tmp/reine63nozoCS1 -e /bin/zsh -lic exec ~/.rein/bin/rein init --check
   | rein init --check: no .ai/ here — rein init would provision a new project.
-  exit 1 in 1113 ms
+  exit 1 in 831 ms
 
 == the out-of-date verdict: rein init --check in a project (this repository)
 $ wsl.exe -d Ubuntu --cd <repo> -e /bin/zsh -lic exec ~/.rein/bin/rein init --check
@@ -30,13 +41,13 @@ $ wsl.exe -d Ubuntu --cd <repo> -e /bin/zsh -lic exec ~/.rein/bin/rein init --ch
   |   install  .git/hooks/post-checkout
   |   install  .git/hooks/post-rewrite
   | Run: rein init
-  exit 1 in 3179 ms
+  exit 1 in 3205 ms
 
 == set up (user server) in a read-only folder: init fails → 119, start never runs
-$ wsl.exe -d Ubuntu --cd /tmp/reine63rt7OH1k -e /bin/zsh -lic tty; ~/.rein/bin/rein init || exit 119; exec ~/.rein/bin/rein start
+$ wsl.exe -d Ubuntu --cd /tmp/reine63rV4fxqJ -e /bin/zsh -lic tty; ~/.rein/bin/rein init || exit 119; exec ~/.rein/bin/rein start
   | not a tty
   | mkdir: Permission denied
   | mkdir: Permission denied
-  exit 119 in 459 ms
+  exit 119 in 455 ms
 
 files in the read-only folder afterwards: []

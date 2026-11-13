@@ -400,7 +400,10 @@ mod tests {
 
     #[cfg(unix)]
     impl crate::host::Host for AgentsHost {
-        fn project_dir(&self, _: &str) -> Result<(std::path::PathBuf, bool), IpcError> {
+        fn project_dir(
+            &self,
+            _: &str,
+        ) -> Result<(std::path::PathBuf, crate::host::Found), IpcError> {
             unreachable!()
         }
         fn rein_setup(

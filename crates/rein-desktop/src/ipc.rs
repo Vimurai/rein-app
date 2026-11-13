@@ -172,9 +172,13 @@ impl Desktop {
         server: crate::tmux_server::Server,
     ) -> Result<crate::project_setup::Opened, IpcError> {
         let size = validate_size(cols, rows)?;
-        let (project, set_up) = self.platform.project_dir(project)?;
-        if !set_up {
-            return self.open_setup(project, server);
+        let (project, found) = self.platform.project_dir(project)?;
+        match found {
+            crate::host::Found::Project => {}
+            crate::host::Found::Plain => return self.open_setup(project, server, None),
+            crate::host::Found::Inside(parent) => {
+                return self.open_setup(project, server, Some(parent));
+            }
         }
         let spec = self.start_spec(&project, server, false)?;
         self.open_spec_as(&spec, &project, size, events, server, None)
@@ -207,6 +211,7 @@ impl Desktop {
         &self,
         project: std::path::PathBuf,
         server: crate::tmux_server::Server,
+        inside: Option<std::path::PathBuf>,
     ) -> Result<crate::project_setup::Opened, IpcError> {
         let tabs = self.tabs();
         let mut setup = self
@@ -222,8 +227,16 @@ impl Desktop {
             id,
             project: project.to_string_lossy().into_owned(),
             title: title_of(&project),
+            inside: inside.as_ref().map(|p| p.to_string_lossy().into_owned()),
         };
-        setup.insert(id, crate::project_setup::SetupTab { project, server });
+        setup.insert(
+            id,
+            crate::project_setup::SetupTab {
+                project,
+                server,
+                inside,
+            },
+        );
         Ok(crate::project_setup::Opened::SetUp { setup: view })
     }
 
@@ -241,6 +254,13 @@ impl Desktop {
             .projects
             .setup_tab(tab)
             .ok_or_else(|| err("unknown_tab", "the tab is not waiting for set-up"))?;
+        // A folder inside a Rein project is never set up (E-63 rework 3).
+        if s.inside.is_some() {
+            return Err(err(
+                "inside_project",
+                "this folder is inside a Rein project — open that project instead",
+            ));
+        }
         let spec = self.start_spec(&s.project, s.server, true)?;
         // Taken out under the tabs lock in `open_spec_as`, so it counts once throughout.
         self.open_spec_as(&spec, &s.project, size, events, s.server, Some(tab))
@@ -672,6 +692,33 @@ mod tests {
         assert!(d.projects.setup_tab(id).is_some());
         assert_eq!(kind(d.setup(id + 100, 80, 24, q())), "unknown_tab");
         d.detach(id);
+        // E-63 rework 3: a folder inside a project carries the project and is never set up.
+        let proj = project();
+        let sub = proj.path().join("src");
+        std::fs::create_dir(&sub).unwrap();
+        let id = match d.open(
+            sub.to_str().unwrap(),
+            80,
+            24,
+            q(),
+            crate::tmux_server::Server::User,
+        ) {
+            Ok(crate::project_setup::Opened::SetUp { setup }) => {
+                assert_eq!(
+                    setup.inside.as_deref(),
+                    Some(proj.path().canonicalize().unwrap().to_str().unwrap())
+                );
+                setup.id
+            }
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(kind(d.setup(id, 80, 24, q())), "inside_project");
+        assert_eq!(
+            crate::project_setup::check(&d, id).unwrap_err().kind,
+            "inside_project"
+        );
+        assert!(d.tabs().is_empty());
+        d.detach(id);
         assert_eq!(
             kind(d.open(
                 "/a\u{1b}[2Jb",
@@ -861,7 +908,10 @@ mod tests {
         waits: bool,
     }
     impl Host for OverlayHost {
-        fn project_dir(&self, _: &str) -> Result<(std::path::PathBuf, bool), IpcError> {
+        fn project_dir(
+            &self,
+            _: &str,
+        ) -> Result<(std::path::PathBuf, crate::host::Found), IpcError> {
             unreachable!()
         }
         fn rein_setup(

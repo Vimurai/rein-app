@@ -39,6 +39,17 @@ pub fn completions(
     out
 }
 
+/// What a validated directory is to Rein (V9 component 1; the E-63 review's rework 3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Found {
+    /// It has `.ai/`.
+    Project,
+    /// No `.ai/` of its own, but a parent has one: that parent, the project it belongs to.
+    Inside(PathBuf),
+    /// Neither: a folder that can be set up.
+    Plain,
+}
+
 pub trait Host: Send + Sync {
     /// A project as the user gave it (argv, `:open`, the folder dialog, a second start) →
     /// the validated, canonical path the pty child runs in. May start processes (on Windows
@@ -48,8 +59,8 @@ pub trait Host: Send + Sync {
     #[cfg(test)]
     fn project(&self, input: &str) -> Result<PathBuf, IpcError> {
         match self.project_dir(input)? {
-            (p, true) => Ok(p),
-            (_, false) => Err(crate::ipc::err(
+            (p, Found::Project) => Ok(p),
+            _ => Err(crate::ipc::err(
                 "no_ai",
                 "not a Rein project (no .ai/ directory) — run `rein init` there first",
             )),
@@ -57,9 +68,9 @@ pub trait Host: Send + Sync {
     }
 
     /// [`project`](Self::project) without the `.ai/` requirement (V9 component 1, E-63): the
-    /// canonical directory and whether it has `.ai/` — asked in the same validation as
-    /// before, so a normal tab open gains no process.
-    fn project_dir(&self, input: &str) -> Result<(PathBuf, bool), IpcError>;
+    /// canonical directory and what it is to Rein — asked in the same validation as before,
+    /// so a normal tab open gains no process.
+    fn project_dir(&self, input: &str) -> Result<(PathBuf, Found), IpcError>;
 
     /// The pty child of Set up this project (V9 component 2): `rein init` in `project`, then
     /// on exit 0 the tab's ordinary start on `server`, in the same terminal. A failed init

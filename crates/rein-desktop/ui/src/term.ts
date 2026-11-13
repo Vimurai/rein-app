@@ -212,6 +212,10 @@ export class TermTab {
       this.#size.opened(this.#tab.pty, cols, rows, this.term);
       this.#ack(0);
       this.term.focus();
+      // A set-up tab's pane sat under the card: paint it as a shown tab is painted (E-63
+      // review — `rein init`'s output and the fixed line were written but, 4 runs in 8, not
+      // drawn until the window was resized).
+      if (setupId !== undefined) requestAnimationFrame(() => this.shown());
       this.onOpen(this.#tab);
     } catch (e) {
       if (gen !== this.#gen) return; // closed or restarted meanwhile: not this tab's error
@@ -294,7 +298,9 @@ export class TermTab {
     // ever drew) — a fixed sentence, not a bare exit code.
     // V9 (E-63): Set up's `rein init` failed — rein start never ran; nothing is retried.
     if (code === INIT_FAILED && !this.#alt) {
-      this.term.write(`\r\n\x1b[7m ${INIT_FAILED_SENTENCE} \x1b[0m\r\nPress Enter to open the folder again.\r\n`);
+      this.term.write(`\r\n\x1b[7m ${INIT_FAILED_SENTENCE} \x1b[0m\r\nPress Enter to open the folder again.\r\n`, () =>
+        requestAnimationFrame(() => this.shown()),
+      );
       return;
     }
     if (code === START_REFUSED && !this.#alt) {

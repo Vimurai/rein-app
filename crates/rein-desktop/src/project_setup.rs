@@ -189,6 +189,8 @@ pub fn run_lines(
 pub struct SetupTab {
     pub project: PathBuf,
     pub server: crate::tmux_server::Server,
+    /// The Rein project this folder is inside: no set-up is offered (E-63 rework 3).
+    pub inside: Option<PathBuf>,
 }
 
 /// What the window keeps for set-up and the out-of-date check.
@@ -248,6 +250,8 @@ pub struct SetupView {
     pub id: u32,
     pub project: String,
     pub title: String,
+    /// The project this folder is inside, if any: the card offers to open it instead.
+    pub inside: Option<String>,
 }
 
 /// `tab_open`'s answer: a tab with its terminal, or a set-up card.
@@ -272,6 +276,12 @@ pub enum Check {
 /// (a started tab, at most [`CHECKS_PER_TAB`] times).
 pub fn check(d: &Desktop, tab: u32) -> Result<Check, IpcError> {
     let setup = d.projects.setup_tab(tab);
+    if setup.as_ref().is_some_and(|s| s.inside.is_some()) {
+        return Err(err(
+            "inside_project",
+            "this folder is inside a Rein project — open that project instead",
+        ));
+    }
     let project = match &setup {
         Some(s) => s.project.clone(),
         None => d

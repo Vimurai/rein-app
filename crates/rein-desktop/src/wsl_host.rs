@@ -28,7 +28,10 @@ pub const PROBE_SCRIPT: &str = "printf %s\\\\n $WSL_DISTRO_NAME $HOME $SHELL";
 /// Run with `--cd <project>`: exit 5 still in `/` (a failed `--cd` does not fail: `wsl.exe`
 /// runs the command in `/` instead — D-038 addendum 1), 3 no `.ai/`, 4 rein not installed,
 /// else `pwd -P`.
-pub const VALIDATE_SCRIPT: &str = "case $PWD in /) exit 5;; esac; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P; [ -d .ai ] || exit 3";
+/// Exit 0 a project, 3 no `.ai/` here or above, 6 inside a project (the parent is the second
+/// line); the canonical path is always the first line (V9 component 1; E-63 rework 3). The
+/// parent walk runs with `IFS=` and `set -f`, so an unquoted path is never split or globbed.
+pub const VALIDATE_SCRIPT: &str = "case $PWD in /) exit 5;; esac; [ -x ~/.rein/bin/rein ] || exit 4; pwd -P; [ -d .ai ] && exit 0; IFS=; set -f; d=$(pwd -P); while [ $d != / ]; do d=${d%/*}; [ -z $d ] && d=/; [ -d $d/.ai ] && cd $d && pwd -P && exit 6; done; exit 3";
 /// The pty child's script, run by the user's login + interactive shell (W2). `tty` names the
 /// pty first: the tmux overlay finds the app's client by it (V6, D-050), and the host takes
 /// that line out of what the terminal shows (`tmux_overlay::take_tty_line`).
@@ -241,7 +244,7 @@ impl<S: WslShell + Send + Sync> WslHost<S> {
 }
 
 impl<S: WslShell + Send + Sync> Host for WslHost<S> {
-    fn project_dir(&self, input: &str) -> Result<(PathBuf, bool), IpcError> {
+    fn project_dir(&self, input: &str) -> Result<(PathBuf, crate::host::Found), IpcError> {
         let d = self.probe_distro()?;
         let linux = wsl_path::to_linux(input, &d.name).map_err(|e| {
             let kind = match e {
@@ -269,23 +272,25 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
             VALIDATE_SCRIPT,
         ]);
         match out {
-            // 0: a project; 3: a directory without `.ai/` (V9 component 1) — both print the
-            // canonical path first.
-            Ok(o) if matches!(o.code, Some(0 | 3)) => {
-                let set_up = o.code == Some(0);
-                let canon = String::from_utf8(o.stdout).ok();
-                let canon = canon.as_deref().map(|c| c.strip_suffix('\n').unwrap_or(c));
-                match canon {
-                    Some(c) if wsl_path::check_linux(c).is_ok() => Ok((PathBuf::from(c), set_up)),
-                    _ if !set_up => Err(err(
+            // 0: a project; 3: a directory without `.ai/`; 6: inside a project (V9 component
+            // 1) — each prints the canonical path first; 6 the parent second.
+            Ok(o) if matches!(o.code, Some(0 | 3 | 6)) => {
+                use crate::host::Found;
+                let text = String::from_utf8(o.stdout).ok();
+                let mut lines = text.as_deref().unwrap_or("").lines();
+                let canon = lines.next().filter(|c| wsl_path::check_linux(c).is_ok());
+                let parent = lines.next().filter(|c| wsl_path::check_linux(c).is_ok());
+                match (o.code, canon, parent) {
+                    (Some(0), Some(c), _) => Ok((PathBuf::from(c), Found::Project)),
+                    (Some(3), Some(c), _) => Ok((PathBuf::from(c), Found::Plain)),
+                    (Some(6), Some(c), Some(p)) => {
+                        Ok((PathBuf::from(c), Found::Inside(PathBuf::from(p))))
+                    }
+                    (Some(3 | 6), _, _) => Err(err(
                         "no_ai",
                         "not a Rein project (no .ai/ directory) — run `rein init` there first",
                     )),
-                    Some(c) => Err(err(
-                        "unsafe_path",
-                        wsl_path::check_linux(c).unwrap_err().to_string(),
-                    )),
-                    None => Err(err("not_a_directory", "not a directory")),
+                    _ => Err(err("unsafe_path", "not an absolute POSIX path")),
                 }
             }
             Ok(o) if o.code == Some(4) => Err(err(
@@ -1029,11 +1034,11 @@ mod tests {
         let before = h.shell.calls().len();
         assert_eq!(
             h.project_dir("/home/me/new").unwrap(),
-            (PathBuf::from("/home/me/new"), false)
+            (PathBuf::from("/home/me/new"), crate::host::Found::Plain)
         );
         assert_eq!(
             h.project_dir("/home/me/p").unwrap(),
-            (PathBuf::from("/home/me/p"), true)
+            (PathBuf::from("/home/me/p"), crate::host::Found::Project)
         );
         assert_eq!(h.shell.calls().len(), before + 2, "one call per open");
         assert!(VALIDATE_SCRIPT.find("pwd -P").unwrap() < VALIDATE_SCRIPT.find(".ai").unwrap());
@@ -1080,6 +1085,69 @@ mod tests {
                 .kind,
             "unsafe_path"
         );
+    }
+
+    /// E-63 rework 3: inside a project (exit 6) is told in the same one call, with the parent.
+    #[test]
+    fn a_folder_inside_a_project_is_told_with_its_parent() {
+        let h = host(ready().on(
+            &validate("/home/me/p/src"),
+            6,
+            b"/home/me/p/src\n/home/me/p\n",
+        ));
+        assert_eq!(
+            h.project_dir("/home/me/p/src").unwrap(),
+            (
+                PathBuf::from("/home/me/p/src"),
+                crate::host::Found::Inside(PathBuf::from("/home/me/p"))
+            )
+        );
+        assert!(!VALIDATE_SCRIPT.contains(['"', '\'']), "argv rule");
+    }
+
+    /// The validate script itself, at its process boundary (`sh -c`, as `wsl.exe -e sh -c`
+    /// runs it): exit 0 / 3 / 6 with the canonical path first; the parent walk never splits
+    /// or globs a path (a space, `*`, `?` in a name).
+    #[cfg(unix)]
+    #[test]
+    fn the_validate_script_walks_up_to_the_nearest_project() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = tempfile::tempdir().unwrap();
+        let bin = home.path().join(".rein/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("rein"), "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(bin.join("rein"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path().canonicalize().unwrap();
+        let proj = root.join("my proj*");
+        let deep = proj.join("a b/c?d");
+        std::fs::create_dir_all(proj.join(".ai")).unwrap();
+        std::fs::create_dir_all(&deep).unwrap();
+        // A decoy a glob would match: `my proj*` must not expand to it.
+        std::fs::create_dir_all(root.join("my projX/.ai")).unwrap();
+        let plain = root.join("plain");
+        std::fs::create_dir_all(&plain).unwrap();
+        let run = |dir: &std::path::Path| {
+            let o = std::process::Command::new("/bin/sh")
+                .args(["-c", VALIDATE_SCRIPT])
+                .current_dir(dir)
+                .env("HOME", home.path())
+                .output()
+                .unwrap();
+            (o.status.code(), String::from_utf8(o.stdout).unwrap())
+        };
+        let p = |x: &std::path::Path| x.to_string_lossy().into_owned();
+        assert_eq!(run(&proj), (Some(0), format!("{}\n", p(&proj))));
+        assert_eq!(
+            run(&deep),
+            (Some(6), format!("{}\n{}\n", p(&deep), p(&proj)))
+        );
+        // `plain` sits beside the projects, not under one: no parent is a project, unless the
+        // temp root itself is inside one (then that is the answer, and still exit 6).
+        let (code, out) = run(&plain);
+        assert!(matches!(code, Some(3 | 6)), "{code:?}");
+        assert!(out.starts_with(&format!("{}\n", p(&plain))));
+        assert!(!out.contains("my proj"), "{out}");
     }
 
     /// E-62 (V9 component 4): the status script goes on stdin with only the validated words in
