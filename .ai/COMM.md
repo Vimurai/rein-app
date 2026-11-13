@@ -2930,3 +2930,94 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Next action needed
 - Build E-63 to this ruling, then hand off.
 ---
+
+## Handoff — 2026-11-13 18:57 UTC
+**From**: Engineer → Architect
+**Trigger**: E-63 built (7ea75b3, Windows clippy fix 0d3d045) to the 14:10 ruling. Tier 2: run_review + align_diff, stamps.
+- **CI on 5929079:** hosted `ci` ×3 green and `desktop-windows` green (43468109776); local `rein ci run` PASS.
+- **macOS:** GitHub cancelled the job after 15 min without a runner (no steps ran); `--failed` rerun green.
+
+### What was built (E-63, V9 components 1–3)
+- **Project check (component 1), no new process on a normal open**
+  - `Host::project_dir(input) → (canonical path, has .ai/)` answers in each host's existing validation:
+    - Linux / macOS: a `stat`;
+    - Windows: the same single `wsl.exe` validate call, with the script reordered to `pwd -P` before its `.ai` test. Exit 3 now carries the path.
+  - A WSL test asserts one call per open after the one-time probe.
+  - `project()` (which refuses a folder without `.ai/`) remains only for tests. `project_choose` now accepts a folder without `.ai/`, so the dialog leads to the card.
+- **Set-up card (component 2)**
+  - `tab_open` answers `{setup: {id, project, title}}` for a folder without `.ai/`: no pty, counted against the 16-tab limit, forgotten on close, never added to the recent list.
+  - `project_check(tab)` runs `rein init --check`, and the card shows **rein's one line only**, plus the app's sentence for what the button does. Set up is never disabled.
+  - **Set up this project** = `project_setup(tab, cols, rows, output)`: the same tab id gets its pty, running one constant script:
+    `[tty; ]~/.rein/bin/rein init || exit 119; <the tab's own start>`
+    The start is the V8 start constant on the app's server, or `exec ~/.rein/bin/rein start`. On WSL the command is the start's own `wsl.exe … -lic` argv; the tty line comes first, before init's output.
+  - Exit 119 in the terminal gives the fixed line "rein init did not succeed — its output is above. Nothing else was run." and nothing is retried. Enter opens the folder again.
+- **Out-of-date bar (component 3), to the ruling**
+  - One `project_check` once the tab reaches "running", unless the project is in `ui.json` `update_dont_ask`.
+  - Verdict = exit code: 0 nothing; 1 the bar; anything else no bar, plus the health line "rein init --check did not give an answer" or "… within 30 seconds".
+  - **Update project** = `project_fix(tab, "init", output)`:
+    - `rein init` in a sheet with `--check`'s rows above its output;
+    - a 10-minute limit and a visible Cancel (`project_fix_cancel`);
+    - one run at a time, shared with the update / rollback runs.
+  - After exit 0 it checks once more:
+    - 0 → "Project updated. Running agents keep their old settings until the project is closed and opened again." The bar goes.
+    - 1 → "rein init finished, but rein still reports changes pending." No second offer.
+  - Cancel, timeout or a non-zero exit each give a fixed line, and the bar stays.
+  - **Not now** hides the bar for the tab; **Don't ask for this project** adds the project to `ui.json`. The list holds paths that pass the path rule, at most 500, de-duplicated.
+- **Rows:** at most 40, each at most 200 characters, with control and bidi characters as visible placeholders (`panel_sources::shown`), then "… and N more".
+- **Limits**
+  - `rein init --check`: at most 2 per tab and stage (set-up / started, counted apart). A misbehaving page cannot start it without bound (test: the third call answers `unavailable` without a process).
+  - Every rein call is a constant argv with no quote character: `ReinRun::{InitCheck, Init}`, `setup_script`. Rein's output reaches the page as text nodes only.
+- **Your chip fix (ruling 3):** the status bar's command chip clears when the last tab closes.
+- **New component:** `components/card.tsx` (shadcn Card, theme tokens, the token shadow).
+
+### Tests
+- **Rust: 139.**
+  - set-up script run through `sh` with a stand-in rein: init then start; a failed init gives 119 and start never runs;
+  - `run_lines`: merged streams, limit, Cancel, and a grandchild holding the pipe;
+  - row caps; the check cap; set-up tabs (no process, limit, forget, rein missing);
+  - WSL validate / set-up / `init` argv; `ui.json` list validation.
+- **Node: 55**, including `project.test.mjs` (card rows; check once after start; each way Update project can end).
+- **Window run** (`tests/e2e/project-screens.sh`, local, Xvfb, stand-in rein that keeps rein's exit-code contract): 16 checks pass in both themes.
+  - card: only `init --check` ran, no session;
+  - Set up: `init` before `start`, the session exists, `.ai/` was made by init;
+  - failed init: start never ran;
+  - stale project: start, then the one check;
+  - Update project: `init`, then the check once more.
+- **Screens (D-052), both themes, `.ai/screens/E-63/`:** `setup-card`, `setup-started`, `setup-failed`, `update-bar`, `update-done`.
+- **Windows interop** (`.ai/screens/E-63/interop-setup.{sh,txt}`), real `wsl.exe` and the real rein:
+  - validate on a folder without `.ai/`: exit 3 with the path, 168 ms;
+  - `init --check`: empty folder exit 1 in 1.1 s; this repo 14 rows, exit 1 in 3.2 s;
+  - set-up child in a read-only throwaway: `rein init` failed, exit 119 in 0.5 s, `rein start` never ran, nothing written.
+  - "not a tty" in that run is only because there is no ConPTY outside a tab; the tty line through ConPTY was proven in E-57.
+
+### Wanted: what `rein init` does to files an operator edited (from reading 0.5.0)
+- **Lost without a backup:**
+  - `ENGINEER.md`, `ARCHITECT.md`, `CLAUDE.md`: `cp -f` from rein's templates every time (`ensure_ai_templates`). `--check` lists them as `refresh`.
+  - `.claude/agents/*.md`: `cp -f`.
+  - `.claude/skills/`: overwritten (`sync_skills_20`) in a single-role workspace.
+- **Kept:**
+  - `.claude/settings.json`: loaded and merged; rein sets its own keys (`env`, hooks) and the rest stays.
+  - `.claude/rules/`: an edited rule is kept (`KEEP`).
+  - `.mcp.json`: regenerated, with user-added servers and env carried over.
+- So `refresh` **can** overwrite an operator's edit. A suggested word for the bar or sheet: "Update project replaces rein's own files (ENGINEER.md, ARCHITECT.md, CLAUDE.md, .claude/agents and skills); edits in them are lost." Not built: your call on the wording.
+
+### Found on the way (not E-63's to fix)
+- **The Windows `ci` job hides two failing UI tests.** On every run (also green 81f141a), `test (windows-latest)` fails:
+  - `actions.test.mjs` "src/actions.ts is generated from actions.json and is not stale";
+  - `harden.test.mjs` "after hardening, Object.prototype cannot be polluted".
+  
+  The step "window UI — install, type-check, test, bundle" is a multi-line `run:` under PowerShell, which does not stop on `npm test`'s non-zero exit, so the job stays green. Likely causes, not yet investigated: CRLF in the checkout for the stale check, and a Windows-only path in the hardening test. Fixing it changes the CI workflow (`shell: bash` or a check after each command), which needs `ci_gate` and a task.
+- **A subfolder of a project** (no `.ai/` of its own; rein would find the parent's) now gets the set-up card, where before it was refused. Set up there would make a nested `.ai/`. Worth a line in V9 or a check for a parent `.ai/`.
+
+### Blueprint divergence (if any)
+- None against the ruling. Additions for V9:
+  - `{setup}` from `tab_open`;
+  - `project_setup(tab, cols, rows, output)` keeps the tab id;
+  - exit 119;
+  - the check cap per tab and stage;
+  - `project_fix_cancel`;
+  - `ui.json` `update_dont_ask` (≤ 500).
+
+### Next action needed
+- Review E-63. On acceptance and release, its installer (run 43468109776) goes to Downloads. Then E-64.
+---
