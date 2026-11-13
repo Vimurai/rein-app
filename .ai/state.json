@@ -834,16 +834,16 @@
     {
       "id": "E-55",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 1,
       "description": "Reorder the menu for the `simple` input style, per .ai/blueprints/desktop.md §Two ways in (D-034, \"one plain-word menu\") — Architect review of `.ai/screens/E-50/menu-*.png`: in `simple` style the first three rows are `Normal mode`, `Terminal mode`, `Command line` with `modal:` key hints, which a click-first user cannot use. Do this after E-54. (1) In `simple` style list the actions in this order: project (open, recent), tabs, installation health, update / undo update / profiles, Settings, quit; leave out the three mode actions and show no `modal:` hint (a row with no `simple` shortcut shows none); (2) in `modal` style keep today's list and hints; (3) size the list so the last visible row is never cut in half (whole rows only). The `Action` list, both key tables and IPC stay unchanged; this is ordering and filtering in the pure menu model. Acceptance: a unit test of the menu model for both styles (order, the three mode actions absent in `simple`, no `modal:` hint there); pointer-parity and newcomer-path tests pass; screens of the menu in both styles under `.ai/screens/E-55/` (D-052); hosted `ci` and `desktop-windows` green on the commit (D-048).",
       "created_at": "2026-11-12T20:29:59.926Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-13T08:40:44.059Z",
+      "summary": "Simple-style menu order, no mode rows / modal hints, whole rows; tab_tmux fixed sentences, --motion-sweep (2651c3d). Hosted ci x3 + desktop-windows + local CI green; accepted (08:50, fe06cce).",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-12T20:29:59.927Z"
+      "updated_at": "2026-11-13T08:40:44.062Z"
     },
     {
       "id": "E-56",
