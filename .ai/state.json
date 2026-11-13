@@ -932,16 +932,16 @@
     {
       "id": "E-62",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Close the project when its agents have exited, per .ai/blueprints/desktop.md §Look and feel v2 V9 components 4-5 (D-057). Operator report: /exit in a Claude pane leaves a bare shell and the project stays open. FIRST read rein 0.5.0 and report in the handoff (V9 \"Open to the Engineer\"): does rein start --status give per-role agent liveness in a readable form; does rein start on a live session restart an exited agent. Then build: project_agents(tab_id) (rein's status if usable, else one tmux list-panes -F with a constant format on the tab's own server through the overlay's stdin transport); the agent-exit bar (one ended: Close project / Keep open; all ended: close without asking when [project] close_when_agents_exit = true, the default); project_close(tab_id, confirm_running) = rein start --kill --yes on the tab's tmux server, then the tab closes; a confirm dialog (default No) when an agent still runs. Poll only for the active tab with the window visible, at most one short process per 5 s, stopped when the tab's process ends. Add Restart only if rein supports it; otherwise leave it out and say so. Acceptance: V9's pure and end-to-end tests (one ended shows the bar; all ended closes and kills the session on the tab's server only, a same-named session on the default server untouched; ordinary tab close still leaves the session running); constants argv-safe; Windows interop output for the status and kill calls under .ai/screens/<task>/; screens (D-052) of the bar and the confirm in both themes; hosted ci x3 and desktop-windows green (D-048).",
       "created_at": "2026-11-13T11:49:08.669Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-13T13:41:48.371Z",
+      "summary": "Agent-exit bar (V9 4-5): project_agents via constant read-only tmux_agents.sh on the tab's server (ended only after seen running, 5 s window-wide gate), project_close = rein start -- …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-13T11:49:08.671Z"
+      "updated_at": "2026-11-13T13:41:48.371Z"
     },
     {
       "id": "E-63",
