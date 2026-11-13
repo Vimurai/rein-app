@@ -116,6 +116,8 @@ pub struct Desktop {
     overlay_seq: Mutex<HashMap<u32, u64>>,
     /// The panels' parsed sources per tab, kept while the file is unchanged (E-59).
     pub panels: crate::panel_ipc::PanelCache,
+    /// The agent-exit bar's per-tab memory (V9 component 4, E-62).
+    pub agents: crate::agents::AgentWatch,
 }
 
 impl Desktop {
@@ -129,7 +131,19 @@ impl Desktop {
             overlay_run: Mutex::new(()),
             overlay_seq: Mutex::new(HashMap::new()),
             panels: crate::panel_ipc::PanelCache::default(),
+            agents: crate::agents::AgentWatch::default(),
         }
+    }
+
+    /// A tab's pty, tmux server and project, as recorded when it opened (V9: the agents'
+    /// status and the close act on these, never on anything the web side sends).
+    pub fn tab_target(
+        &self,
+        tab: u32,
+    ) -> Option<(PtyId, crate::tmux_server::Server, std::path::PathBuf)> {
+        self.tabs()
+            .get(&tab)
+            .map(|t| (t.pty, t.server, std::path::PathBuf::from(&t.project)))
     }
 
     /// The project a tab of this window runs in, as recorded when it opened — the only path a
@@ -289,6 +303,7 @@ impl Desktop {
             .unwrap_or_else(|e| e.into_inner())
             .remove(&tab);
         self.panels.forget(tab);
+        self.agents.forget(tab);
     }
 }
 
@@ -758,6 +773,12 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(20));
             }
             self.answer.clone()
+        }
+        fn tmux_agents(&self, _: &[String]) -> Result<Vec<u8>, &'static str> {
+            unreachable!()
+        }
+        fn rein_kill(&self, _: &Path, _: crate::tmux_server::Server) -> Result<(), &'static str> {
+            unreachable!()
         }
         fn dialog_start(&self) -> Option<std::path::PathBuf> {
             None

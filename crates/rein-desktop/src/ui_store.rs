@@ -31,6 +31,8 @@ pub struct UiFile {
     pub tmux_status: Option<String>,
     /// The tmux server tabs open on (V8): `app` | `user`.
     pub tmux_server: Option<String>,
+    /// Every agent exited: close the project without asking (V9 component 5).
+    pub close_when_agents_exit: Option<bool>,
     pub first_run_done: bool,
 }
 
@@ -45,6 +47,7 @@ impl Default for UiFile {
             tmux_overlay: None,
             tmux_status: None,
             tmux_server: None,
+            close_when_agents_exit: None,
             first_run_done: false,
         }
     }
@@ -67,6 +70,7 @@ pub struct UiView {
     pub tmux_overlay: Effective,
     pub tmux_status: Effective,
     pub tmux_server: Effective,
+    pub close_when_agents_exit: Effective,
     pub first_run_done: bool,
 }
 
@@ -157,6 +161,12 @@ impl UiStore {
                 d.tmux_server.clone().map(Value::from),
                 Value::from(c.tmux.server.clone()),
             ),
+            close_when_agents_exit: pick(
+                "project.close_when_agents_exit",
+                Value::from(c.project.close_when_agents_exit),
+                d.close_when_agents_exit.map(Value::from),
+                Value::from(c.project.close_when_agents_exit),
+            ),
             first_run_done: d.first_run_done,
         }
     }
@@ -236,6 +246,13 @@ impl UiStore {
                         Some(m) if crate::tmux_server::SERVER_WORDS.contains(&m) => Some(m.into()),
                         _ => return Err(bad()),
                     },
+                };
+            }
+            "close_when_agents_exit" => {
+                refuse_config("project.close_when_agents_exit")?;
+                d.close_when_agents_exit = match value {
+                    Value::Null => None,
+                    v => Some(v.as_bool().ok_or_else(bad)?),
                 };
             }
             "first_run_done" => d.first_run_done = value.as_bool().ok_or_else(bad)?,
@@ -390,6 +407,30 @@ mod tests {
         let t = cfg(&["tmux.server"]);
         assert_eq!(
             s.set(&t, "tmux_server", &Value::from("app"))
+                .unwrap_err()
+                .kind,
+            "set_in_config"
+        ); // E-62 (V9 component 5): close when the agents exit — on by default, off by choice,
+        // config.toml winning; only a boolean.
+        assert_eq!(
+            s.view(&c).close_when_agents_exit,
+            Effective {
+                value: Value::from(true),
+                source: "default"
+            }
+        );
+        s.set(&c, "close_when_agents_exit", &Value::from(false))
+            .unwrap();
+        assert_eq!(s.view(&c).close_when_agents_exit.value, false);
+        assert_eq!(
+            s.set(&c, "close_when_agents_exit", &Value::from("no"))
+                .unwrap_err()
+                .kind,
+            "bad_value"
+        );
+        let t = cfg(&["project.close_when_agents_exit"]);
+        assert_eq!(
+            s.set(&t, "close_when_agents_exit", &Value::from(true))
                 .unwrap_err()
                 .kind,
             "set_in_config"

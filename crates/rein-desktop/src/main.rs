@@ -9,6 +9,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod actions;
+mod agents;
 mod cli;
 mod cli_ipc;
 mod config;
@@ -262,7 +263,9 @@ fn main() -> ExitCode {
             pointer_ipc::clipboard_read,
             pointer_ipc::ui_get,
             pointer_ipc::ui_set,
-            panel_ipc::panel_data
+            panel_ipc::panel_data,
+            agents::project_agents,
+            agents::project_close
         ]);
     let result = builder
         .setup(move |app| {

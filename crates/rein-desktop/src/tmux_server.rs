@@ -65,6 +65,12 @@ pub fn start_script() -> &'static str {
     START.trim_end()
 }
 
+/// The start script made into `rein start --kill --yes` (V9 component 4, E-62): the same
+/// checks and `PATH`, so rein's tmux calls reach the app's server. No tty line is needed.
+pub fn kill_script() -> String {
+    format!("{} --kill --yes", start_script())
+}
+
 /// The start script inside WSL: the same, printing the tty first (V6 "Client tty").
 pub fn start_script_wsl() -> String {
     start_script().replacen(

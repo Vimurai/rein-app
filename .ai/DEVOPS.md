@@ -438,3 +438,19 @@ A fresh throwaway clone with the artifact regenerated; the assertions are unchan
 - Delete the step. `tmux-overlay.sh` can be run with `SERVER=user` alone.
 
 **Local run:** `bash crates/rein-desktop/tests/e2e/tmux-server.sh` (about 5 s). `bash crates/rein-desktop/tests/e2e/tmux-overlay.sh` (about 2.5 min: both servers, each with the 60 s "no client" wait).
+
+### 2026-11-13 — E-62: the agent-exit bar's processes, tested in hosted CI (D-057, desktop.md V9)
+**What / why**
+- `.github/workflows/ci.yml`, `test` job, Linux and macOS: a new step `agents (the agent-exit bar)` after the tmux-server step. It runs `crates/rein-desktop/tests/e2e/agents.sh`, which tests at the tmux boundary:
+  - the status script (`src/tmux_agents.sh`) for the tab's client tty and server: one line per pane of the window the client shows, an exited agent showing its shell, read-only (options and sessions unchanged), exit codes 2 / 3 / 5;
+  - the close: the start constant made into `--kill --yes` against a stand-in rein — the project's window goes from the app's server and a same-named window on the default server stays; and the reverse for `server = "user"`;
+  - an ordinary tab close (the client detaching) leaves the project's window running.
+
+**Security implications**
+- No secrets, no permissions, no network. Uses the tmux the overlay step installed; nothing is published.
+- Hermetic: HOME is a `mktemp` dir; every tmux server (`rein-app`, `host`, default) lives under a private `TMUX_TMPDIR` with `TMUX` unset and is killed on exit.
+
+**Rollback**
+- Delete the step.
+
+**Local run:** `bash crates/rein-desktop/tests/e2e/agents.sh` (about 3 s).

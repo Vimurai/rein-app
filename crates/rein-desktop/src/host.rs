@@ -90,6 +90,19 @@ pub trait Host: Send + Sync {
     /// `alive`: the tab's terminal is still there; the run is stopped when it turns false.
     fn tmux_overlay(&self, args: &[String], alive: &dyn Fn() -> bool) -> Result<(), String>;
 
+    /// The agents' status script (V9 component 4, E-62) with `args` — the tab's client tty
+    /// and server word, checked by the caller: `/bin/sh -s` here, `sh -ls` inside WSL. Its
+    /// output, or the app's fixed sentence for why not.
+    fn tmux_agents(&self, args: &[String]) -> Result<Vec<u8>, &'static str>;
+
+    /// `rein start --kill --yes` in `project` on `server` (V9 component 4): the same path the
+    /// tab's `rein start` took, a constant command. `Err` is the app's fixed sentence.
+    fn rein_kill(
+        &self,
+        project: &Path,
+        server: crate::tmux_server::Server,
+    ) -> Result<(), &'static str>;
+
     /// The WSL distro a project belongs to, recorded with recent projects (Windows only).
     fn distro(&self) -> Option<String> {
         None

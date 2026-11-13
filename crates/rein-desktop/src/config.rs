@@ -38,6 +38,7 @@ pub struct Config {
     pub window: Window,
     pub keys: Keys,
     pub tmux: Tmux,
+    pub project: Project,
     pub wsl: Wsl,
 }
 
@@ -139,6 +140,23 @@ impl Default for Tmux {
     }
 }
 
+/// A project's life in the window (desktop.md §Look and feel v2 V9, D-057).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Project {
+    /// When every agent of a project has exited, close the project without asking
+    /// (`rein start --kill --yes`, then the tab closes); false: ask with the bar (V9 4).
+    pub close_when_agents_exit: bool,
+}
+
+impl Default for Project {
+    fn default() -> Self {
+        Self {
+            close_when_agents_exit: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Wsl {
@@ -177,6 +195,9 @@ pub const DEFAULTS_FILE: &str = r##"# rein-app window configuration (desktop.md)
 # [tmux]                  # the window's look on the tmux session a tab shows, while it is open
 # overlay = true          # false: tmux looks as your own ~/.tmux.conf has it (never touched)
 # status = "hidden"       # hidden | app (the window list in the window's colours) | keep (yours)
+
+# [project]
+# close_when_agents_exit = true # every agent exited: close the project (false: ask)
 
 # [wsl]                   # Windows only
 #   distro = "Ubuntu"     # unset: WSL's default distro
@@ -442,6 +463,7 @@ pub fn settings_keys_set(text: &str) -> Vec<String> {
         ("tmux", "overlay"),
         ("tmux", "status"),
         ("tmux", "server"),
+        ("project", "close_when_agents_exit"),
     ]
     .iter()
     .filter(|(table, key)| t.get(*table).and_then(|v| v.get(*key)).is_some())

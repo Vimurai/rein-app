@@ -39,7 +39,10 @@ export function SettingsOverlay({
 }: {
   ui: UiView;
   /** One ui.json field; `null` clears it (the default applies again). */
-  onSet: (field: "input_style" | "theme" | "font_size" | "decorations" | "tmux_server", value: unknown) => void;
+  onSet: (
+    field: "input_style" | "theme" | "font_size" | "decorations" | "tmux_server" | "close_when_agents_exit",
+    value: unknown,
+  ) => void;
   onOpenConfig: () => void;
   onClose: () => void;
   /** The theme on screen: a session's `:theme NAME` wins over the saved one until changed here. */
@@ -110,6 +113,14 @@ export function SettingsOverlay({
                 <SelectItem value="user">My own — new tabs</SelectItem>
               </SelectContent>
             </Select>
+          </Row>
+          <Row label="Close the project when its agents exit" fromConfig={ro("close_when_agents_exit")}>
+            <Switch
+              aria-label="Close the project when its agents exit"
+              checked={ui.close_when_agents_exit.value}
+              disabled={ro("close_when_agents_exit")}
+              onCheckedChange={(on) => onSet("close_when_agents_exit", on)}
+            />
           </Row>
           <Row label="Title bar" fromConfig={ro("decorations")}>
             <Switch

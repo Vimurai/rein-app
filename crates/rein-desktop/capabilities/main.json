@@ -26,6 +26,8 @@
     "allow-ui-get",
     "allow-ui-set",
     "allow-panel-data",
+    "allow-project-agents",
+    "allow-project-close",
     "core:window:allow-close",
     "core:window:allow-start-dragging",
     "core:window:allow-minimize",

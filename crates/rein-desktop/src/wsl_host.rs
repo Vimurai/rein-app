@@ -33,6 +33,8 @@ pub const VALIDATE_SCRIPT: &str = "case $PWD in /) exit 5;; esac; [ -d .ai ] || 
 /// pty first: the tmux overlay finds the app's client by it (V6, D-050), and the host takes
 /// that line out of what the terminal shows (`tmux_overlay::take_tty_line`).
 pub const START_SCRIPT: &str = "tty; exec ~/.rein/bin/rein start";
+/// Close a project on the user's own server (V9 component 4, E-62).
+pub const KILL_SCRIPT: &str = "exec ~/.rein/bin/rein start --kill --yes";
 /// Health inside WSL, from the Linux home (W4, D-045 addendum 1).
 pub const DOCTOR_SCRIPT: &str = "cd; exec ~/.rein/bin/rein doctor --scope install --json";
 /// `:open` completion under a parent other than `/` (W4): the `/` guard, then the listing.
@@ -102,6 +104,16 @@ pub trait WslShell: Shell {
         limit: Duration,
         alive: &dyn Fn() -> bool,
     ) -> io::Result<Option<i32>>;
+
+    /// Run `program args` with a constant `script` on stdin, stdout captured up to `cap`.
+    fn run_script_output(
+        &self,
+        program: &str,
+        args: &[OsString],
+        script: &str,
+        limit: Duration,
+        cap: u64,
+    ) -> io::Result<Option<rein_platform::process::Output>>;
 }
 
 pub struct WslHost<S: WslShell + Send + Sync> {
@@ -469,6 +481,53 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
             alive,
         ))
     }
+
+    /// `wsl.exe -d D -e sh -ls -- <args>` with the status script on stdin, as the overlay.
+    fn tmux_agents(&self, args: &[String]) -> Result<Vec<u8>, &'static str> {
+        let d = self.probe_distro().map_err(|_| crate::agents::NOT_ASKED)?;
+        let mut argv: Vec<OsString> = ["-d", d.name.as_str(), "-e", "sh", "-ls", "--"]
+            .into_iter()
+            .map(OsString::from)
+            .collect();
+        argv.extend(args.iter().map(OsString::from));
+        crate::agents::status_outcome(self.shell.run_script_output(
+            &self.wsl_exe,
+            &argv,
+            crate::agents::SCRIPT,
+            crate::agents::STATUS_LIMIT,
+            crate::agents::STATUS_CAP,
+        ))
+    }
+
+    /// The tab's own `wsl.exe` start made into `--kill --yes`: the same distro, `--cd`, shell
+    /// and flags; a constant script with no quote character.
+    fn rein_kill(
+        &self,
+        project: &Path,
+        server: crate::tmux_server::Server,
+    ) -> Result<(), &'static str> {
+        let d = self
+            .probe_distro()
+            .map_err(|_| crate::agents::KILL_NOT_STARTED)?;
+        let script = match server {
+            crate::tmux_server::Server::App => crate::tmux_server::kill_script(),
+            crate::tmux_server::Server::User => KILL_SCRIPT.to_string(),
+        };
+        let project = project.to_string_lossy();
+        wsl_path::check_linux(&project).map_err(|_| crate::agents::KILL_NOT_STARTED)?;
+        let run = self.run_within(
+            &[
+                "-d", &d.name, "--cd", &project, "-e", &d.shell, "-lic", &script,
+            ],
+            crate::agents::KILL_LIMIT,
+            crate::agents::KILL_CAP,
+        );
+        crate::agents::kill_outcome(match run {
+            Ok(o) => Ok(Some((o.code, o.stdout))),
+            Err(e) if e.kind() == io::ErrorKind::TimedOut => Ok(None),
+            Err(e) => Err(e),
+        })
+    }
 }
 
 /// `<SystemRoot>\System32\wsl.exe`, with `SystemRoot` only if it is drive-absolute: a
@@ -562,6 +621,22 @@ impl WslShell for SystemWsl {
     ) -> io::Result<Option<i32>> {
         tmux_overlay::run_stdin(&mut Self::command(program, args), script, limit, alive)
     }
+
+    fn run_script_output(
+        &self,
+        program: &str,
+        args: &[OsString],
+        script: &str,
+        limit: Duration,
+        cap: u64,
+    ) -> io::Result<Option<rein_platform::process::Output>> {
+        rein_platform::process::output_with_stdin(
+            &mut Self::command(program, args),
+            Some(script),
+            limit,
+            cap,
+        )
+    }
 }
 
 impl SystemWsl {
@@ -630,6 +705,18 @@ mod tests {
         ) -> io::Result<Option<i32>> {
             self.limits.lock().unwrap().push(limit);
             self.run(program, args).map(|o| o.code)
+        }
+
+        fn run_script_output(
+            &self,
+            program: &str,
+            args: &[OsString],
+            _script: &str,
+            limit: Duration,
+            _cap: u64,
+        ) -> io::Result<Option<rein_platform::process::Output>> {
+            self.limits.lock().unwrap().push(limit);
+            self.run(program, args).map(|o| Some((o.code, o.stdout)))
         }
     }
 
@@ -874,6 +961,71 @@ mod tests {
         let cmd = spec.command();
         assert_eq!(cmd.get_env("WSLENV"), None);
         assert!(spec.env_set.is_empty(), "TERM comes from WSL, not from us");
+    }
+
+    /// E-62 (V9 component 4): the status script goes on stdin with only the validated words in
+    /// argv; the kill is the tab's own start path made into `--kill --yes`, quote-free, on
+    /// each server; its failures are the app's fixed sentences.
+    #[test]
+    fn agents_status_and_kill_take_the_tabs_own_path() {
+        use crate::tmux_server::Server;
+        let words = ["/dev/pts/3".to_string(), "app".to_string()];
+        let status = ["-d", "Ubuntu", "-e", "sh", "-ls", "--", "/dev/pts/3", "app"];
+        let kill = |script: &str| {
+            [
+                "-d",
+                "Ubuntu",
+                "--cd",
+                "/home/me/p",
+                "-e",
+                "/usr/bin/zsh",
+                "-lic",
+                script,
+            ]
+            .map(String::from)
+            .to_vec()
+        };
+        let app = crate::tmux_server::kill_script();
+        let h = host(
+            ready()
+                .on(&status, 0, b"engineer|claude|0\n")
+                .on(
+                    &kill(&app).iter().map(String::as_str).collect::<Vec<_>>(),
+                    0,
+                    b"",
+                )
+                .on(
+                    &kill(KILL_SCRIPT)
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>(),
+                    2,
+                    b"refusing",
+                ),
+        );
+        assert_eq!(h.tmux_agents(&words).unwrap(), b"engineer|claude|0\n");
+        assert_eq!(h.rein_kill(Path::new("/home/me/p"), Server::App), Ok(()));
+        assert_eq!(
+            h.rein_kill(Path::new("/home/me/p"), Server::User),
+            Err(crate::agents::KILL_FAILED)
+        );
+        let calls = h.shell.calls();
+        assert!(calls.contains(&kill(&app)) && calls.contains(&kill(KILL_SCRIPT)));
+        assert!(!app.contains(['\'', '"']) && app.ends_with("rein start --kill --yes"));
+        // A path the start would refuse is refused before any process.
+        let n = h.shell.calls().len();
+        assert_eq!(
+            h.rein_kill(Path::new("/home/me/a\"b"), Server::User),
+            Err(crate::agents::KILL_NOT_STARTED)
+        );
+        assert_eq!(h.shell.calls().len(), n);
+        // WSL missing: fixed sentences, nothing else.
+        let none = host(Stub::default());
+        assert_eq!(none.tmux_agents(&words), Err(crate::agents::NOT_ASKED));
+        assert_eq!(
+            none.rein_kill(Path::new("/home/me/p"), Server::App),
+            Err(crate::agents::KILL_NOT_STARTED)
+        );
     }
 
     /// E-57 (V8 3b): on the app's server the argv start script is the quote-free constant with
@@ -1168,6 +1320,7 @@ mod tests {
             PROBE_SCRIPT,
             VALIDATE_SCRIPT,
             START_SCRIPT,
+            KILL_SCRIPT,
             DOCTOR_SCRIPT,
             LIST_SCRIPT,
             LIST_ROOT_SCRIPT,

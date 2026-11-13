@@ -147,6 +147,61 @@ impl Host for LocalHost {
         self.home.clone()
     }
 
+    /// `/bin/sh -s -- <args>` with the status script on stdin, as the overlay runs.
+    fn tmux_agents(&self, args: &[String]) -> Result<Vec<u8>, &'static str> {
+        let mut cmd = std::process::Command::new("/bin/sh");
+        cmd.args(["-s", "--"])
+            .args(args)
+            .current_dir("/")
+            .stderr(std::process::Stdio::null());
+        for k in ENV_REMOVED {
+            cmd.env_remove(k);
+        }
+        rein_platform::process::hide_console(&mut cmd);
+        crate::agents::status_outcome(rein_platform::process::output_with_stdin(
+            &mut cmd,
+            Some(crate::agents::SCRIPT),
+            crate::agents::STATUS_LIMIT,
+            crate::agents::STATUS_CAP,
+        ))
+    }
+
+    /// The tab's own start, made into `--kill --yes`: in the project, the same variables
+    /// removed; on the app's server through the start script's checks and shim.
+    fn rein_kill(
+        &self,
+        project: &Path,
+        server: crate::tmux_server::Server,
+    ) -> Result<(), &'static str> {
+        let home = self
+            .home
+            .as_deref()
+            .ok_or(crate::agents::KILL_NOT_STARTED)?;
+        let (program, args): (PathBuf, Vec<String>) = match server {
+            crate::tmux_server::Server::App => (
+                "/bin/sh".into(),
+                vec!["-c".into(), crate::tmux_server::kill_script()],
+            ),
+            crate::tmux_server::Server::User => (
+                rein_bin(home),
+                vec!["start".into(), "--kill".into(), "--yes".into()],
+            ),
+        };
+        let mut cmd = std::process::Command::new(program);
+        cmd.args(args)
+            .current_dir(project)
+            .stderr(std::process::Stdio::null());
+        for k in ENV_REMOVED {
+            cmd.env_remove(k);
+        }
+        rein_platform::process::hide_console(&mut cmd);
+        crate::agents::kill_outcome(rein_platform::process::output(
+            &mut cmd,
+            crate::agents::KILL_LIMIT,
+            crate::agents::KILL_CAP,
+        ))
+    }
+
     fn doctor(&self) -> HealthView {
         match &self.home {
             Some(h) => cli::local_doctor(h),

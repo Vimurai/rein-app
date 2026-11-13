@@ -23,4 +23,6 @@ pub const COMMANDS: &[&str] = &[
     "ui_get",
     "ui_set",
     "panel_data",
+    "project_agents",
+    "project_close",
 ];

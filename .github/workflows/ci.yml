@@ -96,3 +96,9 @@ jobs:
         if: matrix.desktop && runner.os != 'Windows'
         shell: bash
         run: bash crates/rein-desktop/tests/e2e/tmux-server.sh
+      # D-057 (E-62): the agent-exit bar's status script and close at the tmux boundary — the
+      # kill reaches the tab's own server only; tmux comes from the overlay step.
+      - name: agents (the agent-exit bar) (Linux, macOS)
+        if: matrix.desktop && runner.os != 'Windows'
+        shell: bash
+        run: bash crates/rein-desktop/tests/e2e/agents.sh

@@ -132,6 +132,8 @@ export interface UiView {
   tmux_status: Effective<"hidden" | "app" | "keep">;
   /** V8: the tmux server new tabs open on — rein-app's own, or the user's. */
   tmux_server: Effective<"app" | "user">;
+  /** V9: every agent exited — close the project without asking. */
+  close_when_agents_exit: Effective<boolean>;
   first_run_done: boolean;
 }
 /** The system folder dialog; `null` when cancelled; the path is validated like `tab_open`. */
@@ -143,6 +145,13 @@ export const clipboardRead = () => invoke<string>("clipboard_read", {});
 export const tabTmux = (tab: number, colours: ReturnType<typeof import("./theme.ts").tmuxColours>) =>
   // The health row's words when the overlay was not applied; null when it was or the tab closed.
   invoke<string | null>("tab_tmux", { tab, colours });
+/** V9 (E-62): per role `running | ended | unknown` for `tab`'s project, or why not known. The
+ *  core runs at most one short process per 5 s and answers from the last run in between. */
+export const projectAgents = (tab: number) => invoke<import("./agents.ts").AgentsReply>("project_agents", { tab });
+/** V9: `rein start --kill --yes` for `tab`'s project on its tmux server. Without
+ *  `confirmRunning` the core first asks who still runs and closes nothing if one does. */
+export const projectClose = (tab: number, confirmRunning: boolean) =>
+  invoke<import("./agents.ts").CloseReply>("project_close", { tab, confirmRunning });
 export const uiGet = () => invoke<UiView>("ui_get", {});
 export const uiSet = (field: string, value: unknown) => invoke<UiView>("ui_set", { field, value });
 

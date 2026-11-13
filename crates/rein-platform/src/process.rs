@@ -30,9 +30,31 @@ pub const OVER_CAP: &[u8] = b"(output over the size cap)";
 /// default). `Ok(None)`: it did not finish — exit and stdout closed — within `limit`; the
 /// child was killed and reaped. Stdout over `cap` bytes is replaced by [`OVER_CAP`].
 pub fn output(cmd: &mut Command, limit: Duration, cap: u64) -> io::Result<Option<Output>> {
+    output_with_stdin(cmd, None, limit, cap)
+}
+
+/// [`output`] with `stdin` written to the child (a constant script, `sh -s`), on its own
+/// thread so a child that does not read cannot hold the run past `limit`; `None` closes it.
+pub fn output_with_stdin(
+    cmd: &mut Command,
+    stdin: Option<&str>,
+    limit: Duration,
+    cap: u64,
+) -> io::Result<Option<Output>> {
     let deadline = Instant::now() + limit;
-    cmd.stdin(Stdio::null()).stdout(Stdio::piped());
+    cmd.stdin(if stdin.is_some() {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    })
+    .stdout(Stdio::piped());
     let mut child = cmd.spawn()?;
+    if let (Some(text), Some(mut pipe)) = (stdin, child.stdin.take()) {
+        let text = text.to_owned();
+        std::thread::spawn(move || {
+            let _ = io::Write::write_all(&mut pipe, text.as_bytes());
+        });
+    }
     // stdout is read on its own thread, bounded, and the pipe is closed after the cap so a
     // runaway writer ends. A grandchild that keeps the pipe open is not waited for past the
     // deadline (D-032).

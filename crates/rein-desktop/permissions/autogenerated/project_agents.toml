@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-project-agents"
+description = "Enables the project_agents command without any pre-configured scope."
+commands.allow = ["project_agents"]
+
+[[permission]]
+identifier = "deny-project-agents"
+description = "Denies the project_agents command without any pre-configured scope."
+commands.deny = ["project_agents"]

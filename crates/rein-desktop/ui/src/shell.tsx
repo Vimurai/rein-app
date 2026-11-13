@@ -35,6 +35,8 @@ import {
   healthGet,
   tabTmux,
   listen,
+  projectAgents,
+  projectClose,
   projectsForget,
   projectsList,
   type HealthView,
@@ -47,6 +49,8 @@ import { MenuOverlay, PasteConfirm, ProjectPicker, WhichKey, label } from "./ove
 import { startScreen, withStartKeys, type RecentView } from "./start.ts";
 import { StartScreen } from "./start-screen.tsx";
 import { TermTab } from "./term.ts";
+import { POLL_MS, agentBar, shouldPoll, type Agent } from "./agents.ts";
+import { AgentBar, CloseConfirm } from "./agent-bar.tsx";
 import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
 
 /** What an action handler supplied by the app may do on the command line. */
@@ -77,6 +81,8 @@ export interface ShellProps {
   startLast: boolean;
   /** The DIR the window was started with (set by the core before any script ran). */
   startDir: string | null;
+  /** V9 component 5: every agent exited — close the project without asking. */
+  closeWhenAgentsExit: boolean;
 }
 
 const VERSION = "0.5.0";
@@ -114,11 +120,21 @@ interface OpenTab {
   exited: boolean;
   /** A failed tmux overlay was told in a toast already (V6: once per tab). */
   overlayTold?: boolean;
+  /** V9 (E-62): the last answer about the project's agents. */
+  agents?: Agent[];
+  /** The ended roles the operator chose Keep open for. */
+  kept?: string | null;
+  /** Close project is running. */
+  closing?: boolean;
+  /** Closing by itself failed once: from then on the bar asks instead. */
+  autoFailed?: boolean;
 }
 
 export function Shell(props: ShellProps) {
-  const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, tmuxKey, handlers, notice, startDir, startLast } =
+  const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, tmuxKey, handlers, notice, startDir, startLast, closeWhenAgentsExit } =
     props;
+  /** V9: Close project with an agent still running asks first (default No). */
+  const [confirmClose, setConfirmClose] = useState<{ entry: OpenTab; running: string[] } | null>(null);
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const [recent, setRecent] = useState<RecentView[]>([]);
   const [picker, setPicker] = useState(false);
@@ -153,7 +169,7 @@ export function Shell(props: ShellProps) {
   /** The current tab's terminal, read like a ref. */
   const tab = { get current(): TermTab | null { return tabs.current[cur.current]?.term ?? null; } };
   const pickerRef = useRef(false);
-  pickerRef.current = picker || overlay !== null || pasteText !== null;
+  pickerRef.current = picker || overlay !== null || pasteText !== null || confirmClose !== null;
   // No tab open: the start screen's keys (p o h u q, digits) join the keymap.
   const keys = tabs.current.length ? projectKeys : withStartKeys(projectKeys);
   /** The other input style's table: the menu and tooltips name its key when this one has none. */
@@ -349,9 +365,10 @@ export function Shell(props: ShellProps) {
   const openRef = useRef(open);
   openRef.current = open;
 
-  /** Close tab `i` (default: the current one); its tmux session keeps running. */
+  /** Close tab `i` (default: the current one); its tmux session keeps running — unless
+   *  `note` says the project was closed (V9). */
   const detach = useCallback(
-    (i = cur.current) => {
+    (i = cur.current, note?: string) => {
       const t = tabs.current[i];
       if (!t) {
         say("no tab is open");
@@ -362,10 +379,72 @@ export function Shell(props: ShellProps) {
       tabs.current = tabs.current.filter((x) => x !== t);
       showTab(Math.min(i, tabs.current.length - 1));
       if (!tabs.current.length) setMode({ mode: "NORMAL", pending: [] });
-      say(`${t.title} closed — its tmux session keeps running`);
+      say(note ?? `${t.title} closed — its tmux session keeps running`);
     },
     [say, setMode, showTab],
   );
+
+  /** Close the project of `entry` (V9 component 4): `rein start --kill --yes` on its tmux
+   *  server, then the tab closes. Without `confirmed`, a running agent asks first. */
+  const closeProject = useCallback(
+    (entry: OpenTab, confirmed: boolean, auto = false) => {
+      const id = entry.term.tab?.id;
+      if (id === undefined || entry.closing) return;
+      entry.closing = true;
+      rerender();
+      showCommand(`cd ${shellWord(entry.project)} && rein start --kill --yes`);
+      projectClose(id, confirmed)
+        .then(
+          (r) => {
+            if (!tabs.current.includes(entry)) return;
+            if ("confirm" in r) {
+              // Closing by itself never asks: an agent that came back shows the bar instead.
+              if (auto) entry.autoFailed = true;
+              else setConfirmClose({ entry, running: r.confirm });
+              return;
+            }
+            detach(tabs.current.indexOf(entry), `${entry.title} closed — its agents had exited`);
+          },
+          (e: { message?: string }) => {
+            entry.autoFailed = true;
+            say(`E: cannot close ${entry.title}: ${e.message ?? String(e)}`, true);
+          },
+        )
+        .finally(() => {
+          entry.closing = false;
+          rerender();
+        });
+    },
+    [detach, say, showCommand],
+  );
+  const closeProjectRef = useRef(closeProject);
+  closeProjectRef.current = closeProject;
+  const closeWhenRef = useRef(closeWhenAgentsExit);
+  closeWhenRef.current = closeWhenAgentsExit;
+
+  // V9: ask the core which agents of the active tab still run — every 5 s, only while the
+  // window is visible and the tab's process runs. All ended (setting on): close by itself.
+  useEffect(() => {
+    const tick = () => {
+      const t = tabs.current[cur.current];
+      const id = t?.term.tab?.id;
+      if (!t || id === undefined) return;
+      const visible = document.visibilityState === "visible";
+      if (!shouldPoll({ active: true, visible, open: t.open, exited: t.exited }) || t.closing) return;
+      projectAgents(id).then(
+        (r) => {
+          if (!tabs.current.includes(t) || t.exited || !("agents" in r)) return;
+          t.agents = r.agents;
+          const view = agentBar(r.agents, { closeWhenAllExit: closeWhenRef.current && !t.autoFailed, kept: t.kept ?? null });
+          if (view.kind === "close") closeProjectRef.current(t, false, true);
+          rerender();
+        },
+        () => {},
+      );
+    };
+    const timer = setInterval(tick, POLL_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   /** Run one action — from a key, the command line or (E-40) a click: the same closed list. */
   const run = useCallback(
@@ -676,6 +755,10 @@ export function Shell(props: ShellProps) {
 
   const termOpen = tabs.current.length > 0;
   const current = tabs.current[cur.current];
+  const agentView =
+    current?.agents && !current.exited
+      ? agentBar(current.agents, { closeWhenAllExit: closeWhenAgentsExit && !current.autoFailed, kept: current.kept ?? null })
+      : ({ kind: "none" } as const);
   const runner = { run, tip: (c: ActionCall) => describeAction(c, keys, otherTable) };
   const now = performance.now();
   const starting = (t: OpenTab | undefined) => t !== undefined && !t.exited && t.term.phase(now) === "starting";
@@ -706,6 +789,17 @@ export function Shell(props: ShellProps) {
     <>
       <div id="frame" role="application" aria-label="rein-app" className="flex h-full flex-col">
         <TitleBar bar={bar} chrome={CHROME} r={runner} />
+        {current && agentView.kind === "bar" && (
+          <AgentBar
+            text={agentView.text}
+            closing={current.closing === true}
+            onClose={() => closeProject(current, false)}
+            onKeep={() => {
+              current.kept = agentView.key;
+              rerender();
+            }}
+          />
+        )}
         <div id="stage" className="relative min-h-0 flex-1" aria-busy={status.starting || undefined}>
           {/* V7: the tab is starting — a 2 px line in the stage's own top padding, never over
               the terminal. */}
@@ -771,6 +865,23 @@ export function Shell(props: ShellProps) {
             }}
             onClose={() => {
               setPasteText(null);
+              tab.current?.focus();
+            }}
+          />
+        )}
+      />
+      <Exit
+        show={confirmClose !== null}
+        render={() => (
+          <CloseConfirm
+            running={confirmClose?.running ?? []}
+            onYes={() => {
+              const c = confirmClose;
+              setConfirmClose(null);
+              if (c) closeProject(c.entry, true);
+            }}
+            onNo={() => {
+              setConfirmClose(null);
               tab.current?.focus();
             }}
           />

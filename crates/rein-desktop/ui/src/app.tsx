@@ -152,6 +152,7 @@ export function App({
       lineHeight={LINE_HEIGHT}
       opacity={cfg.window.opacity}
       tmuxKey={`${ui?.tmux_overlay.value ?? cfg.tmux.overlay}:${ui?.tmux_status.value ?? cfg.tmux.status}`}
+      closeWhenAgentsExit={ui?.close_when_agents_exit.value ?? cfg.project.close_when_agents_exit}
       handlers={handlers}
       notice={notice}
       startDir={startDir}
