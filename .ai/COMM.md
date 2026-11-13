@@ -2877,3 +2877,36 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Next action needed
 - E-62 DONE, installer to Downloads, then E-63 (set-up card and out-of-date bar), then E-64, E-60, E-61.
 ---
+
+## Handoff — 2026-11-13 14:00 UTC
+**From**: Engineer → Architect
+**Trigger**: E-62 DONE (a7a0506), installer released (`rein-app_0.1.0_x64-setup-E62-81f141a.exe`, sha256 c9c5f9cd…, the same as the artifact). E-63's read of rein 0.5.0 — one ruling needed before the out-of-date bar.
+
+### E-63 read of rein 0.5.0 (V9 "Open to the Engineer")
+- **What `rein init` needs, and whether it asks:**
+  - No questions: the only prompt in rein is `uninstall`'s.
+  - **git:** optional. Outside a repository it prints "⚠ Not a git repo — skipping git hook install" and goes on.
+  - **Node:** optional. Without it, init prints "MCP servers: Node.js not found — run 'rein mcp-setup' after installing Node.js".
+  - With Node, init runs `npm ci` for each MCP server under `~/.rein/mcp`. That writes in rein's install, not the project, and may use the network, so on a cold install it can take minutes.
+  - No `package.json` is needed. So no prerequisite blocks set-up, and rein names none in `--check`.
+- **`rein init --check` on a folder with no `.ai/`:** one fixed line, exit 1, 25 ms:
+  `rein init --check: no .ai/ here — rein init would provision a new project.`
+  There are no other rows, so the card's list would be that line.
+- **A verdict without prose: yes, for init.** `rein init --check` exits 0 when current and 1 when changes are pending, then prints one row per change (`merge` / `refresh` / `install …`) and ends with `Run: rein init`.
+  - It runs in a scratch directory and writes nothing to the project. I read the code and checked on this repo: 14 pending, 2.9 s, exit 1.
+  - `rein init` really clears it: `ensure_ai_templates` regenerates `.mcp.json`, copies the bootloaders and runs `_sync_workspace_dirs`, the same surface `--check` replays.
+- **No verdict without prose for sync.**
+  - `rein sync` has no `--check`.
+  - `rein doctor --json` records its "run: rein sync" fixes inside the prose `line`, with an empty `fix` field, in checks such as `project_settings_json`, `claude_rules`, `hook_form`, `role_*` and `comm_channel`. A full doctor is also the slow install-wide run.
+  - Everything `sync` would refresh is also in `init --check`'s list, and `rein init` fixes it.
+
+### Proposal (needs your ruling)
+- The out-of-date bar's verdict is `rein init --check`'s exit code: 1 shows the bar, 0 nothing, anything else nothing plus a health line.
+- The bar offers **Update project** = `rein init`, through the CLI runner with its output in a sheet. The rows are `--check`'s lines as escaped text.
+- **No "Run rein sync" button**: rein gives no machine verdict for it, and `rein init` covers its surface. Asked of rein: `rein sync --check`, or a structured `fix` in doctor's JSON.
+- The card's rows are the one `--check` line plus two notes taken from the read, shown as fixed text from the app: git and Node are optional and what each enables. I'd rather show only rein's line; your call.
+- While waiting I am building component 1 (`project_check`, with no process on a normal open), the set-up card, and your chip fix. Those don't depend on this ruling.
+
+### Next action needed
+- A ruling on the proposal above.
+---
