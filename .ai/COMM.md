@@ -2394,3 +2394,75 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Open risks
 - None new.
 ---
+
+---
+## Handoff — 2026-11-13 10:05 UTC
+**From**: Engineer → Architect
+**Trigger**: E-57 built (9d2abae + 14f30be). Hosted `ci` ×3 (incl. the new tmux-server step), `desktop-windows` and local `rein ci run` green on 14f30be. **One acceptance item is open: the Windows interop dump** (below)
+
+### What was built
+- **V8 as amended** (two scripts split by transport, `set -f`, `set-clipboard external`; your 09:55 and 10:30 rulings):
+  - Constant files:
+    - `src/tmux_shim.sh`;
+    - `src/tmux_app.conf`;
+    - `src/tmux_setup.sh` (on stdin; shim and config filled in at build time, `tmux_server::setup_script`);
+    - `src/tmux_start.sh` (the quote-free argv line; `tty;` added inside WSL).
+  - Setup runs before the pty only when `tmux.server = "app"`, inside `tab_open`, so the tab and its V7 loader show first. On failure the tab shows the fixed sentence plus "Settings → tmux server → my own uses your own tmux instead", and Enter tries again.
+  - Exit 126 before tmux draws shows its own fixed sentence.
+  - The V6 overlay takes the tab's server as an 8th word (`tmux -L rein-app` in app mode); each tab records the server it opened on.
+  - Setting `tmux.server` (`config.toml`, `ui.json`, closed key list, Settings "tmux server: rein-app's own / My own"), default `app`.
+  - No IPC command added.
+  - Operator guide: section "tmux in the window".
+- **Security.**
+  - **Before the first write**, `security_engineer` found 2 P1 fail-open bugs in my draft (a directory at `bin/tmux`; a failing `find` read as "safe"), plus the P2s you ruled on. All fixed.
+  - **After**, it re-ran every probe on the implemented files with dash, bash 5, zsh and **bash 3.2.57**: all RESISTED; SEC_CLEARED.
+  - Its low suggestion 1 is done: `put()` removes a non-regular target first, and a test covers it.
+- **Tier 3:** ARCH_PASS, SEC_PASS, TESTS_PASS, CLEAN_PASS, ALIGN_PASS, SEC_CLEARED; CRITIC_STAMP by `review_synthesizer`.
+  - The aligner's two CAPABILITIES_BYPASS flags were `../` repo-path lines in my new e2e scripts. Both now use `git rev-parse --show-toplevel`.
+  - Vibe and chaos audits were not run (D-052 screens instead, as for E-51). I logged that honestly as `RELEASE_BLOCKED` for release, not for the commit.
+- **Hosted CI.** 9d2abae failed clippy on `windows-latest`: `tmux_overlay::run` and `open_spec` had no caller there. 14f30be scopes them (`cfg(unix)` / `cfg(all(test, unix))`), with no behaviour change. It is green.
+- **Tests.**
+  - Rust 111: `tmux_server` checks that setup carries both files byte for byte, that the config runs no command (read from the file), that the start scripts are argv-safe, and that every exit has a fixed sentence; plus the settings key lists.
+  - UI 49.
+  - **`tests/e2e/tmux-server.sh` (new, in hosted CI on Linux and macOS):**
+    - setup refusals: directory as shim, symlinks, group-writable parent, space / glob / relative HOME; the edited shim rewritten; a symlink-to-dir target replaced;
+    - the shim: skips itself and `.`, `-L` / `-S` / `-uL` pass through, `-f VALUE`, exit 127;
+    - the start constant under sh / bash / zsh: `~` expands under `set -f`; a glob HOME next to a valid one → 126; missing or symlinked shim → 126; `XDG_STATE_HOME` ignored;
+    - **end to end:** with a user config that sets a marker option, binds a key and has a `run-shell` line, all three are absent on the `rein-app` socket, with no session on the default server. All three are present with `server = "user"`.
+    - I checked the glob case would catch a missing `set -f` (sh / bash pass the checks without it).
+  - **`tmux-overlay.sh` now runs for both servers** (`app` = `-L rein-app` under a private `TMUX_TMPDIR`).
+- **Screens:** `.ai/screens/E-57/tab-own-server-{catppuccin-mocha,github-light}-{1280x800,2560x1440}.png`, from the real window with the real `rein start`.
+  - **The operator's own `~/.tmux.conf` is copied into the HOME the window runs with.**
+  - **tmux on that server reports `config_files` = only the app's `tmux.conf`**, `status-position bottom` (theirs says `top`), `status off`, prefix `C-b`.
+  - Tool: `tests/e2e/server-screens.sh` (local only, refuses CI; private `-S` socket).
+- **Installer:** `desktop-windows` run **43404030681** (14f30be). It goes to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E57-14f30be.exe` only on your release.
+
+### Not done: the Windows interop dump (acceptance item)
+- **This is the one test of the start constant crossing `wsl.exe` as argv,** the reason for the split.
+- **Two attempts were refused by this session's permissions, and I did not work around either:**
+  1. rein's safe-exec gate blocked a throwaway HOME that symlinks to `~/.rein`.
+  2. The auto-mode classifier denied a stand-in `rein` in my scratchpad plus setup through `wsl.exe` stdin.
+- **Ways to close it:**
+  - the operator allows that run;
+  - or the operator's first tab on this installer is the check. If it shows panes without their status line and no `tmux check failed` sentence, the transport works.
+- The Linux screens use the same scripts, but not through `wsl.exe`.
+
+### Decisions made
+- None of mine.
+
+### Blueprint divergence (if any)
+1. **rein's pane-border role labels are gone in the window.** `rein start` sets neither `pane-border-status` nor `pane-border-format`; the operator's own config did (`setw -g pane-border-status top`, plus the catppuccin plugin's format). On the app's server the panes have no titles; see the screens. Options:
+   - add `pane-border-status top` with a plain format to the app config, which is a V8 change;
+   - or ask rein to set them itself.
+   
+   Yours.
+2. **Low, from `security_engineer`:** in zsh, `set -f` means NO_RCS, not "no globbing". A user rc with GLOB_SUBST + SH_WORD_SPLIT could weaken the start-time re-check, though setup (always `sh`) already refuses such a HOME. `set -o noglob` has no quote character and means the same in sh, bash and zsh. Changing the constant's text is yours.
+3. **The `SEC_CLEARED` stamp was recorded by the review orchestrator** on `security_engineer`'s behalf: `add_stamp` was not exposed inside its sub-session. The stamp says so.
+
+### Next action needed
+- Review E-57; rule on points 1–2; decide how the interop dump is closed. On release, the installer goes to Downloads.
+
+### Open risks
+- **The argv transport on Windows is unproven until the interop dump or the operator's first tab.**
+- **The operator's running sessions are on their own server.** After this build the window starts new sessions on `rein-app`. The guide says so (duplicate-session limit, `rein start --kill`).
+---
