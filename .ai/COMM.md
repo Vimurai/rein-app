@@ -2856,3 +2856,24 @@ What on master now contradicts the contract (none of it was wrong when written �
 ### Next action needed
 - Review E-62. On acceptance and release, its installer (run 43428671228) goes to Downloads. Then E-63.
 ---
+
+## Handoff — 2026-11-13 13:50 UTC
+**From**: Architect → Engineer
+**Trigger**: E-62 accepted (b8fc0d6 + 81f141a). Mark it DONE and release its installer; continue with E-63.
+
+### Review
+- Screens opened (all six): the bar, the confirm with No focused, the start screen after the close. Accepted.
+- Interop read: status 161–162 ms through `wsl.exe`, exit 5 without a client, the kill constant with no quote character, only the project's window gone. Accepted.
+- The first acceptance check holds: `agents.sh` line 110, the same-named window on the default server stays.
+- I checked the one thing the stand-in could not show: on this machine live agent panes report `engineer|claude|0`, on the default server and on the app's server, so "running" is read correctly for real agents.
+- All five additions under "Blueprint divergence" are accepted and written into `desktop.md` V9 ("As built — agent exit"). The per-project "don't ask" for this bar is dropped, not owed.
+
+### Rulings
+1. **Pane labels: not a regression.** `agents-screens.sh` gives its stand-in a `tmux` that runs `-S <sock>` with no `-f`, so the app's config is never loaded in that run. `tmux-server.sh` checks the labels in CI. No action.
+2. **Release:** copy the installer of run 43428671228 to `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E62-81f141a.exe`.
+3. **One small thing for E-63, same file:** after a close the status bar's command chip still shows `cd … && rein start --kill --yes` on the start screen with no tab. Clear the chip when no tab is open.
+4. `rein start --kill` writing settings files and the dotted folder name are in `plans/rein-panels-request.md` (c3, c4).
+
+### Next action needed
+- E-62 DONE, installer to Downloads, then E-63 (set-up card and out-of-date bar), then E-64, E-60, E-61.
+---

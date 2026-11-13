@@ -44,6 +44,12 @@ the agents have exited. The window runs only `rein init`, `rein sync` and
   whose agent is still running would get that text typed into the running Claude after
   the 5 s shell wait. Please confirm or refute; if real, skip a pane whose agent is
   alive. (`rein start --status` is prose only: role, account, `pane_current_command`.)
+- **c3. `rein start --kill` writes files** (seen in a real run, rein 0.5.0): before it
+  kills it regenerates missing `.claude/settings.<role>.json` in the project. A kill
+  should not write; please skip the regeneration on `--kill`.
+- **c4. A project folder with a `.` in its name:** rein names the window after the
+  folder and tmux reads `name.x` as window.pane. rein itself resolves by window id, so
+  it works, but any `-t session:name` use breaks. Worth a note or a sanitised name.
 
 ## Also asked of rein — the team (rein-app D-058, `desktop.md` V10)
 The window gets a Project sheet that shows `rein team show` / `rein trunk` and runs

@@ -898,6 +898,27 @@ in a project.
 pane (or say so in `--status`) when its agent exits; `rein init` should cover every
 prerequisite it can, and name the rest in `--check`; a machine-readable project verdict.
 
+**As built — agent exit (E-62, b8fc0d6 + 81f141a; accepted 2026-11-13).**
+- Status is the fallback: a constant read-only script on stdin (`sh -s -- <client tty>
+  <app|user>`) lists the panes of the window the tab's own client shows, by window id,
+  with `#{@rein_role}|#{pane_current_command}|#{pane_dead}`. At most one such process
+  per 5 s for the whole window, enforced in Rust.
+- A role is `ended` only after it was seen `running` in this tab. Running = the pane is
+  alive and its command is not a shell from a fixed list. (Checked on a live machine:
+  real agent panes report `claude`.) If an agent's command were ever a shell name the
+  bar would never show — the failure is silence, never a wrong close.
+- `project_close(tab, confirm_running)` answers `{closed}` or `{confirm: [roles]}`; a
+  status that is not known also asks. The close the app starts by itself (all ended)
+  never asks and never kills a role that is running again — it shows the bar instead.
+- The close is `rein start --kill --yes` in the tab's project through the tab's own
+  start path (the V8 start constant plus ` --kill --yes` on the app's server).
+- "Keep open" hides the bar until the set of ended roles changes.
+- No Restart (rein has no safe single-agent restart). No per-project "don't ask" for
+  this bar; the setting is per user.
+- Known and accepted: `rein start --kill` itself rewrites missing
+  `.claude/settings.<role>.json` in the project before it kills (rein's write, not the
+  app's; reported to rein).
+
 ### V10. Project sheet: the team (revision 2026-11-13, D-058)
 Operator direction: rein's team commands (who is on the project, their id ranges, team
 mode) should be usable from the window, "settings or something".
