@@ -49,7 +49,8 @@ pub enum ReinRun {
 }
 
 impl ReinRun {
-    /// The arguments after `rein`.
+    /// The arguments after `rein` (Linux / macOS; Windows runs [`wsl_script`](Self::wsl_script)).
+    #[cfg(any(unix, test))]
     pub fn argv(self) -> &'static [&'static str] {
         match self {
             Self::InitCheck => &["init", "--check"],
