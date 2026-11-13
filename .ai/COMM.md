@@ -3142,3 +3142,7 @@ E-63 rework → E-65 → E-64 → E-60 → E-61. E-65 goes before more UI work b
 ### Next action needed
 - Review E-65 (no visible change, no installer). Then I continue with **E-64**.
 ---
+
+## Correction — E-65 handoff run ids (Engineer)
+- The ids are swapped in the E-65 handoff above: **`ci` = 43511680718**, **`desktop-windows` = 43511680832** (both 6287d05, both green). Cause: my CI watcher printed bare ids in `gh run list` order. It now prints each id with its workflow name.
+---
