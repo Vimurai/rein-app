@@ -3266,3 +3266,67 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Next action needed
 - The read V11 asks for (`rein start --kill` bookkeeping), reported in the handoff; then build E-66.
 ---
+
+## Handoff — 2026-11-14 11:00 UTC
+**From**: Engineer → Architect
+**Trigger**: E-66 built (afdf4cf, stamps 3e5bd54), plus one fix found by its CI run (4c02573). Tier 2: run_review + align_diff, stamps.
+- **CI on 8c021c0:** hosted **`ci` 43587013939** ×3 green; **`desktop-windows` 43587013969** green (the installer); local `rein ci run` PASS.
+
+### V11 read (your "Open to the Engineer")
+- **Besides `kill-window`, `rein start --kill` does one piece of bookkeeping:** `_launch_record_prune` (`shared/launch-record.py prune`).
+  - It deletes launch records (`~/.rein/launch/<pid>.json`) and role tokens (`~/.rein/run/role-*.lock`) **whose process is gone**, matched by pid **and** process start time. It holds no lock and registers no wake.
+- **What `kill-server` leaves:** records whose processes are dead. They are inert, because a reused pid fails the start-time match, and the next prune (any `rein start --kill`, and `rein doctor`, which calls it) clears them.
+- **So quit runs `kill-server` alone**, with no per-project close first. (The `--kill` path also regenerates missing `.claude/settings.<role>.json`, already reported for E-62; quit skips that, which is fine.)
+
+### What was built (V11, the app's own server only)
+- **Tab close = project close.** `tab_close(tab, confirm_running)` → `{closed} | {confirm: roles}`.
+  - On the app's server: V9's close (`rein start --kill --yes` on the tab's start path), confirming first when an agent is running or not known. The confirm reads "Closing this tab stops the Engineer in <project>." with **Cancel** focused / **Close**, and **Don't ask again** (`ui.json` `close_dont_ask`).
+  - A set-up tab, an exited one, or a tab on the user's server closes as before.
+  - The tab goes even if the kill fails; the error is told, and the next run's sweep ends that session.
+  - ×, `ZZ`, `C-S-w` and the menu all route through it.
+- **Quit = end the server.** `app_quit(confirm_running)` → `{confirm: n}` ("Quitting stops the agents in N projects.", same Don't ask again), or the constant `tmux_kill_server.sh` on stdin (`tmux -L rein-app kill-server`), at most 3 s, then exit.
+  - **A native close** (title bar, window manager): with projects on the app's server, the first is held (`quit_requested` → the same confirm; Cancel → `quit_cancelled`). A **second close while held goes through**, so a stuck page cannot keep the window open.
+  - **Every exit path** (`RunEvent::Exit`) ends the app's server once, when a tab on it remains. A confirmed quit has already done it, so it is not repeated.
+- **Start-up sweep.** The first tab on the app's server in a run passes the word `sweep` to the V8 setup script, which then also runs `tmux -L rein-app kill-server`. That is **the same setup process** (Linux / macOS `/bin/sh -s -- sweep`; Windows `wsl.exe -d D -e sh -s -- sweep`), so there is no extra process anywhere. Later tabs never sweep.
+- **The app's socket only:** both scripts name only `-L rein-app`, and a test asserts no other `kill-server` / `kill-session` line. With `tmux.server = "user"` no path runs either script.
+- **Words:** "Close project" (the action label, and the tab tooltip "Close project in tab N"); after a close, "<project> closed — its agents were stopped", or on the user's server "… its tmux session keeps running".
+- **The chip (your screenshot item):** after a sheet closes (Update project, health, update, profiles), and after a tab closes while another stays, the chip shows the current tab's `cd … && rein start`.
+- **Not folded in:** `Tab.server` is now sent to the web side read-only (for the wording and the confirm); the web side still never names a server in a request.
+
+### Tests
+- **Rust: 145.**
+  - A stub host checks: the sweep only on the first app-server tab; a user-server tab never sets up, sweeps or kills; tab close asks while the status is unknown and kills only that project once confirmed; the quit count; the server ended once.
+  - Both scripts name only `-L rein-app`; WSL argv for quit and the sweep.
+- **Node: 57** (`lifecycle.test.mjs`: the confirms' words, the after-close note).
+- **CI e2e** (`tmux-server.sh`, Linux and macOS, private `TMUX_TMPDIR`): 7 new checks.
+  - Setup without `sweep` ends nothing; with it, the app's server goes and a same-named default session stays.
+  - Quit's kill ends the app's server only; it is a no-op without one, and without tmux.
+- **Window run** (`lifecycle-screens.sh`, local, Xvfb, a `tmux` wrapper mapping the app's socket and the default server to two private sockets): **16 checks pass in both themes**.
+  - A leftover app server holding the project's session is gone before the first start, and the stand-in rein never started on a live session.
+  - Two tabs: closing one (confirm, then Close) ends that project only.
+  - Quit (confirm, then Quit): the window exits, the app's server is gone, and the default server's same-named session stays.
+  - `tmux.server = "user"`: the tab closes without a kill, quit exits, the user's session runs on, and a session on the app's socket is untouched (no sweep, no quit kill).
+- **Screens** (`.ai/screens/E-66/`): `close-tab-confirm` and `quit-confirm`, both themes.
+- **Windows interop** (`interop-lifecycle.{sh,txt}`), real `wsl.exe`, private `TMUX_TMPDIR` via `WSLENV`:
+  - sweep exit 0 in **154 ms**: the app's server gone, the default `demo` running;
+  - a later setup without `sweep` ends nothing (139 ms);
+  - quit exit 0 in **153 ms**: the app's server gone, the default running;
+  - a second quit is a no-op (137 ms).
+- **Not covered by the window run:** a window manager's close button (Xvfb has none). It goes through the same hold-and-confirm code as the quit key.
+
+### Found on the way and fixed (4c02573)
+- macOS `ci` on 3e5bd54 failed `single_instance::a_window_that_exits_mid_handoff_is_taken_over` with `NotConnected` (os 57). The file is not E-66's.
+- **Cause:** a third macOS form of the mid-handoff race f7a8974 handled. The closing window accepted and dropped the connection, and macOS answered the next call with ENOTCONN rather than EINVAL or a reset.
+- **Fix:** both now map to "the window went away", so the start retries and takes over. A unit test pins the mapping, since Linux cannot produce the errno.
+
+### E-64
+- It had source writes when E-66 arrived, but no complete commit (its Tier 3 post-write review, screens and interop were open).
+- Rather than commit half a Tier 3 task to master, **its source is parked in a named stash** ("E-64 WIP … source only, no .ai"). The SEC_PLAN stamp is committed (84a67d3).
+- I resume it after your review of E-66.
+
+### Blueprint divergence (if any)
+- None. Additions for V11: the `sweep` word on the setup script, `quit_cancelled`, `close_dont_ask` covering both confirms, and `Tab.server` sent read-only.
+
+### Next action needed
+- Review E-66. On acceptance and release, its installer is `desktop-windows` run **43587013969** (8c021c0). Then E-64.
+---
