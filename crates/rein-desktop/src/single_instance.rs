@@ -91,6 +91,18 @@ fn vanished(e: &std::io::Error) -> bool {
     )
 }
 
+/// An error on a stream that DID connect, as `acquire` should see it. macOS reports a window
+/// that accepted and dropped the connection in more than one way besides a reset: EINVAL from
+/// setsockopt (f7a8974) and ENOTCONN from the next call (hosted CI, run 43517886294). Both mean
+/// the window went away, so both become a reset — `acquire` then retries and takes over.
+fn peer_gone(e: std::io::Error) -> std::io::Error {
+    use std::io::ErrorKind::{InvalidInput, NotConnected};
+    match e.kind() {
+        InvalidInput | NotConnected => std::io::Error::new(std::io::ErrorKind::ConnectionReset, e),
+        _ => e,
+    }
+}
+
 fn try_acquire(sock: &Path, handoff: Option<&str>) -> std::io::Result<Instance> {
     // Bind first: two simultaneous starts cannot both win a bind.
     match UnixListener::bind(sock) {
@@ -111,12 +123,7 @@ fn try_acquire(sock: &Path, handoff: Option<&str>) -> std::io::Result<Instance> 
             };
             match hand_off() {
                 Ok(()) => Ok(Instance::HandedOff),
-                // macOS: setsockopt on a socket whose peer already closed is EINVAL, not a
-                // reset. On a stream that connected, it means the window went away.
-                Err(e) if e.kind() == std::io::ErrorKind::InvalidInput => {
-                    Err(std::io::Error::new(std::io::ErrorKind::ConnectionReset, e))
-                }
-                Err(e) => Err(e),
+                Err(e) => Err(peer_gone(e)),
             }
         }
         // A socket file with nobody listening: left by a window that crashed or closed.
@@ -198,6 +205,21 @@ mod tests {
         drop(first); // the listener closes; the socket file stays, as after a crash
         assert!(d.join(SOCKET_NAME).exists());
         assert!(matches!(acquire(&d, None).unwrap(), Instance::Primary(_)));
+    }
+
+    /// macOS's other answers for a window that went away mid-handoff are retried like a reset;
+    /// anything else is still an error (Linux cannot produce these errnos on demand).
+    #[test]
+    fn a_vanished_peers_macos_errors_count_as_gone() {
+        use std::io::{Error, ErrorKind};
+        for kind in [ErrorKind::InvalidInput, ErrorKind::NotConnected] {
+            assert!(vanished(&peer_gone(Error::from(kind))), "{kind:?}");
+        }
+        assert!(vanished(&peer_gone(Error::from(ErrorKind::BrokenPipe))));
+        assert!(!vanished(&peer_gone(Error::from(
+            ErrorKind::PermissionDenied
+        ))));
+        assert!(!vanished(&peer_gone(Error::from(ErrorKind::TimedOut))));
     }
 
     #[test]
