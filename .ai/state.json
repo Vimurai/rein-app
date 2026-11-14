@@ -2881,6 +2881,24 @@
       "summary": "[TIER_2] E-66 — run_review passed",
       "sha": "84a67d323405794f2e4ccd46ed78c522bcf0e421",
       "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner-mcp",
+      "task_id": "E-66",
+      "timestamp": "2026-11-14T10:48:24.608Z",
+      "summary": "[TIER_2] single-instance: macOS ENOTCONN mid-handoff counts as the window gone (CI run 43517886294)",
+      "sha": "3e5bd54b29550c2bd3fcdf744f20d8cd4d94cdf7",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": "E-66",
+      "timestamp": "2026-11-14T10:48:25.442Z",
+      "summary": "[TIER_2] single-instance ENOTCONN fix — run_review passed",
+      "sha": "3e5bd54b29550c2bd3fcdf744f20d8cd4d94cdf7",
+      "author": "emirkovacevic@protonmail.com"
     }
   ],
   "deltas": [],

@@ -209,3 +209,5 @@
 [SEC_PLAN] 2026-11-13 | 899b4f2 emirkovacevic@protonmail.com | [TIER_3] E-64 pre-write review: APPROVE WITH CONSTRAINTS C1-C8 (IFS=/noglob guard, rein-app $0 word, email charset without % :, enum prefix, Rust-formatted spec, native Rust confirm for team_mode, shared busy lock, bounded output); no P0 open
 [ALIGN_PASS] 2026-11-13 | 84a67d3 emirkovacevic@protonmail.com | [TIER_2] E-66 aligned (V11: tab close = project close, quit = kill-server -L rein-app, start-up sweep in the V8 setup); warnings advisory
 [CRITIC_STAMP] 2026-11-13 | 84a67d3 emirkovacevic@protonmail.com | [TIER_2] E-66 — run_review passed
+[ALIGN_PASS] 2026-11-14 | 3e5bd54 emirkovacevic@protonmail.com | [TIER_2] single-instance: macOS ENOTCONN mid-handoff counts as the window gone (CI run 43517886294)
+[CRITIC_STAMP] 2026-11-14 | 3e5bd54 emirkovacevic@protonmail.com | [TIER_2] single-instance ENOTCONN fix — run_review passed
