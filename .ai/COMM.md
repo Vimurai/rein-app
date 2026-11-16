@@ -3330,3 +3330,62 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Next action needed
 - Review E-66. On acceptance and release, its installer is `desktop-windows` run **43587013969** (8c021c0). Then E-64.
 ---
+
+## Handoff — 2026-11-16 09:55 UTC
+**From**: Engineer → Architect
+**Trigger**: E-64 built and DONE (6e865d8, stamps 9f237be). E-66 marked DONE: it was built and green at 8c021c0, but its DONE was never recorded last session.
+
+### Your question before the build: store form per call or once at start
+- **Per call.** rein 0.5.0 (`~/Dev/rein` at v0.5.0):
+  - `isRecordStore(aiDir)` is `existsSync(.ai/project.json)` on every call (`src/mcp/shared/record-store.mjs:41`).
+  - `migrate --team` / `--legacy` keep `state.sqlite` in place. Nothing unlinks or renames it, so a server's cached handle stays valid.
+  - The only per-process caches are the DB handle and the git e-mail.
+- **So the mode buttons are not disabled while agents run.** The confirm's "Close and reopen the project…" sentence stays.
+
+### What was built (V10 + the ruling)
+- **Project: team…** (menu row; a key in both styles; pointer parity). It shows `rein team show` and `rein trunk` as text and offers by shape:
+  - `planner: ` first → the text, the add form, **Go back to single-developer mode**;
+  - rein's "no .ai/team.json" line → the line, the add form, **Turn on team mode**;
+  - anything else → the text only.
+  - No row is parsed, and `.ai/team.json` is never read or written.
+- **IPC:** `team_get`, `team_add`, `team_mode`. The project comes from the tab's state.
+- **Validation in Rust is the only check that counts:** e-mail charset without `%` and `:`, prefix an `E | P` enum, range 1–99999, spec formatted in Rust. A refused value starts no process.
+- **Transport:**
+  - Linux / macOS: five argv words, no shell.
+  - Windows: the constant quote-free script (`IFS=`, `noglob`, `case` re-check) with `rein-app` as `$0` and the values as positional words.
+- **Migrate:** the sheet's confirm, then a native dialog from the core (default **No**) with your fixed sentences. One busy lock is shared with the other CLI runs, and output is bounded and escaped.
+
+### Found on the way
+- **wsl.exe 3.0.5 rewrites a Linux exit 67 (and 87) to 255** and prints "User not found". I checked every code from 1 to 125. The script's refusal code 67 is now 69, with a comment at `team.rs`.
+- **Security review finding 1 is fixed.** The script's re-check let `E:1-2E` through; it now refuses any non-digit after the colon or at the end, and the test table and interop cover it.
+- **Window run fixes:** the shared Select's `min-w-48` made the E/P select push "to" onto a second line (fixed at the call site). The harness now counts only the sheet's calls and clicks the right spot on the shorter sheet.
+
+### Tests and evidence
+- **Rust 153, UI 60. Local `rein ci run` PASS** at 9f237be. **Hosted `ci` ×3 and `desktop-windows` green** at 9f237be.
+- **`team-screens.sh`** (real window, Xvfb, stand-in rein recording argv, both themes):
+  - opening the sheet runs only `team show` and `trunk`;
+  - an add reaches rein as five words;
+  - the native dialog's default (Return) is No and Escape is No;
+  - Yes runs `migrate --team` once, then the sheet refreshes.
+- **Screens** (`.ai/screens/E-64/`): sheet, form with rein's error, confirm (both themes); native dialog and the "no team.json" shape (mocha).
+- **Windows interop** (`interop-team.{sh,txt}`): real `wsl.exe` with a hostile `.zshrc` (IFS, shwordsplit, globsubst); its marker shows the login shell was zsh.
+  - Accepted values reach rein as five argv words.
+  - Ten hostile values are refused by the script before rein runs. The same values are refused in Rust first (the validation-table test).
+- **Tier 3 gates:** SEC_PLAN (before the build), SEC_PASS (security_engineer after the build: C1–C8 met, 0 exploited), ARCH, SEC, TESTS, CLEAN, ALIGN, SEC_CLEARED.
+- **Not run:** `rein-test --vibe`, and the review_synthesizer CRITIC_STAMP. That matches E-57 and E-59.
+
+### Blueprint divergence (if any)
+- The add transport on Windows is positional argv after the constant script, not stdin. Your ruling item 6 allows this, but the task text says stdin.
+- The team results come back in the IPC reply, not through the CLI runner's event stream. The one-at-a-time lock is still shared.
+- `ALIGN_PASS` was checked by hand: `align_diff` reads only staged changes.
+
+### Open risks (security review, Low, yours to accept or plan)
+1. **A WSL migrate stopped at 300 s may keep running after the lock is released.** Killing `wsl.exe` does not stop the Linux `rein state migrate`, so a second migrate could start on a half-migrated `.ai/`. The same pattern already exists for `rein init`. Possible fix: keep the sheet disabled after a timeout, or say "rein may still be running".
+2. **`team_add` has no confirm in the core.** A compromised web view could add a validly shaped developer. Only integrity is at stake, and it shows in the diff the operator commits. Accept as residual risk, or ask for a native confirm.
+3. **Not covered by a test:** the native dialog on Windows. On Linux, `team-screens.sh` exercises it.
+- `wsl_host.rs` is now 1640 lines (the standards check does not size `.rs` files).
+
+### Next action needed
+- Review E-64. On acceptance and release, its installer is `desktop-windows` run **43842114160** (9f237be). E-66's installer (run 43587013969) is still waiting on your acceptance too.
+- Then E-60 (side menu and the first three panels), then E-61. E-60 should add the "Project" button at the foot of the rail, as your handoff of 2026-11-13 said.
+---
