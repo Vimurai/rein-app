@@ -36,6 +36,7 @@ mod single_instance;
 #[cfg(windows)]
 #[path = "single_instance_windows.rs"]
 mod single_instance;
+mod team;
 mod tmux_overlay;
 mod tmux_server;
 mod ui_store;
@@ -274,7 +275,10 @@ fn main() -> ExitCode {
             project_setup::project_fix_cancel,
             lifecycle::tab_close,
             lifecycle::app_quit,
-            lifecycle::quit_cancelled
+            lifecycle::quit_cancelled,
+            team::team_get,
+            team::team_add,
+            team::team_mode
         ]);
     let result = builder
         .setup(move |app| {

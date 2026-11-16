@@ -16,6 +16,7 @@
     { "name": "release.rollback", "arg": null, "label": "Undo last update" },
     { "name": "profiles.show", "arg": null, "label": "Profiles" },
     { "name": "profiles.apply", "arg": null, "label": "Apply profile settings" },
+    { "name": "project.team", "arg": null, "label": "Project: team…" },
     { "name": "cmd.yank", "arg": null, "label": "Copy the last command" },
     { "name": "config.open", "arg": null, "label": "Show the config file's location" },
     { "name": "config.reload", "arg": null, "label": "Reload the config file" },

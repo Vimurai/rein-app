@@ -138,6 +138,13 @@ mod tests {
         ) -> Result<std::process::Command, IpcError> {
             unreachable!()
         }
+        fn rein_team_add(
+            &self,
+            _: &Path,
+            _: &crate::team::Add,
+        ) -> Result<std::process::Command, IpcError> {
+            unreachable!()
+        }
         fn read_project_file(
             &self,
             _: &Path,

@@ -32,4 +32,7 @@ pub const COMMANDS: &[&str] = &[
     "tab_close",
     "app_quit",
     "quit_cancelled",
+    "team_get",
+    "team_add",
+    "team_mode",
 ];

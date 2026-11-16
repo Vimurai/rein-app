@@ -212,6 +212,27 @@ impl Host for LocalHost {
         self.home.clone()
     }
 
+    /// `<home>/.rein/bin/rein team add <email> --range <spec>`: five argv words, no shell, in
+    /// the project, stdin closed by the runner (security review C2).
+    fn rein_team_add(
+        &self,
+        project: &Path,
+        values: &crate::team::Add,
+    ) -> Result<std::process::Command, IpcError> {
+        let home = self
+            .home
+            .as_deref()
+            .ok_or_else(|| err("rein_missing", "HOME is not set to an absolute path"))?;
+        let mut cmd = std::process::Command::new(installed_rein(home)?);
+        cmd.args(["team", "add", &values.email, "--range", &values.spec])
+            .current_dir(project);
+        for k in ENV_REMOVED {
+            cmd.env_remove(k);
+        }
+        rein_platform::process::hide_console(&mut cmd);
+        Ok(cmd)
+    }
+
     /// `/bin/sh -s -- <args>` with the status script on stdin, as the overlay runs.
     fn tmux_agents(&self, args: &[String]) -> Result<Vec<u8>, &'static str> {
         let mut cmd = std::process::Command::new("/bin/sh");

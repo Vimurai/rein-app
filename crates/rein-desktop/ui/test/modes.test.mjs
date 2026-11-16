@@ -71,6 +71,7 @@ test("the leader waits, and which-key lists what can follow it", () => {
       ["r", "release.rollback"],
       ["s", "profiles.show"],
       ["S", "profiles.apply"],
+      ["T", "project.team"], // E-64: the Project sheet
       ["c", "config.open"],
       ["R", "config.reload"],
       ["t", "theme.set"],

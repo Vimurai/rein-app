@@ -948,6 +948,13 @@ mod tests {
         ) -> Result<std::process::Command, IpcError> {
             unreachable!()
         }
+        fn rein_team_add(
+            &self,
+            _: &std::path::Path,
+            _: &crate::team::Add,
+        ) -> Result<std::process::Command, IpcError> {
+            unreachable!()
+        }
         fn rein_start(
             &self,
             _: &Path,

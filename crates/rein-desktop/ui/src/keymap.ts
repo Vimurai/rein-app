@@ -40,6 +40,8 @@ export const SIMPLE_SHORTCUTS: ReadonlyMap<string, ActionCall> = new Map<string,
   ["C--", { name: "font.smaller" }],
   ["C-0", { name: "font.reset" }],
   ["C-,", { name: "settings.show" }],
+  // V10 (E-64): the Project sheet's Team section.
+  ["C-S-m", { name: "project.team" }],
   ["F1", { name: "help.show" }],
 ]);
 
@@ -68,6 +70,7 @@ export const DEFAULT_MODAL: KeyTable = {
     // Beyond the blueprint's table, so every action has a key in at least one style
     // (pointer parity, D-034): the rest of the leader.
     ["<leader> S", a("profiles.apply")],
+    ["<leader> T", a("project.team")],
     ["<leader> c", a("config.open")],
     ["<leader> R", a("config.reload")],
     ["<leader> t", a("theme.set")],

@@ -52,6 +52,9 @@ const ALLOWED: &[&str] = &[
     "allow-tab-close",
     "allow-app-quit",
     "allow-quit-cancelled",
+    "allow-team-get",
+    "allow-team-add",
+    "allow-team-mode",
 ];
 
 fn json(rel: &str) -> serde_json::Value {

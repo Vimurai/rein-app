@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-team-add"
+description = "Enables the team_add command without any pre-configured scope."
+commands.allow = ["team_add"]
+
+[[permission]]
+identifier = "deny-team-add"
+description = "Denies the team_add command without any pre-configured scope."
+commands.deny = ["team_add"]

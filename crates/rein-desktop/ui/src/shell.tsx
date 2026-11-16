@@ -57,6 +57,7 @@ import { AgentBar, CloseConfirm, StopConfirm } from "./agent-bar.tsx";
 import { closeTabText, closedNote, quitText } from "./lifecycle.ts";
 import { shouldCheck, type CheckReply } from "./project.ts";
 import { SetupCard, UpdateBar, UpdateSheet } from "./project-ui.tsx";
+import { TeamSheet } from "./team-sheet.tsx";
 import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
 
 /** What an action handler supplied by the app may do on the command line. */
@@ -167,7 +168,7 @@ export function Shell(props: ShellProps) {
   const [recent, setRecent] = useState<RecentView[]>([]);
   const [picker, setPicker] = useState(false);
   /** The health / update / rollback / profiles overlay, if one is open (E-39). */
-  const [overlay, setOverlay] = useState<"health" | "update" | "rollback" | "profiles" | "menu" | null>(null);
+  const [overlay, setOverlay] = useState<"health" | "update" | "rollback" | "profiles" | "menu" | "team" | null>(null);
   /** The menu's starting filter (`theme.set` without a name opens it at "Theme"). */
   const [menuQuery, setMenuQuery] = useState("");
   /** A paste with several lines, waiting for its question (D-034). */
@@ -622,6 +623,17 @@ export function Shell(props: ShellProps) {
           // `×` names its tab; the key form closes the current one (V11: its project too).
           closeTab(call.arg ? Number(call.arg) - 1 : cur.current);
           return;
+        case "project.team": {
+          // V10 (E-64): the Project sheet for the active tab's project — a started tab only.
+          const t = tabs.current[cur.current];
+          if (!t?.term.tab || t.setup) {
+            say(t?.setup ? "this folder is not set up for Rein yet" : "no project open — :open DIR");
+            return;
+          }
+          setMode({ mode: "NORMAL", pending: [] });
+          setOverlay("team");
+          return;
+        }
         case "menu.show":
         case "help.show":
           setMode({ mode: "NORMAL", pending: [] });
@@ -1112,6 +1124,14 @@ export function Shell(props: ShellProps) {
         )}
       />
       <Exit show={overlay === "profiles"} render={() => <ProfilesOverlay onClose={closeOverlay} onCommand={showCommand} />} />
+      <Exit
+        show={overlay === "team"}
+        render={() => {
+          const t = tabs.current[cur.current];
+          const id = t?.term.tab?.id;
+          return id === undefined || !t ? null : <TeamSheet tab={id} project={t.project} onCommand={showCommand} onClose={closeOverlay} />;
+        }}
+      />
       <Exit
         show={picker}
         render={() => (

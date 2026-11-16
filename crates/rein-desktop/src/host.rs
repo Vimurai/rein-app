@@ -152,6 +152,15 @@ pub trait Host: Send + Sync {
         server: crate::tmux_server::Server,
     ) -> Result<(), &'static str>;
 
+    /// `rein team add <email> --range <spec>` in `project` (V10, E-64), the values checked by
+    /// [`crate::team::add_values`] and each its own argv word: directly on Linux / macOS, as
+    /// positional words after [`crate::team::ADD_SCRIPT`] inside WSL. Not yet started.
+    fn rein_team_add(
+        &self,
+        project: &Path,
+        values: &crate::team::Add,
+    ) -> Result<std::process::Command, IpcError>;
+
     /// The WSL distro a project belongs to, recorded with recent projects (Windows only).
     fn distro(&self) -> Option<String> {
         None

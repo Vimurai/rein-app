@@ -46,6 +46,11 @@ pub const CHECK_TIMED_OUT: &str = "rein init --check did not finish within 30 se
 pub enum ReinRun {
     InitCheck,
     Init,
+    /// The Project sheet's constant commands (V10, E-64).
+    TeamShow,
+    Trunk,
+    MigrateTeam,
+    MigrateLegacy,
 }
 
 impl ReinRun {
@@ -55,6 +60,10 @@ impl ReinRun {
         match self {
             Self::InitCheck => &["init", "--check"],
             Self::Init => &["init"],
+            Self::TeamShow => &["team", "show"],
+            Self::Trunk => &["trunk"],
+            Self::MigrateTeam => &["state", "migrate", "--team"],
+            Self::MigrateLegacy => &["state", "migrate", "--legacy"],
         }
     }
 
@@ -63,6 +72,10 @@ impl ReinRun {
         match self {
             Self::InitCheck => "exec ~/.rein/bin/rein init --check",
             Self::Init => "exec ~/.rein/bin/rein init",
+            Self::TeamShow => "exec ~/.rein/bin/rein team show",
+            Self::Trunk => "exec ~/.rein/bin/rein trunk",
+            Self::MigrateTeam => "exec ~/.rein/bin/rein state migrate --team",
+            Self::MigrateLegacy => "exec ~/.rein/bin/rein state migrate --legacy",
         }
     }
 }

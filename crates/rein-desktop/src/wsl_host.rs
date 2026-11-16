@@ -469,6 +469,37 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
         Ok(cmd)
     }
 
+    /// `wsl.exe -d D --cd P -e <shell> -lic <ADD_SCRIPT> rein-app <email> <spec>` (security
+    /// review C3): the constant re-checks both words under `IFS=` and `noglob` before `exec`.
+    fn rein_team_add(
+        &self,
+        project: &Path,
+        values: &crate::team::Add,
+    ) -> Result<Command, IpcError> {
+        let d = self.probe_distro()?;
+        let project = project.to_string_lossy();
+        wsl_path::check_linux(&project).map_err(|e| err("unsafe_path", e.to_string()))?;
+        let mut cmd = Command::new(&self.wsl_exe);
+        cmd.args([
+            "-d",
+            &d.name,
+            "--cd",
+            &project,
+            "-e",
+            &d.shell,
+            "-lic",
+            crate::team::ADD_SCRIPT,
+            crate::team::ADD_ARGV0,
+            &values.email,
+            &values.spec,
+        ]);
+        for k in ENV_REMOVED {
+            cmd.env_remove(k);
+        }
+        hide_console(&mut cmd);
+        Ok(cmd)
+    }
+
     /// The panel files through the distro's UNC path — no process (panels.md §API; measured
     /// in E-59 against `wsl.exe` + a script). The project is the tab's validated Linux path;
     /// `.` and `..` segments are refused, since the UNC path is not made canonical.
@@ -1134,6 +1165,48 @@ mod tests {
             ["-d", "Ubuntu", "-e", "sh", "-s", "--", "sweep"]
         );
         assert!(!host(Stub::default()).tmux_kill_server(), "WSL missing");
+    }
+
+    /// E-64 (security review C3, C8): `rein team add` reaches WSL as the constant script and
+    /// then `rein-app`, the e-mail and the range — each one argv word, none inside a script.
+    #[test]
+    fn team_add_values_are_their_own_words_after_the_constant() {
+        let h = host(ready());
+        let v = crate::team::add_values("a.b+c@x-y.io", crate::team::Prefix::P, 425, 524).unwrap();
+        let cmd = h.rein_team_add(Path::new("/home/me/p"), &v).unwrap();
+        assert_eq!(cmd.get_program(), EXE);
+        let got: Vec<String> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            got,
+            [
+                "-d",
+                "Ubuntu",
+                "--cd",
+                "/home/me/p",
+                "-e",
+                "/usr/bin/zsh",
+                "-lic",
+                crate::team::ADD_SCRIPT,
+                "rein-app",
+                "a.b+c@x-y.io",
+                "P:425-524"
+            ]
+        );
+        assert!(cmd.get_envs().any(|(k, v)| k == "WSLENV" && v.is_none()));
+        for which in [
+            crate::project_setup::ReinRun::TeamShow,
+            crate::project_setup::ReinRun::Trunk,
+            crate::project_setup::ReinRun::MigrateTeam,
+            crate::project_setup::ReinRun::MigrateLegacy,
+        ] {
+            let c = h.rein_command(Path::new("/home/me/p"), which).unwrap();
+            let last = c.get_args().last().unwrap().to_string_lossy().into_owned();
+            assert_eq!(last, which.wsl_script());
+            assert!(!last.contains(['"', '\'']));
+        }
     }
 
     /// E-63 rework 3: inside a project (exit 6) is told in the same one call, with the parent.
