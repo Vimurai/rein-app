@@ -3427,3 +3427,89 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - `timeout` may be missing in a WSL distro. The script must refuse with its own code and a fixed sentence, and rein must not run.
 ---
+
+## Handoff — 2026-11-16 13:50 UTC
+**From**: Engineer → Architect
+**Trigger**: E-67 DONE (8f1730d, stamps 2119366) and E-68 DONE (5b6c50c, 9a35965). The E-66 installer is released: `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E66-8c021c0.exe` (run 43587013969; the artifact's digest `481ff8…` is in the run).
+
+### E-67: the window run
+- **How the mode button is reached now:**
+  - The sheet opens with focus on Close, so Shift+Tab reaches the mode button.
+  - After an add error, focus sits in the "to" field, so it is Tab (Add), Tab (the mode button).
+  - No fixed pixel is used for a control that moves. The e-mail field stays a click: it sits above everything that moves.
+- **Proof the dialog was up:** a new `tests/e2e/xtitle.c` finds the native dialog as a mapped X window by its exact title. Every answer is checked before (dialog up) and after (dialog gone).
+  - Both paths, `--legacy` and `--team`, both themes: Return (the default, No) → 0 migrations; Escape → 0; Yes → `state migrate --<mode>` exactly once.
+  - Yes is clicked inside the dialog, at a position read from its geometry; Tab-then-Return did not reach GTK's Yes.
+- **Red run:** `.ai/screens/E-67/red-run.txt`. With `to_confirm` put back to the old fixed click, the run exits 1 with 20 failures, every one "native dialog … not on screen".
+- **Found while opening the screens:**
+  - My first new run had `team-confirm-after-error` showing no confirm: Shift+Tab from the "to" field only moved focus to "from".
+  - The terminal showed `^[^[`: a second Escape reached it.
+  - Both are fixed, and that path is now also proved by the native dialog.
+
+### Screens (`.ai/screens/E-67/`), all 14 opened after the final run
+- **`team-sheet-{catppuccin-mocha,github-light}`:** team shape; rein's three lines, trunk `master`, the empty add form, **Go back to single-developer mode**, focus on Close.
+- **`team-single-{both}`:** the "no .ai/team.json" line, the form, **Turn on team mode**, focus on Close.
+- **`team-form-error-{both}`:** the form filled (`new.dev+x@example.com`, E, 150–160), then rein's `[RANGE_OVERLAP]` line and "rein answered with exit 1 — its words are above."
+- **`team-confirm-after-error-{both}`:** the sheet made taller by that error, with the confirm **Go back to single-developer mode?** over it.
+  - It shows the legacy sentences in full.
+  - Focus is on **No, keep it**; the primary button is **Go back to single-developer mode**.
+- **`team-confirm-legacy-{both}`:** the same confirm on a fresh sheet.
+- **`team-confirm-team-{both}`:** **Turn on team mode?** with the team sentences in full, ending "The Tasks panel does not read team projects yet."; **No, keep it** focused.
+- **`team-native-legacy-catppuccin-mocha`, `team-native-team-catppuccin-mocha`:** the GTK dialog at the top left (Xvfb has no window manager).
+  - It shows its title, the same sentences, and **No | Yes**.
+  - The sheet behind it is disabled, with Add showing its spinner.
+- **Not on any screen:** the "may still be running" line. It needs a WSL host; the unit and UI tests cover it, below.
+
+### E-67: the time limit inside Linux (security review C9–C16, all met)
+- **Scripts (WSL only):**
+  - migrate: `IFS=; set -o noglob; for t in /usr/bin/timeout /bin/timeout; do [ -x $t ] && { exec $t -k 5 290 ~/.rein/bin/rein state migrate --team; exit; }; done; exit 96` (`--legacy` alike);
+  - add: the E-64 guard, then the same loop with `-k 3 55`.
+  - **The `exit` after `exec` is the security review's blocking constraint (C9).** Without it, an rc that defines `exec` as a function that returns ran rein twice, then fell through to `exit 96`.
+- **`Host::in_wsl()`:** false by default, true only on `WslHost`. Only add and migrate use it.
+- **Fixed sentences (Rust constants):**
+  - 124 → "rein took too long and was stopped. Check the project before trying again."
+  - 96 → "rein was not run: coreutils timeout was not found in WSL (/usr/bin/timeout or /bin/timeout)."
+  - The host limit firing → "rein may still be running in WSL. Check the project before trying again." The sheet keeps Add and the mode button disabled until it is reopened.
+- **One change from your text: exit 137 is treated like the host limit.** 137 means `timeout` had to KILL, because rein ignored TERM. The distro's `timeout` is **uutils 0.10.0**, which KILLs only its direct child, so a child of rein may live on. So 137 → "may still be running", and the sheet is held.
+- **Interop** (`interop-timeout.{sh,txt}`): the exact constants through real `wsl.exe` 3.0.5, with a stand-in that starts a background child and sleeps far past the limit.
+  - add: exit **124 after 55.2 s** (host 60 s); migrate: **124 after 290.2 s** (host 300 s).
+  - Both times the stand-in and its child are **gone from `ps`**.
+  - `wsl.exe` passes 96, 124 and 137 unchanged.
+  - WSL plus the zsh login rc starts in **0.18–0.47 s**, under C14's 1 s threshold, so 55+3 needs no change.
+- **rein 0.5.0 read (C11, C12):**
+  - `rein state|team` runs `node cli-state.mjs` in the foreground and returns only 0, 1 or 2, so 96 and 124 cannot come from rein.
+  - Its only children are synchronous `git` calls, none detached.
+- **Tests:**
+  - Exact script text and limit arithmetic.
+  - At the process boundary under sh, bash and zsh, using a stand-in `timeout` so the tests also run on macOS: the right `-k` and limit; missing `timeout` → 96 with rein not run; a shadowed `exec` runs rein once in zsh and never in dash.
+  - With the real `timeout` on Linux, a rein past the limit → 124, and its child is gone.
+  - The exact code → sentence table, and the UI's held state.
+- `interop-team.txt` is E-64's hostile-value run against the new add script: all hostile values refused, accepted values one argv word each.
+- **Stamps:** SEC_PLAN (C9–C16), ARCH, SEC, TESTS, CLEAN, ALIGN, SEC_CLEARED, SEC_PASS, CRITIC_STAMP. `rein-test --vibe` not run (as for E-64).
+- **CI:** local `rein ci run` PASS at 2119366; hosted `ci` and `desktop-windows` green at 2119366.
+
+### E-68: `wsl_host.rs` split
+- 1644 lines became:
+  - `wsl_host.rs` 199 (types, inherent impl, re-exports);
+  - `wsl_host/scripts.rs` 148;
+  - `host_impl.rs` 406;
+  - `system.rs` 149;
+  - `tests/mod.rs` 142 (the shared stub), `tests/projects.rs` 454, `tests/commands.rs` 208.
+- **Moves only, checked mechanically:** the set of trimmed lines before and after differs only by `mod` and `use` lines, module docs, `parse_probe` becoming `pub(super)`, and one added test.
+- **The added test** is `every_script_is_byte_identical_to_before_the_split`. It pins all seven `*_SCRIPT` constants against their text copied verbatim from the pre-split file, so there are **158 tests, not 157**.
+- `tests/spawn_sites.rs` lists the two new spawn-site files by name.
+- **CI:** local PASS, hosted `ci` and `desktop-windows` green at 9a35965.
+
+### Blueprint divergence (if any)
+- **Exit 137 → "may still be running" with the sheet held**, where V10 names only 124. Reason above.
+- E-68: one test added, which the task asked for.
+
+### Open risks (security review, Low)
+1. uutils `timeout -k` KILLs only rein itself, so a grandchild that ignores TERM would outlive it. rein 0.5.0 has none; keep it as a condition on rein releases.
+2. When the host limit fires (a cold WSL VM boot of more than about 1.5 s on the add path), the shared lock is freed. Only the team sheet holds its buttons; another sheet could start rein in that window. This is fail-safe and was accepted in V10.
+3. Info: an OOM-killed node (exit 137) would also read "may still be running"; the advice is still right.
+
+### Next action needed
+- **Open the E-67 screens.** Then the E-64 and E-67 build can go to the operator. The latest installer is `desktop-windows` run **43869107504** (9a35965, which includes E-67 and E-68). Name it as you like, e.g. `E67-9a35965`.
+- **Then E-60, then E-61** (E-60 adds the "Project" button at the foot of the rail).
+---
