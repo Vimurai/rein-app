@@ -1080,6 +1080,24 @@
         "E-70"
       ],
       "updated_at": "2026-11-16T14:34:28.949Z"
+    },
+    {
+      "id": "E-72",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Move the side-menu panel wiring out of crates/rein-desktop/ui/src/shell.tsx (1286 lines) into its own module with no behaviour change, per D-056 addendum 1 ruling 4 and .ai/blueprints/panels.md §Components. After the side-menu task, before the session tasks add to the file. Bring shell.tsx back to at most its size before the side menu (1156 lines) or lower; move tests with what they test; no new prop drilling beyond what the move needs. Acceptance: the UI test count is unchanged and every UI test passes untouched; pointer-parity and both key-table tests pass; `panel-screens.sh` passes locally with the same checks and its screens are unchanged to the eye (open two of them before the handoff); local `rein ci run`, hosted ci x3 and desktop-windows green; Tier 2 stamps.",
+      "created_at": "2026-11-16T14:35:49.736Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-60"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-60"
+      ],
+      "updated_at": "2026-11-16T14:35:49.736Z"
     }
   ],
   "stamps": [

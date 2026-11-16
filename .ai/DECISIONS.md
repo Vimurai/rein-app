@@ -2101,3 +2101,11 @@ D-059 ended every session at quit to keep `rein start` away from a live session 
 
 ### Rollback
 Revert the three tasks' commits to return to D-059; `close_when_agents_exit = false` turns the countdown off without a rebuild.
+
+---
+
+### D-056 addendum 1 (2026-11-16) — three rulings on the side-menu build (E-60, ALIGN_FAIL)
+1. **The 100 ms / 500 ms read-and-parse bound is for an optimised build.** Measured locally: 17–18 ms optimised, 113–134 ms in the unoptimised test build. The test asserts the bound when optimised and 10 × in debug; hosted CI runs the debug guard. **No release test build is added to CI** (the Engineer's option (a), declined): several minutes on every run to re-measure a figure with a sixfold margin, on a shared runner where an absolute time is noisy. The debug guard still catches the thing the bound exists for, a parse that stops being linear.
+2. **The window half of the end-to-end test stays local** (Xvfb, `panel-screens.sh`); the core half is in hosted CI on three systems. The blueprint's "Linux, macOS in CI" is narrowed to that. Same standing as the other window runs since D-052; the one window step in hosted CI remains the terminal-size check.
+3. **Modal keys are `Space P <digit>` and `Space P x / r / f`**, because `Space p` is taken and a full binding fires at once. Accepted with the simple-style keys as built.
+4. **`shell.tsx` at 1286 lines:** the panel wiring moves out in its own task (E-72) before the session tasks add to the file.

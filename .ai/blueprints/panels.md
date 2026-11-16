@@ -98,7 +98,10 @@ revision that needs a contract answer (see "Deferred").
   (Engineer measures and reports; no file text on argv either way — V8's rule).
 - **Actions** (both input styles, menu rows, pointer parity as D-034): `panel.toggle
   <id>`, `panel.close`, `panel.refresh`, `panel.focus`. Simple keys `Ctrl+Shift+1…4`;
-  modal `Space p` then the panel's digit.
+  modal `Space P` then the panel's digit, and `Space P x` / `r` / `f` for close,
+  refresh and focus (`Space p` is Recent projects and a full binding fires at once;
+  D-056 addendum 1). Simple also: `Ctrl+Shift+0` close, `Ctrl+Shift+R` refresh,
+  `Ctrl+Shift+E` focus.
 - **Errors**: every refusal is one of the app's fixed sentences (V7's rule); text from
   a file never appears in an error.
 
@@ -130,6 +133,10 @@ revision that needs a contract answer (see "Deferred").
   within 100 ms on Linux and 500 ms on Windows, off the UI thread; never on the pty's
   read path. Typing latency in the terminal is unchanged with a panel open (measured as
   E-53 measured the first frame).
+  **The bound is for an optimised build** (D-056 addendum 1): the test asserts it
+  when optimised and 10 × it in the unoptimised test build that hosted CI runs. The
+  optimised figure is measured locally and given in the handoff of every task that
+  touches the read or parse path. No release test build is added to CI for it.
 - An idle window with a closed panel runs no animation and no timer except the 5 s
   attention stat (V7's rule, restated).
 
@@ -160,8 +167,13 @@ revision that needs a contract answer (see "Deferred").
 - Web: text only (a `<script>` and a Markdown link in a handoff appear as literal text);
   attention rules as a pure function of tab states and source results; pointer parity
   and both key tables for the new actions; reduced motion.
-- End to end (Linux, macOS in CI): open a panel on a fixture project, change
-  `state.json`, the list updates within 6 s; hidden window → no read.
+- End to end: open a panel on a fixture project, change `state.json`, the list
+  updates within 6 s; hidden window → no read. **Split (D-056 addendum 1):** the core
+  half (a tab reads its own project and re-reads when `state.json` changes) runs in
+  hosted CI on all three systems; the window half (the update within 6 s, no read
+  while hidden, typing latency) runs in the local Xvfb window run
+  `tests/e2e/panel-screens.sh`, with its figures in the handoff, like the other
+  window runs (D-052).
 - Windows: interop output for the file read through the real `wsl.exe` path with timing
   (standing rule for anything on the `WslHost` path).
 - Screens gate (D-052): each of the four panels in both themes at 1280×800, the rail
