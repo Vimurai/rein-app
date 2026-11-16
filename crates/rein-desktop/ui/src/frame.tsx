@@ -33,7 +33,7 @@ export interface Runner {
 }
 
 /** A button with a tooltip; its accessible name is the tooltip's text. */
-function TipButton({
+export function TipButton({
   tip,
   className,
   onClick,

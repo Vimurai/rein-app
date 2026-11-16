@@ -8,6 +8,9 @@ export interface KeyLike {
   altKey: boolean;
   shiftKey: boolean;
   metaKey: boolean;
+  /** The physical key (`Digit1`); read only for Ctrl+Shift+digit, whose `key` differs by
+   *  layout (`!` on US, `+` on some) — the panel keys (E-60) must not. */
+  code?: string;
 }
 
 const NAMED: Record<string, string> = {
@@ -43,6 +46,12 @@ export function keyName(e: KeyLike): string | null {
   // where browsers still report the shifted letter: `C-S-p` for Ctrl+Shift+P.
   if (e.shiftKey && (!printable || (e.ctrlKey && /^[a-z]$/i.test(base)))) mods.push("S");
   if (printable && e.ctrlKey) base = base.toLowerCase();
+  // Ctrl+Shift+digit is `C-S-<digit>` on every layout (panels.md §API, E-60).
+  const digit = e.code ? /^Digit([0-9])$/.exec(e.code)?.[1] : undefined;
+  if (digit !== undefined && e.ctrlKey && e.shiftKey) {
+    base = digit;
+    if (!mods.includes("S")) mods.push("S");
+  }
   return mods.length ? `${mods.join("-")}-${base}` : base;
 }
 

@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::config::{ConfigView, THEMES};
+use crate::config::{ConfigView, PANEL_IDS, RAIL_WORDS, THEMES};
 use crate::ipc::{IpcError, err};
 
 pub const FILE_NAME: &str = "ui.json";
@@ -19,6 +19,9 @@ const MAX_BYTES: u64 = 64 * 1024;
 
 /// The most projects "Don't ask for this project" keeps (V9 component 3).
 pub const MAX_DONT_ASK: usize = 500;
+/// The panel's width range in px, and its width until the user drags it (panels.md 2).
+pub const PANEL_WIDTH: std::ops::RangeInclusive<u32> = 320..=560;
+pub const PANEL_WIDTH_DEFAULT: u32 = 360;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -40,6 +43,13 @@ pub struct UiFile {
     pub update_dont_ask: Vec<String>,
     /// V11 (E-66): closing a project or quitting with agents running does not ask.
     pub close_dont_ask: bool,
+    /// The side menu (panels.md §Data Model, E-60): the rail, `shown` | `hidden`, and the
+    /// panels offered — Settings' choices; `[panels]` in config.toml wins.
+    pub panels_rail: Option<String>,
+    pub panels_enabled: Option<Vec<String>>,
+    /// The panel's width once dragged, and the panel that was open last (or none).
+    pub panel_width: Option<u32>,
+    pub panel_open: Option<String>,
     pub first_run_done: bool,
 }
 
@@ -57,6 +67,10 @@ impl Default for UiFile {
             close_when_agents_exit: None,
             update_dont_ask: Vec::new(),
             close_dont_ask: false,
+            panels_rail: None,
+            panels_enabled: None,
+            panel_width: None,
+            panel_open: None,
             first_run_done: false,
         }
     }
@@ -82,6 +96,10 @@ pub struct UiView {
     pub close_when_agents_exit: Effective,
     pub update_dont_ask: Vec<String>,
     pub close_dont_ask: bool,
+    pub panels_rail: Effective,
+    pub panels_enabled: Effective,
+    pub panel_width: u32,
+    pub panel_open: Option<String>,
     pub first_run_done: bool,
 }
 
@@ -180,6 +198,27 @@ impl UiStore {
             ),
             update_dont_ask: d.update_dont_ask.clone(),
             close_dont_ask: d.close_dont_ask,
+            panels_rail: pick(
+                "panels.rail",
+                Value::from(c.panels.rail.clone()),
+                d.panels_rail.clone().map(Value::from),
+                Value::from(c.panels.rail.clone()),
+            ),
+            panels_enabled: pick(
+                "panels.enabled",
+                Value::from(c.panels.enabled.clone()),
+                d.panels_enabled.clone().map(Value::from),
+                Value::from(c.panels.enabled.clone()),
+            ),
+            // A hand-edited ui.json out of range falls back rather than reaching the page.
+            panel_width: d
+                .panel_width
+                .filter(|w| PANEL_WIDTH.contains(w))
+                .unwrap_or(PANEL_WIDTH_DEFAULT),
+            panel_open: d
+                .panel_open
+                .clone()
+                .filter(|p| PANEL_IDS.contains(&p.as_str())),
             first_run_done: d.first_run_done,
         }
     }
@@ -286,6 +325,48 @@ impl UiStore {
                 d.update_dont_ask = out;
             }
             "close_dont_ask" => d.close_dont_ask = value.as_bool().ok_or_else(bad)?,
+            "panels_rail" => {
+                refuse_config("panels.rail")?;
+                d.panels_rail = match value {
+                    Value::Null => None,
+                    v => match v.as_str() {
+                        Some(w) if RAIL_WORDS.contains(&w) => Some(w.into()),
+                        _ => return Err(bad()),
+                    },
+                };
+            }
+            "panels_enabled" => {
+                refuse_config("panels.enabled")?;
+                d.panels_enabled = match value {
+                    Value::Null => None,
+                    v => {
+                        let ids = v
+                            .as_array()
+                            .ok_or_else(bad)?
+                            .iter()
+                            .map(|x| x.as_str().map(String::from))
+                            .collect::<Option<Vec<String>>>()
+                            .ok_or_else(bad)?;
+                        crate::config::panels_enabled_ok(&ids).map_err(|_| bad())?;
+                        Some(ids)
+                    }
+                };
+            }
+            "panel_width" => {
+                d.panel_width = match value.as_u64().and_then(|w| u32::try_from(w).ok()) {
+                    Some(w) if PANEL_WIDTH.contains(&w) => Some(w),
+                    _ => return Err(bad()),
+                };
+            }
+            "panel_open" => {
+                d.panel_open = match value {
+                    Value::Null => None,
+                    v => match v.as_str() {
+                        Some(id) if PANEL_IDS.contains(&id) => Some(id.into()),
+                        _ => return Err(bad()),
+                    },
+                };
+            }
             "first_run_done" => d.first_run_done = value.as_bool().ok_or_else(bad)?,
             _ => return Err(err("bad_field", "not a setting")),
         }
@@ -551,6 +632,66 @@ mod tests {
                 .input_style
                 .value,
             "simple"
+        );
+    }
+
+    /// E-60 (panels.md §Data Model): the side menu's choices and the panel's own state.
+    #[test]
+    fn the_panel_choices_are_closed_and_config_wins() {
+        let t = tempfile::tempdir().unwrap();
+        let s = UiStore::open(Some(t.path().to_path_buf()));
+        let c = cfg(&[]);
+        let v = s.view(&c);
+        assert_eq!(v.panels_rail.value, Value::from("shown"));
+        assert_eq!(v.panels_enabled.value, serde_json::json!(PANEL_IDS));
+        assert_eq!((v.panel_width, v.panel_open), (PANEL_WIDTH_DEFAULT, None));
+        s.set(&c, "panels_rail", &Value::from("hidden")).unwrap();
+        s.set(&c, "panels_enabled", &serde_json::json!(["tasks"]))
+            .unwrap();
+        s.set(&c, "panel_width", &Value::from(480)).unwrap();
+        s.set(&c, "panel_open", &Value::from("communication"))
+            .unwrap();
+        let again = UiStore::open(Some(t.path().to_path_buf())).view(&c);
+        assert_eq!(again.panels_rail.value, Value::from("hidden"));
+        assert_eq!(again.panels_enabled.value, serde_json::json!(["tasks"]));
+        assert_eq!(again.panel_width, 480);
+        assert_eq!(again.panel_open.as_deref(), Some("communication"));
+        s.set(&c, "panel_open", &Value::Null).unwrap();
+        assert_eq!(s.view(&c).panel_open, None);
+        for (field, value) in [
+            ("panels_rail", Value::from("left")),
+            ("panels_enabled", serde_json::json!(["shell"])),
+            ("panels_enabled", serde_json::json!(["tasks", "tasks"])),
+            ("panels_enabled", Value::from("tasks")),
+            ("panel_width", Value::from(319)),
+            ("panel_width", Value::from(561)),
+            ("panel_width", Value::from(4_294_967_656_u64)),
+            ("panel_open", Value::from("shell")),
+        ] {
+            assert_eq!(
+                s.set(&c, field, &value).unwrap_err().kind,
+                "bad_value",
+                "{field} {value}"
+            );
+        }
+        let t2 = cfg(&["panels.rail", "panels.enabled"]);
+        assert_eq!(
+            s.set(&t2, "panels_rail", &Value::from("shown"))
+                .unwrap_err()
+                .kind,
+            "set_in_config"
+        );
+        assert_eq!(s.view(&t2).panels_enabled.source, "config");
+        // A hand-edited ui.json out of range never reaches the page.
+        std::fs::write(
+            t.path().join(FILE_NAME),
+            r#"{"schema":1,"panel_width":9000,"panel_open":"shell"}"#,
+        )
+        .unwrap();
+        let odd = UiStore::open(Some(t.path().to_path_buf())).view(&c);
+        assert_eq!(
+            (odd.panel_width, odd.panel_open),
+            (PANEL_WIDTH_DEFAULT, None)
         );
     }
 }

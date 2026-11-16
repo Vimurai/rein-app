@@ -366,3 +366,54 @@ mod tests {
         );
     }
 }
+
+/// E-60 (owed by E-59): the Windows read on a Windows runner, against a local folder in place
+/// of the distro's share — a regular file is read and stamped; a directory junction in place
+/// of `.ai` (what a WSL symlink looks like through the share: a reparse point) is refused, and
+/// so is a directory in place of the file.
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn the_windows_read_takes_a_regular_file_and_refuses_reparse_points() {
+        let t = tempfile::tempdir().unwrap();
+        let ai = t.path().join(".ai");
+        std::fs::create_dir(&ai).unwrap();
+        std::fs::write(ai.join("state.json"), br#"{"tasks":[]}"#).unwrap();
+        let got = read_unc(&ai, ProjectFile::StateJson, true).unwrap();
+        assert_eq!(got.bytes, br#"{"tasks":[]}"#);
+        assert_eq!(got.stamp.len, 12);
+        assert!(got.from_start);
+        let stat = read_unc(&ai, ProjectFile::StateJson, false).unwrap();
+        assert!(stat.bytes.is_empty() && stat.stamp == got.stamp);
+        assert_eq!(
+            read_unc(&ai, ProjectFile::CommMd, true).unwrap_err(),
+            Unavailable::Missing
+        );
+
+        // A junction named `.ai` pointing at the real folder: refused, never followed.
+        let other = t.path().join("other");
+        std::fs::create_dir(&other).unwrap();
+        let link = other.join(".ai");
+        let ok = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&link)
+            .arg(&ai)
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "mklink /J");
+        assert_eq!(
+            read_unc(&link, ProjectFile::StateJson, true).unwrap_err(),
+            Unavailable::NotRegular
+        );
+
+        // A directory where the file should be.
+        std::fs::create_dir(ai.join("COMM.md")).unwrap();
+        assert_eq!(
+            read_unc(&ai, ProjectFile::CommMd, true).unwrap_err(),
+            Unavailable::NotRegular
+        );
+    }
+}

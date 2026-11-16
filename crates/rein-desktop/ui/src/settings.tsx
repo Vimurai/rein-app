@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Switch } from "../components/switch.tsx";
 import { FolderOpen, Minus, Plus, RotateCcw } from "./icons.ts";
 import type { UiView } from "./ipc.ts";
+import { DESCRIPTORS } from "./panels.ts";
 import { THEME_NAMES } from "./theme.ts";
 
 export const FONT_MIN = 6;
@@ -40,7 +41,7 @@ export function SettingsOverlay({
   ui: UiView;
   /** One ui.json field; `null` clears it (the default applies again). */
   onSet: (
-    field: "input_style" | "theme" | "font_size" | "decorations" | "tmux_server" | "close_when_agents_exit",
+    field: "input_style" | "theme" | "font_size" | "decorations" | "tmux_server" | "close_when_agents_exit" | "panels_rail" | "panels_enabled",
     value: unknown,
   ) => void;
   onOpenConfig: () => void;
@@ -50,7 +51,9 @@ export function SettingsOverlay({
   /** The config path once shown, or a refused change; drawn inside the overlay. */
   note: { text: string; error: boolean } | null;
 }) {
-  const ro = (k: keyof Omit<UiView, "first_run_done" | "update_dont_ask" | "close_dont_ask">) => ui[k].source === "config";
+  const ro = (k: keyof Omit<UiView, "first_run_done" | "update_dont_ask" | "close_dont_ask" | "panel_width" | "panel_open">) =>
+    ui[k].source === "config";
+  const enabled = ui.panels_enabled.value;
   const size = ui.font_size.value;
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -122,6 +125,30 @@ export function SettingsOverlay({
               onCheckedChange={(on) => onSet("close_when_agents_exit", on)}
             />
           </Row>
+          {/* panels.md §Data Model (E-60): the rail, and one switch per panel. */}
+          <Row label="Side menu" fromConfig={ro("panels_rail")}>
+            <Switch
+              aria-label="Side menu"
+              checked={ui.panels_rail.value === "shown"}
+              disabled={ro("panels_rail")}
+              onCheckedChange={(on) => onSet("panels_rail", on ? "shown" : "hidden")}
+            />
+          </Row>
+          {DESCRIPTORS.map((d) => (
+            <Row key={d.id} label={`Panel: ${d.title}`} fromConfig={ro("panels_enabled")}>
+              <Switch
+                aria-label={`Panel: ${d.title}`}
+                checked={enabled.includes(d.id)}
+                disabled={ro("panels_enabled")}
+                onCheckedChange={(on) =>
+                  onSet(
+                    "panels_enabled",
+                    DESCRIPTORS.map((x) => x.id).filter((id) => (id === d.id ? on : enabled.includes(id))),
+                  )
+                }
+              />
+            </Row>
+          ))}
           <Row label="Title bar" fromConfig={ro("decorations")}>
             <Switch
               aria-label="Title bar"

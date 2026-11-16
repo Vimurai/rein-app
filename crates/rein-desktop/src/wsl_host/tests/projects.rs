@@ -452,3 +452,30 @@ fn the_overlay_runs_sh_ls_inside_wsl_with_only_the_validated_words() {
         Err("tmux is older than 3.2".into())
     );
 }
+
+/// E-60 (owed by E-59): the panel read refuses a project path with a `.` or `..` segment, or
+/// one ending in a dot or a space (Windows strips those, so `proj.` would read `proj`), before
+/// it asks WSL anything.
+#[test]
+fn the_panel_read_refuses_odd_segments_before_any_call() {
+    use crate::project_file::{ProjectFile, Unavailable};
+    let h = host(ready());
+    for p in [
+        "/home/me/p.",
+        "/home/me/p ",
+        "/home/me/./p",
+        "/home/me/../p",
+        "relative/p",
+    ] {
+        assert_eq!(
+            h.read_project_file(Path::new(p), ProjectFile::StateJson, true)
+                .unwrap_err(),
+            Unavailable::Unreadable,
+            "{p:?}"
+        );
+    }
+    assert!(
+        h.shell.calls().is_empty(),
+        "no wsl.exe call for a refused path"
+    );
+}

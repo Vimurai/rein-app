@@ -63,6 +63,23 @@ impl PanelCache {
     }
 }
 
+/// Debug builds only: with `REIN_DESKTOP_TRACE_PANELS` set, one stderr line per file looked
+/// at — `stat` (unchanged, from the cache) or `read` (read and parsed) — so a window run can
+/// see that an open panel follows a change and that a hidden window reads nothing (E-60).
+/// Release builds ignore it, as they do `REIN_DESKTOP_SLOW_LIST_MS`. No path or file text.
+fn trace(tab: u32, which: ProjectFile, what: &str) {
+    #[cfg(debug_assertions)]
+    if crate::dirs::process_env("REIN_DESKTOP_TRACE_PANELS").is_some() {
+        let ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        eprintln!("panel-trace {ms} tab={tab} file={which:?} {what}");
+    }
+    #[cfg(not(debug_assertions))]
+    let _ = (tab, which, what);
+}
+
 /// One file of a tab, parsed — from the cache when its stamp is unchanged.
 fn parsed(d: &Desktop, tab: u32, which: ProjectFile) -> Result<Parsed, Unavailable> {
     let project = d.tab_project(tab).ok_or(Unavailable::Unreadable)?;
@@ -70,9 +87,11 @@ fn parsed(d: &Desktop, tab: u32, which: ProjectFile) -> Result<Parsed, Unavailab
     if let Some((stamp, p)) = d.panels.lock().get(&(tab, which))
         && *stamp == stat.stamp
     {
+        trace(tab, which, "stat");
         return Ok(p.clone());
     }
     let file = d.platform.read_project_file(&project, which, true)?;
+    trace(tab, which, "read");
     let p = match which {
         ProjectFile::StateJson => {
             Parsed::Tasks(panel_sources::parse_tasks(&file.bytes).map(Arc::new))

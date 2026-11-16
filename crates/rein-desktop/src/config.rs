@@ -39,6 +39,7 @@ pub struct Config {
     pub keys: Keys,
     pub tmux: Tmux,
     pub project: Project,
+    pub panels: Panels,
     pub wsl: Wsl,
 }
 
@@ -157,6 +158,46 @@ impl Default for Project {
     }
 }
 
+/// The panel ids the app knows (panels.md §Components 7, D-056): the compiled-in descriptors,
+/// in rail order. A `[panels] enabled` entry or a `panel.toggle` binding names one of these.
+pub const PANEL_IDS: &[&str] = &["dashboard", "communication", "tasks"];
+/// `[panels] rail`.
+pub const RAIL_WORDS: &[&str] = &["shown", "hidden"];
+
+/// The side menu (panels.md §Data Model, D-056).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Panels {
+    /// `shown` | `hidden`: the rail at the window's left edge. Hidden, panels still open
+    /// from the menu and keys.
+    pub rail: String,
+    /// The panels offered, by id (each in [`PANEL_IDS`], no repeats); rail order is
+    /// [`PANEL_IDS`]' order whatever the order here.
+    pub enabled: Vec<String>,
+}
+
+impl Default for Panels {
+    fn default() -> Self {
+        Self {
+            rail: "shown".into(),
+            enabled: PANEL_IDS.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+}
+
+/// A `[panels] enabled` list: known ids, no repeats.
+pub fn panels_enabled_ok(ids: &[String]) -> Result<(), String> {
+    for (i, id) in ids.iter().enumerate() {
+        if !PANEL_IDS.contains(&id.as_str()) {
+            return Err(format!("{id:?} is not a panel — {}", PANEL_IDS.join(", ")));
+        }
+        if ids[..i].contains(id) {
+            return Err(format!("{id:?} is listed twice"));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Wsl {
@@ -198,6 +239,10 @@ pub const DEFAULTS_FILE: &str = r##"# rein-app window configuration (desktop.md)
 
 # [project]
 # close_when_agents_exit = true # every agent exited: close the project (false: ask)
+
+# [panels]                # the side menu: read-only panels beside the terminal
+# rail = "shown"          # shown | hidden (panels still open from the menu and keys)
+# enabled = ["dashboard", "communication", "tasks"]
 
 # [wsl]                   # Windows only
 #   distro = "Ubuntu"     # unset: WSL's default distro
@@ -366,6 +411,16 @@ fn validate(c: &Config) -> Result<(), Refusal> {
             format!("server {:?} — app or user", c.tmux.server),
         );
     }
+    if !RAIL_WORDS.contains(&c.panels.rail.as_str()) {
+        return r(
+            "panels",
+            "rail",
+            format!("rail {:?} — shown or hidden", c.panels.rail),
+        );
+    }
+    if let Err(why) = panels_enabled_ok(&c.panels.enabled) {
+        return r("panels", "enabled", why);
+    }
     if let Some(d) = &c.wsl.distro
         && crate::wsl_host::check_name(d).is_err()
     {
@@ -427,6 +482,7 @@ fn binding_ok(binding: &str) -> Result<(), String> {
         }
         (ActionArg::ThemeName, Some(t)) => THEMES.contains(&t),
         (ActionArg::InputStyle, Some(s)) => matches!(s, "simple" | "modal"),
+        (ActionArg::PanelId, Some(p)) => PANEL_IDS.contains(&p),
         // A binding cannot name a file or a directory (§Security 4).
         (ActionArg::Dir, Some(_)) | (ActionArg::None, Some(_)) => false,
     };
@@ -464,6 +520,8 @@ pub fn settings_keys_set(text: &str) -> Vec<String> {
         ("tmux", "status"),
         ("tmux", "server"),
         ("project", "close_when_agents_exit"),
+        ("panels", "rail"),
+        ("panels", "enabled"),
     ]
     .iter()
     .filter(|(table, key)| t.get(*table).and_then(|v| v.get(*key)).is_some())
@@ -660,6 +718,22 @@ mod tests {
             ("[tmux]\nstatus = \"off\"\n", 2, "hidden, app or keep"),
             ("[tmux]\nserver = \"mine\"\n", 2, "app or user"),
             ("[tmux]\noverlay = \"yes\"\n", 2, "expected a boolean"),
+            ("[panels]\nrail = \"left\"\n", 2, "shown or hidden"),
+            (
+                "[panels]\nenabled = [\"tasks\", \"shell\"]\n",
+                2,
+                "\"shell\" is not a panel",
+            ),
+            (
+                "[panels]\nenabled = [\"tasks\", \"tasks\"]\n",
+                2,
+                "listed twice",
+            ),
+            (
+                "[keys.normal]\n\"g p\" = \"panel.toggle shell\"\n",
+                2,
+                "does not take that argument",
+            ),
             ("[keys]\nescape = []\n", 2, "escape is"),
             ("this is not toml\n", 1, "expected"),
         ];
@@ -683,7 +757,7 @@ mod tests {
 
     #[test]
     fn a_valid_file_parses() {
-        let text = "[font]\nfamily = \"Iosevka Term, monospace\"\nsize = 16\n[theme]\nname = \"nord\"\n[theme.custom]\nbg = \"#101010\"\ncolor4 = \"#5e81ac\"\n[window]\ndecorations = false\nopacity = 0.9\nstart = \"last\"\n[keys]\nleader = \",\"\n[keys.normal]\n\"<leader> 1\" = \"tab.goto 1\"\n\"g s\" = \"input.style simple\"\n[wsl]\ndistro = \"Ubuntu-24.04\"\n";
+        let text = "[font]\nfamily = \"Iosevka Term, monospace\"\nsize = 16\n[theme]\nname = \"nord\"\n[theme.custom]\nbg = \"#101010\"\ncolor4 = \"#5e81ac\"\n[window]\ndecorations = false\nopacity = 0.9\nstart = \"last\"\n[keys]\nleader = \",\"\n[keys.normal]\n\"<leader> 1\" = \"tab.goto 1\"\n\"g s\" = \"input.style simple\"\n\"g p\" = \"panel.toggle tasks\"\n[panels]\nrail = \"hidden\"\nenabled = [\"tasks\"]\n[wsl]\ndistro = \"Ubuntu-24.04\"\n";
         let c = parse(FILE_NAME, text).unwrap();
         assert_eq!(c.font.size, 16);
         assert_eq!(
@@ -693,6 +767,21 @@ mod tests {
         assert!(!c.window.decorations);
         assert_eq!(c.keys.leader, ",");
         assert_eq!(c.wsl.distro.as_deref(), Some("Ubuntu-24.04"));
+        assert_eq!(c.panels.rail, "hidden");
+        assert_eq!(c.panels.enabled, ["tasks"]);
+        assert_eq!(
+            settings_keys_set(text),
+            [
+                "theme.name",
+                "font.size",
+                "window.decorations",
+                "panels.rail",
+                "panels.enabled"
+            ]
+        );
+        // E-60: the default offers every panel with the rail shown.
+        assert_eq!(Config::default().panels.enabled, PANEL_IDS);
+        assert_eq!(Config::default().panels.rail, "shown");
     }
 
     #[test]

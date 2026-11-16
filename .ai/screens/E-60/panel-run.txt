@@ -1,0 +1,9 @@
+[catppuccin-mocha 1280x800]
+  ok   state.json read again 1709 ms after the change (limit 6000)
+  ok   no panel read for 12 s while the window is hidden
+  ok   reads resume 118 ms after the window is shown again
+[github-light 1280x800]
+[typing latency, catppuccin-mocha]
+  median key latency: panel closed 6.9 ms, panel open 6.5 ms
+  ok   typing latency unchanged with a panel open (open <= 1.5 x closed + 5 ms)
+PASS: panel screens

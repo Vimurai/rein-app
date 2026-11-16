@@ -29,6 +29,7 @@ fn generate_actions() {
             Some("name") => "ActionArg::ThemeName",
             Some("style") => "ActionArg::InputStyle",
             Some("dir") => "ActionArg::Dir",
+            Some("panel") => "ActionArg::PanelId",
             Some(other) => panic!("actions.json: unknown arg kind {other:?}"),
         };
         assert!(

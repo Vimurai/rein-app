@@ -13,6 +13,7 @@ export interface ConfigFile {
   keys: { escape: string[]; leader: string; normal: Record<string, string> };
   tmux: { overlay: boolean; status: "hidden" | "app" | "keep"; server: "app" | "user" };
   project: { close_when_agents_exit: boolean };
+  panels: { rail: "shown" | "hidden"; enabled: string[] };
   wsl: { distro: string | null };
 }
 
@@ -29,6 +30,7 @@ export const DEFAULT_CONFIG: ConfigFile = {
   keys: { escape: ["C-\\", "C-n"], leader: "Space", normal: {} },
   tmux: { overlay: true, status: "hidden", server: "app" },
   project: { close_when_agents_exit: true },
+  panels: { rail: "shown", enabled: ["dashboard", "communication", "tasks"] },
   wsl: { distro: null },
 };
 

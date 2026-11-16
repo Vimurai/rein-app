@@ -6,6 +6,7 @@
 import { ACTIONS } from "./actions.ts";
 import { expanded, type ActionCall, type KeyTable } from "./keymap.ts";
 import { THEME_NAMES } from "./theme.ts";
+import { PANEL_IDS, descriptor } from "./panels.ts";
 
 export interface MenuEntry {
   call: ActionCall;
@@ -54,7 +55,9 @@ export function describe(call: ActionCall, current: KeyTable, other: KeyTable): 
         ? `Close project in tab ${call.arg}`
         : call.name === "project.open" && call.arg
           ? `Open ${call.arg}`
-          : base;
+          : call.name === "panel.toggle" && call.arg
+            ? `${descriptor(call.arg)?.title ?? call.arg} panel`
+            : base;
   const plain: ActionCall = call.name === "tab.detach" ? { name: call.name } : call;
   const mine = keyFor(current, plain);
   const theirs = mine === null ? keyFor(other, plain) : null;
@@ -84,7 +87,7 @@ export const MODE_ACTIONS = ["mode.normal", "mode.terminal", "mode.command"] as 
 export function menuEntries(
   current: KeyTable,
   other: KeyTable,
-  ctx: { tabs: number },
+  ctx: { tabs: number; panels?: readonly string[] },
 ): MenuEntry[] {
   const simple = current.style === "simple";
   const byName = new Map<string, MenuEntry[]>();
@@ -111,6 +114,13 @@ export function menuEntries(
       case "style":
         add({ name: a.name, arg: "simple" }, `${label}: simple (shortcuts, no modes)`);
         add({ name: a.name, arg: "modal" }, `${label}: modal (vim-style modes)`);
+        break;
+      // One row per enabled panel (panels.md §API, E-60); all of them when not told.
+      case "panel":
+        for (const id of PANEL_IDS) {
+          if (ctx.panels && !ctx.panels.includes(id)) continue;
+          add({ name: a.name, arg: id }, `${label}: ${descriptor(id)?.title ?? id}`);
+        }
         break;
       default:
         add({ name: a.name }, label);

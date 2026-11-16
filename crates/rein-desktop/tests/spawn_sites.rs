@@ -18,12 +18,21 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// The source without its `#[cfg(test)] mod tests` block (tests build commands that never
-/// run in the window) and without line comments.
+/// The source without its test modules — from the first `#[cfg(…test…)]` line followed by a
+/// `mod` line (`#[cfg(test)]`, `#[cfg(all(test, unix))]`, …): tests build commands that never
+/// run in the window — and without line comments.
 fn production(text: &str) -> String {
-    let body = match text.find("#[cfg(test)]\nmod tests") {
-        Some(i) => &text[..i],
-        None => text,
+    let lines: Vec<&str> = text.lines().collect();
+    let cut = lines.windows(2).position(|w| {
+        let attr = w[0].trim_start();
+        attr.starts_with("#[cfg(")
+            && attr.contains("test")
+            && !attr.contains("not(test")
+            && w[1].trim_start().starts_with("mod ")
+    });
+    let body = match cut {
+        Some(i) => lines[..i].join("\n"),
+        None => text.to_string(),
     };
     body.lines()
         .map(|l| match l.trim_start().starts_with("//") {

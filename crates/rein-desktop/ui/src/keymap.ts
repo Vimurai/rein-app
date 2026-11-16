@@ -3,6 +3,7 @@
 // supply other tables to the same function.
 
 import type { ActionName } from "./actions.ts";
+import { PANEL_IDS as PANEL_KEYS } from "./panels.ts";
 
 export interface ActionCall {
   name: ActionName;
@@ -42,6 +43,11 @@ export const SIMPLE_SHORTCUTS: ReadonlyMap<string, ActionCall> = new Map<string,
   ["C-,", { name: "settings.show" }],
   // V10 (E-64): the Project sheet's Team section.
   ["C-S-m", { name: "project.team" }],
+  // The side menu (panels.md §API, E-60): a panel by its digit, then close / refresh / focus.
+  ...PANEL_KEYS.map((id, i): [string, ActionCall] => [`C-S-${i + 1}`, { name: "panel.toggle", arg: id }]),
+  ["C-S-0", { name: "panel.close" }],
+  ["C-S-r", { name: "panel.refresh" }],
+  ["C-S-e", { name: "panel.focus" }],
   ["F1", { name: "help.show" }],
 ]);
 
@@ -71,6 +77,12 @@ export const DEFAULT_MODAL: KeyTable = {
     // (pointer parity, D-034): the rest of the leader.
     ["<leader> S", a("profiles.apply")],
     ["<leader> T", a("project.team")],
+    // `<leader> p` is Recent projects already, and a full binding fires at once, so the
+    // panels sit under `<leader> P` (E-60; panels.md, D-056 addendum 1).
+    ...PANEL_KEYS.map((id, i): [string, ActionCall] => [`<leader> P ${i + 1}`, a("panel.toggle", id)]),
+    ["<leader> P x", a("panel.close")],
+    ["<leader> P r", a("panel.refresh")],
+    ["<leader> P f", a("panel.focus")],
     ["<leader> c", a("config.open")],
     ["<leader> R", a("config.reload")],
     ["<leader> t", a("theme.set")],

@@ -72,6 +72,13 @@ test("the leader waits, and which-key lists what can follow it", () => {
       ["s", "profiles.show"],
       ["S", "profiles.apply"],
       ["T", "project.team"], // E-64: the Project sheet
+      // E-60: the panels, under `P` (`p` is Recent projects).
+      ["P 1", "panel.toggle"],
+      ["P 2", "panel.toggle"],
+      ["P 3", "panel.toggle"],
+      ["P x", "panel.close"],
+      ["P r", "panel.refresh"],
+      ["P f", "panel.focus"],
       ["c", "config.open"],
       ["R", "config.reload"],
       ["t", "theme.set"],
@@ -153,6 +160,10 @@ test("key names and the bytes of a held chord key", () => {
   assert.equal(k(" "), "Space");
   assert.equal(k("Escape"), "Esc");
   assert.equal(k("Shift", { shiftKey: true }), null);
+  // E-60: Ctrl+Shift+digit is the digit on every layout (US `!`, others `+` or `1`).
+  for (const key of ["!", "+", "1", "&"]) assert.equal(k(key, { ctrlKey: true, shiftKey: true, code: "Digit1" }), "C-S-1");
+  assert.equal(k("0", { ctrlKey: true, code: "Digit0" }), "C-0", "Ctrl alone keeps font.reset's key");
+  assert.equal(k("!", { shiftKey: true, code: "Digit1" }), "!", "Shift alone types the character");
   assert.equal(keyBytes("C-\\"), "\x1c");
   assert.equal(keyBytes("C-n"), "\x0e");
   assert.equal(keyBytes("a"), "a");

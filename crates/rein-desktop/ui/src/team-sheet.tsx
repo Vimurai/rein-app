@@ -30,7 +30,10 @@ const errText = (e: unknown) => (e as { message?: string }).message ?? String(e)
 export function TeamSheet({ tab, project, onCommand, onClose }: { tab: number; project: string; onCommand: (cmd: string) => void; onClose: () => void }) {
   const [view, setView] = useState<TeamView | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  /** The run in flight, by the button that started it: its spinner shows there, and every
+   *  other button is only disabled (E-60, from the E-67 review). */
+  const [busyOn, setBusyOn] = useState<"add" | "mode" | null>(null);
+  const busy = busyOn !== null;
   const [email, setEmail] = useState("");
   const [prefix, setPrefix] = useState<Prefix>("E");
   const [from, setFrom] = useState("");
@@ -51,7 +54,7 @@ export function TeamSheet({ tab, project, onCommand, onClose }: { tab: number; p
 
   const add = () => {
     if (!formReady(email, from, to) || busy || held) return;
-    setBusy(true);
+    setBusyOn("add");
     onCommand(`rein team add ${email} --range ${prefix}:${from}-${to}`);
     teamAdd(tab, email, prefix, Number(from), Number(to))
       .then(
@@ -62,12 +65,12 @@ export function TeamSheet({ tab, project, onCommand, onClose }: { tab: number; p
         },
         (e) => setResult({ title: "rein team add", error: errText(e) }),
       )
-      .finally(() => setBusy(false));
+      .finally(() => setBusyOn(null));
   };
 
   const runMode = (mode: Mode) => {
     setConfirm(null);
-    setBusy(true);
+    setBusyOn("mode");
     onCommand(`rein state migrate --${mode}`);
     teamMode(tab, mode)
       .then(
@@ -79,7 +82,7 @@ export function TeamSheet({ tab, project, onCommand, onClose }: { tab: number; p
         },
         (e) => setResult({ title: `rein state migrate --${mode}`, error: errText(e) }),
       )
-      .finally(() => setBusy(false));
+      .finally(() => setBusyOn(null));
   };
 
   const o = view ? offer(view.shape) : null;
@@ -133,7 +136,7 @@ export function TeamSheet({ tab, project, onCommand, onClose }: { tab: number; p
                   <span className="text-muted-foreground">–</span>
                   <Input aria-label="To" placeholder="to" inputMode="numeric" className="w-24" value={to} onChange={(e) => setTo(e.target.value.trim())} />
                   <Button type="submit" disabled={busy || held || !formReady(email, from, to)}>
-                    {busy && <Spinner size={12} />}
+                    {busyOn === "add" && <Spinner size={12} />}
                     Add
                   </Button>
                 </div>
@@ -157,6 +160,7 @@ export function TeamSheet({ tab, project, onCommand, onClose }: { tab: number; p
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[12px] text-muted-foreground">{NOT_OFFERED}</span>
                 <Button disabled={busy || held} onClick={() => setConfirm(o.mode)}>
+                  {busyOn === "mode" && <Spinner size={12} />}
                   {MODE_BUTTON[o.mode]}
                 </Button>
               </div>

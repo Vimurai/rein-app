@@ -56,6 +56,7 @@ html, body {
 @keyframes rein-rise-in { from { opacity: 0; transform: translateY(8px); } }
 @keyframes rein-grow-in { from { max-width: 0; opacity: 0; } to { max-width: 220px; } }
 @keyframes rein-pop-out { to { opacity: 0; transform: scale(0.98); } }
+@keyframes rein-slide-in { from { opacity: 0; transform: translateX(-8px); } }
 
 /* The loading primitives (components/loaders.tsx). Each is held invisible for
    --loader-delay first, so a wait shorter than that shows nothing. The hold is an animation,
@@ -103,6 +104,8 @@ html, body {
 .toast-out { animation: rein-fade-out var(--motion-base) var(--motion-ease) forwards; }
 .tab-in { animation: rein-grow-in var(--motion-base) var(--motion-ease); }
 .fade-in { animation: rein-fade-in var(--motion-base) var(--motion-ease); }
+/* panels.md §Components 2 (E-60): the panel slides in beside the terminal, never over its text. */
+.panel-in { animation: rein-slide-in var(--motion-base) var(--motion-ease); }
 
 /* V1 / V7: under reduced motion nothing moves — no animation, no transition. The labels
    ("Starting rein…", "Checking…") carry the meaning; the progress line is a still line. */

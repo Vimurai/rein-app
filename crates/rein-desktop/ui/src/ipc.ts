@@ -150,6 +150,11 @@ export interface UiView {
   update_dont_ask: string[];
   /** V11: closing a project or quitting does not ask. */
   close_dont_ask: boolean;
+  /** The side menu (panels.md, E-60): Settings' choices, and the panel's own state. */
+  panels_rail: Effective<"shown" | "hidden">;
+  panels_enabled: Effective<string[]>;
+  panel_width: number;
+  panel_open: string | null;
   first_run_done: boolean;
 }
 /** The system folder dialog; `null` when cancelled; the path is validated like `tab_open`. */
@@ -194,3 +199,7 @@ export const minimizeWindow = () => invoke<void>("plugin:window|minimize", { lab
 export const toggleMaximize = () => invoke<void>("plugin:window|toggle_maximize", { label: "main" });
 export const configGet = (reload = false) =>
   invoke<import("./config.ts").ConfigView>("config_get", { reload });
+/** panels.md §API (E-59): one source of `tab`'s own project — the core takes the project
+ *  from the tab, never a path from here. */
+export const panelData = <T>(tab: number, source: import("./panels.ts").Source) =>
+  invoke<import("./panels.ts").Reply<T>>("panel_data", { tab, source });
