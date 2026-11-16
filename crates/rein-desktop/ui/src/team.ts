@@ -13,6 +13,10 @@ export interface Run {
   lines: string[];
   cut: boolean;
   timed_out: boolean;
+  /** A fixed sentence from the core for how a run through WSL ended (E-67), else null. */
+  note: string | null;
+  /** The host's limit fired under WSL: rein may still run (E-67). */
+  stuck: boolean;
 }
 export interface TeamView {
   show: Run;
@@ -74,6 +78,13 @@ export function formReady(email: string, from: string, to: string): boolean {
 
 /** A run's last line for the operator: rein's lines are shown as printed above it. */
 export function runNote(r: Run): { status: "ok" | "fail"; text: string } {
+  if (r.note) return { status: "fail", text: r.note };
   if (r.timed_out) return { status: "fail", text: "rein did not finish in time and was stopped." };
   return r.code === 0 ? { status: "ok", text: "rein finished." } : { status: "fail", text: `rein answered with exit ${r.code ?? "?"} — its words are above.` };
+}
+
+/** After a run whose rein may still be running in WSL, the sheet's buttons stay disabled
+ * until the sheet is reopened (V10 "As built and reviewed", E-67): once held, always held. */
+export function heldAfter(held: boolean, r: Run): boolean {
+  return held || r.stuck;
 }

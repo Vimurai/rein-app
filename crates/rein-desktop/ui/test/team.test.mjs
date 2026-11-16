@@ -4,7 +4,7 @@
 // Project sheet is new.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MODE_BUTTON, MODE_CONFIRM, formHint, formReady, offer, runNote } from "../src/team.ts";
+import { MODE_BUTTON, MODE_CONFIRM, formHint, formReady, heldAfter, offer, runNote } from "../src/team.ts";
 
 test("the sheet offers by shape and names no mode", () => {
   assert.deepEqual(offer("team"), { mode: "legacy", form: true, note: null });
@@ -44,7 +44,19 @@ test("the form's help text, as a table", () => {
 });
 
 test("the run's last line", () => {
-  assert.deepEqual(runNote({ code: 0, lines: [], cut: false, timed_out: false }), { status: "ok", text: "rein finished." });
-  assert.match(runNote({ code: 1, lines: [], cut: false, timed_out: false }).text, /exit 1/);
-  assert.match(runNote({ code: null, lines: [], cut: false, timed_out: true }).text, /in time/);
+  const run = (o) => ({ code: 0, lines: [], cut: false, timed_out: false, note: null, stuck: false, ...o });
+  assert.deepEqual(runNote(run({})), { status: "ok", text: "rein finished." });
+  assert.match(runNote(run({ code: 1 })).text, /exit 1/);
+  assert.match(runNote(run({ code: null, timed_out: true })).text, /in time/);
+  // E-67: the core's fixed sentence for a WSL run wins over the exit code (src/team.rs wsl_end).
+  const words = "rein may still be running in WSL. Check the project before trying again.";
+  assert.deepEqual(runNote(run({ code: null, timed_out: true, note: words, stuck: true })), { status: "fail", text: words });
+  assert.deepEqual(runNote(run({ code: 124, note: "rein took too long" })), { status: "fail", text: "rein took too long" });
+});
+
+test("a run that may still be running holds the sheet until it is reopened (E-67)", () => {
+  const run = (stuck) => ({ code: null, lines: [], cut: false, timed_out: stuck, note: null, stuck });
+  assert.equal(heldAfter(false, run(false)), false);
+  assert.equal(heldAfter(false, run(true)), true);
+  assert.equal(heldAfter(true, run(false)), true, "a later run does not release it");
 });

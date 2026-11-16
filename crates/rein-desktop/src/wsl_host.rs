@@ -244,6 +244,10 @@ impl<S: WslShell + Send + Sync> WslHost<S> {
 }
 
 impl<S: WslShell + Send + Sync> Host for WslHost<S> {
+    fn in_wsl(&self) -> bool {
+        true
+    }
+
     fn project_dir(&self, input: &str) -> Result<(PathBuf, crate::host::Found), IpcError> {
         let d = self.probe_distro()?;
         let linux = wsl_path::to_linux(input, &d.name).map_err(|e| {

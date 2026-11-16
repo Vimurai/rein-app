@@ -29,6 +29,16 @@ pub const RUN_LIMIT: Duration = Duration::from_secs(60);
 pub const MIGRATE_LIMIT: Duration = Duration::from_secs(300);
 /// The most lines of rein's output one answer carries.
 pub const MAX_LINES: usize = 200;
+/// The WSL scripts' exit when coreutils `timeout` is at neither fixed path (rein not run).
+/// rein 0.5.0's `team` and `state` commands exit 0, 1 or 2 only (E-67 read).
+pub const NO_TIMEOUT_EXIT: i32 = 96;
+/// The fixed sentences of a WSL run's end (V10 "As built and reviewed", review C15).
+pub const TOOK_TOO_LONG: &str =
+    "rein took too long and was stopped. Check the project before trying again.";
+pub const NO_TIMEOUT: &str =
+    "rein was not run: coreutils timeout was not found in WSL (/usr/bin/timeout or /bin/timeout).";
+pub const MAY_STILL_RUN: &str =
+    "rein may still be running in WSL. Check the project before trying again.";
 
 /// The one sentence for a refused value (V10: fixed, whatever was wrong).
 pub const REFUSED: &str = "Use an e-mail address of letters, digits and . _ + - (one @), and a range of whole numbers from 1 to 99999 with the first not above the second.";
@@ -40,8 +50,9 @@ pub const NO_TEAM_LINE: &str =
 /// The Windows script (security review C3): `$1` the e-mail, `$2` the range, after the
 /// literal `rein-app` in the `$0` slot. Checked again before `exec`; quote-free (V8 3b).
 /// Exit codes 64-66, 68, 69: `wsl.exe` 3.0.5 turns a Linux exit 67 (and 87) into 255 with
-/// "User not found" (seen in E-64's interop), so 67 is skipped.
-pub const ADD_SCRIPT: &str = "IFS=; set -o noglob; case $# in 2) ;; *) exit 64;; esac; case $1 in -*|*@*@*|@*|*@|*[!A-Za-z0-9._+@-]*) exit 65;; esac; case $1 in ?*@?*) ;; *) exit 66;; esac; case $2 in [EP]:[0-9]*-[0-9]*) ;; *) exit 69;; esac; case $2 in *[!EP0-9:-]*|*:*:*|*-*-*|?:*[!0-9-]*|*[!0-9]) exit 68;; esac; exec ~/.rein/bin/rein team add $1 --range $2";
+/// "User not found" (seen in E-64's interop), so 67 is skipped. rein runs under coreutils
+/// `timeout` (55 s, KILL 3 s later; the host's limit is 60 s), as the migrate scripts do.
+pub const ADD_SCRIPT: &str = "IFS=; set -o noglob; case $# in 2) ;; *) exit 64;; esac; case $1 in -*|*@*@*|@*|*@|*[!A-Za-z0-9._+@-]*) exit 65;; esac; case $1 in ?*@?*) ;; *) exit 66;; esac; case $2 in [EP]:[0-9]*-[0-9]*) ;; *) exit 69;; esac; case $2 in *[!EP0-9:-]*|*:*:*|*-*-*|?:*[!0-9-]*|*[!0-9]) exit 68;; esac; for t in /usr/bin/timeout /bin/timeout; do [ -x $t ] && { exec $t -k 3 55 ~/.rein/bin/rein team add $1 --range $2; exit; }; done; exit 96";
 /// The `$0` word before the values (security review: without it the e-mail would be `$0`).
 pub const ADD_ARGV0: &str = "rein-app";
 
@@ -169,9 +180,38 @@ pub struct Run {
     pub cut: bool,
     /// Killed at the limit.
     pub timed_out: bool,
+    /// A fixed sentence for how a WSL run ended, when it is one of the cases below.
+    pub note: Option<&'static str>,
+    /// The host's limit fired under WSL: rein may still run, so the sheet keeps its buttons
+    /// disabled until it is reopened.
+    pub stuck: bool,
 }
 
-fn run(cmd: std::process::Command, limit: Duration) -> Result<(Run, Vec<String>), IpcError> {
+/// How a run ended, in words, for a run through `wsl.exe` only (review C11): exact codes,
+/// the host's limit first. Every other code stays rein's own answer. 137 means `timeout` had
+/// to send KILL — rein ignored TERM — and uutils `timeout` KILLs only its direct child, so a
+/// child of rein may live on: it counts as "may still be running", not "stopped" (E-67 review).
+pub fn wsl_end(code: Option<i32>, timed_out: bool) -> Option<&'static str> {
+    if wsl_stuck(code, timed_out) {
+        return Some(MAY_STILL_RUN);
+    }
+    match code {
+        Some(124) => Some(TOOK_TOO_LONG),
+        Some(NO_TIMEOUT_EXIT) => Some(NO_TIMEOUT),
+        _ => None,
+    }
+}
+
+/// A WSL run whose rein may still be running: the host's limit fired, or `timeout` had to KILL.
+pub fn wsl_stuck(code: Option<i32>, timed_out: bool) -> bool {
+    timed_out || code == Some(137)
+}
+
+fn run(
+    cmd: std::process::Command,
+    limit: Duration,
+    wsl: bool,
+) -> Result<(Run, Vec<String>), IpcError> {
     let never = AtomicBool::new(false);
     let mut raw = Vec::new();
     let (code, stopped) = run_lines(cmd, limit, &never, &mut |l| raw.push(l))
@@ -181,12 +221,15 @@ fn run(cmd: std::process::Command, limit: Duration) -> Result<(Run, Vec<String>)
         .take(MAX_LINES)
         .map(|l| crate::cli::bounded(l))
         .collect();
+    let timed_out = stopped.is_some();
     Ok((
         Run {
             code,
             lines: shown,
             cut: raw.len() > MAX_LINES,
-            timed_out: stopped.is_some(),
+            timed_out,
+            note: if wsl { wsl_end(code, timed_out) } else { None },
+            stuck: wsl && wsl_stuck(code, timed_out),
         },
         raw,
     ))
@@ -214,15 +257,27 @@ fn project(d: &Desktop, tab: u32) -> Result<std::path::PathBuf, IpcError> {
 
 pub fn get(d: &Desktop, tab: u32) -> Result<TeamView, IpcError> {
     let p = project(d, tab)?;
-    let (show, raw) = run(d.platform.rein_command(&p, ReinRun::TeamShow)?, RUN_LIMIT)?;
-    let (trunk, _) = run(d.platform.rein_command(&p, ReinRun::Trunk)?, RUN_LIMIT)?;
+    let (show, raw) = run(
+        d.platform.rein_command(&p, ReinRun::TeamShow)?,
+        RUN_LIMIT,
+        false,
+    )?;
+    let (trunk, _) = run(
+        d.platform.rein_command(&p, ReinRun::Trunk)?,
+        RUN_LIMIT,
+        false,
+    )?;
     let shape = shape(show.code, &raw);
     Ok(TeamView { show, trunk, shape })
 }
 
 pub fn add(d: &Desktop, tab: u32, values: &Add) -> Result<Run, IpcError> {
     let p = project(d, tab)?;
-    let (r, _) = run(d.platform.rein_team_add(&p, values)?, RUN_LIMIT)?;
+    let (r, _) = run(
+        d.platform.rein_team_add(&p, values)?,
+        RUN_LIMIT,
+        d.platform.in_wsl(),
+    )?;
     Ok(r)
 }
 
@@ -245,7 +300,11 @@ pub fn mode(
     if !confirm(mode.title(), mode.confirm_text()) {
         return Ok(ModeEnd::Declined { declined: true });
     }
-    let (r, _) = run(d.platform.rein_command(&p, mode.run())?, MIGRATE_LIMIT)?;
+    let (r, _) = run(
+        d.platform.rein_command(&p, mode.run())?,
+        MIGRATE_LIMIT,
+        d.platform.in_wsl(),
+    )?;
     Ok(ModeEnd::Ran(r))
 }
 
@@ -417,7 +476,239 @@ mod tests {
         assert!(!ADD_SCRIPT.contains(['"', '\'', '\\', '`', '\n']));
         assert!(!ADD_SCRIPT.contains("$("));
         assert!(ADD_SCRIPT.starts_with("IFS=; set -o noglob;"));
-        assert!(ADD_SCRIPT.ends_with("exec ~/.rein/bin/rein team add $1 --range $2"));
+        assert!(ADD_SCRIPT.ends_with(
+            "for t in /usr/bin/timeout /bin/timeout; do [ -x $t ] && { exec $t -k 3 55 ~/.rein/bin/rein team add $1 --range $2; exit; }; done; exit 96"
+        ));
+    }
+
+    /// E-67 (D-060, review C9-C11): every WSL script that runs a team command does it under
+    /// coreutils `timeout` at a fixed path, inside the host's limit, with `exit` right after
+    /// the `exec`, and refuses with 96 when `timeout` is missing. Quote-free (V8).
+    #[test]
+    fn the_wsl_team_scripts_run_rein_under_timeout() {
+        let migrate = [
+            (ReinRun::MigrateTeam, "--team"),
+            (ReinRun::MigrateLegacy, "--legacy"),
+        ];
+        for (which, word) in migrate {
+            assert_eq!(
+                which.wsl_script(),
+                format!(
+                    "IFS=; set -o noglob; for t in /usr/bin/timeout /bin/timeout; do [ -x $t ] && {{ exec $t -k 5 290 ~/.rein/bin/rein state migrate {word}; exit; }}; done; exit 96"
+                )
+            );
+        }
+        // The Linux side ends before the host frees the lock: limit + KILL grace < host limit.
+        assert!(290 + 5 < MIGRATE_LIMIT.as_secs() && 55 + 3 < RUN_LIMIT.as_secs());
+        for script in [
+            ADD_SCRIPT,
+            ReinRun::MigrateTeam.wsl_script(),
+            ReinRun::MigrateLegacy.wsl_script(),
+        ] {
+            assert!(!script.contains(['"', '\'', '\\', '`', '\n']), "{script}");
+            assert!(script.starts_with("IFS=; set -o noglob;"), "{script}");
+            assert!(script.contains("; exit; }; done; exit 96"), "{script}");
+            // wsl.exe 3.0.5 rewrites 67 and 87 (D-060).
+            assert!(!script.contains("exit 67") && !script.contains("exit 87"));
+        }
+        assert_eq!(NO_TIMEOUT_EXIT, 96);
+    }
+
+    /// Review C11: the fixed sentences only for exact codes, the host's limit first; 125-127
+    /// (timeout's own failure, rein not runnable) and every other code stay rein's answer.
+    #[test]
+    fn a_wsl_runs_end_in_fixed_words() {
+        assert_eq!(wsl_end(None, true), Some(MAY_STILL_RUN));
+        assert_eq!(wsl_end(Some(124), true), Some(MAY_STILL_RUN));
+        assert_eq!(wsl_end(Some(124), false), Some(TOOK_TOO_LONG));
+        assert_eq!(wsl_end(Some(137), false), Some(MAY_STILL_RUN));
+        assert!(wsl_stuck(Some(137), false) && wsl_stuck(None, true));
+        assert!(!wsl_stuck(Some(124), false) && !wsl_stuck(Some(96), false));
+        assert_eq!(wsl_end(Some(96), false), Some(NO_TIMEOUT));
+        for code in [
+            Some(0),
+            Some(1),
+            Some(2),
+            Some(125),
+            Some(126),
+            Some(127),
+            Some(255),
+            None,
+        ] {
+            assert_eq!(wsl_end(code, false), None, "{code:?}");
+        }
+    }
+
+    /// A WSL script with its two `timeout` paths swapped for `with` (a stand-in, or paths that
+    /// do not exist), so the script's own logic runs on any host, macOS included.
+    #[cfg(unix)]
+    fn with_timeout(script: &str, with: &str) -> String {
+        let s = script.replace("/usr/bin/timeout /bin/timeout", with);
+        assert_ne!(s, script);
+        s
+    }
+
+    /// A HOME with a stand-in rein (prints its argv) and a stand-in `timeout` that prints its
+    /// first three words and runs the rest.
+    #[cfg(unix)]
+    fn stand_ins() -> (tempfile::TempDir, String) {
+        use std::os::unix::fs::PermissionsExt;
+        let home = tempfile::tempdir().unwrap();
+        let bin = home.path().join(".rein/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let x = std::fs::Permissions::from_mode(0o755);
+        std::fs::write(
+            bin.join("rein"),
+            "#!/bin/sh\nfor a in \"$@\"; do printf '[%s]' \"$a\"; done\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(bin.join("rein"), x.clone()).unwrap();
+        let t = home.path().join("timeout");
+        std::fs::write(
+            &t,
+            "#!/bin/sh\nprintf 'T(%s %s %s)' \"$1\" \"$2\" \"$3\"; shift 3; exec \"$@\"\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&t, x).unwrap();
+        let t = t.to_str().unwrap().to_string();
+        (home, t)
+    }
+
+    #[cfg(unix)]
+    fn shells() -> Vec<&'static str> {
+        ["/bin/sh", "/bin/bash", "/bin/zsh", "/usr/bin/zsh"]
+            .into_iter()
+            .filter(|s| std::path::Path::new(s).exists())
+            .collect()
+    }
+
+    #[cfg(unix)]
+    fn sh_run(
+        sh: &str,
+        home: &std::path::Path,
+        script: &str,
+        args: &[&str],
+    ) -> (Option<i32>, String) {
+        let o = std::process::Command::new(sh)
+            .args(["-c", script])
+            .args(args)
+            .env_clear()
+            .env("HOME", home)
+            .env("PATH", "/usr/bin:/bin")
+            .output()
+            .unwrap();
+        (
+            o.status.code(),
+            String::from_utf8_lossy(&o.stdout).into_owned(),
+        )
+    }
+
+    /// E-67 at the process boundary: the migrate scripts pass rein's words through `timeout`
+    /// with the right limit; with no `timeout` they exit 96 and rein does not run; an rc that
+    /// shadows `exec` with a function that returns still runs rein once (review C9).
+    #[cfg(unix)]
+    #[test]
+    fn the_wsl_scripts_at_their_process_boundary() {
+        let (home, t) = stand_ins();
+        let fake = format!("{t} /nonexistent/timeout");
+        for sh in shells() {
+            for (which, word) in [
+                (ReinRun::MigrateTeam, "--team"),
+                (ReinRun::MigrateLegacy, "--legacy"),
+            ] {
+                let s = with_timeout(which.wsl_script(), &fake);
+                assert_eq!(
+                    sh_run(sh, home.path(), &s, &[]),
+                    (Some(0), format!("T(-k 5 290)[state][migrate][{word}]")),
+                    "{sh}"
+                );
+                let none = with_timeout(which.wsl_script(), "/nonexistent/a /nonexistent/b");
+                assert_eq!(
+                    sh_run(sh, home.path(), &none, &[]),
+                    (Some(96), String::new()),
+                    "{sh}"
+                );
+            }
+            let add = with_timeout(ADD_SCRIPT, &fake);
+            assert_eq!(
+                sh_run(sh, home.path(), &add, &[ADD_ARGV0, "a@b", "P:1-2"]),
+                (
+                    Some(0),
+                    "T(-k 3 55)[team][add][a@b][--range][P:1-2]".to_string()
+                ),
+                "{sh}"
+            );
+            let none = with_timeout(ADD_SCRIPT, "/nonexistent/a /nonexistent/b");
+            assert_eq!(
+                sh_run(sh, home.path(), &none, &[ADD_ARGV0, "a@b", "P:1-2"]),
+                (Some(96), String::new()),
+                "{sh}"
+            );
+            // An rc whose `exec` is a function that returns: rein runs once, never twice, and
+            // the script does not go on to say `timeout` was missing. The same file at both
+            // paths is a usr-merged distro.
+            let shadow = format!(
+                "exec() {{ \"$@\"; }} 2>/dev/null; {}",
+                with_timeout(ReinRun::MigrateTeam.wsl_script(), &format!("{t} {t}"))
+            );
+            // dash refuses a function named `exec` (a syntax error: rein never runs); zsh, where
+            // the double run was seen, takes it and must run rein exactly once.
+            let (code, out) = sh_run(sh, home.path(), &shadow, &[]);
+            let runs = out.matches("[migrate]").count();
+            assert!(runs <= 1, "{sh}: {out}");
+            if sh.ends_with("zsh") {
+                assert_eq!(runs, 1, "{sh}: {out}");
+            }
+            assert_ne!(code, Some(96), "{sh}");
+        }
+    }
+
+    /// E-67 with the real coreutils `timeout` (skipped where it is not installed, e.g. macOS):
+    /// a rein that outlives the limit is stopped with 124, and its background child with it.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_rein_past_the_limit_is_stopped_with_its_child() {
+        use std::os::unix::fs::PermissionsExt;
+        if !std::path::Path::new("/usr/bin/timeout").exists()
+            && !std::path::Path::new("/bin/timeout").exists()
+        {
+            eprintln!("SKIP: no coreutils timeout at /usr/bin or /bin");
+            return;
+        }
+        let home = tempfile::tempdir().unwrap();
+        let bin = home.path().join(".rein/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let pid = home.path().join("child.pid");
+        std::fs::write(
+            bin.join("rein"),
+            format!(
+                "#!/bin/sh\nsleep 30 &\necho $! >{}\nsleep 30\n",
+                pid.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(bin.join("rein"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        let s = ReinRun::MigrateTeam
+            .wsl_script()
+            .replace("-k 5 290", "-k 1 1");
+        let started = std::time::Instant::now();
+        let (code, _) = sh_run("/bin/sh", home.path(), &s, &[]);
+        let took = started.elapsed();
+        let child = std::fs::read_to_string(&pid).unwrap_or_default();
+        std::thread::sleep(Duration::from_millis(200));
+        let kill = |sig: &str| {
+            !child.trim().is_empty()
+                && std::process::Command::new("kill")
+                    .args([sig, child.trim()])
+                    .status()
+                    .is_ok_and(|s| s.success())
+        };
+        let alive = kill("-0");
+        kill("-9"); // never leave the child behind, whatever the asserts below say
+        assert_eq!(code, Some(124));
+        assert!(!child.trim().is_empty(), "the stand-in never started");
+        assert!(!alive, "the background child outlived the limit");
+        assert!(took < Duration::from_secs(10));
     }
 
     /// The script at its process boundary under a hostile rc: `sh`, `bash` and `zsh` (when
@@ -426,27 +717,15 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn the_windows_script_under_a_hostile_rc() {
-        use std::os::unix::fs::PermissionsExt;
-        let home = tempfile::tempdir().unwrap();
-        let bin = home.path().join(".rein/bin");
-        std::fs::create_dir_all(&bin).unwrap();
-        std::fs::write(
-            bin.join("rein"),
-            "#!/bin/sh\nfor a in \"$@\"; do printf '[%s]' \"$a\"; done\n",
-        )
-        .unwrap();
-        std::fs::set_permissions(bin.join("rein"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        let (home, t) = stand_ins();
         // What an rc the login shell reads before the script may leave set (security review
         // P1): IFS made of the values' own characters, splitting and globbing options on.
         let rc = "IFS=.@:+-; setopt GLOB_SUBST SH_WORD_SPLIT EXTENDED_GLOB KSH_GLOB 2>/dev/null; shopt -s extglob nullglob 2>/dev/null; ";
-        let shells: Vec<&str> = ["/bin/sh", "/bin/bash", "/bin/zsh", "/usr/bin/zsh"]
-            .into_iter()
-            .filter(|s| std::path::Path::new(s).exists())
-            .collect();
-        for sh in shells {
+        for sh in shells() {
+            let script = with_timeout(ADD_SCRIPT, &format!("{t} /nonexistent/timeout"));
             let run = |args: &[&str]| {
                 let o = std::process::Command::new(sh)
-                    .args(["-c", &format!("{rc}{ADD_SCRIPT}")])
+                    .args(["-c", &format!("{rc}{script}")])
                     .args(args)
                     .env_clear()
                     .env("HOME", home.path())
@@ -462,7 +741,7 @@ mod tests {
                 run(&[ADD_ARGV0, "a.b+c@d-e.f", "E:1-2"]),
                 (
                     Some(0),
-                    "[team][add][a.b+c@d-e.f][--range][E:1-2]".to_string()
+                    "T(-k 3 55)[team][add][a.b+c@d-e.f][--range][E:1-2]".to_string()
                 ),
                 "{sh}"
             );
@@ -583,10 +862,12 @@ mod tests {
             lines: vec!["✗ [RANGE_OVERLAP] x".into()],
             cut: false,
             timed_out: false,
+            note: None,
+            stuck: false,
         };
         assert_eq!(
             serde_json::to_value(ModeEnd::Ran(r.clone())).unwrap(),
-            serde_json::json!({"code": 1, "lines": ["✗ [RANGE_OVERLAP] x"], "cut": false, "timed_out": false})
+            serde_json::json!({"code": 1, "lines": ["✗ [RANGE_OVERLAP] x"], "cut": false, "timed_out": false, "note": null, "stuck": false})
         );
         assert_eq!(
             serde_json::to_value(ModeEnd::Declined { declined: true }).unwrap(),

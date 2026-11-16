@@ -16,6 +16,7 @@ import {
   NOT_OFFERED,
   formHint,
   formReady,
+  heldAfter,
   offer,
   runNote,
   type Mode,
@@ -37,6 +38,8 @@ export function TeamSheet({ tab, project, onCommand, onClose }: { tab: number; p
   /** The last add or mode run, shown under the form as rein printed it. */
   const [result, setResult] = useState<{ title: string; run: Run } | { title: string; error: string } | null>(null);
   const [confirm, setConfirm] = useState<Mode | null>(null);
+  /** rein may still be running in WSL: Add and the mode button stay off until reopened. */
+  const [held, setHeld] = useState(false);
 
   const load = useCallback(() => {
     setView(null);
@@ -47,13 +50,14 @@ export function TeamSheet({ tab, project, onCommand, onClose }: { tab: number; p
   useEffect(load, [load]);
 
   const add = () => {
-    if (!formReady(email, from, to) || busy) return;
+    if (!formReady(email, from, to) || busy || held) return;
     setBusy(true);
     onCommand(`rein team add ${email} --range ${prefix}:${from}-${to}`);
     teamAdd(tab, email, prefix, Number(from), Number(to))
       .then(
         (run) => {
           setResult({ title: "rein team add", run });
+          setHeld((h) => heldAfter(h, run));
           if (run.code === 0) load();
         },
         (e) => setResult({ title: "rein team add", error: errText(e) }),
@@ -70,7 +74,8 @@ export function TeamSheet({ tab, project, onCommand, onClose }: { tab: number; p
         (end) => {
           if ("declined" in end) return;
           setResult({ title: `rein state migrate --${mode}`, run: end });
-          load();
+          setHeld((h) => heldAfter(h, end));
+          if (!end.stuck) load();
         },
         (e) => setResult({ title: `rein state migrate --${mode}`, error: errText(e) }),
       )
@@ -127,7 +132,7 @@ export function TeamSheet({ tab, project, onCommand, onClose }: { tab: number; p
                   <Input aria-label="From" placeholder="from" inputMode="numeric" className="w-24" value={from} onChange={(e) => setFrom(e.target.value.trim())} />
                   <span className="text-muted-foreground">–</span>
                   <Input aria-label="To" placeholder="to" inputMode="numeric" className="w-24" value={to} onChange={(e) => setTo(e.target.value.trim())} />
-                  <Button type="submit" disabled={busy || !formReady(email, from, to)}>
+                  <Button type="submit" disabled={busy || held || !formReady(email, from, to)}>
                     {busy && <Spinner size={12} />}
                     Add
                   </Button>
@@ -151,7 +156,7 @@ export function TeamSheet({ tab, project, onCommand, onClose }: { tab: number; p
             {o?.mode && (
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[12px] text-muted-foreground">{NOT_OFFERED}</span>
-                <Button disabled={busy} onClick={() => setConfirm(o.mode)}>
+                <Button disabled={busy || held} onClick={() => setConfirm(o.mode)}>
                   {MODE_BUTTON[o.mode]}
                 </Button>
               </div>

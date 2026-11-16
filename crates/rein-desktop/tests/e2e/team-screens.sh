@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # team-screens.sh <out-dir> [W H] — the Project sheet's Team section end to end and the screens
-# (desktop.md §Look and feel v2 V10, E-64, D-052): the real window (debug build) on Xvfb, in
-# catppuccin-mocha and github-light:
-#   team-sheet        — a project in team shape: rein's text, the add form, Go back to
-#                       single-developer mode;
-#   team-single       — the "no .ai/team.json" shape: rein's line, the form, Turn on team mode
-#                       (catppuccin-mocha only);
-#   team-form-error   — an add rein refused (an overlapping range), its words under the form;
-#   team-confirm      — the sheet's confirm (default No);
-#   team-native       — the core's own dialog before rein runs (catppuccin-mocha only).
-# Checked from the stand-in's argv log: the add reaches rein as five words; the migrate does
-# not run when the native dialog says No, and runs once when it says Yes.
+# (desktop.md §Look and feel v2 V10 and its "As built and reviewed" part, E-64, E-67, D-052,
+# D-060): the real window (debug build) on Xvfb, in catppuccin-mocha and github-light:
+#   team-sheet / team-single      — the team shape and the "no .ai/team.json" shape;
+#   team-form-error               — an add rein refused (an overlapping range), its words shown;
+#   team-confirm-after-error      — the confirm reached with the sheet made taller by that error;
+#   team-confirm-legacy / -team   — the sheet's confirm with each mode's sentences;
+#   team-native-legacy / -team    — the core's own dialog (catppuccin-mocha only).
+# Controls that move with content are reached by keyboard focus, never a fixed pixel. Every
+# "did not run" check is paired with proof that the native dialog was a mapped window with its
+# title (xtitle) before the answer and gone after it: Return (its default, No), Escape, and Yes
+# (clicked, its place read from the dialog's geometry) running `state migrate --legacy` / `--team` exactly once.
 # The `rein` is a stand-in in a throwaway HOME that records its argv one word per line and
 # answers as rein 0.5.0 does; tmux runs on a private -S socket. A local tool only: it refuses
 # to run when CI is set. Needs: Xvfb, tmux, cc, Xlib + XTest headers, ffmpeg, a debug build.
@@ -35,6 +35,7 @@ mkdir -p "$W/bin" "$W/home/.rein/bin" "$W/run" "$OUT" "$W/Dev"
 chmod 700 "$W/run"
 cc -O2 -o "$W/bin/xresize" "$REPO/crates/rein-desktop/tests/e2e/xresize.c" -lX11 || exit 2
 cc -O2 -o "$W/bin/xinput" "$REPO/crates/rein-desktop/tests/e2e/xinput.c" -lX11 -lXtst || exit 2
+cc -O2 -o "$W/bin/xtitle" "$REPO/crates/rein-desktop/tests/e2e/xtitle.c" -lX11 || exit 2
 cat >"$W/bin/tmux" <<EOF
 #!/bin/sh
 exec "$REAL_TMUX" -S "$W/tmux.sock" "\$@"
@@ -108,18 +109,61 @@ app() { # app <theme> <dir>
 }
 quit() { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; T kill-server 2>/dev/null; sleep 0.5; }
 
-for theme in catppuccin-mocha github-light; do
-  echo "[$theme ${GW}x${GH}]"
-  # A project in team shape.
-  p="$W/Dev/team-$theme"; mkdir -p "$p/.ai"; touch "$p/.ai/team-shape"
+TEAM_T="Turn on team mode?" LEGACY_T="Go back to single-developer mode?"
+up() { "$W/bin/xtitle" "$1" >/dev/null 2>&1; } # the core's native dialog is a mapped window titled $1
+migrations() { grep -c "^\[state\]\[migrate\]\[--$1\]$" "$W/argv.log"; }
+# The sheet opens with focus on Close; the mode button is the control just before it, wherever
+# the content above has moved it. Its confirm opens on No; Tab is the confirm's own button.
+sheet() { X key ctrl+shift+m; sleep 2; }
+to_confirm() { X key shift+Tab; X key Return; sleep 1; }
+to_native() { X key Tab; X key Return; sleep 2; }
+reset() { X key Escape; sleep 0.5; } # after a native answer only the sheet is left; it closes
+# proof <title> <what>: the native dialog is a mapped window on screen, or a failure.
+proof() { if up "$1"; then echo "  ok   native dialog \"$1\" on screen $2"; else echo "  FAIL native dialog \"$1\" not on screen $2"; fails=$((fails + 1)); fi; }
+# native <mode> <title> <keys…> <want>: open the confirm and the native dialog, prove the dialog is
+# on screen, answer with <keys>, prove it is gone, and count the migrations.
+native() {
+  local m=$1 t=$2 label=$3 want=$4; shift 4
+  sheet; to_confirm; to_native
+  proof "$t" "before $label"
+  for k in "$@"; do
+    case $k in
+      yes) # GTK's Yes: the right half of the dialog's bottom button row, from its geometry
+        local g
+        g=$("$W/bin/xtitle" "$t" -g) && set -- $g && X click $(($1 + $3 * 3 / 4)) $(($2 + $4 - 17)) ;;
+      *) X key "$k" ;;
+    esac
+  done
+  sleep 2
+  if up "$t"; then echo "  FAIL native dialog still on screen after $label"; fails=$((fails + 1)); fi
+  check "$label: state migrate --$m ran $want time(s)" "$want" "$(migrations "$m")"
+  reset
+}
+# shape <theme> <dir> <mode> <title>: the confirm and native dialog screens, then No by
+# Return (the default), No by Escape, and Yes (clicked) running the migrate once.
+shape() {
+  local theme=$1 p=$2 m=$3 t=$4
+  sheet; to_confirm
+  shot "team-confirm-$m-$theme"
+  to_native
+  proof "$t" "for the screens"
+  [ "$theme" = catppuccin-mocha ] && shot "team-native-$m-$theme"
+  X key Escape; sleep 1.5; reset
   : >"$W/argv.log"
+  native "$m" "$t" "native Return (default No)" 0 Return
+  native "$m" "$t" "native Escape" 0 Escape
+  native "$m" "$t" "native Yes (a click on it)" 1 yes
+}
+
+for theme in catppuccin-mocha github-light; do
+  echo "[$theme ${GW}x${GH}] team shape (--legacy)"
+  p="$W/Dev/team-$theme"; mkdir -p "$p/.ai"; touch "$p/.ai/team-shape"
   app "$theme" "$p"
   : >"$W/argv.log" # only the sheet's calls count, not start-up's health and project check
-  X key ctrl+shift+m
-  sleep 2
+  sheet
   shot "team-sheet-$theme"
   check "open: team show, then trunk — nothing else" "[team][show],[trunk]" "$(calls)"
-  # The add form: type a good row; rein refuses it (overlap) and its words show under the form.
+  # The add form (its fields sit above everything that moves): rein refuses (overlap), its words show.
   X click ${ADD_EMAIL_X:-500} ${ADD_EMAIL_Y:-430}
   X type "new.dev+x@example.com"
   X key Tab; X key Tab
@@ -130,43 +174,24 @@ for theme in catppuccin-mocha github-light; do
   sleep 2
   shot "team-form-error-$theme"
   check "add: five words, each value one word" "[team][show],[trunk],[team][add][new.dev+x@example.com][--range][E:150-160]" "$(calls)"
-  # Go back to single-developer mode: the sheet's confirm (default No).
-  X click ${MODE_X:-1000} ${MODE_Y:-560}
-  sleep 1
-  shot "team-confirm-$theme"
-  if [ "$theme" = catppuccin-mocha ]; then
-    X key Tab; X key Return # the confirm's own button → the core's native dialog
-    sleep 2
-    shot "team-native-$theme"
-    X key Escape # No
-    sleep 1.5
-    check "native No: the migrate did not run" 0 "$(grep -c migrate "$W/argv.log")"
-  fi
+  # The confirm with the sheet made taller by the add error: from the "to" field, Tab is Add and
+  # the next Tab the mode button. The native dialog behind its confirm proves the confirm was up.
+  X key Tab; X key Tab; X key Return; sleep 1
+  shot "team-confirm-after-error-$theme"
+  to_native
+  proof "$LEGACY_T" "after the add error"
+  X key Escape; sleep 1.5; reset
+  shape "$theme" "$p" legacy "$LEGACY_T"
+  quit
+  echo "[$theme ${GW}x${GH}] no .ai/team.json shape (--team)"
+  p="$W/Dev/single-$theme"; mkdir -p "$p/.ai"
+  app "$theme" "$p"
+  sheet
+  shot "team-single-$theme"
+  reset
+  shape "$theme" "$p" team "$TEAM_T"
   quit
 done
-# The "no .ai/team.json" shape, and the native Yes running the migrate once.
-p="$W/Dev/single"; mkdir -p "$p/.ai"
-: >"$W/argv.log"
-app catppuccin-mocha "$p"
-: >"$W/argv.log"
-X key ctrl+shift+m
-sleep 2
-shot "team-single-catppuccin-mocha"
-X click ${SINGLE_MODE_X:-880} ${SINGLE_MODE_Y:-526} # shorter sheet: the button sits higher
-sleep 1
-X key Tab; X key Return
-sleep 2
-X key Return # the native dialog's default is No
-sleep 1.5
-check "native default (Return) is No" 0 "$(grep -c migrate "$W/argv.log")"
-X click ${SINGLE_MODE_X:-880} ${SINGLE_MODE_Y:-526}
-sleep 1
-X key Tab; X key Return
-sleep 2
-X click ${NATIVE_YES_X:-467} ${NATIVE_YES_Y:-162} # GTK's Yes, the dialog at the screen's top left on Xvfb
-sleep 3
-check "native Yes: migrate --team ran once" "[state][migrate][--team]" "$(grep migrate "$W/argv.log" | tr '\n' ',' | sed 's/,$//')"
-quit
-echo "argv log:"; sed 's/^/  /' "$W/argv.log"
+echo "argv log (last project):"; sed 's/^/  /' "$W/argv.log"
 if [ "$fails" -eq 0 ]; then echo "PASS: team screens"; else echo "$fails failure(s)"; fi
 [ "$fails" -eq 0 ]

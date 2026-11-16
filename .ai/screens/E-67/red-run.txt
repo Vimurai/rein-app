@@ -1,0 +1,47 @@
+# team-screens.sh with to_confirm() replaced by the old fixed click (1000,600) — must be red
+[catppuccin-mocha 1280x800] team shape (--legacy)
+  ok   open: team show, then trunk — nothing else
+  ok   add: five words, each value one word
+  ok   native dialog "Go back to single-developer mode?" on screen after the add error
+  FAIL native dialog "Go back to single-developer mode?" not on screen for the screens
+  FAIL native dialog "Go back to single-developer mode?" not on screen before native Return (default No)
+  ok   native Return (default No): state migrate --legacy ran 0 time(s)
+  FAIL native dialog "Go back to single-developer mode?" not on screen before native Escape
+  ok   native Escape: state migrate --legacy ran 0 time(s)
+  FAIL native dialog "Go back to single-developer mode?" not on screen before native Yes (a click on it)
+  FAIL native Yes (a click on it): state migrate --legacy ran 1 time(s) — expected [1], got [0]
+[catppuccin-mocha 1280x800] no .ai/team.json shape (--team)
+  FAIL native dialog "Turn on team mode?" not on screen for the screens
+  FAIL native dialog "Turn on team mode?" not on screen before native Return (default No)
+  ok   native Return (default No): state migrate --team ran 0 time(s)
+  FAIL native dialog "Turn on team mode?" not on screen before native Escape
+  ok   native Escape: state migrate --team ran 0 time(s)
+  FAIL native dialog "Turn on team mode?" not on screen before native Yes (a click on it)
+  FAIL native Yes (a click on it): state migrate --team ran 1 time(s) — expected [1], got [0]
+[github-light 1280x800] team shape (--legacy)
+  ok   open: team show, then trunk — nothing else
+  ok   add: five words, each value one word
+  ok   native dialog "Go back to single-developer mode?" on screen after the add error
+  FAIL native dialog "Go back to single-developer mode?" not on screen for the screens
+  FAIL native dialog "Go back to single-developer mode?" not on screen before native Return (default No)
+  ok   native Return (default No): state migrate --legacy ran 0 time(s)
+  FAIL native dialog "Go back to single-developer mode?" not on screen before native Escape
+  ok   native Escape: state migrate --legacy ran 0 time(s)
+  FAIL native dialog "Go back to single-developer mode?" not on screen before native Yes (a click on it)
+  FAIL native Yes (a click on it): state migrate --legacy ran 1 time(s) — expected [1], got [0]
+[github-light 1280x800] no .ai/team.json shape (--team)
+  FAIL native dialog "Turn on team mode?" not on screen for the screens
+  FAIL native dialog "Turn on team mode?" not on screen before native Return (default No)
+  ok   native Return (default No): state migrate --team ran 0 time(s)
+  FAIL native dialog "Turn on team mode?" not on screen before native Escape
+  ok   native Escape: state migrate --team ran 0 time(s)
+  FAIL native dialog "Turn on team mode?" not on screen before native Yes (a click on it)
+  FAIL native Yes (a click on it): state migrate --team ran 1 time(s) — expected [1], got [0]
+argv log (last project):
+  [team][show]
+  [trunk]
+  [team][show]
+  [trunk]
+  [team][show]
+  [trunk]
+20 failure(s)

@@ -81,6 +81,12 @@ pub trait Host: Send + Sync {
         server: crate::tmux_server::Server,
     ) -> Result<ChildSpec, IpcError>;
 
+    /// rein runs inside WSL behind `wsl.exe` (the Windows window, D-038). Fixed by the host's
+    /// type, never by anything the web view sends (E-67, security review C16).
+    fn in_wsl(&self) -> bool {
+        false
+    }
+
     /// `rein init --check` or `rein init` in `project` as a constant command (V9 components
     /// 2–3), not yet started; [`crate::project_setup::run_lines`] runs it.
     fn rein_command(

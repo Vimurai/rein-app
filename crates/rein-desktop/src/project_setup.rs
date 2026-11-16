@@ -67,15 +67,22 @@ impl ReinRun {
         }
     }
 
-    /// The `-lic` word inside WSL: quote-free (V8's argv rule).
+    /// The `-lic` word inside WSL: quote-free (V8's argv rule). A migrate runs under coreutils
+    /// `timeout` (290 s, KILL 5 s later) so it has ended before the host's 300 s limit frees
+    /// the lock; `timeout` missing → exit [`crate::team::NO_TIMEOUT_EXIT`], rein not run. The
+    /// `exit` after `exec` stops a second run when an rc shadows `exec` (E-67, D-060, review C9).
     pub fn wsl_script(self) -> &'static str {
         match self {
             Self::InitCheck => "exec ~/.rein/bin/rein init --check",
             Self::Init => "exec ~/.rein/bin/rein init",
             Self::TeamShow => "exec ~/.rein/bin/rein team show",
             Self::Trunk => "exec ~/.rein/bin/rein trunk",
-            Self::MigrateTeam => "exec ~/.rein/bin/rein state migrate --team",
-            Self::MigrateLegacy => "exec ~/.rein/bin/rein state migrate --legacy",
+            Self::MigrateTeam => {
+                "IFS=; set -o noglob; for t in /usr/bin/timeout /bin/timeout; do [ -x $t ] && { exec $t -k 5 290 ~/.rein/bin/rein state migrate --team; exit; }; done; exit 96"
+            }
+            Self::MigrateLegacy => {
+                "IFS=; set -o noglob; for t in /usr/bin/timeout /bin/timeout; do [ -x $t ] && { exec $t -k 5 290 ~/.rein/bin/rein state migrate --legacy; exit; }; done; exit 96"
+            }
         }
     }
 }

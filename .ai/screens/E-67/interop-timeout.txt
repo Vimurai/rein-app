@@ -1,0 +1,21 @@
+date: 2026-11-16T10:48:14Z
+wsl.exe: WSL version: 3.0.5.0; distro: Ubuntu; login shell: /usr/bin/zsh
+timeout in WSL: timeout (uutils coreutils) 0.10.0
+WSL + login rc start-up (wsl.exe -e /usr/bin/zsh -lic true), 5 runs: 473ms 197ms 203ms 182ms 182ms
+wsl.exe exit passthrough: 96->96 124->124 137->137 
+
+ADD_SCRIPT: IFS=; set -o noglob; case $# in 2) ;; *) exit 64;; esac; case $1 in -*|*@*@*|@*|*@|*[!A-Za-z0-9._+@-]*) exit 65;; esac; case $1 in ?*@?*) ;; *) exit 66;; esac; case $2 in [EP]:[0-9]*-[0-9]*) ;; *) exit 69;; esac; case $2 in *[!EP0-9:-]*|*:*:*|*-*-*|?:*[!0-9-]*|*[!0-9]) exit 68;; esac; for t in /usr/bin/timeout /bin/timeout; do [ -x $t ] && { exec $t -k 3 55 ~/.rein/bin/rein team add $1 --range $2; exit; }; done; exit 96
+migrate --team script: IFS=; set -o noglob; for t in /usr/bin/timeout /bin/timeout; do [ -x $t ] && { exec $t -k 5 290 ~/.rein/bin/rein state migrate --team; exit; }; done; exit 96
+
+== team add past the limit (timeout -k 3 55) (host limit 60 s)
+  exit 124 after 55192 ms (host limit 60000 ms: inside)
+  | zsh rc read (ZSH_VERSION=5.9)
+  > rein stand-in 2029728 started child 2029734 (argv: team add dev@example.com --range E:1-2)
+  stand-in and child pids: 2029728 2029734; still in ps: 0
+
+== state migrate --team past the limit (timeout -k 5 290) (host limit 300 s)
+  exit 124 after 290183 ms (host limit 300000 ms: inside)
+  | zsh rc read (ZSH_VERSION=5.9)
+  > rein stand-in 2046024 started child 2046025 (argv: state migrate --team)
+  stand-in and child pids: 2046024 2046025; still in ps: 0
+
