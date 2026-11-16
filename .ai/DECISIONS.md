@@ -2064,3 +2064,40 @@ Drop the `timeout` wrapper (one line of the constant script); the host limit rem
 - **Accepted residual risks (Low):** a grandchild of rein that ignores TERM would outlive the limit (rein 0.5.0 starts none; re-read on each rein release the app is built against); after a host-limit timeout only the team sheet holds its buttons; an OOM-killed node reads as "may still be running".
 - **E-68:** moves only, seven scripts pinned byte-identical, 158 tests. Accepted on the report and CI; the source was not re-read by the Architect.
 - **Seen on the native-dialog screens, cosmetic:** while the migrate waits on the native dialog, the spinner is on **Add**, not on the mode button that was pressed. Folded into the side-menu task, which touches the sheet.
+
+---
+
+## D-061 — Sessions outlive the app and are restored at start; a project ends on Close project or when an agent exits
+
+**Date**: 2026-11-16
+**Task**: operator direction after the E-66 build ("I hate that we lost sessions surviving … next time we open rein-app should auto load all sessions where we left … if I exit one pane with /exit should close both engineer and architect and close session for that project"). E-69, E-70, E-71. Blueprint: `desktop.md` V12.
+**Decision**: On the app's own tmux server, quitting the app leaves every session running; the app records its open project tabs and at start re-attaches each to its live session, found by a tag the app set on it. A session ends when the user closes the project, or 5 s after one of its agents exits unless the user cancels.
+
+### Why needed
+D-059 ended every session at quit to keep `rein start` away from a live session (rein then types `rein pane <role>` into running agents). It worked, and the operator found the cost too high: agents no longer work while the window is closed, and the place one left off is lost.
+
+### Rulings
+1. **D-059 rulings 3 (quit part) and 4 are withdrawn**: no `kill-server` at quit, no quit confirm, no start-up sweep. D-059 ruling 1's tab part stays: closing a tab closes its project.
+2. **The re-send fault is avoided by attaching, not by killing.** Before a tab opens, the app asks its own server whether a session with the project's tag is alive; alive → `tmux attach`, never `rein start`. The tag is a SHA-256 of the project path computed in Rust, kept as the session option `@rein_app_project`. This amends D-033's "the app names no session" only in that the app now marks a session; it still never names or creates one.
+3. **Restore never starts agents by itself.** A remembered project whose session is gone (reboot, WSL shutdown) comes back as a tab with a **Start** button.
+4. **One agent exiting closes the project after a 5 s countdown** with **Keep open** (operator's choice over an immediate close, because the app cannot tell `/exit` from a crash). The countdown runs only on the active tab of a visible window. `close_when_agents_exit = false` keeps the old bar.
+5. **`tmux.server = "user"`**: tabs are remembered, but they open as today and nothing there is tagged, attached by tag, or killed.
+6. **Windows is conditional.** If WSL stops the distro once the app's last `wsl.exe` is gone, sessions cannot outlive the app there; the Engineer measures this before any write and the result goes to the operator.
+
+### Alternatives considered
+1. **Keep D-059 and only restore the tab list** (fresh `rein start` per tab at start-up) — rejected: agents would not survive, which is the thing asked for, and N projects would start 2N agents unasked.
+2. **Find the session by rein's session name** — rejected: the name is rein's to choose and is not in the contract; a tag the app sets needs nothing from rein.
+3. **Close the project immediately on an agent's exit** — rejected by the operator in favour of the countdown.
+4. **Count down on background tabs too** — rejected: the user could not see or cancel it.
+
+### Constraints driving this decision
+- rein 0.5.0's re-send on a live session (seen 2026-11-13); the app may not work around it by typing into panes.
+- No added process on a tab open on Windows (each `wsl.exe` start costs 150–500 ms).
+- The standing rule: never kill anything on the user's tmux server.
+
+### Impact
+- Unlocks: E-69 → E-70 → E-71, after E-60.
+- Risk if wrong: an agent keeps running (and spending) with the window closed and the user unaware; a crashed agent closes its project after 5 s if nobody is looking at the bar; on Windows the feature may not be possible.
+
+### Rollback
+Revert the three tasks' commits to return to D-059; `close_when_agents_exit = false` turns the countdown off without a rebuild.

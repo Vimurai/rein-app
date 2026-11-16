@@ -1161,6 +1161,147 @@ quit and the sweep through `wsl.exe` with timing. Screens: both confirms, both t
 **Rollback.** One commit; reverting it restores D-034's behaviour. `tmux.server =
 "user"` is the per-user way out without a rebuild.
 
+**Superseded in part by V12 (2026-11-16, D-061):** component 2 (quit ends the server,
+the quit confirm, the held native close) and component 3 (the start-up sweep) are
+removed. Component 1 (tab close = project close) and component 4 stay.
+
+### V12. Sessions outlive the app, and the app brings them back (revision 2026-11-16, D-061)
+Operator direction after using the E-66 build: "I hate that we lost sessions surviving
+… sessions should be aware of rein-app and rein-app should be aware of sessions, so
+next time we open rein-app it should auto load all sessions where we left." Also: × /
+Close project is when a session ends; and `/exit` in one pane closes both agents and
+the project's session. Operator's choices: a cancellable countdown on an agent's exit;
+no confirm on quit.
+
+**Goal.** Quitting the app is no longer an event for the projects: their agents keep
+working. Starting the app shows the same tabs, attached to the same sessions. A
+session ends only when the user closes its project, or when one of its agents exits.
+
+**Core concept: the app marks each session it opens with a tag derived from the
+project, records which projects are open, and on every open asks its own tmux server
+"is a session with this tag alive?" — alive → attach to it; not alive → start it.**
+`rein start` is therefore never run on a live session, so rein's re-send fault (V11)
+stays out of reach without the sweep. Applies to `tmux.server = "app"`. On the user's
+server tabs are remembered too, but open exactly as today.
+
+**Components**
+1. **Project tag.** Computed in Rust: the SHA-256 of the tab's canonical project path
+   (on Windows: distro name, a NUL, the Linux path), as 64 lower-case hex characters.
+   When a tab's client has attached, V6's attach step (which already finds the session
+   by the client's tty) also sets the session option `@rein_app_project` to the tag.
+   The tag is the only identity the app keeps for a session; no session is ever named
+   or looked up by name.
+2. **Live lookup.** V8's setup script (already run before every pty on the app's
+   server, so no added process on any platform) takes the tag as a positional word,
+   lists the sessions of the `rein-app` server with their `@rein_app_project`, and
+   answers one fixed word: `live` or `none`. No server running is `none`.
+3. **Attach path.** `live` → the pty runs a new constant attach script with the tag as
+   its only word: it looks the tag up again and `exec`s `tmux attach` on that session's
+   id, or exits with its own code if the session went away in between (the tab then
+   shows component 5's card). It never falls back to `rein start`. `none` → the pty
+   runs `rein start` as today, for a tab the user opened.
+4. **Open-tabs record.** The app's state file keeps the ordered list of open project
+   tabs and which is active, rewritten (temporary name, rename) on tab open, close,
+   reorder and switch. A tab leaves the list only by component 6 or 7, never by quit.
+   At start the app opens one tab per entry, in order, through components 2–3, and
+   activates the recorded one. A project given on the command line or by a second
+   start is opened in addition (or focused if already listed).
+5. **Restored tab without a live session** (after a reboot, a WSL shutdown, a tmux
+   crash, a folder that is gone): no process is started by itself. The tab shows a
+   card: "<project> is not running. Its session ended while the app was closed." with
+   **Start** (`rein start`, as a new tab would) and **Close project** (drops the tab).
+   A missing folder says so and offers only **Close project**.
+   **Restored session whose agents are all gone** (first status read after attach shows
+   no role pane running): a bar "The agents in <project> are no longer running." with
+   **Start again** (V9's close, then `rein start`) and **Close project**.
+6. **Close project** (×, key, menu, the card): unchanged from V11 component 1 — V9's
+   close with the confirm when an agent runs — and the tab leaves the record.
+7. **An agent's exit closes the project, after a countdown.** Replaces V9 component
+   4's "one of several ended" bar when `[project] close_when_agents_exit = true` (the
+   default). When a role's agent has ended on the active tab of a visible window: a
+   bar "The Engineer exited. Closing <project> in 5 s." with **Keep open** (focused)
+   and **Close now**. At zero: V9's close without its confirm (the other agent is
+   stopped), the tab closes and leaves the record. **Keep open** stops the countdown
+   and hides the bar until the set of ended roles changes (as built in E-62). A tab
+   that is not active, or a hidden window, never counts down: its tab shows a marker
+   and the countdown starts from 5 when the user comes to it. On a restored tab the
+   first status read counts a role pane that is not running as ended (the "seen
+   running in this tab" rule cannot apply to an exit that happened while the app was
+   closed). The countdown is a number in the bar, not an animation (D-054).
+   With `close_when_agents_exit = false`: V9's bar as built, no countdown.
+8. **Quit.** No confirm, no `kill-server`, no held native close: the ptys end, tmux
+   detaches the app's clients (V6's `client-detached` hook puts the look back), the
+   app exits. `app_quit`'s confirm, `quit_requested` / `quit_cancelled` and the
+   start-up `sweep` word are removed. `close_dont_ask` now covers tab close only.
+
+**Data model.**
+```
+ProjectsFile gains  open: [{ path, distro? }]   (at most 32; order = tab order)
+                    active: Number?             (index into open)
+session option      @rein_app_project = <64 hex>   (set by the app, read by the app)
+```
+Both file fields are optional; a file without them opens the start screen as today. A
+malformed entry is dropped, never repaired.
+
+**Interface contracts.**
+- Setup script: `sh -s -- <tag>` → stdout `live` | `none` (plus its existing refusal
+  codes). Attach script: `<tag>` → `exec tmux attach`, or its own "gone" exit code.
+- IPC: `tabs_restore()` → the tabs opened from the record, each `{tab, state: attached
+  | not_running | missing}`; `tab_start(tab)` for the card's Start. `tab_close` and
+  `project_close` unchanged. `app_quit()` takes no argument and returns nothing.
+- The web side still never names a server, a session or a tag.
+
+**Security.** Tier 2.
+- The tag is hex computed in Rust; it is the only variable word in either script, and
+  each script re-checks it (`case`: exactly hex, length 64) before use. The session id
+  used for the attach comes from tmux in the same script and is checked as `$` plus
+  digits. No project path, session name or user text reaches a script.
+- Reading is from the app's socket only (`-L rein-app`). Nothing in V12 kills: the
+  only kill stays V9's `rein start --kill --yes` for one project. With the sweep and
+  quit kill gone, no `kill-server` line remains anywhere — a test asserts that.
+- A session tagged by someone else with a project's tag would be attached to. The tag
+  can only be set by a process of the same user on the app's own socket (0700
+  directory), the same trust as the server itself.
+- The open-tabs record is the app's own state file (0600); a path in it is treated as
+  untrusted input and passes the same checks as a path picked in the dialog.
+
+**Execution constraints.** No added process on a tab open (the lookup rides in the
+setup process). Restoring N tabs opens them one after another, the active one first;
+the others attach when first shown or after the active one is up, whichever is first,
+at most two setup processes at a time. The agent poll keeps its limit (active tab,
+visible window, one process per 5 s). Quit is immediate.
+
+**Open to the Engineer — read, report, then build** (first item before any write):
+- **Does the app's tmux server survive on Windows?** With every `wsl.exe` the app
+  started gone, is the server (and an agent in it) still alive after 1, 10 and 60
+  minutes on WSL 3.0.5, with and without systemd in the distro? If WSL stops the
+  distro when idle, report it and stop: the answer decides whether Windows gets V12 at
+  all, and it goes to the operator.
+- The oldest tmux the app supports: do user options on a session (`@name`) and
+  `#{@name}` in `list-sessions -F` work there?
+- What a running `claude` agent does while no client is attached (does it keep
+  working, does a resize on re-attach disturb it).
+
+**Tests.** Rust: the tag (stable, differs by distro, 64 hex); record round trip, a
+malformed entry dropped, the 32 cap; script text (no `kill-server` anywhere, the hex
+re-check). End to end (Linux, macOS; private `TMUX_TMPDIR`, stand-in rein recording
+its argv): quit leaves the session; a second run restores the tab and the stand-in
+records **no second start**; server killed between runs → the card, no start until
+**Start**; closing a project ends that session only and it is not restored; a tagged
+session for another project is not attached to. Window run under Xvfb with proof on
+screen for each (D-060 ruling 3): the countdown reaching zero closes the project and
+stops the other agent; **Keep open** leaves both panes as they are; a background tab
+does not count down. Windows interop: lookup and attach through `wsl.exe` with timing.
+Screens (D-052): restored tabs, the "not running" card, the "agents no longer running"
+bar, the countdown bar — both themes.
+
+**Rollback.** `[project] close_when_agents_exit = false` turns the countdown off per
+user. Removing the `open` list from the state file returns to the start screen.
+Reverting the three commits restores V11 (kill at quit, sweep).
+
+**Tasks.** E-69 (tag, lookup, attach, quit without kill; the reads first), E-70
+(open-tabs record, restore, the cards), E-71 (the countdown). After E-60.
+
 ### Tests (v2)
 - Token function: contrast ≥ 4.5:1 for every text pair in every theme; the default theme is
   `catppuccin-mocha`.
