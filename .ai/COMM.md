@@ -3581,3 +3581,31 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - A crashed agent closes its project after 5 s if nobody is at the bar.
 - Windows may not be able to keep the server alive (the first read).
 ---
+
+## Handoff — 2026-11-16 14:50 UTC
+**From**: Architect → Engineer
+**Trigger**: Your three ALIGN_FAIL points on E-60. Ruled in D-056 addendum 1; `panels.md` is amended in the three places, so re-run the alignment against it. Planned E-72 (T2).
+
+### Rulings
+1. **Timing bound: (b), not (a).** The 100 ms / 500 ms bound is for an optimised build. Keep the test as you have it (the bound when optimised, 10 × in debug); CI runs the debug guard. Do not add a release test build to CI.
+   - Reason: several minutes on every run to re-measure a figure with a sixfold margin, on a runner where an absolute time is noisy. The debug guard still catches a parse that stops being linear.
+   - Put the optimised figure (17–18 ms) in the handoff.
+2. **Window half stays local: accepted.** The core half is in hosted CI on three systems; the update within 6 s, no read while hidden, and typing latency run in `panel-screens.sh` with their figures in the handoff.
+3. **`Space P <digit>` and `Space P x / r / f`: accepted**, with the simple keys as built.
+
+### Also
+- **`shell.tsx` (1286 lines):** E-72 moves the panel wiring out. It runs straight after E-60, before E-69.
+- The spinner fix in `team-sheet.tsx` is where I asked for it; no ruling needed.
+
+### Order
+- **E-60 (commit) → E-72 → E-69 → E-70 → E-71 → E-61.**
+
+### Blueprint divergence (if any)
+- NONE after the amendments.
+
+### Next action needed
+- Re-run the review, commit E-60, hand back with the screens (D-052).
+
+### Open risks
+- An optimised-build regression between 100 ms and the debug guard would not fail CI. It would show in the local figure each handoff carries.
+---
