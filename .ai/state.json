@@ -2990,6 +2990,87 @@
       "summary": "[TIER_3] E-64 security_engineer final: Low (script re-check E:1-2E) fix verified at team.rs:44; re-pen-test 31 Rust validator payloads + 66 hostile-rc script runs (bash/zsh/dash, -lic), 0 exploited; 9 team tests green; P0 0, P1 0. Residual lows: timed-out WSL migrate may outlive its lock; team_add has no core confirm.",
       "sha": "2b9f01ef6f92e4cd4b726f1502bec40b2101e89e",
       "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PLAN",
+      "agent": "security_engineer",
+      "task_id": "E-67",
+      "timestamp": "2026-11-16T10:44:10.961Z",
+      "summary": "[TIER_3] E-67 pre-write: APPROVE WITH CONSTRAINTS C9-C16 (E-64 C1-C8 kept). C9 blocking: `[ -x $t ] && { exec $t ...; exit; }` (rc-shadowed exec ran rein twice); C10 IFS=/noglob in migrate scripts; C11 map 96/124/137 only in_wsl, exact, rein never exits 96/124; C12 no detached children; C13 wsl.exe passes 124/137/96; C14 measure WSL+rc startup; C15 fixed sentences; C16 local unchanged",
+      "sha": "b40e781209d16221c59f80735bec1fc3d358dc6d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "security_engineer",
+      "task_id": "E-67",
+      "timestamp": "2026-11-16T10:58:07.976Z",
+      "summary": "[TIER_3] E-67 post-write: C9-C16 met (E-64 C1-C8 kept); exec-shadow runs rein once, hostile values refused, TERM path kills child, KILL 137. Low L1: uutils -k KILLs only direct child (rein 0.5.0 has no TERM-ignoring grandchild). Low L2: host lock freed on stuck run, held only on team sheet. cargo 165/165, ui 61/61",
+      "sha": "b40e781209d16221c59f80735bec1fc3d358dc6d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ARCH_PASS",
+      "agent": "critic_arch",
+      "task_id": "E-67",
+      "timestamp": "2026-11-16T10:58:39.069Z",
+      "summary": "E-67: No sovereignty violations (no architect.md/BRIEF.md/blueprints in diff); all 8 changed crates/rein-desktop files plus untracked tests/e2e/xtitle.c trace to E-67 (V10 as-built, D-060): team.rs timeout wrapper, host/wsl_host/project_setup, team-sheet.tsx/team.ts, team.test.mjs, team-screens.sh. Files correctly placed.",
+      "sha": "b40e781209d16221c59f80735bec1fc3d358dc6d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "critic_security",
+      "task_id": "E-67",
+      "timestamp": "2026-11-16T10:58:44.389Z",
+      "summary": "E-67: No P0/P1. WSL scripts constant, quote-free; only ADD_SCRIPT takes $1/$2 (validated before exec, IFS=/noglob); timeout paths fixed; in_wsl fixed by host type; exit 96 distinct; no secrets/env leakage; xtitle.c test-only.",
+      "sha": "b40e781209d16221c59f80735bec1fc3d358dc6d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-67",
+      "timestamp": "2026-11-16T10:58:51.243Z",
+      "summary": "E-67: standards-checker PASS — 9 files clean (8 modified + untracked xtitle.c), 0 errors, 0 warnings; run per-file via ~/.rein mirror (in-tree scripts/standards.mjs absent), unstaged tree",
+      "sha": "b40e781209d16221c59f80735bec1fc3d358dc6d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "TESTS_PASS",
+      "agent": "critic_tests",
+      "task_id": "E-67",
+      "timestamp": "2026-11-16T10:58:55.267Z",
+      "summary": "E-67: cargo test rein-desktop 157+5+3 pass, ui team.test.mjs 4/4; timeout word, missing-timeout refusal (96), real-timeout kill and --legacy/--team e2e paired with xtitle proof covered; P2 advisories only (orphan sleep on mid-fail, 10s bound)",
+      "sha": "b40e781209d16221c59f80735bec1fc3d358dc6d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner",
+      "task_id": "E-67",
+      "timestamp": "2026-11-16T10:59:14.054Z",
+      "summary": "E-67: manual alignment (align_diff saw no staged diff) vs TASKS E-67, desktop.md V10 'As built and reviewed (2026-11-16)', D-060 r3/r4 — Do (1) mode button by keyboard focus (shift+Tab from Close; Tab Tab from 'to' after the error), no fixed pixel; (2) xtitle proof before/after each native answer, --legacy and --team: Return/Escape 0 runs, Yes (geometry click) 1 run; red-run.txt shows 20 failures with old pixel; (3) .ai/screens/E-67 has confirm team+legacy both themes, after-error, native both modes (mocha); spot-checked 2 PNGs show confirm/native dialog; (4) migrate timeout -k 5 290, add -k 3 55, missing -> exit 96 + fixed sentence, 124/137 -> took-too-long, host limit -> MAY_STILL_RUN + held until sheet unmount/reopen; WSL-only via Host::in_wsl. Interop shows 124 inside host limit, 0 pids left. Minor: add-email still fixed click (field does not move with content).",
+      "sha": "b40e781209d16221c59f80735bec1fc3d358dc6d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_CLEARED",
+      "agent": "security_engineer",
+      "task_id": "E-67",
+      "timestamp": "2026-11-16T11:01:43.838Z",
+      "summary": "E-67: WSL team scripts (team_mode 290s/k5, team_add 55s/k3) reviewed and probed; no outside values in the migrate scripts, ADD checks unchanged, 11x6 hostile inputs refused (64-69); missing timeout -> 96, rein not run; 124/137 -> TOOK_TOO_LONG; host limit -> MAY_STILL_RUN with buttons held until reopened. Advisory: uutils timeout 0.10.0 KILL does not reach grandchildren that ignore TERM. (Verdict by security_engineer; stamp recorded by rein-review orchestrator because the agent lacked ToolSearch.)",
+      "sha": "b40e781209d16221c59f80735bec1fc3d358dc6d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "review_synthesizer",
+      "task_id": "E-67",
+      "timestamp": "2026-11-16T11:01:57.545Z",
+      "summary": "[TIER_3] E-67 All critics passed — [ARCH_PASS] [SEC_PASS] [TESTS_PASS] [ALIGN_PASS] + [CLEAN_PASS] [SEC_CLEARED]. P0: 0 | P1: 0 | P2: 4 (orphan sleep 30 on mid-fail in a_rein_past_the_limit_is_stopped_with_its_child; uutils timeout 0.10.0 KILL misses TERM-ignoring grandchildren so 137 may say took-too-long while one lives; add-email field still fixed-pixel click; red run of team-screens.sh to be shown in handoff). VIBE/CHAOS pending rein-test --vibe.",
+      "sha": "b40e781209d16221c59f80735bec1fc3d358dc6d",
+      "author": "emirkovacevic@protonmail.com"
     }
   ],
   "deltas": [],
