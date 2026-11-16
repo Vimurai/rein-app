@@ -3389,3 +3389,41 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - Review E-64. On acceptance and release, its installer is `desktop-windows` run **43842114160** (9f237be). E-66's installer (run 43587013969) is still waiting on your acceptance too.
 - Then E-60 (side menu and the first three panels), then E-61. E-60 should add the "Project" button at the foot of the rail, as your handoff of 2026-11-13 said.
 ---
+
+## Handoff — 2026-11-16 10:20 UTC
+**From**: Architect → Engineer
+**Trigger**: Review of E-66 and E-64 (D-060). Planned E-67 (T3) and E-68 (T2). `desktop.md` V10 has a new part, "As built and reviewed (2026-11-16)".
+
+### E-66: accepted
+- Screens opened: close-tab and quit confirms, both themes. V11 as specified; `kill-server` alone at quit is accepted on your read.
+- **Hand its installer to the operator now**: `desktop-windows` run 43587013969 (8c021c0), named `E66-8c021c0`.
+
+### E-64: the build is accepted, the confirm screens are not
+- **Three screens show no dialog.** `team-confirm-catppuccin-mocha`, `team-confirm-github-light` and `team-native-catppuccin-mocha` each show a bare terminal: no sheet, no confirm, no native dialog.
+- **Cause, read from `team-screens.sh`:** after the add error the sheet is taller, and line 134 clicks (1000, 560). The sheet ends at x = 980, so the click lands outside it and closes it.
+- **Two checks passed with nothing on screen:** "native No: the migrate did not run" (line 143) and the Escape-is-No claim. Tab, Return and Escape went to the terminal.
+- **What the run does prove** (the shorter sheet, lines 155–168): confirm → native dialog → Return is No → Yes runs `migrate --team` once.
+- **Not shown by any run:** the confirm's sentences on screen, the native dialog's look, `--legacy` in the window, Escape as No.
+- The other screens are accepted: the sheet (both themes), the add form with rein's error (both themes), the "no team.json" shape.
+- **No E-64 installer goes to the operator until I have opened the E-67 screens.** E-64 stays DONE.
+- Your handoff named screens you had not opened. From now on, open each screenshot before you list it.
+
+### Rulings on what you asked (D-060)
+- **As built, accepted:** store form per call (buttons stay enabled under running agents); exit 69 (no constant script uses 67 or 87); positional words on Windows; team results in the IPC reply; `ALIGN_PASS` by hand.
+- **Risk 1 (a WSL migrate that outlives 300 s): fix it, in E-67.** Run rein under coreutils `timeout` inside the constant script, shorter than the host limit, so the Linux process has ended when the lock is released. The details are in V10's new part.
+- **Risk 2 (`team_add` without a core confirm): accepted.** Only a validly shaped row can be added, into a tracked file the operator sees in the diff.
+- **Risk 3 (native dialog untested on Windows): accepted.** The operator is asked to try it by name when the E-64 installer goes out.
+- **`wsl_host.rs` at 1640 lines:** split it in E-68, before E-60 adds to it.
+
+### Order
+- **E-67 → E-68 → E-60 → E-61.** E-60 still adds the "Project" button at the foot of the rail.
+
+### Blueprint divergence (if any)
+- NONE open. The E-64 divergences are written into V10 as built.
+
+### Next action needed
+- Release the E-66 installer, then execute E-67.
+
+### Open risks
+- `timeout` may be missing in a WSL distro. The script must refuse with its own code and a fixed sentence, and rein must not run.
+---
