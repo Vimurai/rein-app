@@ -1070,6 +1070,29 @@ components 1–3 and the IPC it contradicts.**
 contract's list of stable entry points (§3.6). The sheet is built against rein 0.5.0 and
 fails soft on a different answer; the request to rein asks to add them, with `--json`.
 
+**As built and reviewed (2026-11-16, E-64, D-060) — replaces what it contradicts above.**
+- IPC results (`team_get`, `team_add`, `team_mode`) come back in the IPC reply, not
+  through the CLI runner's event stream. The one-at-a-time lock is shared with the
+  other CLI runs.
+- The WSL script's own refusal code is 69: wsl.exe 3.0.5 rewrites a Linux exit 67 or 87
+  to 255. No constant script may use 67 or 87.
+- rein decides the store form per call, so the mode buttons are not disabled while
+  agents run.
+- **Time limit inside Linux (E-67).** On Windows the constant scripts for `team_mode`
+  and `team_add` run rein under coreutils `timeout`, shorter than the host's limit
+  (migrate: 290 s against 300 s; add: 55 s against 60 s), so the Linux process has
+  ended when the host releases the lock. `timeout` missing → the script refuses with
+  its own code and a fixed sentence; rein does not run. Exit 124 → the fixed "took too
+  long" sentence. If the host limit fires anyway, the sheet says "rein may still be
+  running in WSL. Check the project before trying again." and its buttons stay
+  disabled until the sheet is reopened.
+- `team_add` has no confirm in the core: accepted residual risk (D-060 ruling 5).
+- **Window checks (D-060 ruling 3).** `team-screens.sh` reaches the mode button by
+  keyboard focus or by a position read from the page, never a fixed pixel for a
+  control that moves with content. Every "did not run" check is paired with proof the
+  dialog was up. Screens owed: the sheet's confirm for both sentences (team, legacy),
+  both themes, and the native dialog.
+
 ### V11. The app's projects live only while the app does (revision 2026-11-13, D-059)
 Operator report on the E-63 build: after closing the app the tmux session keeps running
 in the background; opening the project again runs `rein start` on the live session, and

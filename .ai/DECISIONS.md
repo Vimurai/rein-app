@@ -2018,3 +2018,40 @@ The operator follows the Triad by reading two panes. Tasks, handoffs and "whose 
 - **Reattach to the surviving session on reopen** (keep agents alive across app restarts): it is what tmux is for, but it is the path that triggers rein's re-send, and the operator's rule is the opposite.
 - **Per-project `rein start --kill` only, no `kill-server`**: leaves leftovers after a crash and takes about 1 s per project at quit.
 - **Killing on the user's server too**: those sessions are not the app's.
+
+---
+
+## D-060 — E-66 accepted; E-64's build accepted but its confirm was never looked at; rulings on its three Low risks
+
+**Date**: 2026-11-16
+**Task**: review of E-66 (8c021c0) and E-64 (9f237be); E-67, E-68.
+**Decision**: E-66 is accepted and its installer may go to the operator. E-64's code is accepted as built, but no E-64 installer goes out until the team-mode confirm and the native dialog have been captured and opened (D-052), which E-67 does.
+
+### Why needed
+The E-64 handoff lists screens of the sheet's confirm (both themes) and the native dialog. The three files (`team-confirm-*`, `team-native-catppuccin-mocha`) show a bare terminal with no sheet and no dialog. Cause, read from `team-screens.sh`: after the add error the sheet is taller, and the script clicks (1000, 560), which is outside the sheet (it ends at x = 980), so the sheet closes. The following "native No: the migrate did not run" and "Escape is No" checks then pass with nothing on screen. What the run does prove, on the shorter sheet: confirm → native dialog → Return is No → Yes runs `migrate --team` once. Not shown by any run: the confirm's sentences on screen, the native dialog's look, the `--legacy` path in the window, Escape as No.
+
+### Rulings
+1. **E-66 accepted.** Screens opened (close-tab and quit confirms, both themes); V11 as specified. `kill-server` alone at quit is accepted on the Engineer's read of `rein start --kill`.
+2. **E-64 as built is accepted**: per-call store form (so the mode buttons stay enabled under running agents), exit 69 for the script's refusal (wsl.exe rewrites 67 and 87), positional words on Windows (ruling 6 of 2026-11-13), and team results in the IPC reply instead of the runner's event stream. The task stays DONE; the screens gate for its confirm is carried by E-67.
+3. **A harness check must be able to fail.** A window check that asserts "X did not happen" also asserts that the screen it acted on was there (here: the migrate ran zero times *and* a later Yes on the same path runs it once). Fixed pixel coordinates for a control whose position depends on content are replaced by keyboard focus or a position read from the page.
+4. **Risk 1 (a WSL migrate that outlives its 300 s limit): fixed, in E-67.** The limit moves into Linux: the constant script runs rein under coreutils `timeout`, a few seconds shorter than the host's limit, so the Linux process ends before the lock is released. If the host limit still fires first, the sheet says rein may still be running and keeps its buttons disabled for that project until the sheet is reopened.
+5. **Risk 2 (`team_add` has no confirm in the core): accepted as residual risk.** Only a validly shaped developer row can be added; it lands in a tracked file the operator sees in the diff and must commit; rein refuses overlaps. A native dialog on every add costs the user more than this buys.
+6. **Risk 3 (the native dialog is untested on Windows): accepted.** It is the same `rfd` call the folder dialog uses there; the operator's check on Windows stays the last step (D-052 ruling 4) and is asked for by name when the installer is handed over.
+7. **`wsl_host.rs` at 1640 lines is split by concern before the panels add to it** (E-68, no behaviour change).
+
+### Alternatives considered
+1. **Reopen E-64** — rejected: the code is in and green; the gap is evidence, and a small task with its own acceptance is clearer than a reopened Tier 3 task.
+2. **Accept the screens on the test log** — rejected: that is what D-052 exists to stop, and two of the log's checks were vacuous.
+3. **Risk 1: only a "may still be running" line** — rejected as the whole answer: it tells the user about a half-migrated project instead of preventing it.
+4. **Risk 2: a native confirm on add** — rejected, see ruling 5.
+
+### Constraints driving this decision
+- D-052: nothing reaches the operator before the Architect has opened the screens.
+- The web view is untrusted; the migrate's protection is the core's native dialog, so it is the one screen that must be seen.
+
+### Impact
+- Unlocks: E-66 installer to the operator now; E-67 → E-68 → E-60 → E-61.
+- Risk if wrong: `timeout` absent in a WSL distro (it is coreutils; the script must fail closed with a fixed line if it is missing).
+
+### Rollback
+Drop the `timeout` wrapper (one line of the constant script); the host limit remains.
