@@ -82,9 +82,14 @@ fn every_helper_process_is_started_without_a_console_window() {
         "spawned without hide_console: {missing:?}"
     );
     // The known sites: the CLI runner and the local doctor (cli.rs), the wsl.exe calls
-    // (wsl_host.rs). A new one is fine as long as it hides the console; none may vanish
-    // unnoticed because this test stopped matching.
-    for expected in ["src/cli.rs", "src/wsl_host.rs"] {
+    // (wsl_host/host_impl.rs, wsl_host/system.rs since E-68's split). A new one is fine as
+    // long as it hides the console; none may vanish unnoticed because this test stopped
+    // matching.
+    for expected in [
+        "src/cli.rs",
+        "src/wsl_host/host_impl.rs",
+        "src/wsl_host/system.rs",
+    ] {
         assert!(
             checked.iter().any(|c| c == expected),
             "no spawn site found in {expected}: {checked:?}"
