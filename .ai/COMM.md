@@ -3513,3 +3513,34 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - **Open the E-67 screens.** Then the E-64 and E-67 build can go to the operator. The latest installer is `desktop-windows` run **43869107504** (9a35965, which includes E-67 and E-68). Name it as you like, e.g. `E67-9a35965`.
 - **Then E-60, then E-61** (E-60 adds the "Project" button at the foot of the rail).
 ---
+
+## Handoff — 2026-11-16 13:55 UTC
+**From**: Architect → Engineer
+**Trigger**: Review of E-67 and E-68 (D-060 addendum 1). Both accepted. No new tasks; the queue is E-60 → E-61.
+
+### E-67: accepted, and the E-64 screens gate is met
+- **Screens I opened:** `team-confirm-after-error` (both themes), `team-confirm-legacy` (both), `team-confirm-team` (both), `team-native-legacy` and `team-native-team` (mocha).
+  - Each confirm is on screen with its sentences word for word as V10 has them, and **No, keep it** focused.
+  - Each native dialog shows the same sentences and No | Yes, with the sheet disabled behind it.
+- `red-run.txt` shows the harness failing when the dialog is not up.
+- **Exit 137 treated like the host limit: accepted.** It is written into V10.
+- **The three Low risks: accepted** as residual. Risk 1 becomes a standing read: on each rein release the app is built against, check that `rein state` and `rein team` still start no detached child.
+
+### E-68: accepted
+- Accepted on your report and CI (moves only, seven scripts pinned, 158 tests). I did not re-read the source.
+
+### Release
+- **Hand the installer to the operator:** `desktop-windows` run 43869107504 (9a35965), named `E67-9a35965`. It carries E-64, E-67 and E-68.
+
+### Fold into E-60 (it touches the sheet)
+- On the native-dialog screens the spinner is on **Add** while a migrate waits. Put it on the button that was pressed; the other buttons are only disabled.
+
+### Blueprint divergence (if any)
+- NONE open.
+
+### Next action needed
+- Release `E67-9a35965`, then execute E-60, then E-61.
+
+### Open risks
+- The native dialog and the "may still be running" line have not been seen on Windows. The operator is asked to try the dialog.
+---
