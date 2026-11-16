@@ -1002,16 +1002,16 @@
     {
       "id": "E-67",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 3,
       "description": "Fix the team window run so the team-mode confirm is really shown and captured, and move the WSL time limit into Linux, per .ai/blueprints/desktop.md §Look and feel v2 V10 \"As built and reviewed (2026-11-16)\" and D-060. Found in review: .ai/screens/E-64/team-confirm-* and team-native-* show a bare terminal — crates/rein-desktop/tests/e2e/team-screens.sh clicks (1000,560), outside the sheet (it ends at x=980) once the add error makes it taller, so the sheet closes and \"native No: the migrate did not run\" passes with nothing on screen. Do: (1) reach the mode button by keyboard focus or a position read from the page, not a fixed pixel; (2) pair every \"did not run\" check with proof the dialog was up, and add the --legacy path (confirm, native No, native Escape, native Yes → `state migrate --legacy` once); (3) retake under .ai/screens/E-67/: the sheet's confirm with the team sentences and with the legacy sentences, both themes, and the native dialog; open each file yourself before the handoff and say what it shows; (4) on Windows run rein under coreutils `timeout` inside the constant scripts for team_mode (290 s) and team_add (55 s); `timeout` missing → the script's own refusal code (not 67 or 87) and a fixed sentence, rein not run; exit 124 → the fixed \"took too long\" sentence; if the host limit fires first the sheet shows the fixed \"rein may still be running in WSL\" line and keeps its buttons disabled until reopened. security_engineer reads the script change before the write. Acceptance: team-screens.sh fails when the confirm is not on screen (show the red run once); tests cover the timeout word and the missing-timeout refusal; Windows interop shows a stand-in that sleeps past the limit is gone from `ps` when the script returns 124; local `rein ci run`, hosted ci ×3 and desktop-windows green; Tier 3 stamps. No E-64 installer is handed over before the Architect has opened the E-67 screens.",
       "created_at": "2026-11-16T10:17:45.007Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-16T12:39:42.665Z",
+      "summary": "Team window run proves confirm + native dialog (xtitle) for --legacy/--team, red run shown; WSL scripts under coreutils timeout (290/55, exit after exec, 96 if missing), fixed senten …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-16T10:17:45.012Z"
+      "updated_at": "2026-11-16T12:39:42.669Z"
     },
     {
       "id": "E-68",
@@ -3070,6 +3070,33 @@
       "timestamp": "2026-11-16T11:01:57.545Z",
       "summary": "[TIER_3] E-67 All critics passed — [ARCH_PASS] [SEC_PASS] [TESTS_PASS] [ALIGN_PASS] + [CLEAN_PASS] [SEC_CLEARED]. P0: 0 | P1: 0 | P2: 4 (orphan sleep 30 on mid-fail in a_rein_past_the_limit_is_stopped_with_its_child; uutils timeout 0.10.0 KILL misses TERM-ignoring grandchildren so 137 may say took-too-long while one lives; add-email field still fixed-pixel click; red run of team-screens.sh to be shown in handoff). VIBE/CHAOS pending rein-test --vibe.",
       "sha": "b40e781209d16221c59f80735bec1fc3d358dc6d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-68",
+      "timestamp": "2026-11-16T12:41:53.829Z",
+      "summary": "[TIER_2] E-68 manual Rust review (scripts/standards.mjs absent, JS-only rules N/A): wsl_host.rs 1644 -> 7 files, max 454 lines (<600 limit); no secrets, no tmp files, no unwrap/println/dbg in non-test code; unwraps only in #[cfg(test)]; no behaviour change evident. 0 errors, 0 warnings.",
+      "sha": "2119366bdf3dbf03275285ab44815331ebfaedb2",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner",
+      "task_id": "E-68",
+      "timestamp": "2026-11-16T12:42:32.977Z",
+      "summary": "[TIER_2] E-68 wsl_host split is moves-only: line multiset of HEAD wsl_host.rs fully contained in new files (0 lines lost/changed); 8 &str constants byte-identical; only visibility change parse_probe -> pub(super); external uses (main.rs WslHost::system, config.rs check_name) resolve; largest file 454 lines; cargo test -p rein-desktop green (158/5/3). Deviation noted: one ADDED test every_script_is_byte_identical_to_before_the_split (21 -> 22 #[test]) - additive guard, literal breach of 'test count unchanged'; spawn_sites.rs retargets paths only.",
+      "sha": "2119366bdf3dbf03275285ab44815331ebfaedb2",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-68",
+      "timestamp": "2026-11-16T12:42:50.545Z",
+      "summary": "[TIER_2] E-68 Blueprint aligned + clean-code gate clear — 0 warnings ignored (ALIGN_PASS: moves only, 8 script consts byte-identical, public surface intact, 158 unit tests green; +1 script-pin test is required by E-68's own text; CLEAN_PASS: all files <600 lines)",
+      "sha": "2119366bdf3dbf03275285ab44815331ebfaedb2",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
