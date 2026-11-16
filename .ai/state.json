@@ -1016,16 +1016,16 @@
     {
       "id": "E-68",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Split crates/rein-desktop/src/wsl_host.rs (1640 lines) into modules by concern with no behaviour change, per D-060 ruling 7 and .ai/blueprints/desktop.md §Windows window (D-038). After the team window-run task, before the side-menu task adds to the file. Keep the public surface the rest of the crate uses; keep every constant script byte-identical (a test pins each script's text before and after); move tests with the code they test; no file over 600 lines unless you say why in the handoff. Acceptance: `git diff` shows moves only apart from `mod` / `use` lines; the Rust test count is unchanged; the WSL argv and script-text tests pass untouched; local `rein ci run`, hosted ci ×3 and desktop-windows green; Tier 2 review stamps.",
       "created_at": "2026-11-16T10:17:48.572Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-16T13:03:04.846Z",
+      "summary": "wsl_host.rs split into root + scripts/host_impl/system + tests/{mod,projects,commands}; moves only (parse_probe pub(super)); scripts pinned byte-identical; largest file 454; CI green at 9a35965",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-16T10:17:48.574Z"
+      "updated_at": "2026-11-16T13:03:04.847Z"
     }
   ],
   "stamps": [

@@ -1086,6 +1086,12 @@ fails soft on a different answer; the request to rein asks to add them, with `--
   long" sentence. If the host limit fires anyway, the sheet says "rein may still be
   running in WSL. Check the project before trying again." and its buttons stay
   disabled until the sheet is reopened.
+  As built (E-67, D-060 addendum 1): `-k 5` / `-k 3` after the limit; an `exit`
+  directly after the `exec` so a shadowed `exec` cannot run rein twice; missing
+  `timeout` is exit 96; **exit 137 (timeout had to KILL) is treated like the host
+  limit**, because uutils `timeout` KILLs only its direct child.
+- While a run is busy, the spinner belongs on the button that was pressed (today it
+  shows on Add during a migrate) — fixed with the side-menu task.
 - `team_add` has no confirm in the core: accepted residual risk (D-060 ruling 5).
 - **Window checks (D-060 ruling 3).** `team-screens.sh` reaches the mode button by
   keyboard focus or by a position read from the page, never a fixed pixel for a

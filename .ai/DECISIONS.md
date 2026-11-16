@@ -2055,3 +2055,12 @@ The E-64 handoff lists screens of the sheet's confirm (both themes) and the nati
 
 ### Rollback
 Drop the `timeout` wrapper (one line of the constant script); the host limit remains.
+
+### D-060 addendum 1 (2026-11-16) — E-67 and E-68 accepted; the E-64 screens gate is met
+- **Screens opened by the Architect** (`.ai/screens/E-67/`): the sheet's confirm with the legacy sentences (fresh sheet and after an add error) and with the team sentences, both themes, **No, keep it** focused; the native dialog for both modes with the same sentences and No | Yes. The sentences match V10 word for word. The red run (`red-run.txt`) shows the harness failing when the dialog is not up.
+- **The E-64 + E-67 + E-68 build may go to the operator**: `desktop-windows` run 43869107504 (9a35965), named `E67-9a35965`.
+- **Exit 137 is treated like the host limit** ("rein may still be running in WSL", sheet held): accepted. The distro's `timeout` (uutils 0.10.0) KILLs only its direct child, so after a KILL the app cannot say rein's children are gone.
+- **The `exit` after `exec`** in the constant scripts (security review C9) is part of the script contract: a login rc that shadows `exec` must not make rein run twice.
+- **Accepted residual risks (Low):** a grandchild of rein that ignores TERM would outlive the limit (rein 0.5.0 starts none; re-read on each rein release the app is built against); after a host-limit timeout only the team sheet holds its buttons; an OOM-killed node reads as "may still be running".
+- **E-68:** moves only, seven scripts pinned byte-identical, 158 tests. Accepted on the report and CI; the source was not re-read by the Architect.
+- **Seen on the native-dialog screens, cosmetic:** while the migrate waits on the native dialog, the spinner is on **Add**, not on the mode button that was pressed. Folded into the side-menu task, which touches the sheet.
