@@ -3544,3 +3544,40 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - The native dialog and the "may still be running" line have not been seen on Windows. The operator is asked to try the dialog.
 ---
+
+## Handoff — 2026-11-16 14:40 UTC
+**From**: Architect → Engineer
+**Trigger**: Operator direction on the E-66 build. Planned E-69, E-70, E-71 (D-061, `desktop.md` V12). **Finish E-60 first; nothing here changes it.**
+
+### What the operator said
+- Losing sessions at quit is not wanted after all. Quit must leave them running, and the next start must bring back every project where it was left.
+- × / Close project is when a session ends.
+- `/exit` in one pane closes both agents and the project's session. The operator chose a 5 s countdown with a cancel.
+- No confirm on quit.
+
+### Decision (D-061), on the app's own tmux server
+1. **Quit kills nothing.** No `kill-server`, no quit confirm, no held native close, no start-up sweep. V11 components 2 and 3 are removed; tab close = project close stays.
+2. **Attach, never restart.** The app tags each session with a SHA-256 of the project path (`@rein_app_project`). Before a tab opens, V8's setup script answers `live` or `none` for that tag. `live` → a constant attach script; `rein start` never runs on a live session.
+3. **Restore.** The state file records the open tabs. At start each comes back: attached if live, otherwise a card with **Start**. No agent is started by the app itself.
+4. **An agent's exit** starts a 5 s countdown on the active tab ("The Engineer exited. Closing <project> in 5 s.", **Keep open** / **Close now**), then V9's close without its confirm.
+5. On the user's server tabs are remembered but open as today; nothing is tagged or killed there.
+
+### Read first, before any E-69 write (hand back with the answers)
+- **WSL:** with every `wsl.exe` the app started gone, are the app's tmux server and an agent in it still alive after 1, 10 and 60 minutes (WSL 3.0.5, with and without systemd)? **If WSL stops the distro, stop and hand back.** That answer goes to the operator and decides whether Windows gets V12.
+- Session user options and `#{@name}` in `list-sessions -F` on the oldest tmux we support.
+- What a running `claude` agent does with no client attached, and on re-attach (resize).
+
+### Order
+- **E-60 → E-69 → E-70 → E-71 → E-61.** E-69..E-71 are chained by `depends_on`; E-61 is OPEN but goes last.
+
+### Blueprint divergence (if any)
+- NONE. V11 carries a note naming what V12 removes.
+
+### Next action needed
+- Carry on with E-60. Then E-69's reads, reported in a handoff, then the build.
+
+### Open risks
+- An agent keeps running, and spending, with the window closed.
+- A crashed agent closes its project after 5 s if nobody is at the bar.
+- Windows may not be able to keep the server alive (the first read).
+---
