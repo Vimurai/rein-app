@@ -19,9 +19,10 @@ const MAX_BYTES: u64 = 64 * 1024;
 
 /// The most projects "Don't ask for this project" keeps (V9 component 3).
 pub const MAX_DONT_ASK: usize = 500;
-/// The panel's width range in px, and its width until the user drags it (panels.md 2).
-pub const PANEL_WIDTH: std::ops::RangeInclusive<u32> = 320..=560;
-pub const PANEL_WIDTH_DEFAULT: u32 = 360;
+/// The panel's width range in px, and its width until the user drags it (panels.md 2; widened
+/// by status.md §Components 7, E-74 — the window also keeps it under half its own width).
+pub const PANEL_WIDTH: std::ops::RangeInclusive<u32> = 320..=720;
+pub const PANEL_WIDTH_DEFAULT: u32 = 400;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -829,7 +830,7 @@ mod tests {
             ("panels_enabled", serde_json::json!(["tasks", "tasks"])),
             ("panels_enabled", Value::from("tasks")),
             ("panel_width", Value::from(319)),
-            ("panel_width", Value::from(561)),
+            ("panel_width", Value::from(721)),
             ("panel_width", Value::from(4_294_967_656_u64)),
             ("panel_open", Value::from("shell")),
         ] {

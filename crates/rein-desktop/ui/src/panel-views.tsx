@@ -1,13 +1,18 @@
-// The three panel views (panels.md §Components 5, D-056; E-60): summary, list, timeline.
-// Every string here came from a project's `.ai/` files through the core, which already cut
-// it to its caps and made control and bidi characters visible. It is put on the page as a
-// React text child only — never HTML, never Markdown, never a link.
+// The three panel views (panels.md §Components 5, D-056; E-60): summary, list, timeline;
+// made readable by E-74 (status.md §Components 7, D-063). Every string here came from a
+// project's `.ai/` files through the core, which already cut it to its caps and made control
+// and bidi characters visible. It is put on the page as a React text child, or through the
+// closed structured text (`structured-text.tsx`) — never HTML, never a link, never an image.
 
 import { useState } from "react";
 import { Button } from "../components/button.tsx";
+import { Input } from "../components/input.tsx";
 import { KNOWN_GAP, type AttentionItem } from "./attention.ts";
 import { ChevronDown, ChevronRight } from "./icons.ts";
-import type { Entry, Group, Row, Task } from "./panels.ts";
+import { Chips, taskChips, type ReaderItem } from "./panel-reader.tsx";
+import { filterTasks, firstLines, taskTitle } from "./panel-text.ts";
+import { taskGroups, type Entry, type Group, type ListOptions, type Row, type Task, type Tasks } from "./panels.ts";
+import { InlineText, StructuredText } from "./structured-text.tsx";
 
 /** Dashboard: key facts as rows, counts by status as chips. */
 export function SummaryView({ rows, chips }: { rows: Row[]; chips: { label: string; n: number }[] }) {
@@ -34,117 +39,125 @@ export function SummaryView({ rows, chips }: { rows: Row[]; chips: { label: stri
   );
 }
 
-/** One task row, opening its detail in place (the drawer). */
-function TaskRow({ t }: { t: Task }) {
-  const [open, setOpen] = useState(false);
+/** Opens the reader on `items[index]`; `from` is the row, which gets focus back. */
+export type OnRead = (items: ReaderItem[], index: number) => void;
+
+/** One task row: id, title and chips; activating it opens the reader (status.md §7). */
+function TaskRow({ t, nowMs, onOpen }: { t: Task; nowMs: number; onOpen: () => void }) {
   return (
     <li className="border-b border-border/50 last:border-b-0">
       <button
         type="button"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-start gap-2 rounded-md px-1 py-1.5 text-left text-[13px] text-foreground transition-colors duration-[var(--motion-fast)] hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        data-reader-key={`task:${t.id}`}
+        onClick={onOpen}
+        className="grid w-full gap-1 rounded-md px-1 py-1.5 text-left text-foreground transition-colors duration-[var(--motion-fast)] hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
-        {open ? (
-          <ChevronDown size={14} aria-hidden="true" className="mt-0.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight size={14} aria-hidden="true" className="mt-0.5 shrink-0 text-muted-foreground" />
-        )}
-        <span className="shrink-0 font-mono text-[12px] text-muted-foreground">{t.id}</span>
-        <span className={`min-w-0 flex-1 [overflow-wrap:anywhere] ${open ? "" : "line-clamp-2"}`}>{t.description || "—"}</span>
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span className="shrink-0 font-mono text-[12px] text-muted-foreground">{t.id}</span>
+          <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{taskTitle(t.description) || "—"}</span>
+        </span>
+        <span className="pl-[calc(4ch+0.5rem)]">
+          <Chips chips={taskChips(t, nowMs)} />
+        </span>
       </button>
-      {open && (
-        <dl className="m-0 mb-2 ml-6 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
-          <dt className="text-muted-foreground">Status</dt>
-          <dd className="m-0 text-foreground">{t.status || "—"}</dd>
-          <dt className="text-muted-foreground">Owner</dt>
-          <dd className="m-0 text-foreground">{t.owner || "—"}</dd>
-          <dt className="text-muted-foreground">Tier</dt>
-          <dd className="m-0 text-foreground">{t.tier || "—"}</dd>
-          {t.blocked_by.length > 0 && (
-            <>
-              <dt className="text-muted-foreground">Blocked by</dt>
-              <dd className="m-0 [overflow-wrap:anywhere] text-foreground">{t.blocked_by.join(", ")}</dd>
-            </>
-          )}
-          <dt className="text-muted-foreground">Updated</dt>
-          <dd className="m-0 text-foreground">{t.updated_at || "—"}</dd>
-        </dl>
-      )}
     </li>
   );
 }
 
-/** Tasks: grouped rows, each opening its detail. */
-export function ListView({ groups, cut }: { groups: Group[]; cut: boolean }) {
+/** Tasks: a filter over id and description (the rows already read), groups that collapse —
+ *  Done starts collapsed — and rows that open the reader. */
+export function ListView({ tasks, options, cut, nowMs, onRead }: { tasks: Tasks; options: ListOptions; cut: boolean; nowMs: number; onRead?: OnRead | undefined }) {
+  const [query, setQuery] = useState("");
+  const [closed, setClosed] = useState<Record<string, boolean>>({ DONE: true });
+  const filtering = query.trim() !== "";
+  const groups = taskGroups({ ...tasks, tasks: filterTasks(tasks.tasks, query) }, options);
+  const isOpen = (g: Group) => filtering || !closed[g.key];
+  // Up / Down in the reader walk the rows as shown: open groups, in order.
+  const shown = groups.filter(isOpen).flatMap((g) => g.rows);
+  const items: ReaderItem[] = shown.map((t) => ({ key: `task:${t.id}`, kind: "task", task: t }));
   return (
     <div className="grid gap-4">
-      {groups.map((g) => (
-        <section key={g.key} aria-label={g.label} className="grid gap-1">
-          <h3 className="m-0 flex items-baseline justify-between text-[12px] font-medium text-muted-foreground">
-            {g.label}
-            <span className="tabular-nums">{g.rows.length + g.more}</span>
-          </h3>
-          {g.rows.length === 0 ? (
-            <p className="m-0 text-[12px] text-muted-foreground">None</p>
-          ) : (
-            <ul className="m-0 list-none p-0">
-              {g.rows.map((t) => (
-                <TaskRow key={t.id} t={t} />
+      <Input
+        type="search"
+        aria-label="Filter tasks by id or text"
+        placeholder="Filter tasks"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {groups.map((g) => {
+        const open = isOpen(g);
+        const n = g.rows.length + g.more;
+        if (filtering && n === 0) return null;
+        return (
+          <section key={g.key} aria-label={g.label} className="grid gap-1">
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={() => setClosed({ ...closed, [g.key]: open })}
+              disabled={filtering}
+              className="flex items-center gap-1 rounded-md px-1 py-0.5 text-left text-[12px] font-medium text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:hover:bg-transparent"
+            >
+              {open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+              <span className="flex-1">{g.label}</span>
+              <span className="tabular-nums">{n}</span>
+            </button>
+            {open &&
+              (g.rows.length === 0 ? (
+                <p className="m-0 pl-5 text-[12px] text-muted-foreground">None</p>
+              ) : (
+                <ul className="m-0 list-none p-0">
+                  {g.rows.map((t) => (
+                    <TaskRow key={t.id} t={t} nowMs={nowMs} onOpen={() => onRead?.(items, shown.indexOf(t))} />
+                  ))}
+                </ul>
               ))}
-            </ul>
-          )}
-          {g.more > 0 && <p className="m-0 text-[12px] text-muted-foreground">… and {g.more} more</p>}
-        </section>
-      ))}
+            {open && g.more > 0 && <p className="m-0 pl-5 text-[12px] text-muted-foreground">… and {g.more} more</p>}
+          </section>
+        );
+      })}
+      {filtering && groups.every((g) => g.rows.length === 0) && <p className="m-0 text-[12px] text-muted-foreground">No task matches.</p>}
       {cut && <p className="m-0 text-[12px] text-muted-foreground">Older tasks are left out.</p>}
     </div>
   );
 }
 
-/** One handoff, collapsible; the newest starts open. */
-function EntryItem({ e, first }: { e: Entry; first: boolean }) {
-  const [open, setOpen] = useState(first);
+/** The lines of "Next action needed" a Communication entry shows before "Read all". */
+export const NEXT_LINES = 6;
+
+/** One handoff: who → who and when, the trigger as its title, the start of "Next action
+ *  needed", and "Read all" for the reader. */
+function EntryItem({ e, onOpen }: { e: Entry; onOpen: () => void }) {
+  const next = e.sections.find((s) => s.name === "Next action needed");
+  const head = next ? firstLines(next.text, NEXT_LINES) : null;
   return (
-    <li className="border-b border-border/50 pb-2 last:border-b-0">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-        className="grid w-full gap-0.5 rounded-md px-1 py-1.5 text-left transition-colors duration-[var(--motion-fast)] hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-      >
-        <span className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
-          {open ? (
-            <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-muted-foreground" />
-          ) : (
-            <ChevronRight size={14} aria-hidden="true" className="shrink-0 text-muted-foreground" />
-          )}
-          <span className="[overflow-wrap:anywhere]">{e.title}</span>
-        </span>
-        <span className="pl-5 text-[12px] text-muted-foreground">{e.when}</span>
-        {e.trigger && <span className={`min-w-0 pl-5 text-[12px] text-foreground [overflow-wrap:anywhere] ${open ? "" : "line-clamp-2"}`}>{e.trigger}</span>}
-      </button>
-      {open && (
-        <div className="grid gap-2 pt-1 pl-6">
-          {e.sections.map((s, i) => (
-            <section key={i} aria-label={s.name || "Section"} className="grid gap-0.5">
-              {s.name && <h4 className="m-0 text-[12px] font-medium text-muted-foreground">{s.name}</h4>}
-              <p className="m-0 text-[12px] [overflow-wrap:anywhere] whitespace-pre-wrap text-foreground">{s.text}</p>
-            </section>
-          ))}
-          {e.cut && <p className="m-0 text-[12px] text-muted-foreground">The rest of this handoff is left out.</p>}
+    <li className="grid gap-1.5 border-b border-border/50 pt-1 pb-3 last:border-b-0">
+      <span className="text-[12px] text-muted-foreground [overflow-wrap:anywhere]">
+        {e.title} · {e.when}
+      </span>
+      <span className="font-medium [overflow-wrap:anywhere]">{e.trigger ? <InlineText text={e.trigger} /> : "Handoff"}</span>
+      {head && head.text.trim() !== "" && (
+        <div className="grid gap-0.5">
+          <span className="text-[12px] text-muted-foreground">Next action needed</span>
+          <StructuredText text={head.text} />
+          {head.more && <span className="text-[12px] text-muted-foreground">…</span>}
         </div>
       )}
+      <span>
+        <Button variant="default" size="sm" data-reader-key={`handoff:${e.key}`} onClick={onOpen}>
+          Read all
+        </Button>
+      </span>
     </li>
   );
 }
 
 /** Communication: whose turn it is, then the handoffs newest first. */
-export function TimelineView({ whoseTurn, entries, cut }: { whoseTurn: string | null; entries: Entry[]; cut: boolean }) {
+export function TimelineView({ whoseTurn, entries, cut, onRead }: { whoseTurn: string | null; entries: Entry[]; cut: boolean; onRead?: OnRead | undefined }) {
+  const items: ReaderItem[] = entries.map((e) => ({ key: `handoff:${e.key}`, kind: "handoff", entry: e }));
   return (
     <div className="grid gap-3">
       {whoseTurn !== null && (
-        <p className="m-0 rounded-md border border-border px-3 py-2 text-[13px] text-foreground">
+        <p className="m-0 rounded-md border border-border px-3 py-2 text-foreground">
           <span className="text-muted-foreground">Whose turn: </span>
           <span className="font-medium [overflow-wrap:anywhere]">{whoseTurn}</span>
         </p>
@@ -154,7 +167,7 @@ export function TimelineView({ whoseTurn, entries, cut }: { whoseTurn: string | 
       ) : (
         <ol aria-label="Handoffs, newest first" className="m-0 grid list-none gap-1 p-0">
           {entries.map((e, i) => (
-            <EntryItem key={e.key} e={e} first={i === 0} />
+            <EntryItem key={e.key} e={e} onOpen={() => onRead?.(items, i)} />
           ))}
         </ol>
       )}

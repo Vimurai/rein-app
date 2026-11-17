@@ -3,6 +3,8 @@
 // then every POLL_MS (the core stats the file and parses only on a change) — and draws the
 // descriptor's view. Dragging its right edge changes its width; the terminal is fitted once
 // when the drag ends, not per pixel. Esc in the panel gives the terminal the keyboard back.
+// E-74 (status.md §Components 7): the body is 13 px / 1.5, the width 320 px to the smaller of
+// 720 px and half the window, and a task or handoff opens in the reader over the terminal.
 
 import {
   Component,
@@ -19,13 +21,14 @@ import { ScrollArea } from "../components/scroll-area.tsx";
 import { RefreshCw, TriangleAlert, X } from "./icons.ts";
 import { panelData } from "./ipc.ts";
 import type { AttentionItem } from "./attention.ts";
-import { AttentionView, ListView, SummaryView, TimelineView } from "./panel-views.tsx";
+import { Reader, type ReaderItem } from "./panel-reader.tsx";
+import { AttentionView, ListView, SummaryView, TimelineView, type OnRead } from "./panel-views.tsx";
 import {
+  PANEL_MIN,
   POLL_MS,
   clampWidth,
   shouldRead,
   summaryModel,
-  taskGroups,
   timelineModel,
   updatedAgo,
   type Descriptor,
@@ -95,12 +98,15 @@ export function PanelBody({
   app,
   nowMs,
   attention,
+  onRead,
 }: {
   d: Descriptor;
   reply: Reply<unknown> | null;
   app: { health: string; server: string };
   nowMs: number;
   attention?: AttentionFeed | undefined;
+  /** Opens the reader (E-74); absent in the render test. */
+  onRead?: OnRead | undefined;
 }) {
   if (d.source === "attention") {
     if (attention?.readAt == null) reply = null;
@@ -123,12 +129,12 @@ export function PanelBody({
     }
     case "list": {
       const t = reply.ok as Tasks;
-      return <ListView groups={taskGroups(t, d.options as ListOptions)} cut={t.cut} />;
+      return <ListView tasks={t} options={d.options as ListOptions} cut={t.cut} nowMs={nowMs} onRead={onRead} />;
     }
     case "timeline": {
       const h = reply.ok as Handoffs;
       const m = timelineModel(h, nowMs);
-      return <TimelineView whoseTurn={"pin" in d.options && d.options.pin ? m.whoseTurn : null} entries={m.entries} cut={h.cut} />;
+      return <TimelineView whoseTurn={"pin" in d.options && d.options.pin ? m.whoseTurn : null} entries={m.entries} cut={h.cut} onRead={onRead} />;
     }
   }
 }
@@ -138,6 +144,8 @@ export function PanelHost({
   tab,
   project,
   width,
+  maxWidth,
+  modal,
   overlay,
   refreshSeq,
   focusSeq,
@@ -153,6 +161,10 @@ export function PanelHost({
   /** The tab's project name, shown in the header. */
   project: string;
   width: number;
+  /** The widest the edge may go now: the smaller of 720 px and half the window. */
+  maxWidth: number;
+  /** The modal input style: the reader also takes k / j. */
+  modal: boolean;
   /** Below 900 px of window width the panel lies over the terminal. */
   overlay: boolean;
   /** Bumped by `panel.refresh` / `panel.focus`. */
@@ -176,6 +188,20 @@ export function PanelHost({
   /** The header's refresh button; `panel.refresh` comes in as `refreshSeq`. */
   const [refreshed, setRefreshed] = useState(0);
   const root = useRef<HTMLElement>(null);
+  /** The reader (E-74): the items it walks, the one shown, where the panel's edge is. */
+  const [reader, setReader] = useState<{ items: ReaderItem[]; index: number; left: number } | null>(null);
+  const onRead: OnRead = (items, index) => setReader({ items, index, left: root.current?.getBoundingClientRect().right ?? 0 });
+  /** Esc or Close: the row of the item last shown gets the keyboard, else the panel. */
+  const closeReader = () => {
+    const key = reader?.items[reader.index]?.key;
+    setReader(null);
+    requestAnimationFrame(() => {
+      const row = key ? root.current?.querySelector<HTMLElement>(`[data-reader-key="${CSS.escape(key)}"]`) : null;
+      (row ?? root.current)?.focus();
+    });
+  };
+  // Another panel or another tab: the reader's items were someone else's.
+  useEffect(() => setReader(null), [d.id, tab]);
 
   useEffect(() => {
     if (d.source === "attention" || !shouldRead(true, visible)) return;
@@ -208,11 +234,11 @@ export function PanelHost({
     onDrag("start", width);
   };
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (drag.current) onDrag("move", clampWidth(drag.current.w + e.clientX - drag.current.x));
+    if (drag.current) onDrag("move", clampWidth(drag.current.w + e.clientX - drag.current.x, maxWidth));
   };
   const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
-    const w = clampWidth(drag.current.w + e.clientX - drag.current.x);
+    const w = clampWidth(drag.current.w + e.clientX - drag.current.x, maxWidth);
     drag.current = null;
     onDrag("end", w);
   };
@@ -228,7 +254,7 @@ export function PanelHost({
     const step = e.key === "ArrowLeft" ? -16 : e.key === "ArrowRight" ? 16 : 0;
     if (!step) return;
     e.preventDefault();
-    onDrag("end", clampWidth(width + step));
+    onDrag("end", clampWidth(width + step, maxWidth));
   };
 
   const nowMs = Date.now();
@@ -268,9 +294,9 @@ export function PanelHost({
         </Button>
       </header>
       <ScrollArea className="min-h-0 flex-1">
-        <div className="p-3" aria-busy={reply === null || undefined}>
+        <div className="p-3 text-[13px] leading-[1.5]" aria-busy={reply === null || undefined}>
           <PanelGuard resetKey={`${d.id}:${key}`}>
-            <PanelBody d={d} reply={reply} app={app} nowMs={nowMs} attention={own} />
+            <PanelBody d={d} reply={reply} app={app} nowMs={nowMs} attention={own} onRead={onRead} />
           </PanelGuard>
         </div>
       </ScrollArea>
@@ -278,8 +304,8 @@ export function PanelHost({
         role="separator"
         aria-orientation="vertical"
         aria-label="Panel width"
-        aria-valuemin={320}
-        aria-valuemax={560}
+        aria-valuemin={PANEL_MIN}
+        aria-valuemax={maxWidth}
         aria-valuenow={width}
         tabIndex={0}
         onPointerDown={onPointerDown}
@@ -290,6 +316,17 @@ export function PanelHost({
         onKeyDown={onEdgeKey}
         className="absolute inset-y-0 -right-1 w-2 cursor-col-resize focus-visible:bg-ring/40 focus-visible:outline-none"
       />
+      {reader && (
+        <Reader
+          items={reader.items}
+          index={reader.index}
+          modal={modal}
+          nowMs={nowMs}
+          left={reader.left}
+          onIndex={(index) => setReader({ ...reader, index })}
+          onClose={closeReader}
+        />
+      )}
     </aside>
   );
 }

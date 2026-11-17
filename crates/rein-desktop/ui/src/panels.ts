@@ -145,16 +145,19 @@ export function panelDigit(id: string): number | null {
 
 // ── host ────────────────────────────────────────────────────────────────────────────────
 
+// status.md §Components 7 (E-74): 320 px to the smaller of 720 px and half the window.
 export const PANEL_MIN = 320;
-export const PANEL_MAX = 560;
-export const PANEL_DEFAULT = 360;
+export const PANEL_MAX = 720;
+export const PANEL_DEFAULT = 400;
 /** Below this window width the panel lies over the terminal instead of beside it. */
 export const OVERLAY_BELOW = 900;
 /** How often an open panel reads its source while the window is visible (the core stats
  *  the file and parses only on a change); a change shows within 6 s. */
 export const POLL_MS = 5000;
 
-export const clampWidth = (w: number) => Math.round(Math.min(PANEL_MAX, Math.max(PANEL_MIN, w)));
+/** The widest the panel may be in a window this wide; never below the minimum. */
+export const maxWidth = (windowWidth: number) => Math.max(PANEL_MIN, Math.min(PANEL_MAX, Math.floor(windowWidth / 2)));
+export const clampWidth = (w: number, max: number = PANEL_MAX) => Math.round(Math.min(Math.min(max, PANEL_MAX), Math.max(PANEL_MIN, w)));
 export const overlays = (windowWidth: number) => windowWidth < OVERLAY_BELOW;
 /** A source is read only while its panel is open and the window can be seen. */
 export const shouldRead = (open: boolean, visible: boolean) => open && visible;

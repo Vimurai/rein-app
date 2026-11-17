@@ -908,7 +908,7 @@ export function Shell(props: ShellProps) {
   });
 
   // The side menu (E-60): the rail, the open panel beside or over the stage; the stage's fit.
-  const sideView = side.view({ termOpen, current, health, runner });
+  const sideView = side.view({ termOpen, current, health, runner, modal: keys.style === "modal" });
   useStageFit(termsEl, () => tab.current, side);
 
   return (

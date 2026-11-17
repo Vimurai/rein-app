@@ -6,6 +6,7 @@ export {
   Check,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   CircleCheck,
   CircleHelp,
   CircleX,

@@ -21,8 +21,9 @@ pub const MAX_TASKS_READ: usize = 5_000;
 pub const MAX_BLOCKED_BY: usize = 32;
 /// Characters kept of a short field (id, status, owner, tier, timestamps, names).
 pub const SHORT: usize = 64;
-/// Characters kept of a task's description.
-pub const DESCRIPTION: usize = 1024;
+/// Characters kept of a task's description: enough for the reader to show it whole (E-74,
+/// status.md §7 — this repository's longest is about 2000); the 1 MiB reply cap still holds.
+pub const DESCRIPTION: usize = 4096;
 /// Handoffs kept (the last ones in the file).
 pub const MAX_HANDOFFS: usize = 30;
 /// Bytes of text kept per handoff, all sections together (panels.md §Data Model).
@@ -126,7 +127,8 @@ impl<'de> Deserialize<'de> for Lenient {
                 f.write_str("a string, number, boolean or null")
             }
             fn visit_str<E>(self, v: &str) -> Result<Lenient, E> {
-                Ok(Lenient(Some(v.chars().take(SHORT * 32).collect())))
+                // One more than the largest field cap, so `shown` still sees the cut and marks it.
+                Ok(Lenient(Some(v.chars().take(DESCRIPTION + 1).collect())))
             }
             fn visit_i64<E>(self, v: i64) -> Result<Lenient, E> {
                 Ok(Lenient(Some(v.to_string())))
@@ -624,6 +626,14 @@ mod tests {
         assert_eq!(t.tasks[0].blocked_by.len(), MAX_BLOCKED_BY);
         assert!(t.tasks[0].description.ends_with(CUT));
         assert_eq!(t.tasks[0].description.chars().count(), DESCRIPTION + 1);
+        // E-74: a real-length description (this repository's run to ~2000) arrives whole.
+        let whole = "w".repeat(3000);
+        let t = parse_tasks(
+            format!(r#"{{"tasks":[{{"id":"E-1","status":"OPEN","description":"{whole}"}}]}}"#)
+                .as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(t.tasks[0].description, whole);
         // A handoff with a million lines keeps 8 KiB of text.
         let body = "line of text\n".repeat(1_000_000);
         let h = parse_handoffs(

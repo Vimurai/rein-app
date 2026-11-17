@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # panel-screens.sh <out-dir> [W H] — the side menu end to end and its screens (panels.md, E-60,
 # D-052): the real window (debug build) on Xvfb, in catppuccin-mocha and github-light.
+#   panel-tasks-filter / -reader-task / -reader-task-next / -reader-closed / -communication-readable /
+#   -reader-handoff / -reader-handoff-next — E-74's readable panels on this repository's own
+#   .ai/ files (PANEL_SCREENS_ONLY=readable runs only these);
 #   panel-dashboard / -communication / -tasks — each panel on a fixture project, rail shown;
 #     the newest handoff holds a <script> tag, an <img onerror> and a Markdown link, which must
 #     appear as literal text (checked by eye on the screen; the render test checks the markup);
@@ -159,6 +162,25 @@ quit() { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; T kill-server
 
 for theme in catppuccin-mocha github-light; do
   echo "[$theme ${GW}x${GH}]"
+  # E-74 (status.md §7): readable panels on a copy of this repository's own .ai/ — a real long
+  # task and a real long handoff — driven by keyboard only: the filter, a row into the reader,
+  # Esc back to the row, Communication's "Read all", Down to the next handoff.
+  r="$W/Dev/rein-app-$theme"; mkdir -p "$r/.ai"
+  cp "$REPO/.ai/state.json" "$REPO/.ai/COMM.md" "$r/.ai/"
+  app "$theme" "$r"
+  X key ctrl+shift+3; sleep 1.5; X key ctrl+shift+e # open Tasks, give the panel the keyboard
+  X key Tab; X key Tab; X key Tab # refresh, close, then the filter box
+  X type "E-74"; sleep 1; shot "panel-tasks-filter-$theme"
+  X key Tab; X key Return; sleep 1.5 # the row (a group header takes no focus while filtering): the reader
+  shot "panel-reader-task-$theme"
+  X key Down; sleep 1; shot "panel-reader-task-next-$theme" # one match: Down stays on it
+  X key Escape; sleep 1; shot "panel-reader-closed-$theme"    # the row has the keyboard again
+  X key ctrl+shift+2; sleep 1.5; X key ctrl+shift+e; shot "panel-communication-readable-$theme"
+  X key Tab; X key Tab; X key Tab; X key Return; sleep 1.5 # refresh, close, the first Read all
+  shot "panel-reader-handoff-$theme"
+  X key Down; sleep 1; shot "panel-reader-handoff-next-$theme"
+  quit
+  [ "${PANEL_SCREENS_ONLY:-}" = readable ] && continue
   p="$W/Dev/demo-$theme"; project "$p"
   app "$theme" "$p"
   X key ctrl+shift+1; sleep 1.5; shot "panel-dashboard-$theme"

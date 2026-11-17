@@ -11,7 +11,7 @@ import type { Runner } from "./frame.tsx";
 import { panelData, type HealthView } from "./ipc.ts";
 import type { ActionCall } from "./keymap.ts";
 import { PanelHost, useVisible, type AttentionFeed } from "./panel-host.tsx";
-import { POLL_MS, clampWidth, descriptor, enabledPanels, overlays as panelOverlays } from "./panels.ts";
+import { PANEL_DEFAULT, POLL_MS, clampWidth, descriptor, enabledPanels, maxWidth, overlays as panelOverlays } from "./panels.ts";
 import { Rail } from "./rail.tsx";
 import type { TermTab } from "./term.ts";
 
@@ -44,6 +44,8 @@ export interface SideMenuView {
   current: { title: string; term: TermTab } | undefined;
   health: HealthView | null;
   runner: Runner;
+  /** The modal input style (the reader then also takes k / j). */
+  modal: boolean;
 }
 
 export interface SideMenu {
@@ -80,7 +82,7 @@ export function useSideMenu(
   const { panelsRail, panelsEnabled, panelInit, onPanelState } = props;
   /** The open panel (one at a time) and its width; `liveWidth` follows a drag of its edge. */
   const [panel, setPanel] = useState<string | null>(null);
-  const [panelWidth, setPanelWidth] = useState(360);
+  const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT);
   const [liveWidth, setLiveWidth] = useState<number | null>(null);
   const resizing = useRef(false);
   const [panelRefresh, setPanelRefresh] = useState(0);
@@ -218,7 +220,7 @@ export function useSideMenu(
 
   // The rail while a project is open, and the open panel for the current tab — beside the
   // terminal, or over it in a narrow window.
-  const view = ({ termOpen, current, health, runner }: SideMenuView) => {
+  const view = ({ termOpen, current, health, runner, modal }: SideMenuView) => {
     const offered = enabledPanels(panelsEnabled);
     const coreTab = current?.term.tab;
     const openPanel = panel !== null && panelsEnabled.includes(panel) ? descriptor(panel) : null;
@@ -259,7 +261,9 @@ export function useSideMenu(
           d={openPanel}
           tab={coreTab.id}
           project={current.title}
-          width={liveWidth ?? panelWidth}
+          width={clampWidth(liveWidth ?? panelWidth, maxWidth(winWidth))}
+          maxWidth={maxWidth(winWidth)}
+          modal={modal}
           overlay={panelOverlays(winWidth)}
           refreshSeq={panelRefresh}
           focusSeq={panelFocus}
@@ -276,8 +280,8 @@ export function useSideMenu(
             else {
               resizing.current = false;
               setLiveWidth(null);
-              setPanelWidth(clampWidth(w));
-              onPanelState("panel_width", clampWidth(w));
+              setPanelWidth(clampWidth(w, maxWidth(winWidth)));
+              onPanelState("panel_width", clampWidth(w, maxWidth(winWidth)));
               // The terminal is fitted once, after the layout has its final width.
               requestAnimationFrame(() => terminalRef.current()?.fit());
             }

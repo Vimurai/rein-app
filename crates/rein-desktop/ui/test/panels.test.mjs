@@ -12,6 +12,7 @@ import { build } from "esbuild";
 import {
   DESCRIPTORS,
   OVERLAY_BELOW,
+  PANEL_DEFAULT,
   PANEL_IDS,
   POLL_MS,
   age,
@@ -19,6 +20,7 @@ import {
   clampWidth,
   enabledPanels,
   handoffSeconds,
+  maxWidth,
   overlays,
   panelDigit,
   shouldRead,
@@ -30,6 +32,7 @@ import {
 import { DEFAULT_MODAL, DEFAULT_SIMPLE, expanded } from "../src/keymap.ts";
 import { KNOWN_GAP, MAX_ITEMS, QUIET_S, attentionItems, badgeText, bellClears, bellMarks, goToTab, span } from "../src/attention.ts";
 import { describe as describeAction, menuEntries } from "../src/menu.ts";
+import { TITLE_MAX, blocks, filterTasks, firstLines, inline, readerKey, step, taskTitle } from "../src/panel-text.ts";
 
 const ui = fileURLToPath(new URL("..", import.meta.url));
 
@@ -96,9 +99,15 @@ test("the menu offers one row per enabled panel, in rail order", () => {
 });
 
 test("the host's rules: width, overlay, reading only while open and visible", () => {
+  // E-74 (status.md §7): 320 px to the smaller of 720 px and half the window; 400 by default.
+  assert.equal(PANEL_DEFAULT, 400);
   assert.equal(clampWidth(100), 320);
-  assert.equal(clampWidth(999), 560);
+  assert.equal(clampWidth(999), 720);
   assert.equal(clampWidth(400.4), 400);
+  assert.equal(maxWidth(1280), 640);
+  assert.equal(maxWidth(2000), 720);
+  assert.equal(maxWidth(500), 320, "never below the minimum");
+  assert.equal(clampWidth(700, maxWidth(1280)), 640);
   assert.equal(OVERLAY_BELOW, 900);
   assert.equal(overlays(899), true);
   assert.equal(overlays(900), false);
@@ -277,4 +286,128 @@ test("the Needs you panel: items with their project, a quote labelled as a menti
   assert.match(KNOWN_GAP, /permission prompt/);
   assert.match(KNOWN_GAP, /while the app is closed/, "D-061 addendum 1: the gap holds while the app is closed too");
   assert.match(rendered.attentionLoading(), /data-slot="skeleton"/);
+});
+
+// ── Readable panels (E-74, status.md §Components 7, D-063) ──────────────────────────────
+
+test("structured text: each construct, and every marker left unclosed stays literal", () => {
+  assert.deepEqual(inline("a `b` **c** d"), [
+    { kind: "text", text: "a " },
+    { kind: "code", text: "b" },
+    { kind: "text", text: " " },
+    { kind: "bold", text: "c" },
+    { kind: "text", text: " d" },
+  ]);
+  assert.deepEqual(inline("an ` alone and ** alone"), [{ kind: "text", text: "an ` alone and ** alone" }]);
+  assert.deepEqual(inline("empty `` and ****"), [{ kind: "text", text: "empty `` and ****" }]);
+  assert.deepEqual(inline("[x](https://e.com) <b>"), [{ kind: "text", text: "[x](https://e.com) <b>" }], "a link and a tag are text");
+  const b = blocks("# Head\n\nOne\ntwo\n\n- a\n  more\n- b\n\n2. x\n3. y\n\n```\ncode\n  kept\n```\n```\nloose");
+  assert.deepEqual(b.map((x) => x.kind), ["heading", "p", "ul", "ol", "pre", "p"]);
+  assert.deepEqual(b[1].inl, [{ kind: "text", text: "One two" }], "lines of a paragraph join");
+  assert.deepEqual(b[2].items.map((i) => i[0].text), ["a more", "b"], "an indented line continues its item");
+  assert.equal(b[3].start, 2);
+  assert.equal(b[4].text, "code\n  kept");
+  assert.deepEqual(b[5].inl, [{ kind: "text", text: "``` loose" }], "an unclosed fence is a line of text");
+  // Linear: a capped-size input of unclosed markers parses at once.
+  const t0 = performance.now();
+  inline("`**".repeat(40000));
+  blocks("```\n".repeat(20000).slice(0, -1) + "x");
+  assert.ok(performance.now() - t0 < 1000, "no quadratic pass");
+});
+
+test("first lines of Next action needed, and the task title rule", () => {
+  assert.deepEqual(firstLines("1\n2\n3\n\n", 6), { text: "1\n2\n3", more: false });
+  assert.deepEqual(firstLines("1\n2\n3\n4", 2), { text: "1\n2", more: true });
+  assert.equal(taskTitle("Fix the bar. Then the rest."), "Fix the bar.");
+  assert.equal(taskTitle("First line\nsecond"), "First line");
+  assert.equal(taskTitle("per .ai/blueprints/status.md §7 (D-063). Operator"), "per .ai/blueprints/status.md §7 (D-063).", "a dot inside a path is not an end");
+  const long = "Make sessions on the app's own tmux server outlive the app and be attached to, not restarted, per the blueprint.";
+  const t = taskTitle(long);
+  assert.ok(t.length <= TITLE_MAX && t.endsWith("…"), t);
+  assert.ok(long.startsWith(t.slice(0, -1)), "cut at a word, from the start");
+  assert.ok(!/\s…$/.test(t) && !t.slice(0, -1).endsWith(","), t);
+  assert.equal(taskTitle(""), "");
+});
+
+test("the Tasks filter matches id or text, case ignored, and keeps every row when empty", () => {
+  const rows = [
+    { id: "E-74", description: "Readable panels" },
+    { id: "E-75", description: "Needs you triage" },
+  ];
+  assert.deepEqual(filterTasks(rows, "  ").map((r) => r.id), ["E-74", "E-75"]);
+  assert.deepEqual(filterTasks(rows, "e-75").map((r) => r.id), ["E-75"]);
+  assert.deepEqual(filterTasks(rows, "READABLE").map((r) => r.id), ["E-74"]);
+  assert.deepEqual(filterTasks(rows, "nothing"), []);
+});
+
+test("the reader's keys: Up / Down always, k / j only in the modal style, Esc closes; stepping stops at the ends", () => {
+  assert.equal(readerKey("Escape", false), "close");
+  assert.equal(readerKey("ArrowDown", false), "next");
+  assert.equal(readerKey("ArrowUp", true), "prev");
+  assert.equal(readerKey("j", true), "next");
+  assert.equal(readerKey("k", true), "prev");
+  assert.equal(readerKey("j", false), null, "the simple style types nothing into the reader with j");
+  assert.equal(readerKey("Enter", true), null);
+  assert.equal(step(0, 3, -1), 0);
+  assert.equal(step(2, 3, 1), 2);
+  assert.equal(step(1, 3, 1), 2);
+  assert.equal(step(0, 0, 1), 0);
+});
+
+const tagsIn = (html) => [...new Set([...html.matchAll(/<([a-zA-Z][a-zA-Z0-9]*)/g)].map((m) => m[1].toLowerCase()))].sort();
+
+test("structured text renders only its closed set of elements: no link, image, src, href or event", () => {
+  const { STRUCTURED_TAGS } = rendered;
+  const html = rendered.structured();
+  for (const t of tagsIn(html)) assert.ok(STRUCTURED_TAGS.includes(t), `<${t}> is not allowed`);
+  assert.doesNotMatch(html, /<[^>]*\s(href|src|on[a-z]+)=/i, "an attribute inside a real tag");
+  for (const t of ["h4", "p", "ul", "ol", "li", "pre", "code", "strong"]) assert.ok(tagsIn(html).includes(t), `${t} is drawn`);
+  assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
+  assert.ok(html.includes("[the blueprint](https://example.com/x)"));
+  assert.ok(html.includes("![img](https://example.com/i.png)"), "a Markdown image stays text");
+  assert.ok(html.includes("an unclosed ` and ** marker"));
+  assert.match(html, /<ol[^>]*start="3"/);
+});
+
+test("the reader: id, title and chips for a task; who → who, trigger and every section for a handoff; its own controls", () => {
+  const { STRUCTURED_TAGS } = rendered;
+  const task = rendered.readerTask();
+  assert.ok(task.includes("E-74") && task.includes("Make the side panels readable, per status.md §Components 7 (D-063)."));
+  assert.ok(task.includes("blocked by E-69") && task.includes("T2") && task.includes("engineer"));
+  assert.match(task, /role="dialog"/);
+  for (const name of ["Previous", "Next", "Close the reader"]) assert.ok(task.includes(`aria-label="${name}"`), `${name}: a pointer control`);
+  assert.ok(task.includes("Task 1 of 1"));
+  const ho = rendered.readerHandoff();
+  assert.ok(ho.includes("Architect → Engineer") && ho.includes("Handoff 2 of 2"));
+  assert.ok(ho.includes("The rest of this handoff is left out."));
+  const allowed = new Set([...STRUCTURED_TAGS, "section", "header", "button", "svg", "path", "circle", "article", "h3", "h4", "span"]);
+  for (const html of [task, ho]) {
+    for (const t of tagsIn(html)) assert.ok(allowed.has(t), `<${t}> in the reader`);
+    assert.doesNotMatch(html, /<a[\s>]|<img|<[^>]*\s(href|src)=/i);
+    assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
+  }
+  // The sheet lies over the stage beside the panel: nothing it does resizes the terminal.
+  const src = readFileSync(join(ui, "src/panel-reader.tsx"), "utf8");
+  assert.doesNotMatch(src, /\bfit\(|ptyResize|resize\(/);
+  assert.doesNotMatch(src, /from "\.\/ipc\.ts"/, "the reader makes no IPC call");
+});
+
+test("Communication shows the trigger, six lines of Next action needed and Read all; Tasks a filter, titles and chips", () => {
+  const c = rendered.communication();
+  assert.ok(c.includes(">Read all<"));
+  assert.ok(c.includes("Next action needed"));
+  assert.ok(c.includes("six (left out)") === false && c.includes(">five<"), "six lines, the seventh left out");
+  assert.ok(c.includes("…"));
+  const t = rendered.tasks();
+  assert.ok(t.includes('aria-label="Filter tasks by id or text"'));
+  assert.ok(t.includes('data-reader-key="task:E-1"'));
+  assert.ok(t.includes("T2") && t.includes("engineer"), "chips");
+  assert.ok(rendered.readerTask().includes(">T2<"), "a tier that is not a bare number is shown as written");
+  const NOW = Date.UTC(2026, 10, 16, 12, 0);
+  assert.deepEqual(
+    rendered.taskChips({ id: "E-1", status: "OPEN", owner: "Engineer (Claude)", tier: "2", description: "", blocked_by: ["E-69"], updated_at: "2026-11-16T11:40:00Z" }, NOW),
+    ["Tier 2", "Engineer (Claude)", "blocked by E-69", "20 min ago"],
+  );
+  assert.deepEqual(rendered.taskChips({ id: "E-1", status: "", owner: "", tier: "", description: "", blocked_by: [], updated_at: "not a date" }, NOW), [], "no chip for what is not known");
+  assert.match(t, /aria-expanded="true"[^>]*>.*Open/s);
 });
