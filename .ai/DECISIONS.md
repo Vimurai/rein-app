@@ -2140,3 +2140,72 @@ The operator's answer to addendum 1 ruling 4, relayed by the Engineer with the w
 8. **E-73 accepted (2026-11-17)** at ecf503d (hosted `ci` ×3 and `desktop-windows` green; b83e98f re-run green). As built: `panels_disabled` in `ui.json`, the legacy key read once and never written again, the new key wins if both are present, Settings still sends the panels that are on and the core stores the complement. Accepted on the report, stamps and CI; source not re-read. The two CLEAN_WARN notes (the complement written three times, a doc comment one field too high) get no task; they are fixed when `ui_store.rs` is next opened.
 
 **Alternatives for ruling 4:** (a) leave it and tell users — rejected, it repeats with every panel; (b) add `attention` to every stored list once — rejected, it fixes this panel only and overrides a user who later switches it off if the marker is lost; (c) store the app version beside the list and add ids newer than it — rejected, more state for the same result as storing the off list.
+
+---
+
+## D-062 — One status per open project, computed in the core; shown in the tab bar and raised as notifications
+
+**Date**: 2026-11-17
+**Task**: operator direction ("we are missing notifications for each project running so we can see when something is stuck or need our attention and also status running in tabs above"). E-76, E-77, E-78, E-79. Blueprint: `status.md`.
+**Decision**: The Rust core keeps one status from a closed list per open tab (`setup`, `ended`, `starting`, `needs_you`, `working`, `quiet`, `unknown`), from the tab's own state, agent liveness, the time of the tmux window's last output, the bell and the two `.ai/` files. The tab bar draws it; a change raises a notification through three channels (in the window; window attention; the operating system's notification).
+
+### Why needed
+With several projects open the operator had to click through tabs to learn which one had stopped. The only cross-project signal was the "Needs you" badge, which counted items that never change.
+
+### Rulings
+1. **The app says "quiet" and "stopped", never "waiting for you".** It cannot tell a finished agent from one at a permission prompt. The exact state needs rein's signal (`plans/rein-panels-request.md` item 2, sent to `rein · Architect` 2026-11-17); the data model reserves the field and nothing reads it until rein names it in the contract.
+2. **The rules run in the core, not the web view**, because a hidden or minimised web view's timers are slowed or stopped and that is exactly when a notification matters. `attention.ts`'s rule function moves to the core (E-75).
+3. **Polling continues while the window is hidden**, at 15 s — this amends `panels.md` "no polling when hidden" for the status poll and the attention stat only.
+4. **A system notification carries only the app's fixed sentences and the project's folder name.** It is shown outside the window, possibly on a lock screen, and kept by the system; text from a project's files never goes there.
+5. **Notifications fire on a change, once**, with a 30 s silence after a tab opens or is restored, nothing for the tab the operator is looking at, and one system notification per project per 60 s.
+6. **System notifications are their own task behind `dependency_gate`**; the first two channels need no new dependency and do not wait for it.
+7. Activity is per project, not per role: tmux 3.2a has no per-pane activity time. Per role comes with rein's signal.
+
+### Alternatives considered
+1. **Read Claude Code's pane title or screen text to detect a prompt** — rejected: undocumented output of another program, it breaks silently on its next release, and it would put Claude-specific logic in the app.
+2. **Wait for rein's signal before building anything** — rejected: the request was unsent for four days and "the project went quiet after working" is already most of what the operator asked for.
+3. **Compute in the web view as `attention.ts` does today** — rejected, ruling 2.
+4. **Write a Claude Code hook from the app that reports the state** — rejected: hooks are rein's (the app manages three allowed profile keys and carries no Rein logic, D-001).
+
+### Constraints driving this decision
+- The web view is untrusted and may be throttled; the status script must stay constant and read-only (V9).
+- No Rein logic in the app; no write into a project.
+
+### Impact
+- Unlocks: E-76 → E-77, E-78 → E-79.
+- Risk if wrong: if "no output for 15 s" does not separate a working agent from a stopped one, the states mislead. E-76 measures this first and stops if it fails.
+
+### Rollback
+`[notifications] enabled = false`, `[tabs] status = "hidden"`; each task reverts as one commit.
+
+---
+
+## D-063 — Panels become readable (structured text, a reader); "Needs you" lists only what the operator can act on
+
+**Date**: 2026-11-17
+**Task**: operator report on the E-61 build ("panels UI is not good, text cannot be readable when long; needs you panel gives a lot of things that are not important"). E-74, E-75. Blueprint: `status.md` components 4, 5, 7.
+**Decision**: Long text opens in a reader sheet over the terminal and is laid out as paragraphs, lists and code by a closed structured-text component. "Needs you" splits into Now (counted) and For information (collapsed, not counted), grouped by project, with Dismiss.
+
+### Why needed
+Real task descriptions and handoffs are paragraphs of several hundred words; a 360 px column of unbroken plain text cannot be read. "Needs you" counted permanently blocked tasks and a "no handoff for 29 h" row for a project whose agents were not running, so the badge was always on and meant nothing.
+
+### Rulings
+1. **D-056's "never Markdown" is narrowed, not dropped.** A closed set of constructs (paragraph, list, code span, code block, bold, heading line) is drawn with text children only. No link, image, `href`, `src` or HTML can be produced; a test asserts the element names. A URL stays literal text.
+2. **The reader lies over the terminal** and causes no pty resize; the in-place task drawer goes.
+3. **Blocked tasks, an out-of-date project and health warn are information**, not counted. The "no handoff for 30 minutes" rule is removed; `stuck` (D-062) replaces it and needs a running agent.
+4. **Dismissals persist** in `dismissed.json` as a key and a SHA-256 of the item's text — no project text is stored; an item returns when its text changes. This amends `panels.md` "no panel data is stored between runs" for this file only.
+
+### Alternatives considered
+1. **A Markdown library** — rejected: a new dependency whose default is to make links and HTML; the closed component is small and cannot.
+2. **Only widen the panel** — rejected: a wall of text is unreadable at any width, and a wide panel takes the terminal.
+3. **Per-rule on/off switches instead of triage** — rejected: it hands the sorting to the operator.
+
+### Constraints driving this decision
+- `.ai/` files are untrusted text (`panels.md` §Security); CSP unchanged.
+
+### Impact
+- Unlocks: E-74 → E-75.
+- Risk if wrong: an item the operator needed is filed under information. The table in `status.md` component 4 is the one place to change.
+
+### Rollback
+Each task reverts as one commit; deleting `dismissed.json` is safe.

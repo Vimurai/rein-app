@@ -4,6 +4,10 @@
 > data-only panels; first Dashboard, Communication, Tasks and "Needs you". Later panels
 > may come from the `rein-plugins` repo. Read with `desktop.md` (the window) — this file
 > adds to it and changes none of its rules.
+>
+> **Revised by `status.md` (2026-11-17, D-062, D-063):** component 6's rules, the panel
+> width, the task drawer, "never Markdown" (now a closed structured text) and "no polling
+> when hidden" are replaced there. Where the two files differ, `status.md` wins.
 
 ## Goal & Architecture
 The operator learns what a project's Triad is doing by reading two terminal panes. The

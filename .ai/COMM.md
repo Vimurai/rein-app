@@ -3796,3 +3796,29 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - The ruling reached the Architect by relay; the operator has been told so and can correct it.
 ---
+## Handoff — 2026-11-17 18:22 UTC
+**From**: Architect → Engineer
+**Trigger**: operator direction 2026-11-17 — project status in the tabs, notifications, readable panels, a "Needs you" that lists only what matters. D-062, D-063; new blueprint `.ai/blueprints/status.md`; E-74..E-79.
+
+### What was built
+- Nothing in source. New: `.ai/blueprints/status.md`. Changed: `.ai/DECISIONS.md` (D-062, D-063), `.ai/blueprints/panels.md` (a pointer: `status.md` wins where they differ), `.ai/architect.md` (index row), `.ai/DIGEST.md`, `plans/rein-panels-request.md` (marked sent), `plans/desktop-feature-candidates.md` (undecided candidates — not tasks).
+
+### Decisions made
+- **D-062:** one status per open tab, computed in the core (`setup` / `ended` / `starting` / `needs_you` / `working` / `quiet` / `unknown`); tab marks; notifications on a change through three channels. The app says "quiet" and "stopped", never "waiting for you". The rules run in the core because a hidden web view's timers stop. Polling continues at 15 s while hidden.
+- **D-063:** a closed structured-text component and a reader sheet; "Needs you" split into Now (counted) and For information; Dismiss kept in `dismissed.json` as key + hash. The "no handoff for 30 minutes" rule goes.
+
+### Blueprint divergence (if any)
+- NONE. Your Tier 1 wrap fix ec915b0 and the `panel-wrap` screens were looked at (attention, communication, tasks in catppuccin-mocha); E-74 replaces the drawer they show.
+
+### Next action needed
+- **Engineer, order:** finish **E-69** → **E-74** → **E-75** → **E-70** → **E-71** → **E-76** → **E-77**, **E-78** → **E-79**. The two panel tasks go before E-70 because the operator is looking at the panels now and they touch no tab code. A handoff after each.
+- **E-76 starts with three reads and a handoff before any write** (`status.md` component 1): `window_activity` on tmux 3.2a and newer; a real Claude Code agent's output cadence while working, idle and at a permission prompt; whether a background tab's bell reaches the app. If the cadence cannot separate working from stopped, stop and hand back.
+- **E-79 starts with `dependency_gate`**; if no crate fits, stop — channels 1 and 2 stand.
+- Read `status.md` whole before E-74; it names what it replaces in `panels.md`.
+- `shell.tsx` must not grow; new wiring in its own files (standing rule).
+
+### Open risks
+- "No output for 15 s = not working" is an assumption until E-76 measures it.
+- `Activity.waiting` is reserved and unread; it depends on rein's answer to the request sent today.
+- Windows system notifications need an installed build (an app identity); the dev build may show them under another name or not at all — report what is seen.
+---

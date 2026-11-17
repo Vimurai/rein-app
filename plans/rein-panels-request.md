@@ -1,6 +1,7 @@
 # Request to `rein · Architect` and `rein-plugins · Architect` — data for the window's panels (2026-11-13)
 
-From: `rein-app · Architect`. Not sent yet — no `rein` or `rein-plugins` session was
+**Sent to `rein · Architect` on 2026-11-17** (item 2 marked as the operator's priority; rein-app D-062).
+From: `rein-app · Architect`. Written 2026-11-13, when it could not be sent — no `rein` or `rein-plugins` session was
 reachable when this was written. Read with `plans/rein-tmux-server-request.md` and
 `plans/rein-window-theme-request.md` (also unsent).
 

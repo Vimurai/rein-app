@@ -1,4 +1,4 @@
-# DIGEST (Token Saver Cache) — updated 2026-11-17 16:45 UTC by Architect (state paragraph added; the Triad Health lines below date from 2026-11-11 and are superseded by it)
+# DIGEST (Token Saver Cache) — updated 2026-11-17 18:22 UTC by Architect (state paragraph added; the Triad Health lines below date from 2026-11-11 and are superseded by it)
 
 ## Triad Health
 - Stage: Executing (Phase 1 code complete and proven against rein's real artifact; the first tag waits on rein's signed release and the operator)
@@ -30,7 +30,10 @@
 
 - **State on 2026-11-17 (Architect):** the side menu is complete — E-59, E-60, E-61 ("Needs you" + badge), E-72, E-73 DONE and accepted (D-056 addenda 1–2, `panels.md`). `ui.json` stores the panels switched off, so a new panel is on by default. Known gap: a permission prompt in a pane is invisible to the app, open or closed; only rein can signal it. **Sessions outliving the app (D-061, `desktop.md` V12, E-69 → E-70 → E-71) are not started:** tmux 3.2a and a detached `claude` agent were checked and are fine, but whether WSL keeps the distro alive with default settings cannot be measured on the operator's machine (`.wslconfig` disables both idle timeouts). **Operator's choice (D-061 addendum 2, relayed by the Engineer): Windows gets V12 and depends on a kept-alive distro**; the app never touches `.wslconfig`, the operator guide names the two settings, a user on defaults sees the "not running" card. **E-69 is in progress, then E-70, E-71; E-6 waits on the first tag.** Hosted macOS runners cancelled four jobs for capacity on 2026-11-17; each needed a manual re-run (D-048).
 
+- **Status, notifications, readable panels (D-062, D-063, 2026-11-17 18:22 UTC, operator direction; `status.md`):** the core keeps one status per open tab (`setup` / `ended` / `starting` / `needs_you` / `working` / `quiet` / `unknown`) from agent liveness, the tmux window's last output, the bell and the `.ai/` files; tab marks, a status-bar segment, notifications on a change (toast; window attention; system notification behind `dependency_gate`). The app says "quiet" / "stopped", never "waiting for you" — that needs rein's signal (`plans/rein-panels-request.md` item 2, **sent to `rein · Architect` 2026-11-17**). Panels: structured text + a reader sheet, task titles, filter; "Needs you" split into Now (counted) and For information, grouped by project, with Dismiss. **Queue: E-69 (in progress) → E-74 → E-75 → E-70 → E-71 → E-76 → E-77, E-78 → E-79.** E-76 starts with three reads and stops if output cadence cannot separate working from stopped. Further feature candidates, undecided: `plans/desktop-feature-candidates.md`.
+
 ## Recent changes (last 10)
+- 2026-11-17 Architect: D-062, D-063 — `status.md`; E-74..E-79 registered.
 - 2026-11-17 Architect: D-061 addendum 1, D-056 addendum 2 — E-60, E-61, E-72, E-73 accepted; E-69..E-71 wait on the operator.
 - 2026-11-12 Architect: D-049 — modern look, bundled fonts, `rein` theme, no console window; E-47..E-50 registered.
 - 2026-11-11 Architect: D-038 — Windows window over WSL2; E-43..E-45 registered.

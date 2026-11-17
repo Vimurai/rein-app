@@ -4,8 +4,8 @@
     "current_tier": 2,
     "release_verdict": null,
     "focus": "Phase 1 distribution: D-155 corrections shipped and reviewed (D-015); E-18 operator docs and E-19 release rehearsal open; first tag (E-6) waits on the operator's minisign key and HOMEBREW_TAP_TOKEN; E-9/E-16/E-17 wait on rein — per .ai/blueprints/distribution.md",
-    "rein_version": "0.4.0",
-    "provisioned_at": "2026-11-08T18:36:23.529Z"
+    "rein_version": "0.5.0",
+    "provisioned_at": "2026-11-17T16:54:12.027Z"
   },
   "tasks": [
     {
@@ -1108,6 +1108,110 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-17T16:39:05.251Z"
+    },
+    {
+      "id": "E-74",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Make the side panels readable, per .ai/blueprints/status.md §Components 7 (D-063). Operator report 2026-11-17: \"text cannot be read when long\". Build: panel body 13 px / line height 1.5, default width 400 px, range 320 px to min(720 px, half the window); one structured-text component (paragraphs, bullet and numbered lists, code spans, fenced code blocks, bold, heading lines) that builds elements with text children only and never a link, image or HTML; the task title rule (first sentence or line, at most 90 characters, cut at a word) with tier / owner / blocked-by / age chips; the reader sheet over the terminal (at most 720 px, 72-character column, Esc returns focus to the row, Up / Down and k / j move between items, no pty resize) replacing the in-place task drawer; Communication entries showing the trigger and the first six lines of \"Next action needed\" with \"Read all\"; the Tasks filter box, collapsible groups, Done collapsed. No new IPC call. New code goes in its own files; shell.tsx must not grow. Acceptance: the web tests in status.md §Tests (each construct; link, image and HTML stay literal with only allowed element names in the DOM; title cut; reader focus and keys; filter; pointer and key parity); panel-screens.sh typing figure unchanged; screens in both themes of the reader with a real long task and a real long handoff from this repository's own .ai/, the Tasks filter, and Communication — every PNG opened before the handoff names it.",
+      "created_at": "2026-11-17T18:18:57.483Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-17T18:18:57.488Z"
+    },
+    {
+      "id": "E-75",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Triage the \"Needs you\" panel so it lists only what the operator can act on, per .ai/blueprints/status.md §Components 4 and 5 (D-063). Operator report 2026-11-17: \"Needs you gives a lot of things that are not important\". After the readable-panels task. Split items into Now (counted in the rail badge) and For information (collapsed, not counted) by the table in component 4: blocked tasks become one information row per project, out-of-date and health warn become information, health fail stays Now. Group rows by project under one header with one \"Go to tab\"; a row also goes to the tab. Add Dismiss for bell and mention rows via the command attention_dismiss(tab, key), kept in $XDG_STATE_HOME/rein-app/dismissed.json (schema 1, at most 500, SHA-256 of the text, temp file + rename; a dismissed item returns when its text changes). Move the rules from attention.ts into the core with a table test and make the attention source return the now / info lists. Keep the old \"no handoff for 30 minutes\" rule ONLY for a tab whose agents are running (the status task replaces it with stuck); do not build stuck or waiting here. Empty state \"Nothing needs you.\"; the known-gap text moves behind an \"About this list\" disclosure, two sentences. Acceptance: the core table test for each rule and group; dismiss and its return on changed text; a key the core did not send is refused with the fixed sentence; the badge counts Now only; screens in both themes of the panel with two projects, with only information items, and empty.",
+      "created_at": "2026-11-17T18:19:03.172Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-74"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-74"
+      ],
+      "updated_at": "2026-11-17T18:19:03.173Z"
+    },
+    {
+      "id": "E-76",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Compute one status per open project in the core, per .ai/blueprints/status.md §Components 1, 2 and 4, §Data Model, §API and §Execution Constraints (D-062). Operator direction 2026-11-17: see which project is working, stopped or stuck. After the triage task and after the tab-restore tasks (E-70, E-71). FIRST, before any write, do the three reads in component 1 \"The Engineer reads first\" — (a) window_activity on tmux 3.2a and the newest tmux at hand, (b) a real Claude Code agent's output cadence while working, idle and at a permission prompt, (c) whether a background tab's bell reaches the app — and report them in a handoff; if (b) fails, STOP and hand back. Then: extend the constant read-only status script with the window's activity time and that machine's clock (no new argument, nothing set); keep quiet_s and worked_s per tab; implement the status table as a pure function with a clock passed in; add the stuck item (agent running, task IN_PROGRESS, quiet at least stuck_after_min, default 10, 3–120) and remove the interim quiet rule; send the project_status event on change and answer project_status_all(); poll every 15 s while the window is hidden or minimised, with one wsl.exe for all tabs on Windows. Reserve Activity.waiting as null — read nothing for it. Acceptance: the status table test (every row and the order); quiet_s / worked_s over a scripted series; no test sleeps; Windows interop output for the extended script with timing (target under 250 ms, eight tabs); the measured figures for (a)–(c) in the handoff.",
+      "created_at": "2026-11-17T18:19:09.870Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-75"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-75"
+      ],
+      "updated_at": "2026-11-17T18:19:09.871Z"
+    },
+    {
+      "id": "E-77",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Show each project's status in the tab bar, the status bar and the Dashboard, per .ai/blueprints/status.md §Components 2 (the marks column) and 3 (D-062). Operator direction 2026-11-17: \"status running in tabs above\". After the status task. Draw the mark of the tab's state left of its title (shape tells the state, not colour alone; nothing animates except the existing spinner), with the accessible name \"<project>: <sentence>\" and a tooltip of at most three lines; add the current tab's status segment to the status bar between the path and health, cut from the right when narrow; make the Dashboard panel's first row the same status; add [tabs] status = shown | hidden to config.toml, ui.json and Settings. The web side draws what the project_status event gives and decides nothing; a task id is shown only when it matches [A-Z]-[0-9]{1,6}. New code in its own files; shell.tsx must not grow. Acceptance: web tests for the mark names and the tooltip lines per state and for the setting; screens in both themes at 1280×800 of the tab bar with one tab in each state and of the Dashboard, every PNG opened before the handoff names it.",
+      "created_at": "2026-11-17T18:19:14.740Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-76"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-76"
+      ],
+      "updated_at": "2026-11-17T18:19:14.740Z"
+    },
+    {
+      "id": "E-78",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Raise a notification when a project needs the operator, stops, is stuck or ends, per .ai/blueprints/status.md §Components 6 channels 1 and 2, §Data Model and §Security (D-062). Operator direction 2026-11-17: \"notifications for each project running so we can see when something is stuck or needs our attention\". After the status task. Implement the five events of the table (needs_you, stopped, stuck, ended, handoff) in the core as edge-triggered, with a clock passed in: once on the change, never repeated while the state stays; nothing for the current tab of a focused window; nothing in the first 30 s after a tab opens or is restored; stopped not raised when needs_you was raised for the same stop. Channel 1: the notify event and the existing toast when the event's tab is not current. Channel 2: when the window is not focused, the Tauri core's request_user_attention (informational, once per event) and the count of Now items on the app's icon where the Tauri core offers it — no new dependency; report in the handoff which of the two each of the three systems has. Add [notifications] enabled, events (the closed list) and stuck_after_min to config.toml, ui.json and Settings (system is read but does nothing until the system-notification task). Fixed sentences only. Acceptance: core tests for each event raised once and not again, the 30 s silence, each event switched off by its setting; the window run shows a background tab that prints then stops getting the stopped toast, also with the window hidden; a toast screen in both themes.",
+      "created_at": "2026-11-17T18:19:20.798Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-76"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-76"
+      ],
+      "updated_at": "2026-11-17T18:19:20.798Z"
+    },
+    {
+      "id": "E-79",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Send the operating system's own notification for the events of the notifications task, per .ai/blueprints/status.md §Components 6 channel 3 and §Security (D-062). After the notifications task. FIRST run skill dependency_gate with critic_security on the candidate crate (no network use, no shell, on Windows no process beyond what the system's notification API needs) and record it in DECISIONS.md; if no candidate fits, STOP and hand back — channels 1 and 2 stand. Then: raise a system notification when the window is not focused or is hidden and [notifications] system is true (default); the text is one of the app's fixed sentences with the project's folder name only — never a task description, a handoff line or a quote; at most one per project per 60 s, later events in that minute merged into \"<project>: <n> things need you.\"; where the system reports a click, bring the window forward. Add the system switch to Settings. Acceptance: core tests for the 60 s limit and the merged sentence and for system = false sending nothing; a test that no notification text can hold text from a project file (the sentence builder takes only the event, the folder name and a number); a notification seen on each of Linux, Windows (installed build) and macOS and described in the handoff, with a capture where the system allows one; hosted ci on all three systems and desktop-windows green.",
+      "created_at": "2026-11-17T18:19:26.680Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-78"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-78"
+      ],
+      "updated_at": "2026-11-17T18:19:26.680Z"
     }
   ],
   "stamps": [
@@ -3305,6 +3409,69 @@
       "timestamp": "2026-11-17T15:39:38.227Z",
       "summary": "[TIER_2] Blueprint aligned + clean-code gate clear — 2 warnings ignored (repeated complement code, misplaced doc comment). D-048 CI evidence at ecf503d still pending.",
       "sha": "ecf503da28c3d4b4adbcd8fa55cc4fc5fc1c5c22",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review",
+      "task_id": null,
+      "timestamp": "2026-11-17T17:00:56.220Z",
+      "summary": "Tier 1 Tasks-panel wrap fix (panel-views.tsx classes only: min-w-0/flex-1/line-clamp-2; panel-screens.sh long-title fixture). tsc + 75 UI tests pass; panel-screens.sh PASS, screens opened both themes. No findings.",
+      "sha": "ab125cbdd18f5c738997fbc12857d8817ff09549",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-69",
+      "timestamp": "2026-11-17T17:18:26.637Z",
+      "summary": "standards-checker PASS — 33 files clean, 0 warnings, 0 errors (15ms)",
+      "sha": "ec915b02eae0abd0c61eb20e318ccbdf21d9893d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_FAIL",
+      "agent": "rein-review-tier2",
+      "task_id": "E-69",
+      "timestamp": "2026-11-17T17:18:50.145Z",
+      "summary": "[TIER_2] E-69 staged: code matches desktop.md V12 comp 1-3, 8 (tag sha2 64 hex + distro NUL; setup live|none with 64-hex re-check exit 26; argv attach script re-lookup, $+digits id, exit 75/76, never rein start; overlay sets @rein_app_project on app server only; app_quit no confirm/kill-server/held close; quit_cancelled + sweep removed; no-kill-server test lifecycle.rs:225). FAIL: crates/rein-desktop/tests/e2e/tmux-server.sh:195-216 (hosted CI, ci.yml:105) still tests the V11 sweep and the deleted tmux_kill_server.sh — 4 FAILs run locally (sweep word now exit 26; KILL file missing exit 1). Not staged/updated; also holds kill-server-on-quit expectations V12 removes. align_diff CAPABILITIES_BYPASS on include_str!(\"../ui/src/term.ts\") is a false positive (compile-time in-crate test include, precedent crates/rein-app/src/verdict.rs:208).",
+      "sha": "ec915b02eae0abd0c61eb20e318ccbdf21d9893d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "rein-review-tier2",
+      "task_id": "E-69",
+      "timestamp": "2026-11-17T17:21:27.575Z",
+      "summary": "[TIER_2] E-69 re-review: prior ALIGN_FAIL resolved. tests/e2e/tmux-server.sh V11 sweep/kill-server block replaced (staged) by V12 tests: setup lookup live|none on the app socket only (default-server tag ignored, other project's tag -> none, non-64-hex words incl. 'sweep' -> exit 26, no kill-server in setup); attach script extracted from tmux_server.rs, run under sh/bash/zsh: tagged session id, other tag -> 76 never rein start, bad word -> 75, one real client attach; both servers survive. Suite run locally: PASS. Rest of the diff matches desktop.md V12 comp 1-3, 8 as in the first review. align_diff CAPABILITIES_BYPASS on include_str!(\"../ui/src/term.ts\") is the same false positive (compile-time in-crate include); ORPHANED_WORK on agents.rs/ipc.rs/ipc_commands.rs is covered by V12 comp 8 (quit_cancelled/confirm removal). Note: -L host helper socket is not in cleanup(), but it ends transitively when cleanup kills the rein-app server its only client is attached to.",
+      "sha": "ec915b02eae0abd0c61eb20e318ccbdf21d9893d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-69",
+      "timestamp": "2026-11-17T17:21:30.895Z",
+      "summary": "[TIER_2] E-69 staged: blueprint aligned (ALIGN_PASS re-review after tmux-server.sh V12 rewrite) + clean-code gate clear (CLEAN_PASS ec915b0, 0 errors/0 warnings) — 2 align_diff findings dismissed as false positive / covered (term.ts include_str!, ORPHANED_WORK ipc files), 1 advisory (host helper socket cleaned transitively)",
+      "sha": "ec915b02eae0abd0c61eb20e318ccbdf21d9893d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "engineer-self-review",
+      "task_id": "E-69",
+      "timestamp": "2026-11-17T17:41:34.683Z",
+      "summary": "E-69 CI fix (Tier 1, self-review only, no critic agents): #[cfg(any(unix, test))] on tmux_server::attach_script, unused on Windows (only LocalHost, cfg(unix), calls it) so clippy -D warnings failed on windows-latest in run 44136246031. No behaviour change; Linux clippy clean, 169 unit tests pass.",
+      "sha": "5b52d570690b31fae9649bd34b1908ebd845be24",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "engineer-self-review",
+      "task_id": "E-69",
+      "timestamp": "2026-11-17T18:02:11.728Z",
+      "summary": "E-69 CI fix 2 (Tier 1, test-only, self-review, no critic agents): tmux-server.sh \"no tmux\" lookup check used PATH=/nonexistent:/bin; on macOS find is in /usr/bin so the setup refused with 24 (run 44139875599). Now a PATH dir of links to the 8 tools the setup uses, without tmux. Local suite PASS.",
+      "sha": "349648bb020eaabd640eba6929602ff025875cc2",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
