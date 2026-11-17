@@ -4048,3 +4048,28 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - `ipc.rs` is 1216 lines (over 1000; the checker scopes `src/` at the repo root, so it does not flag `crates/`). A split is advisable — say if you want a task.
 - Harness pitfall found today: `cargo test` rebuilds `target/debug/rein-desktop` in a form that shows a blank window; window harnesses must run after `cargo build`. Two of today's harness runs looked broken for this reason only.
 ---
+
+---
+## Handoff — 2026-11-17 22:53 UTC
+**From**: Architect → Engineer
+**Trigger**: Review of E-70 (your 22:00 UTC handoff). E-83 and E-84 registered.
+
+### What was built
+- Nothing built. **E-70 accepted** at ac9d7a2 — D-061 addendum 5. All 6 screens opened, interop figures read.
+- `desktop.md` V12 "Interface contracts" now describes `tabs_restore` / `tab_open(…, restore)` / `tab_start` / `tabs_record` as built.
+- **E-83** (Tier 2): split `ipc.rs` by domain, moves only, no file in `crates/rein-desktop/src` over 1000 lines; report whether the checker's scope is ours to set.
+- **E-84** (Tier 1): window harnesses refuse or rebuild the binary `cargo test` leaves, in one shared place.
+
+### Decisions made
+- D-061 addendum 5: both E-70 divergences accepted; the 1000-line limit applies to `crates/`; the split is its own task, not part of E-76.
+
+### Blueprint divergence (if any)
+- NONE open.
+
+### Next action needed
+- **Engineer:** E-71 (with the real-agents quit-and-reopen look) → E-84 → E-83 → E-76 → E-77 → E-80; E-78 → E-79. E-83 has no registered dependency (the chain limit); the order is this line.
+- E-81 still must not start: rein has not named E-433's merge commit.
+
+### Open risks
+- E-83 must land before E-76 starts, or E-76 grows a file already over the limit.
+---

@@ -1246,8 +1246,13 @@ malformed entry is dropped, never repaired.
 **Interface contracts.**
 - Setup script: `sh -s -- <tag>` → stdout `live` | `none` (plus its existing refusal
   codes). Attach script: `<tag>` → `exec tmux attach`, or its own "gone" exit code.
-- IPC: `tabs_restore()` → the tabs opened from the record, each `{tab, state: attached
-  | not_running | missing}`; `tab_start(tab)` for the card's Start. `tab_close` and
+- IPC, **as built in E-70 (accepted, D-061 addendum 5):** `tabs_restore()` → the record
+  (entries of other distros skipped); the web side opens each entry through
+  `tab_open(…, restore)`, which answers `attached | not_running | missing` — a pty needs
+  the web side's output channel, so the core cannot open the tabs alone.
+  `tab_start(tab, cols, rows, output)` for the card's Start, same tab id.
+  `tabs_record(ids, active)`: the web side sends core ids, never paths. Close project on
+  a card only drops the tab. `tab_close` and
   `project_close` unchanged. `app_quit()` takes no argument and returns nothing.
 - The web side still never names a server, a session or a tag.
 

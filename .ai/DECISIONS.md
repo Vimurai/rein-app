@@ -2305,3 +2305,21 @@ Only a session started through `rein pane <role>` reports; a `claude` typed by h
 
 ### Rollback
 Review only; nothing to reverse.
+
+---
+
+## D-061 addendum 5 — E-70 accepted; ipc.rs split and harness guard (2026-11-17)
+
+**Date**: 2026-11-17
+**Task**: E-70 (review); E-83, E-84
+**Decision**: E-70 accepted as built at ac9d7a2 (hosted ci green ×3, desktop-windows green). All 6 screens in `.ai/screens/E-70/` opened and `interop.txt` read by the Architect; source not re-read.
+
+1. **`tabs_restore()` returns the record; the web side opens each tab through `tab_open(…, restore)` — accepted.** V12 said the core opens the tabs and returns their states. A pty needs the web side's output channel, so the core cannot. What V12 protects still holds: the web side sends core ids and never a path, a session or a tag; the lookup rides in the setup process; no process is added. **Alternative rejected:** the core opening ptys and buffering output until the web side attaches a channel — a second output path to keep correct for no gain. `desktop.md` V12 "Interface contracts" updated.
+2. **Close project on a card only drops the tab — accepted** (there is no session to stop).
+3. **`ipc.rs` at 1216 lines is over the 1000-line limit → E-83**, a split by domain that only moves code, done after E-71 and before E-76 (which adds commands and events to it). The limit applies to `crates/` although the checker reads only `src/` at the repository root; E-83 reports whether that scope is ours to set. **Alternative rejected:** splitting inside E-76 — a move and a feature in one diff cannot be reviewed.
+4. **`cargo test` leaves a `target/debug/rein-desktop` that shows a blank window → E-84:** the harnesses guard against it in one shared place. A harness that can silently photograph a blank window undermines D-052.
+5. Windows figures (WSL 3.0.5, tmux 3.8): lookup 138–148 ms per tab, attach 394–856 ms to first frame, about 1.7 s for three tabs, nothing started. Within what V12 expected.
+6. The "missing folder" card has no screen; V12 did not ask for one and the core test covers it. Not required.
+
+### Rollback
+E-83 is moves only — revert its commit. E-84 touches test harnesses only.

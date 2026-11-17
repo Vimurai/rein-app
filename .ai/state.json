@@ -1254,6 +1254,34 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-17T21:00:28.502Z"
+    },
+    {
+      "id": "E-83",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Split crates/rein-desktop/src/ipc.rs (1216 lines) into modules by domain with no change of behaviour, per .ai/DECISIONS.md D-061 addendum 5 ruling 3 and .ai/blueprints/engineering-standards.md (file-size limit). Order: after the countdown task (E-71) and BEFORE the status task (E-76), which adds commands. Move only: every command keeps its name, arguments, answers and fixed sentences; the command list registered with Tauri and the capability file do not change. No file in crates/rein-desktop/src over 1000 lines afterwards, tests included. Also say in the handoff whether the standards checker's scope (it reads src/ at the repository root only) can be set in this repository to cover crates/*/src; if it can, set it; if it is rein's, report it and change nothing. Acceptance: the capability test and every existing test pass unchanged apart from module paths; git diff shows moves, not edits; hosted CI green on all three systems and desktop-windows.",
+      "created_at": "2026-11-17T22:53:07.459Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-17T22:53:07.462Z"
+    },
+    {
+      "id": "E-84",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 1,
+      "description": "Make every window harness (the Xvfb screen scripts under crates/rein-desktop, lifecycle-screens.sh included) refuse or rebuild a binary that cargo test left behind, per .ai/DECISIONS.md D-061 addendum 5 ruling 4. Found in E-70: cargo test rebuilds target/debug/rein-desktop in a form that shows a blank window, and two harness runs looked broken for that reason only. Put the check in one shared place the harnesses already source, not a copy per script: either run cargo build first, or detect the wrong binary and stop with one sentence that says to run cargo build. Acceptance: running cargo test and then a harness gives a correct window or that one sentence, never a blank screenshot; hosted CI green.",
+      "created_at": "2026-11-17T22:53:10.607Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-17T22:53:10.607Z"
     }
   ],
   "stamps": [
