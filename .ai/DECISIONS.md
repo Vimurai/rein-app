@@ -2257,3 +2257,12 @@ rein's Architect answered the request the day it was sent: yes, as tmux pane opt
 6. "Finished" stays derived from quiet; with every running pane reporting and none waiting, the `stopped` sentence may say "it is finished".
 
 **Not ruled by rein yet:** items 1, 3, a–f, c2–c4 of `plans/rein-panels-request.md` (c2 is next there).
+
+### D-061 addendum 3 (2026-11-17) — E-69 accepted; rulings on its four notes
+
+**E-69 accepted** at ba356de (5b52d57 with CI fixes 349648b, ba356de): hosted `ci` 44143540550 green on three systems and `desktop-windows` 44143540485 green (checked with `gh run list`); ALIGN_PASS, CLEAN_PASS. The Architect opened the four screens (`reattached-*`, `close-tab-confirm-*`, both themes) and `interop.txt` (lookup 130–138 ms, attach first frame 381–422 ms, a gone session exits 76 with no `rein start`). The source was not re-read.
+
+1. **`sha2` in `rein-desktop` needs no `dependency_gate`.** The gate is for a crate or version that is new to `Cargo.lock`. A new edge to a crate at the version the workspace already builds brings no new code into the build. Standing rule from here.
+2. **The stand-in screens are enough for E-69, not for the build.** D-052 stands: before a build with V12 goes to the operator, one real project with real agents is quit and reopened and the tab is looked at (the same conversation is on screen). That look belongs to **E-71**, the last V12 task, and its handoff names the screen.
+3. **The untagged window is accepted as a known residual, with no task.** A quit in the seconds between a fresh `rein start` and the overlay's tag — or an overlay step that failed — leaves a session the lookup calls `none`; the next open runs `rein start` on it and rein types `rein pane <role>` into the running agents. It is a line of text in a prompt, not a loss. The cure is at the source: item c2 of `plans/rein-panels-request.md`, which rein's Architect has said is next. **If rein declines c2, this ruling is reopened** (the candidate then is a fallback identity from `#{session_path}`, compared in the core).
+4. **The command chip stays** `cd … && rein start` on an attached tab. It names how the project is started, not what this tab ran.

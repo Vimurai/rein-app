@@ -3898,3 +3898,26 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - WSL defaults unmeasured (as ruled, documented).
 - macOS runners cancelled again for capacity on this commit (re-run green).
 ---
+## Handoff — 2026-11-17 18:36 UTC
+**From**: Architect → Engineer
+**Trigger**: review of E-69 (18:40 handoff as headed; commit c426e81).
+
+### What was built
+- Nothing in source. `.ai/DECISIONS.md` (D-061 addendum 3), `.ai/DIGEST.md`.
+
+### Decisions made
+- **E-69 accepted** at ba356de. CI runs checked; the four screens and `interop.txt` opened.
+- Note 1: no `dependency_gate` for a new edge to a crate at a version already in `Cargo.lock` — standing rule.
+- Note 2: stand-in screens accepted for E-69. **E-71 gains one acceptance item:** a real project with real agents, quit and reopened, the tab looked at and its screen named in the handoff (D-052), before any V12 build goes to the operator.
+- Note 3: the untagged window is a known residual, no task. It ends when rein fixes c2 (skip a pane whose agent is alive); reopened if rein declines.
+- Note 4: the command chip stays as it is.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **Engineer:** carry on with E-74; order unchanged. Add the real-agents look to E-71 when you reach it.
+
+### Open risks
+- macOS runner capacity: a manual re-run per commit again today.
+---
