@@ -904,16 +904,16 @@
     {
       "id": "E-60",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Build the side menu and the first three panels per .ai/blueprints/panels.md (D-056) §Components 1-3, 5, 7, §Data Model, §API. After the sources task. Add the 40 px rail (icon per enabled panel, tooltip with title and key), the panel host (one panel beside the terminal, 360 px, 320-560 px by dragging, one pty resize after the drag ends, lies over the terminal below 900 px window width, Esc returns focus to the terminal), the descriptor registry with the closed schema (unknown source / view / icon / extra key refused, by test), the three views (summary, list, timeline) and the compiled-in descriptors dashboard, communication and tasks. Add settings [panels] rail and [panels] enabled (config.toml, Settings, closed key lists), panel width and last open panel in ui.json, and the actions panel.toggle <id>, panel.close, panel.refresh, panel.focus in both key tables and the menu (pointer parity, D-034). All text from a source is put on the page as text nodes only. Motion uses the V7 tokens and Skeleton; reduced motion honoured; no timer runs with the window hidden. Acceptance: the blueprint's descriptor, web and end-to-end tests (a script tag and a Markdown link in a handoff appear as literal text; the list updates within 6 s of a state.json change; no read with a hidden window); typing latency unchanged with a panel open; screens under .ai/screens/<task>/ (D-052): each panel in both themes at 1280x800, the narrow-window overlay, the \"not available\" state; hosted ci x3 and desktop-windows green (D-048).",
       "created_at": "2026-11-13T11:44:45.149Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-17T12:21:03.789Z",
+      "summary": "Side menu + dashboard/communication/tasks panels (74368e7); Windows directory-open fix (0819bd7, FILE_FLAG_BACKUP_SEMANTICS so a directory reads NotRegular). Hosted ci x3 + desktop-w …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-13T11:44:45.150Z"
+      "updated_at": "2026-11-17T12:21:03.793Z"
     },
     {
       "id": "E-61",
@@ -1030,7 +1030,7 @@
     {
       "id": "E-69",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Make sessions on the app's own tmux server outlive the app and be attached to, not restarted, per .ai/blueprints/desktop.md §Look and feel v2 V12 components 1-3 and 8 (D-061). Operator direction 2026-11-16: sessions must survive quitting the app. FIRST, before any write, do the three reads in V12 \"Open to the Engineer\" and report them in a handoff: (a) on WSL 3.0.5, with every wsl.exe the app started gone, is the app's tmux server and an agent in it still alive after 1, 10 and 60 minutes, with and without systemd — if WSL stops the distro, STOP and hand back, the answer goes to the operator; (b) session user options and `#{@name}` in `list-sessions -F` on the oldest tmux supported; (c) what a running claude agent does with no client attached and on re-attach. Then build: the project tag (SHA-256 hex in Rust; distro + NUL + path on Windows) set as `@rein_app_project` in V6's attach step; the live lookup inside V8's setup script (`live` | `none`, no added process); the constant attach script (re-lookup, exec `tmux attach` on the session id, own exit code when gone, never `rein start`); quit without confirm, without kill-server and without the held native close; remove the start-up sweep, `quit_requested` / `quit_cancelled` and app_quit's confirm. Acceptance: V12 tests for these components — stand-in rein records no second start when the app is run twice on one project; quit leaves the session; a session tagged for another project is not attached to; no `kill-server` line remains in any script (test); both scripts re-check the tag as 64 hex; Windows interop for lookup and attach with timing; a real project tab screenshot after re-attach, both themes, under .ai/screens/, each opened before the handoff; local `rein ci run`, hosted ci x3 and desktop-windows green; Tier 2 stamps.",
       "created_at": "2026-11-16T14:34:16.013Z",
@@ -1039,11 +1039,9 @@
       "depends_on": [
         "E-60"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-60"
-      ],
-      "updated_at": "2026-11-16T14:34:16.016Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-17T12:21:03.800Z"
     },
     {
       "id": "E-70",
@@ -1084,7 +1082,7 @@
     {
       "id": "E-72",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Move the side-menu panel wiring out of crates/rein-desktop/ui/src/shell.tsx (1286 lines) into its own module with no behaviour change, per D-056 addendum 1 ruling 4 and .ai/blueprints/panels.md §Components. After the side-menu task, before the session tasks add to the file. Bring shell.tsx back to at most its size before the side menu (1156 lines) or lower; move tests with what they test; no new prop drilling beyond what the move needs. Acceptance: the UI test count is unchanged and every UI test passes untouched; pointer-parity and both key-table tests pass; `panel-screens.sh` passes locally with the same checks and its screens are unchanged to the eye (open two of them before the handoff); local `rein ci run`, hosted ci x3 and desktop-windows green; Tier 2 stamps.",
       "created_at": "2026-11-16T14:35:49.736Z",
@@ -1093,11 +1091,9 @@
       "depends_on": [
         "E-60"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-60"
-      ],
-      "updated_at": "2026-11-16T14:35:49.736Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-17T12:21:03.801Z"
     }
   ],
   "stamps": [
