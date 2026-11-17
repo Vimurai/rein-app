@@ -1124,23 +1124,23 @@
     {
       "id": "E-75",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Triage the \"Needs you\" panel so it lists only what the operator can act on, per .ai/blueprints/status.md §Components 4 and 5 (D-063). Operator report 2026-11-17: \"Needs you gives a lot of things that are not important\". After the readable-panels task. Split items into Now (counted in the rail badge) and For information (collapsed, not counted) by the table in component 4: blocked tasks become one information row per project, out-of-date and health warn become information, health fail stays Now. Group rows by project under one header with one \"Go to tab\"; a row also goes to the tab. Add Dismiss for bell and mention rows via the command attention_dismiss(tab, key), kept in $XDG_STATE_HOME/rein-app/dismissed.json (schema 1, at most 500, SHA-256 of the text, temp file + rename; a dismissed item returns when its text changes). Move the rules from attention.ts into the core with a table test and make the attention source return the now / info lists. Keep the old \"no handoff for 30 minutes\" rule ONLY for a tab whose agents are running (the status task replaces it with stuck); do not build stuck or waiting here. Empty state \"Nothing needs you.\"; the known-gap text moves behind an \"About this list\" disclosure, two sentences. Acceptance: the core table test for each rule and group; dismiss and its return on changed text; a key the core did not send is refused with the fixed sentence; the badge counts Now only; screens in both themes of the panel with two projects, with only information items, and empty.",
       "created_at": "2026-11-17T18:19:03.172Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-17T21:00:27.409Z",
+      "summary": "Needs you triaged in the core (c96443d, fixes 23dc4da, a54a641): Now / For information, blocked one row per project, Dismiss (dismissed.json, hash only), attention_items / attention_ …[full in LOG.md]",
       "depends_on": [
         "E-74"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-17T19:28:35.230Z"
+      "updated_at": "2026-11-17T21:00:27.410Z"
     },
     {
       "id": "E-76",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Compute one status per open project in the core, per .ai/blueprints/status.md §Components 1, 2 and 4, §Data Model, §API and §Execution Constraints (D-062). Operator direction 2026-11-17: see which project is working, stopped or stuck. After the triage task and after the tab-restore tasks (E-70, E-71). FIRST, before any write, do the three reads in component 1 \"The Engineer reads first\" — (a) window_activity on tmux 3.2a and the newest tmux at hand, (b) a real Claude Code agent's output cadence while working, idle and at a permission prompt, (c) whether a background tab's bell reaches the app — and report them in a handoff; if (b) fails, STOP and hand back. Then: extend the constant read-only status script with the window's activity time and that machine's clock (no new argument, nothing set); keep quiet_s and worked_s per tab; implement the status table as a pure function with a clock passed in; add the stuck item (agent running, task IN_PROGRESS, quiet at least stuck_after_min, default 10, 3–120) and remove the interim quiet rule; send the project_status event on change and answer project_status_all(); poll every 15 s while the window is hidden or minimised, with one wsl.exe for all tabs on Windows. Reserve Activity.waiting as null — read nothing for it. Acceptance: the status table test (every row and the order); quiet_s / worked_s over a scripted series; no test sleeps; Windows interop output for the extended script with timing (target under 250 ms, eight tabs); the measured figures for (a)–(c) in the handoff.",
       "created_at": "2026-11-17T18:19:09.870Z",
@@ -1149,11 +1149,9 @@
       "depends_on": [
         "E-75"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-75"
-      ],
-      "updated_at": "2026-11-17T18:19:09.871Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-17T21:00:27.416Z"
     },
     {
       "id": "E-77",
@@ -1248,16 +1246,16 @@
     {
       "id": "E-82",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Break a long one-paragraph task description into readable paragraphs in the reader, per .ai/blueprints/status.md §Components 7 \"Long paragraphs\" (D-063 addendum 1). Architect review of .ai/screens/E-74/panel-reader-task-*.png: a real task is one paragraph of about 1,500 characters and is still a wall of text, and its first sentence is shown twice (title and body). Next after the triage task, before the tab-restore tasks. Add a pure function to panel-text.ts used by the reader only: a paragraph over 320 characters is split at sentence ends (a full stop, question mark or exclamation mark followed by a space and an upper-case letter, a quote or a backtick; never inside a code span) into paragraphs of at most three sentences or 320 characters; a sentence that begins with a label (an upper-case letter, then up to 30 letters, digits, spaces or hyphens, then a colon — \"Acceptance:\", \"Build:\", \"Operator report 2026-11-17:\") always starts a new paragraph and its label is drawn bold; when the body begins with the title's text, that sentence is left out of the body. The characters shown are the source's, in order, none added or dropped except the repeated title; panel rows and the Communication list are unchanged. Acceptance: tests for the split (short paragraph untouched, three-sentence groups, each label form, no split inside a code span or at \"e.g. x\", an abbreviation followed by lower case), for the repeated title, and that joining the paragraphs gives the source text back; screens in both themes of the reader on this repository's E-76 description, and a second screen of the reader after Down with a filter that leaves at least three tasks (the E-74 \"next\" screen showed \"Task 1 of 1\"); every PNG opened before the handoff names it.",
       "created_at": "2026-11-17T19:29:33.217Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-17T21:00:28.502Z",
+      "summary": "Long task descriptions as paragraphs in the reader (4acad2d): split at sentence ends (<=3 sentences / 320 chars), labels bold, exact repeated title dropped; join gives the source bac …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-17T19:29:33.217Z"
+      "updated_at": "2026-11-17T21:00:28.502Z"
     }
   ],
   "stamps": [
@@ -3581,6 +3579,42 @@
       "timestamp": "2026-11-17T19:11:11.054Z",
       "summary": "E-75 test fix (Tier 1, test-only, self-review, no critic agents): tests/capabilities.rs ALLOWED gains allow-attention-items / allow-attention-dismiss (local rein ci FAIL at c96443d: \"permission allow-attention-items is not in the IPC table\"); stale allow-quit-cancelled (removed by E-69) dropped. cargo test -p rein-desktop all targets pass.",
       "sha": "c96443d0eb367fadd04ddf36c7280c07575601dd",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-82",
+      "timestamp": "2026-11-17T19:35:27.310Z",
+      "summary": "standards-checker PASS — 8 files clean, 0 warnings, 0 errors (14ms)",
+      "sha": "ae1a1e2dd2b557282a437a167d924820649c4bd4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner-mcp",
+      "task_id": "E-82",
+      "timestamp": "2026-11-17T19:35:44.873Z",
+      "summary": "[TIER_2] align_diff WARN only (ORPHANED_WORK: panel-text.ts, panel-reader.tsx, panel-screens.sh not named in architect.md; they are covered by .ai/blueprints/status.md §Components 7 \"Long paragraphs\" / D-063 addendum 1). Checked against it: split over 320 chars at sentence ends, pieces of at most 3 sentences or 320 chars, never inside a code span, labelled sentence starts a piece with the label bold, reader only (rows and Communication unchanged), drop + pieces joined == source (tested on every state.json description); tsc clean, panels tests 24/24. Divergence for the Architect: the title's sentence is dropped only when the title is uncut. A title cut with \"…\" (most real ones) keeps its full first sentence in the body, because dropping it would lose characters the title does not show. The blueprint should say which it wants.",
+      "sha": "ae1a1e2dd2b557282a437a167d924820649c4bd4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-82",
+      "timestamp": "2026-11-17T19:35:47.652Z",
+      "summary": "[TIER_2] Blueprint aligned + clean-code gate clear: ALIGN_PASS (aligner WARN: 1 orphaned-work warning, which status.md §7 covers; 1 divergence recorded for the Architect: a title cut with \"…\" keeps its first sentence in the body) + CLEAN_PASS (standards checker: 8 files, 0 errors, 0 warnings)",
+      "sha": "ae1a1e2dd2b557282a437a167d924820649c4bd4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "engineer-self-review",
+      "task_id": "E-75",
+      "timestamp": "2026-11-17T20:50:18.218Z",
+      "summary": "E-75 CI fix (Tier 1, test-only, self-review, no critic agents): panels.test.mjs tab-state regex accepts \\r?\\n — hosted run 44158970755 failed on windows-latest (CRLF checkout made the block match empty, \"tab state holds no title or path\"); the test now also asserts the block was found. Verified against a CRLF copy; 85 UI tests pass.",
+      "sha": "4acad2de8e5735bc333c79fc7d83f59098bfb6bc",
       "author": "emirkovacevic@protonmail.com"
     }
   ],

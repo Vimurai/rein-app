@@ -3969,3 +3969,28 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - The sentence split is a heuristic; the test "joining the paragraphs gives the source back" is what keeps it honest.
 ---
+---
+## Handoff — 2026-11-17 21:05 UTC
+**From**: Engineer → Architect
+**Trigger**: E-75 and E-82 complete (status.md §Components 4–5 and §7 "Long paragraphs"; D-063, addendum 1).
+
+### What was built
+- **E-75** at c96443d (+23dc4da capability test, +a54a641 a CRLF-safe test regex — the first hosted run failed on windows-latest). **E-82** at 4acad2d. Hosted ci 44173554778 green ×3 and desktop-windows 44173554767 green at a54a641; local `rein ci run` PASS.
+- **E-75:** new `src/attention.rs` — the rules in the core. Now: ended / refused, bell, mention, health fail, and the old 30-minute quiet rule only while the tab's agents are seen running (`AgentWatch::running`). For information: blocked as one row per project with its list, out of date, health warn. ≤ 200. Command `attention_items(tabs, health)`: the web side sends closed booleans, a bell count and core ids by tab-bar index; the answer names tabs by index and the web side adds its own titles. `attention_dismiss(tab, key)`: only a bell / mention key the core last sent, once per sending; otherwise "that item is not in the list". New `src/dismissed.rs` (`dismissed.json`, schema 1, ≤ 500, SHA-256 of key / text / quote / bell count, temp + rename, bad file ignored). Panel: grouped by project with one Go to tab, rows go to their tab, Dismiss, For information collapsed, About this list (two sentences). `docs/operator-guide.md` "Needs you" rewritten.
+- **E-82:** `panel-text.ts` `splitParagraph` / `labelOf` / `readerBody`; the reader's task body in pieces (≤ 3 sentences or 320 characters, a labelled sentence starts a piece, label bold), the first sentence left out when it is exactly the title. Tested: each rule, and that the dropped title plus the pieces give every description in this repository's `state.json` back.
+- Screens (each opened): `.ai/screens/E-75/` — `panel-attention-{both}` (two projects), `-info-open-github-light`, `-info-blocked-catppuccin-mocha`, `-dismissed-github-light` (the bell gone, badge 2 → 1, `dismissed.json` checked), `-info-only-{both}`, `-empty-{both}`. `.ai/screens/E-82/` — `panel-reader-task-{both}` (E-76's description in paragraphs, labels bold), `panel-reader-task-next-{both}` (filter "status.md", Task 2 of 9).
+- **Installer for the operator, on their request:** `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E82-a54a641.exe` (desktop-windows 44173554767, sha256 e1b1ac5b…6ade4c7) — E-69, E-74, E-75, E-82.
+
+### Decisions made
+- None new.
+
+### Blueprint divergence (if any)
+- **E-75:** status.md §API says the `attention` source of `panel_data` returns the lists; built as a new command `attention_items(tabs, health)` instead (one call for all tabs, carrying the web side's booleans; `panel_data(tab, "attention")` still answers the facts). The web side still decides ended / refused / bell / update / health (§API allows "what only it knows"); a refused tab has no core tab, so the panel names it by tab-bar index. The quiet rule works in practice for the active tab only (agent status is polled for that tab only).
+- **E-82:** the repeated title is dropped only when the title is the whole first sentence. Most real titles are cut at 90 characters with "…" — then the full first sentence stays in the body (dropping it would hide the cut-off part). Say if you want otherwise.
+
+### Next action needed
+- **Architect:** review E-75 and E-82. **Engineer:** E-70 next, then E-71 → E-76 → E-77 → E-80, E-78 → E-79.
+
+### Open risks
+- macOS runner capacity re-runs continue.
+---
