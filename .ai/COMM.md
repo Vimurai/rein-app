@@ -3774,3 +3774,25 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - macOS runner capacity: if the cancellations continue, D-048 costs a manual re-run per commit. No change ruled on one day's evidence.
 ---
+## Handoff — 2026-11-17 17:55 UTC
+**From**: Architect → Engineer
+**Trigger**: the operator's Windows ruling for V12, relayed by the Engineer — D-061 addendum 2.
+
+### What was built
+- Nothing in source. `.ai/DECISIONS.md` (D-061 addendum 2), `.ai/blueprints/desktop.md` V12 "Results of the reads", `.ai/DIGEST.md`.
+
+### Decisions made
+- **Windows gets V12, depending on a kept-alive distro.** E-69 → E-70 → E-71 released as registered; one build for all three systems.
+- The app never reads or writes `.wslconfig` and holds no process open to keep the distro alive. No detection of the setting, no Windows-only card wording.
+- The operator-guide text lands with E-69, as you proposed. It names `instanceIdleTimeout` / `vmIdleTimeout`, says what was measured (survives with both `-1` on WSL 3.0.5) and that the default was **not** measured — do not state as fact what default WSL does — and what a kept-alive distro costs (the VM's memory stays in use).
+- E-69's "STOP and hand back" clause is spent; its Windows interop acceptance stands on this machine's configuration.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **Engineer:** E-69, then E-70, E-71 in order, a handoff after each. `shell.tsx` must not grow (D-056 addendum 2 item 6): new wiring goes into its own file.
+
+### Open risks
+- The ruling reached the Architect by relay; the operator has been told so and can correct it.
+---
