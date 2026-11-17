@@ -5,8 +5,8 @@
 #   agent-bar     — the Engineer's agent exited: "The Engineer has exited." with Keep open and
 #                   Close project, the Architect still running;
 #   close-confirm — Close project clicked while the Architect runs: the confirm, No focused;
-#   all-exited-closed — No, then the Architect exits too: the project closes by itself (the
-#                   window's session is gone; the start screen is back).
+#   (with close_when_agents_exit = false: V9's bar as built; the countdown and the close when
+#   all agents have exited are countdown-screens.sh's, E-71).
 # The `rein` is a stand-in in a throwaway HOME: `rein start` builds rein's layout (one session,
 # the project's window, two panes tagged @rein_role) through plain `tmux` and attaches; each
 # pane runs a stand-in agent (`sleep`, typed into its shell) that returns to the shell when
@@ -88,7 +88,8 @@ for theme in catppuccin-mocha github-light; do
   echo "[$theme ${GW}x${GH}]"
   st="$W/xdg/state/rein-app"
   mkdir -p "$st"
-  printf '{"schema":1,"input_style":"simple","first_run_done":true,"theme":"%s"}' "$theme" >"$st/ui.json"
+  # V9's bar as built: E-71's countdown is off here (countdown-screens.sh covers it).
+  printf '{"schema":1,"input_style":"simple","first_run_done":true,"theme":"%s","close_when_agents_exit":false}' "$theme" >"$st/ui.json"
   rm -f "$st/projects.json" # E-70: each launch starts with no open-tabs record (no restore)
   env -u TMUX -u TMUX_PANE -u CLAUDECODE \
     HOME="$W/home" PATH="$W/bin:$PATH" SHELL=/bin/sh \
@@ -113,13 +114,6 @@ for theme in catppuccin-mocha github-light; do
   echo "  window still there after the confirm is shown: $(T list-windows -a -F '#W' | tr '\n' ' ')"
   X key Escape # No is the default
   echo "  after No: $(T list-windows -a -F '#W' | tr '\n' ' ')"
-  # The Architect exits too: all ended, close_when_agents_exit on (the default) — the project
-  # closes by itself on the next poll.
-  arch="$(T list-panes -a -F '#{pane_id} #{@rein_role}' | awk '$2 == "architect" { print $1 }')"
-  T send-keys -t "$arch" C-c
-  sleep 12
-  echo "  after both exited: windows=[$(T list-windows -a -F '#W' 2>/dev/null | tr '\n' ' ')]"
-  shot "all-exited-closed-$theme"
   kill "$APP" 2>/dev/null
   wait "$APP" 2>/dev/null
   APP=""

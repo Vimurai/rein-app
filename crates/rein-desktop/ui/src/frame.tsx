@@ -15,6 +15,7 @@ import {
   CircleHelp,
   CircleX,
   Copy,
+  Hourglass,
   Menu,
   Minus,
   Plus,
@@ -188,6 +189,7 @@ export function TitleBar({ bar, chrome, r }: { bar: TitleBarData; chrome: Chrome
                 }}
               >
                 {t.exited && <span aria-label="exited" className="size-[6px] shrink-0 rounded-full bg-destructive" />}
+                {t.marked && !t.exited && <Hourglass size={12} aria-label="an agent exited" className="shrink-0 text-primary" />}
                 <span className="truncate">{t.label}</span>
                 {/* Starting (V7): a spinner in place of the close icon, which hover still shows. */}
                 {t.starting && (

@@ -63,3 +63,73 @@ test("only the active tab of a visible window is polled, while its process runs"
   assert.equal(shouldPoll({ ...live, open: false }), false);
   assert.equal(shouldPoll({ ...live, exited: true }), false);
 });
+
+// ── V12 component 7 (D-061, E-71): the countdown after an agent's exit ──────────────────────
+import { COUNTDOWN_S, counted, countdownStep } from "../src/countdown.ts";
+
+const two = (e, a) => [
+  { role: "engineer", state: e },
+  { role: "architect", state: a },
+];
+const cdOn = (over = {}) => ({ closeWhenAgentsExit: true, project: "rein-app", shown: true, now: 0, ...over });
+
+test("an exit starts a 5 s countdown on the active tab of a visible window; zero fires", () => {
+  const t = { agents: two("ended", "running"), exited: false };
+  let s = countdownStep(t, cdOn({ now: 1000 }));
+  assert.deepEqual(s.view, { kind: "countdown", text: "The Engineer exited. Closing rein-app in 5 s.", key: "engineer", left: 5 });
+  assert.equal(s.fire, false);
+  s = countdownStep(t, cdOn({ now: 3500 }));
+  assert.equal(s.view.left, 3, "a number, counted down by the clock");
+  s = countdownStep(t, cdOn({ now: 1000 + COUNTDOWN_S * 1000 }));
+  assert.equal(s.view.left, 0);
+  assert.equal(s.fire, true, "at zero: V9's close without its confirm");
+});
+
+test("Keep open stops it until the set of ended roles changes; a changed set starts again from 5", () => {
+  const t = { agents: two("ended", "running"), exited: false };
+  countdownStep(t, cdOn({ now: 0 }));
+  t.kept = "engineer"; // Keep open
+  assert.deepEqual(countdownStep(t, cdOn({ now: 2000 })).view, { kind: "none" });
+  assert.equal(t.countdown, null);
+  t.agents = two("ended", "ended"); // both ended now: all ended is V9's close, not a countdown
+  assert.deepEqual(countdownStep(t, cdOn({ now: 3000 })).view, { kind: "close" });
+  // Three roles: a second exit changes the set and starts from 5 again.
+  const u = { agents: [...two("ended", "running"), { role: "reviewer", state: "running" }], exited: false };
+  countdownStep(u, cdOn({ now: 0 }));
+  assert.equal(countdownStep(u, cdOn({ now: 3000 })).view.left, 2);
+  u.agents[1] = { role: "architect", state: "ended" };
+  const s = countdownStep(u, cdOn({ now: 3000 }));
+  assert.equal(s.view.left, 5);
+  assert.equal(s.view.text, "The Engineer and the Architect exited. Closing rein-app in 5 s.");
+});
+
+test("a background tab or a hidden window never counts down: the tab is marked and starts from 5 when shown", () => {
+  const t = { agents: two("ended", "running"), exited: false };
+  countdownStep(t, cdOn({ now: 0 }));
+  let s = countdownStep(t, cdOn({ now: 2000, shown: false }));
+  assert.deepEqual(s, { view: { kind: "none" }, fire: false });
+  assert.equal(t.marked, true);
+  assert.equal(t.countdown, null);
+  s = countdownStep(t, cdOn({ now: 60000, shown: false }));
+  assert.equal(s.fire, false, "never fires out of sight");
+  s = countdownStep(t, cdOn({ now: 61000 }));
+  assert.equal(s.view.left, 5, "from 5 when the user comes to it");
+  assert.equal(t.marked, false);
+});
+
+test("the setting off keeps V9's bar; a restored tab counts a role not running as ended", () => {
+  const t = { agents: two("ended", "running"), exited: false };
+  const s = countdownStep(t, cdOn({ closeWhenAgentsExit: false }));
+  assert.equal(s.view.kind, "bar");
+  assert.equal(s.fire, false);
+  // Restored: the engineer was not running at the first read — "unknown" to the core.
+  const r = { agents: two("unknown", "running"), endedAtRestore: ["engineer"], exited: false };
+  assert.equal(countdownStep(r, cdOn()).view.kind, "countdown");
+  assert.deepEqual(counted(two("unknown", "running"), ["engineer"]).map((a) => a.state), ["ended", "running"]);
+  assert.deepEqual(counted(two("running", "running"), ["engineer"]).map((a) => a.state), ["running", "running"], "running again: running");
+  // Nothing ended clears the mark; an exited or closing tab has no countdown.
+  const q = { agents: two("running", "running"), exited: false, marked: true };
+  countdownStep(q, cdOn());
+  assert.equal(q.marked, false);
+  assert.equal(countdownStep({ ...t, exited: true }, cdOn()).view.kind, "none");
+});

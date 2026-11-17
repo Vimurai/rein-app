@@ -32,6 +32,8 @@ export interface TabView {
   exited: boolean;
   /** `rein start` has not drawn yet (V7 `tabPhase`): a spinner in place of the close icon. */
   starting?: boolean;
+  /** V12 7 (E-71): an agent exited while the tab was not in front — a marker on the tab. */
+  marked?: boolean;
 }
 
 export interface TabControl {
@@ -40,6 +42,8 @@ export interface TabControl {
   current: boolean;
   exited: boolean;
   starting: boolean;
+  /** An agent exited out of sight (V12 7): an hourglass on the tab. */
+  marked: boolean;
   /** Click: show the tab. */
   select: ActionCall;
   /** The close icon (on hover), and a middle click on the tab. */
@@ -62,6 +66,7 @@ export function titleBar(tabs: readonly TabView[], version: string): TitleBar {
       current: t.current,
       exited: t.exited,
       starting: t.starting === true,
+      marked: t.marked === true,
       select: { name: "tab.goto", arg: String(i + 1) },
       close: { name: "tab.detach", arg: String(i + 1) },
     })),

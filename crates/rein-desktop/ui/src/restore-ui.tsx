@@ -55,8 +55,8 @@ export interface RestoredTab {
   title: string;
   project: string;
   card?: CardView | undefined;
-  gone?: boolean;
-  closing?: boolean;
+  gone?: boolean | undefined;
+  closing?: boolean | undefined;
   term: { tab: { id: number } | null; start: (setupId?: number, cardId?: number) => Promise<void>; restart: () => Promise<void> };
 }
 

@@ -50,8 +50,7 @@ import { MenuOverlay, PasteConfirm, ProjectPicker, WhichKey, label } from "./ove
 import { startScreen, withStartKeys, type RecentView } from "./start.ts";
 import { StartScreen } from "./start-screen.tsx";
 import { TermTab } from "./term.ts";
-import { agentBar, type Agent } from "./agents.ts";
-import { AgentBar, CloseConfirm, StopConfirm, useAgentPoll } from "./agent-bar.tsx";
+import { AgentBar, CloseConfirm, StopConfirm, useAgentPoll, type PolledTab } from "./agent-bar.tsx";
 import { closeTabText, closedNote } from "./lifecycle.ts";
 import { shouldCheck, type CheckReply } from "./project.ts";
 import { SetupCard, UpdateBar, UpdateSheet } from "./project-ui.tsx";
@@ -120,7 +119,8 @@ function shellWord(s: string): string {
 const MAX_TABS = 16;
 
 /** One open tab: its terminal, its pane, and what the chrome shows for it. */
-interface OpenTab {
+/** The agents, the bar and the countdown (V9, E-71) are `PolledTab`'s fields (agent-bar.tsx). */
+interface OpenTab extends PolledTab {
   /** For the tab's life (the title bar keys its pill by it). */
   id: number;
   term: TermTab;
@@ -137,21 +137,11 @@ interface OpenTab {
   bell?: boolean;
   /** A failed tmux overlay was told in a toast already (V6: once per tab). */
   overlayTold?: boolean;
-  /** V9 (E-62): the last answer about the project's agents. */
-  agents?: Agent[];
-  /** The ended roles the operator chose Keep open for. */
-  kept?: string | null;
-  /** Close project is running. */
-  closing?: boolean;
-  /** Closing by itself failed once: from then on the bar asks instead. */
-  autoFailed?: boolean;
   /** V9 (E-63): a folder without `.ai/` — the set-up card, no terminal yet. */
   setup?: { id: number; reply: CheckReply | null; inside: string | null } | undefined;
   /** V12 (E-70): a restored tab — its card (no session / no folder), the first status read
-   *  still owed, its agents found gone, and opened without taking the front. */
+   *  opened without taking the front (its status read and "gone" are PolledTab's). */
   card?: CardView | undefined;
-  restored?: boolean;
-  gone?: boolean;
   quiet?: boolean;
   /** The out-of-date check ran for this tab (once per open). */
   asked?: boolean;
@@ -560,7 +550,7 @@ export function Shell(props: ShellProps) {
     [detach, say, showCommand],
   );
   // V9: the active tab's agents every 5 s while visible (agent-bar.tsx; moved there by E-70).
-  useAgentPoll(() => tabs.current[cur.current], (t) => tabs.current.includes(t), closeProject, closeWhenAgentsExit, rerender);
+  useAgentPoll(() => tabs.current[cur.current], () => tabs.current, closeProject, closeWhenAgentsExit, rerender);
 
   /** Run one action — from a key, the command line or (E-40) a click: the same closed list. */
   const run = useCallback(
@@ -878,15 +868,12 @@ export function Shell(props: ShellProps) {
 
   const termOpen = tabs.current.length > 0;
   const current = tabs.current[cur.current];
-  const agentView =
-    current?.agents && !current.exited
-      ? agentBar(current.agents, { closeWhenAllExit: closeWhenAgentsExit && !current.autoFailed, kept: current.kept ?? null })
-      : ({ kind: "none" } as const);
+  const agentView = (current && !current.exited && current.barView) || ({ kind: "none" } as const);
   const runner = { run, tip: (c: ActionCall) => describeAction(c, keys, otherTable) };
   const now = performance.now();
   const starting = (t: OpenTab | undefined) => t !== undefined && !t.exited && t.term.phase(now) === "starting";
   const bar = titleBar(
-    tabs.current.map((t, i) => ({ id: t.id, title: t.title, current: i === cur.current, exited: t.exited, starting: starting(t) })),
+    tabs.current.map((t, i) => ({ id: t.id, title: t.title, current: i === cur.current, exited: t.exited, starting: starting(t), marked: t.marked === true })),
     VERSION,
   );
   // The `simple` style has no modes, so no mode badge (D-034).
@@ -922,11 +909,12 @@ export function Shell(props: ShellProps) {
           />
         )}
         {current?.gone && !current.exited && <AgentsGoneBar t={current} rerender={rerender} say={say} onClose={() => closeProject(current, true)} />}
-        {current && agentView.kind === "bar" && (
+        {current && (agentView.kind === "bar" || agentView.kind === "countdown") && (
           <AgentBar
             text={agentView.text}
             closing={current.closing === true}
-            onClose={() => closeProject(current, false)}
+            countdown={agentView.kind === "countdown"}
+            onClose={() => closeProject(current, agentView.kind === "countdown")}
             onKeep={() => {
               current.kept = agentView.key;
               rerender();

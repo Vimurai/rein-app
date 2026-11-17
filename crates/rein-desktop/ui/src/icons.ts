@@ -13,6 +13,7 @@ export {
   Copy,
   Folder,
   FolderOpen,
+  Hourglass,
   Keyboard,
   LayoutDashboard,
   ListChecks,
