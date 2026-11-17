@@ -1046,23 +1046,23 @@
     {
       "id": "E-70",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Record the open project tabs and restore them when the app starts, per .ai/blueprints/desktop.md §Look and feel v2 V12 components 4-6, §Data model and §Interface contracts (D-061). After the attach task. Add `open` (at most 32, tab order) and `active` to the app's state file, rewritten atomically on tab open, close, reorder and switch; a tab leaves the list only by Close project or the agent-exit close, never by quit. At start open one tab per entry through the live lookup: live → attach; not live → no process, the card \"<project> is not running. Its session ended while the app was closed.\" with Start (`rein start`) and Close project; folder missing → the card says so, Close project only; attached but no role pane running at the first status read → the bar \"The agents in <project> are no longer running.\" with Start again (V9's close, then `rein start`) and Close project. The active tab opens first; at most two setup processes at a time. A project from the command line or a second start is opened in addition, or focused if listed. On `tmux.server = \"user\"` tabs are remembered and open as today. IPC `tabs_restore`, `tab_start`. Acceptance: Rust tests for the record (round trip, malformed entry dropped, cap, a path from the file passes the same checks as a picked one); end to end with a stand-in rein: second run restores tabs in order with no start recorded, server killed between runs gives the card and no start until Start is pressed, a closed project is not restored; window run under Xvfb with on-screen proof for each state (D-060 ruling 3); screens under .ai/screens/ for restored tabs, the card and the bar, both themes, each opened before the handoff; Windows interop with timing for restoring three tabs; local `rein ci run`, hosted ci x3 and desktop-windows green; Tier 2 stamps.",
       "created_at": "2026-11-16T14:34:23.054Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-17T22:52:19.632Z",
+      "summary": "Open tabs recorded and restored (0bdcde1, fix ac9d7a2): projects.json open/active, tabs_record (core ids), tabs_restore + tab_open(restore), not-running / missing cards, tab_start, a …[full in LOG.md]",
       "depends_on": [
         "E-69"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-17T18:32:52.986Z"
+      "updated_at": "2026-11-17T22:52:19.634Z"
     },
     {
       "id": "E-71",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Close a project 5 seconds after one of its agents exits, with a cancel, per .ai/blueprints/desktop.md §Look and feel v2 V12 component 7 (D-061). After the restore task. Operator direction: `/exit` in one pane closes both agents and the project's session; a countdown was chosen because the app cannot tell `/exit` from a crash. With `[project] close_when_agents_exit = true` (default), on the active tab of a visible window, replace V9's \"one of several ended\" bar by \"The Engineer exited. Closing <project> in 5 s.\" with Keep open (focused) and Close now; at zero run V9's close without its confirm, close the tab and drop it from the open-tabs record. Keep open stops the countdown and hides the bar until the set of ended roles changes. A tab that is not active, or a hidden window, never counts down: mark the tab and start from 5 when the user comes to it. On a restored tab the first status read counts a role pane that is not running as ended. The number in the bar is text, no animation (D-054). With the setting false keep V9's bar as built. Apply only on the app's server; on the user's server nothing is killed. Keep the poll limit (active tab, visible window, one process per 5 s). Acceptance: UI tests for the countdown state machine (start, cancel, restart on a changed set, background tab, hidden window, setting false); window run under Xvfb with two real role panes and on-screen proof (D-060 ruling 3): zero closes the project and the other role's process is gone, Keep open leaves both panes, a background tab does not count down; pointer and keyboard parity for both buttons; screens of the countdown bar and the marked background tab, both themes, under .ai/screens/, each opened before the handoff; local `rein ci run`, hosted ci x3 and desktop-windows green; Tier 2 stamps.",
       "created_at": "2026-11-16T14:34:28.948Z",
@@ -1071,11 +1071,9 @@
       "depends_on": [
         "E-70"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-70"
-      ],
-      "updated_at": "2026-11-16T14:34:28.949Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-17T22:52:19.637Z"
     },
     {
       "id": "E-72",
@@ -3615,6 +3613,42 @@
       "timestamp": "2026-11-17T20:50:18.218Z",
       "summary": "E-75 CI fix (Tier 1, test-only, self-review, no critic agents): panels.test.mjs tab-state regex accepts \\r?\\n — hosted run 44158970755 failed on windows-latest (CRLF checkout made the block match empty, \"tab state holds no title or path\"); the test now also asserts the block was found. Verified against a CRLF copy; 85 UI tests pass.",
       "sha": "4acad2de8e5735bc333c79fc7d83f59098bfb6bc",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner-mcp",
+      "task_id": "E-70",
+      "timestamp": "2026-11-17T21:40:03.751Z",
+      "summary": "[TIER_2] E-70 aligns with desktop.md V12 comps 4-6, Data model, Interface contracts. align_diff WARN only ORPHANED_WORK on 3 Tauri-autogenerated permission tomls (tab_start/tabs_record/tabs_restore) - generated by the IPC commands the contract names, covered. Declared divergence accepted: tabs_restore() returns the record and the web opens each via tab_open(..,restore) so the lookup stays in the setup process (no added process); tabs_record takes core ids only, never paths; recorded paths re-checked via project_path::check + clean_open (cap 32, malformed dropped); restore one at a time is within the <=2 setup-process limit.",
+      "sha": "720668f259aeb37968172e08fa2a8e51d7869d5c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-70",
+      "timestamp": "2026-11-17T21:40:06.680Z",
+      "summary": "standards-checker PASS — 39 files clean, 0 warnings, 15ms; no secret patterns; largest: ipc.rs 1216 lines, shell.tsx 1129 (shrunk from 1138)",
+      "sha": "720668f259aeb37968172e08fa2a8e51d7869d5c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-70",
+      "timestamp": "2026-11-17T21:40:14.772Z",
+      "summary": "[TIER_2] E-70 Blueprint aligned + clean-code gate clear — ALIGN_PASS (align_diff WARN on 3 Tauri-autogenerated permission tomls, covered by the IPC contract; tabs_restore/tabs_record divergence accepted) + CLEAN_PASS (0 errors, 0 warnings over 39 files). 0 warnings ignored; note ipc.rs at 1216 lines and shell.tsx at 1129, a future split is advised.",
+      "sha": "720668f259aeb37968172e08fa2a8e51d7869d5c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "engineer-self-review",
+      "task_id": "E-70",
+      "timestamp": "2026-11-17T21:49:58.353Z",
+      "summary": "E-70 CI fix (Tier 1, self-review, no critic agents): Desktop::open is test-only and its tests are cfg(all(test, unix)); the gate is now the same (was cfg(test)), so the Windows test build no longer sees dead code (hosted run 44182330899, clippy -D warnings on windows-latest). No behaviour change; 180 tests pass.",
+      "sha": "0bdcde149c49f69231cac4ddb96fef46a484ac87",
       "author": "emirkovacevic@protonmail.com"
     }
   ],

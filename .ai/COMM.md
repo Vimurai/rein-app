@@ -4018,3 +4018,33 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - Until E-76, a project in a background tab that goes quiet for 30 minutes raises nothing. Known and accepted.
 ---
+---
+## Handoff — 2026-11-17 22:00 UTC
+**From**: Engineer → Architect
+**Trigger**: E-70 complete (desktop.md V12 components 4–6, D-061).
+
+### What was built
+- **E-70** at 0bdcde1 (+ac9d7a2: `Desktop::open` gated like its unix-only tests — windows-latest clippy). Hosted ci 44183960193 green ×3, desktop-windows 44183960160 green; local `rein ci run` PASS.
+- **Record:** `projects.json` gains `open: [{path, distro?}]` (≤ 32, tab order) and `active`; a malformed entry is dropped (the path rule a picked path meets, a distro charset, duplicates), `active` follows its entry. `tabs_record(ids, active)`: the web side sends core ids, never paths; written on every tab change once the start-up restore is done; a tab leaves only by Close project.
+- **Restore:** `tabs_restore()` gives the record (other distros skipped); the web side opens each through `tab_open(…, restore)` — the recorded current tab first, the others one at a time, then the command-line project. Live → attached; no live session on the app's server → the "not running" card, no process; folder gone → the "missing" card. `tab_start(tab)`: Start runs `rein start` in place of the card, same id. Cards count against the 16-tab limit. The user's server: remembered, opened as today.
+- **Agents gone:** an attached restored tab whose first status read shows no role running gets the bar "The agents in <project> are no longer running." — Start again (V9's close, then a fresh open in the same tab) / Close project.
+- **Web:** new `ui/src/restore.ts` (pure) and `restore-ui.tsx`; `term.ts` (restore, card, `coreId`, `restart`); the agent poll moved unchanged into `agent-bar.tsx` (`useAgentPoll`); `panelOwnsKey` also honours `[data-own-keys]` so the card and bar keep their keys (Enter on Start) while shortcuts still act. `shell.tsx` 1138 → 1129.
+- **Docs:** operator guide "Sessions outlive the window" — tabs come back, the card, the bar.
+- **Tests:** record round trip / malformed / cap / active; core restore tests (attach, card, missing, user server, Start replaces the card, record mapping, limit); UI `recordOf` / `agentsGone` / texts. `lifecycle-screens.sh` (Xvfb): the record holds what was open (a closed project is not in it); a run with no project restores both tabs attached with no start; a session killed between runs → card, nothing starts until Start (Enter), then exactly one start; an agent gone → the bar. The other window harnesses now clear `projects.json` per launch.
+- **Screens (each opened):** `.ai/screens/E-70/restored-tabs-{both}`, `not-running-card-{both}`, `agents-gone-bar-{both}`.
+- **Interop:** `.ai/screens/E-70/interop.{sh,txt}` — three recorded tabs through Windows `wsl.exe`: lookups 148 / 138 / 142 ms; the two live ones attach (first tmux frame 856 ms cold, 394 ms); the third shows the card with no process; ≈ 1.7 s in all; nothing started.
+
+### Decisions made
+- None new.
+
+### Blueprint divergence (if any)
+- `tabs_restore()` returns the record and the web side opens each tab through `tab_open(…, restore)`, instead of the core opening the tabs and returning their states — a pty needs the web side's output channel. The lookup still rides in the setup process; no process is added. The card's Start is `tab_start(tab, cols, rows, output)` for the same reason.
+- Close project on a card only drops the tab (there is no session to stop).
+
+### Next action needed
+- **Architect:** review E-70. **Engineer:** E-71 next (with the real-agents quit-and-reopen look).
+
+### Open risks
+- `ipc.rs` is 1216 lines (over 1000; the checker scopes `src/` at the repo root, so it does not flag `crates/`). A split is advisable — say if you want a task.
+- Harness pitfall found today: `cargo test` rebuilds `target/debug/rein-desktop` in a form that shows a blank window; window harnesses must run after `cargo build`. Two of today's harness runs looked broken for this reason only.
+---
