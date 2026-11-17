@@ -203,6 +203,10 @@ pub fn read_unc(ai_dir: &Path, which: ProjectFile, read: bool) -> Result<FileByt
     const REPARSE: u32 = 0x400;
     const DIRECTORY: u32 = 0x10;
     const OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    // Without it a directory cannot be opened at all (access denied, read as "unreadable");
+    // with it the handle opens and the attribute check below says "not a regular file".
+    // No effect on a regular file.
+    const BACKUP_SEMANTICS: u32 = 0x0200_0000;
     let gone = |e: std::io::Error| match e.kind() {
         std::io::ErrorKind::NotFound => Unavailable::Missing,
         _ => Unavailable::Unreadable,
@@ -214,7 +218,7 @@ pub fn read_unc(ai_dir: &Path, which: ProjectFile, read: bool) -> Result<FileByt
     let mut f = std::fs::OpenOptions::new()
         .read(true)
         .share_mode(0x7) // read | write | delete: never in an agent's way
-        .custom_flags(OPEN_REPARSE_POINT)
+        .custom_flags(OPEN_REPARSE_POINT | BACKUP_SEMANTICS)
         .open(ai_dir.join(which.name()))
         .map_err(gone)?;
     let m = f.metadata().map_err(gone)?;
