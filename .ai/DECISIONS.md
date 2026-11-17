@@ -2275,3 +2275,7 @@ rein's Architect confirmed the re-send bug in the code and ruled: `rein start` o
 2. **Item c is answered**: `rein start` on a live session is rein's supported way to restart one exited agent. Nothing here uses it yet — V12 component 5's "Start again" still closes the project first. Changing that is a later revision, after E-434 merges, and only if the operator wants it.
 3. Item b (a pane ending with its agent) is not ruled by rein; the liveness rule of V9 stays.
 4. rein's Architect will name the merge commits of E-433 (waiting signal) and E-434; the Architect here relays E-433's to the Engineer for E-81.
+
+### D-062 addendum 2 (2026-11-17) — rein narrowed the waiting signal (rein D-160 addenda 1–2, rein d0c6c9b)
+
+Only a session started through `rein pane <role>` reports; a `claude` typed by hand into a pane, or a pane bound by an older `rein pane`, has no `@rein_signals` and stays unknown. The signal also needs tmux recorded at rein's install (`rein doctor` warns and fixes). Our rule already reads `@rein_waiting` only where `@rein_signals` holds `waiting`, so the design is unchanged. One wording change: W6's information row no longer says `rein sync` adds the signal — it points at `rein doctor` (`status.md` §Waiting signal W6). For the operator guide, when E-81 is built: the two reasons a project may not report.

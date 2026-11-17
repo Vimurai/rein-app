@@ -414,9 +414,15 @@ W5. **Per role in the window** — the tab tooltip and the Home card list each r
    "waiting for approval" / "asked a question" / "running" / "ended"; the Home card's
    agent `state` gains `waiting`.
 W6. **A project that does not report** — when a tab's agents run and no pane `reports`,
-   one information item: "This project does not report when an agent waits. `rein sync`
-   in the project adds it." The app runs nothing. The "About this list" text is shown
-   only then.
+   one information item: "This project's agents do not report when one waits. Agents
+   started by `rein start` on a current rein do; `rein doctor` says what is missing."
+   The app runs nothing. The "About this list" text is shown only then.
+   (Amended 2026-11-17 on rein D-160 addenda 1–2: only a session started through
+   `rein pane <role>` reports — a `claude` typed by hand into a pane never does — and the
+   signal needs tmux recorded at rein's install; so `rein sync` alone is not always the
+   cure and the sentence no longer names it. The information item is per pane state, so
+   a tab with one reporting role and one hand-started agent shows the reporting role's
+   state and "running" for the other, with no item.)
 W7. **A session that waited while the app was closed** — items still present when a
    tab's 30 s start-up silence ends raise one notification per project, once.
 
