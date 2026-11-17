@@ -2279,3 +2279,12 @@ rein's Architect confirmed the re-send bug in the code and ruled: `rein start` o
 ### D-062 addendum 2 (2026-11-17) — rein narrowed the waiting signal (rein D-160 addenda 1–2, rein d0c6c9b)
 
 Only a session started through `rein pane <role>` reports; a `claude` typed by hand into a pane, or a pane bound by an older `rein pane`, has no `@rein_signals` and stays unknown. The signal also needs tmux recorded at rein's install (`rein doctor` warns and fixes). Our rule already reads `@rein_waiting` only where `@rein_signals` holds `waiting`, so the design is unchanged. One wording change: W6's information row no longer says `rein sync` adds the signal — it points at `rein doctor` (`status.md` §Waiting signal W6). For the operator guide, when E-81 is built: the two reasons a project may not report.
+
+### D-063 addendum 1 (2026-11-17) — E-74 accepted; long paragraphs are split in the reader (E-82)
+
+**E-74 accepted** at 27a4680 (hosted `ci` and `desktop-windows` green there, checked with `gh run list`). The Architect opened all 15 screens in `.ai/screens/E-74/`. The source was not re-read.
+
+1. **Description cap 1024 → 4096 accepted.** No blueprint pinned 1024, and a reader that cuts 64 of 82 real tasks does not do its job. The 1 MiB reply cap stays the bound that matters.
+2. **File order for Communication and "Esc returns to the last shown row" accepted** as built.
+3. **A real task is still a wall of text.** rein tasks are one paragraph by their own format, so paragraphs, lists and code spans never appear in them. In the reader a long paragraph is split at sentence ends, a leading label ("Acceptance:") starts a paragraph in bold, and the title's sentence is not repeated in the body. Presentation only: the characters are the source's. **Alternative rejected:** asking rein to write tasks with line breaks — the app must read what projects already hold.
+4. `panel-reader-task-next-*` shows "Task 1 of 1": the filter left one row, so the screen does not show stepping. The handoff-next screens do, and the tests cover it; E-82 retakes it with three rows.

@@ -155,6 +155,16 @@ need you."; `stopped` is not raised when a `needs_you` was raised for the same s
   returns focus to the row it came from; Up / Down (and `k` / `j` in `modal`) move to
   the previous / next item without closing. It lies over the terminal: no pty resize.
   It replaces the in-place task drawer.
+- **Long paragraphs (D-063 addendum 1, E-82).** Tasks are written as one paragraph, so
+  structure alone leaves the reader a wall of text. In the reader only: a paragraph over
+  320 characters is split at sentence ends into paragraphs of at most three sentences or
+  320 characters; a sentence that starts with a label and a colon ("Acceptance:",
+  "Build:") starts a new paragraph with the label in bold; the body does not repeat the
+  title's sentence. No character of the source is added or dropped otherwise.
+- **Caps as built (E-74).** A task description is kept to 4096 characters (was 1024 in
+  E-59; 64 of this repository's 82 tasks were longer). The 1 MiB reply cap is unchanged.
+  Reader `Esc` returns focus to the row of the item last shown. Communication stays in
+  file order, newest entry first.
 - **Communication.** An entry shows who → who, age, the trigger as its title, and the
   first six lines of "Next action needed"; "Read all" opens the reader with every
   section.

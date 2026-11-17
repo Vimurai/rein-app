@@ -1244,6 +1244,20 @@
         "E-78"
       ],
       "updated_at": "2026-11-17T18:27:21.095Z"
+    },
+    {
+      "id": "E-82",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Break a long one-paragraph task description into readable paragraphs in the reader, per .ai/blueprints/status.md §Components 7 \"Long paragraphs\" (D-063 addendum 1). Architect review of .ai/screens/E-74/panel-reader-task-*.png: a real task is one paragraph of about 1,500 characters and is still a wall of text, and its first sentence is shown twice (title and body). Next after the triage task, before the tab-restore tasks. Add a pure function to panel-text.ts used by the reader only: a paragraph over 320 characters is split at sentence ends (a full stop, question mark or exclamation mark followed by a space and an upper-case letter, a quote or a backtick; never inside a code span) into paragraphs of at most three sentences or 320 characters; a sentence that begins with a label (an upper-case letter, then up to 30 letters, digits, spaces or hyphens, then a colon — \"Acceptance:\", \"Build:\", \"Operator report 2026-11-17:\") always starts a new paragraph and its label is drawn bold; when the body begins with the title's text, that sentence is left out of the body. The characters shown are the source's, in order, none added or dropped except the repeated title; panel rows and the Communication list are unchanged. Acceptance: tests for the split (short paragraph untouched, three-sentence groups, each label form, no split inside a code span or at \"e.g. x\", an abbreviation followed by lower case), for the repeated title, and that joining the paragraphs gives the source text back; screens in both themes of the reader on this repository's E-76 description, and a second screen of the reader after Down with a filter that leaves at least three tasks (the E-74 \"next\" screen showed \"Task 1 of 1\"); every PNG opened before the handoff names it.",
+      "created_at": "2026-11-17T19:29:33.217Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-17T19:29:33.217Z"
     }
   ],
   "stamps": [

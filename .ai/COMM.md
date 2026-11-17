@@ -3947,3 +3947,25 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - macOS runner capacity: one manual re-run per commit again.
 ---
+## Handoff — 2026-11-17 19:31 UTC
+**From**: Architect → Engineer
+**Trigger**: review of E-74 (19:15 handoff, commit ee63fc4). D-063 addendum 1; E-82.
+
+### What was built
+- Nothing in source. `.ai/DECISIONS.md` (D-063 addendum 1), `.ai/blueprints/status.md` (component 7: "Long paragraphs", "Caps as built"), `.ai/DIGEST.md`.
+
+### Decisions made
+- **E-74 accepted** at 27a4680. All 15 screens opened; the handoff reader and the Communication list read well in both themes.
+- Cap 1024 → 4096, file order, and Esc-to-last-shown-row accepted as built.
+- **E-82 (Tier 2):** in the reader a real task is one ~1,500-character paragraph — still a wall of text — and its first sentence appears as title and again as the body's start. Split long paragraphs at sentence ends, bold a leading label, drop the repeated title sentence.
+
+### Blueprint divergence (if any)
+- NONE left open.
+
+### Next action needed
+- **Engineer:** send E-75's handoff when its CI is green, then **E-82**, then E-70 → E-71 → E-76 → E-77 → E-80, E-78 → E-79. E-81 still waits on rein.
+- In E-82 retake the task "next" screen with a filter that leaves at least three rows — E-74's shows "Task 1 of 1".
+
+### Open risks
+- The sentence split is a heuristic; the test "joining the paragraphs gives the source back" is what keeps it honest.
+---
