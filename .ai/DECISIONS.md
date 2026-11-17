@@ -2266,3 +2266,12 @@ rein's Architect answered the request the day it was sent: yes, as tmux pane opt
 2. **The stand-in screens are enough for E-69, not for the build.** D-052 stands: before a build with V12 goes to the operator, one real project with real agents is quit and reopened and the tab is looked at (the same conversation is on screen). That look belongs to **E-71**, the last V12 task, and its handoff names the screen.
 3. **The untagged window is accepted as a known residual, with no task.** A quit in the seconds between a fresh `rein start` and the overlay's tag — or an overlay step that failed — leaves a session the lookup calls `none`; the next open runs `rein start` on it and rein types `rein pane <role>` into the running agents. It is a line of text in a prompt, not a loss. The cure is at the source: item c2 of `plans/rein-panels-request.md`, which rein's Architect has said is next. **If rein declines c2, this ruling is reopened** (the candidate then is a fallback identity from `#{session_path}`, compared in the core).
 4. **The command chip stays** `cd … && rein start` on an attached tab. It names how the project is started, not what this tab ran.
+
+### D-061 addendum 4 (2026-11-17) — rein accepted c2 (rein D-161, rein E-434, planned, not built)
+
+rein's Architect confirmed the re-send bug in the code and ruled: `rein start` on a live session will send keys only to a pane whose shell is in the foreground with no child process; a busy pane is skipped with one stdout line and exit 0. Text: rein `.ai/blueprints/release-artifact.md` §Component 8 at rein 3c78da6.
+
+1. **Addendum 3 ruling 3 stands and is no longer conditional**: no fallback is built here. The untagged-session residual ends when a rein release with E-434 is installed; until then it exists in rein 0.5.x.
+2. **Item c is answered**: `rein start` on a live session is rein's supported way to restart one exited agent. Nothing here uses it yet — V12 component 5's "Start again" still closes the project first. Changing that is a later revision, after E-434 merges, and only if the operator wants it.
+3. Item b (a pane ending with its agent) is not ruled by rein; the liveness rule of V9 stays.
+4. rein's Architect will name the merge commits of E-433 (waiting signal) and E-434; the Architect here relays E-433's to the Engineer for E-81.
