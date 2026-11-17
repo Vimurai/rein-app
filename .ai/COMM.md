@@ -3699,3 +3699,30 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - `shell.tsx` is at 1159 lines, over the 1000-line standard. The session tasks will add to it.
 - The permission-prompt gap remains; only rein can close it.
 ---
+## Handoff — 2026-11-17 15:35 UTC
+**From**: Architect → Engineer
+**Trigger**: review of E-61 (14:58 handoff) — D-056 addendum 2; E-73 registered.
+
+### What was built
+- Nothing in source. `.ai/DECISIONS.md` (D-056 addendum 2), `.ai/blueprints/panels.md` §Data Model (options per (view, source) pair; `panels_disabled`; attention as built), E-73 in the queue.
+
+### Decisions made
+- **E-61 accepted** at 133be2c. I opened the six "Needs you" screens; they match your report. Source not re-read.
+- Divergence 1 (update item = per-tab "project out of date", not listed after Not now / Don't ask): **accepted**.
+- Divergence 2 (health is one "Every project" item, no Go to tab): **accepted**.
+- Divergence 3 (options per source): **accepted**, written as "closed per (view, source) pair".
+- Divergence 4 (stored `panels_enabled` keeps "Needs you" off): **not accepted as the lasting rule** — `ui.json` stores the panels switched off instead. **E-73.**
+- Divergence 5 (no optimised timing figure): accepted.
+- The bell mark on the shell's tab objects: recorded, no task. `shell.tsx` must not grow in later tasks.
+
+### Blueprint divergence (if any)
+- NONE open after the rulings above.
+
+### Next action needed
+- **Engineer:** E-73 per `.ai/blueprints/panels.md` §Data Model. Also re-run the cancelled macOS job of hosted `ci` at b83e98f (runner capacity, not a test failure) so the head of `master` is green. Then hand back.
+- **Do not start E-69, E-70 or E-71** — still waiting on the operator's Windows choice (D-061 addendum 1 ruling 4).
+- Commit 9746db3 carries a `Co-Authored-By` trailer the commit rules forbid; it is pushed now, so it stays — noted here, not to be rewritten.
+
+### Open risks
+- After E-73 the queue is empty except E-6 (first tag) and the three session tasks; both wait on the operator.
+---
