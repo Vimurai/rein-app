@@ -38,6 +38,7 @@
 
 ## Recent changes (last 10)
 - 2026-11-17 Architect: D-063 addendum 1 — E-74 accepted; E-82 registered.
+- 2026-11-17 Architect: D-063 addendum 2 — **E-75 and E-82 accepted** at a54a641 (CI green ×3 + desktop-windows; all 13 screens opened). `attention_items(tabs, health)` as its own command accepted; a cut title keeps its first sentence in the reader body, accepted. Interim limit: the 30-minute quiet rule sees the active tab only until E-76. **Queue now: E-70 (in progress) → E-71 → E-76 → E-77 → E-80; E-78 → E-79; E-81 waits on rein E-433.**
 - 2026-11-17 Architect: D-061 addendum 3 — E-69 accepted.
 - 2026-11-17 Architect: D-062 addendum 1 — rein's waiting signal; E-81 registered (waits on rein E-433).
 - 2026-11-17 Architect: D-064 — Home; E-80 registered.

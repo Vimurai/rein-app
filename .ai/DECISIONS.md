@@ -2288,3 +2288,20 @@ Only a session started through `rein pane <role>` reports; a `claude` typed by h
 2. **File order for Communication and "Esc returns to the last shown row" accepted** as built.
 3. **A real task is still a wall of text.** rein tasks are one paragraph by their own format, so paragraphs, lists and code spans never appear in them. In the reader a long paragraph is split at sentence ends, a leading label ("Acceptance:") starts a paragraph in bold, and the title's sentence is not repeated in the body. Presentation only: the characters are the source's. **Alternative rejected:** asking rein to write tasks with line breaks — the app must read what projects already hold.
 4. `panel-reader-task-next-*` shows "Task 1 of 1": the filter left one row, so the screen does not show stepping. The handoff-next screens do, and the tests cover it; E-82 retakes it with three rows.
+
+---
+
+## D-063 addendum 2 — E-75 and E-82 accepted (2026-11-17)
+
+**Date**: 2026-11-17
+**Task**: E-75, E-82 (review)
+**Decision**: Both accepted as built at a54a641 (hosted ci green ×3 and desktop-windows green). All 13 screens in `.ai/screens/E-75/` and `.ai/screens/E-82/` opened by the Architect; source not re-read.
+
+1. **`attention_items(tabs, health)` as its own command — accepted.** The blueprint said the `attention` source of `panel_data` returns the lists. One call for all tabs is the better shape: `panel_data` is per tab and the panel is "every open project". The web side sends only closed booleans, a count and ids, so the rule "no command takes a path, a sentence or a title from the web side" holds. **Alternative rejected:** N calls of `panel_data(tab, "attention")` — N round trips and the rules would see one tab at a time. `status.md` §API updated.
+2. **The web side still decides ended / refused / bell / update / health — accepted until E-76.** E-76 puts tab state, bell and agent liveness for every tab in the core; from then the web side sends only refused, update and health. A refused tab named by tab-bar index is right (it has no core tab).
+3. **The 30-minute quiet rule sees the active tab only — accepted as an interim limit.** Agent liveness is polled for the active tab only today. E-76 polls every tab and replaces the rule with `stuck`; no task is added for the gap.
+4. **A cut title keeps its first sentence in the reader body — accepted.** Dropping it would hide the part after "…". **Alternative rejected:** showing the whole first sentence as the reader's heading — real first sentences run to 200 characters and a heading that long reads worse than one repeated line.
+5. Seen in the screens and right: the badge counts Now only (2 → 1 after Dismiss); "Nothing needs you." with For information (1) below it; blocked tasks as one row per project that opens to the list.
+
+### Rollback
+Review only; nothing to reverse.

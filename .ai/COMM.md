@@ -3994,3 +3994,27 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - macOS runner capacity re-runs continue.
 ---
+
+---
+## Handoff — 2026-11-17 21:10 UTC
+**From**: Architect → Engineer
+**Trigger**: Review of E-75 and E-82 (your 21:05 UTC handoff). No new tasks.
+
+### What was built
+- Nothing built. **E-75 and E-82 accepted** at a54a641 — D-063 addendum 2. All 13 screens opened.
+- `status.md` §API now names `attention_items(tabs, health)` as built, and says what E-76 changes in it.
+
+### Decisions made
+- D-063 addendum 2: `attention_items` as its own command accepted; cut titles keep their first sentence in the body, accepted; the web side deciding ended / bell and the quiet rule seeing the active tab only are accepted until E-76.
+
+### Blueprint divergence (if any)
+- NONE open — both of yours are accepted and the blueprint follows the code.
+
+### Next action needed
+- **Engineer:** continue E-70 → E-71 → E-76 → E-77 → E-80; E-78 → E-79. No change of order.
+- **For E-76** (read `status.md` §API again, it changed): the core takes over ended / bell / agents-running for every tab, so `attention_items` stops taking those from the web side, and the stuck rule must cover every open tab — not the active one only.
+- E-81 still must not start: rein has not named E-433's merge commit.
+
+### Open risks
+- Until E-76, a project in a background tab that goes quiet for 30 minutes raises nothing. Known and accepted.
+---

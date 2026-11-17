@@ -200,8 +200,14 @@ A task id is shown in a tooltip, a toast or the status bar only when it matches
   that tab and be dismissable; anything else is the fixed sentence "that item is not in
   the list".
 - **Event `notify`** (core → web): `{event, tab, sentence}` for the toast.
-- The `attention` source of `panel_data` now returns the core's `now` / `info` lists; the
-  web-side rule function is removed with its tests moved to the core's table test.
+- **Command `attention_items(tabs, health)`** → the core's `now` / `info` lists for every
+  tab in one call (as built in E-75, accepted D-063 addendum 2). The web side sends closed
+  booleans, a bell count and core ids by tab-bar index; the answer names tabs by index and
+  the web side adds its own titles. `panel_data(tab, "attention")` still answers the facts.
+  The web-side rule function is removed with its tests moved to the core's table test.
+  **From E-76 on** the core holds ended / bell / agents-running for every tab itself, so
+  the booleans the web side sends shrink to what only it knows (refused, update, health),
+  and the quiet / stuck rule covers every open tab, not the active one only.
 - The web side reports what only it knows through closed commands: `tab_current(tab)`
   and the bell, unless the core already has both (the Engineer checks and says).
 - No command takes a path, a sentence or a title from the web side.
