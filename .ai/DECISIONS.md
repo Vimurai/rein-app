@@ -2405,3 +2405,19 @@ The window is in no release; the operator copies installers by hand from workflo
 
 ### Rollback
 `[updates] app = false` per user; revert the tasks; a bad release is superseded by a higher version.
+
+---
+
+## D-061 addendum 7 — E-71 accepted; attach at the real size (2026-11-18)
+
+**Date**: 2026-11-18
+**Task**: E-71 (review); E-91
+**Decision**: E-71 accepted as built at c513fb8 (hosted ci green ×3, desktop-windows green). All 7 screens in `.ai/screens/E-71/` opened by the Architect; source not re-read.
+
+1. **The real-agents look required by addendum 3 is done and passes for what it could show:** a real `rein start` session was tagged, survived quit with no client, and the reopened window attached to the same session with both `claude` processes alive; Close project ended only that session. Both agents sat at Claude Code's folder-trust prompt, so "an agent keeps working while detached" rests on the read of addendum 1, not on this look. Tagging works on Linux; whether it does through `wsl.exe` stays E-90's first question.
+2. **Text wrapped at half width after re-attach → E-91.** The client attaches at the window's size before its first layout, so tmux resizes the panes twice and what was already printed stays wrapped narrow. On every app start, for every project, that is not cosmetic. Every attach waits for the first measured terminal size. **Alternative rejected:** asking tmux to redraw or clear after attach — it cannot re-wrap a program's printed output, and clearing loses the operator's context.
+3. **rein's "which Claude account" prompt on a never-started project sits in the tab — accepted.** It is rein's own prompt in rein's terminal; the window does not answer for the user.
+4. **Recorded, the Engineer's error:** a diagnostic `rein start` outside the app's shim ran against the operator's default tmux server. Read afterwards (read-only): that server's socket and its two sessions (`em-locize`, `main`) all date from that same second, with no client — so the command most likely started the operator's default server, and their tmux configuration restored those sessions. Nothing was killed or lost; the operator is told. Rule restated: every diagnostic that can reach tmux runs on a private socket.
+
+### Rollback
+Review only. E-91 reverts by its commit.

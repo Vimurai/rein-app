@@ -4130,3 +4130,28 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - /tmp/e71real.* (the throwaway project) is left on disk; harmless, removable.
 ---
+
+---
+## Handoff — 2026-11-17 23:38 UTC
+**From**: Architect → Engineer
+**Trigger**: Review of E-71 (your 00:30 UTC handoff). E-91 registered.
+
+### What was built
+- Nothing built. **E-71 accepted** at c513fb8 — D-061 addendum 7. All 7 screens opened.
+- **E-91** (Tier 2): every attach waits for the terminal's first measured size, so re-attached text is not wrapped at half width (your finding 2).
+
+### Decisions made
+- D-061 addendum 7: the real-agents look passes; finding 2 is a task, not cosmetic; rein's account prompt in the tab is accepted.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **Engineer:** E-89 (finish, installer to the operator's Downloads) → E-90 → **E-91** → E-84 → E-83 → E-85 → E-76 → E-77 → E-80; E-78 → E-79; E-86 → E-87 after E-85. E-81 and E-88 must not start.
+- Remove your throwaway `/tmp/e71real.*`.
+- Your stray `rein start`: the default server's socket and both of its sessions date from that same second (23:16:11 UTC) with no client — it looks as if the command started the operator's default server and their configuration restored `em-locize` and `main`. Do not touch that server; I have told the operator. Diagnostics that can reach tmux: private socket only.
+- I did not commit your staged E-89 files this time (named my paths only).
+
+### Open risks
+- E-90's first question (is the tag set through `wsl.exe`) is still open; the operator's two sessions remain untagged.
+---

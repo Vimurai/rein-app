@@ -1378,6 +1378,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-17T23:20:17.668Z"
+    },
+    {
+      "id": "E-91",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Attach a restored or reopened tab at the terminal's real size, per .ai/DECISIONS.md D-061 addendum 7 ruling 2 and .ai/blueprints/desktop.md V12 components 3 and 4. Found in the E-71 real-agents look (.ai/screens/E-71/real-reattached-1280x800.png): after quit and reopen the agents' already-printed text is wrapped at about half the pane width, because the client attached at the window's size before its first layout and tmux resized the panes twice. Make every attach (restore at start, the card's Start, adoption, a page load) wait for the first measured size of the terminal area and create the pty with those columns and rows, so the session is resized at most once; keep the limit that a tab open is never delayed by more than the existing start timeout — on timeout open with the last known size as today. Order: after the untagged-session fix (E-90). Acceptance: a window test (Xvfb) with a stand-in agent that prints a full-width ruler before quit — after reopen the ruler is on one line and the tmux client's first size equals the terminal's size; no change for a tab opened by the user; a real-agents screen after quit and reopen showing unwrapped text; hosted CI green.",
+      "created_at": "2026-11-17T23:38:28.099Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-17T23:38:28.100Z"
     }
   ],
   "stamps": [
@@ -3800,6 +3814,24 @@
       "timestamp": "2026-11-17T23:09:55.772Z",
       "summary": "[TIER_2] E-71 Blueprint aligned + clean-code gate clear — ALIGN_PASS (align_diff WARN: 3 orphaned-work files covered by desktop.md V12 7; 2 minor notes: all-ended close now confirmed=true from the tick, 250 ms tick runs apply() whenever a tab has agents) + CLEAN_PASS (standards checker: 15 files, 0 errors, 0 warnings, 11ms). 0 warnings ignored. Pending outside this review: the real-agents quit-and-reopen look (D-061 addendum 3), awaiting the operator.",
       "sha": "877fcf1d1a7ee3bcc685438fb0cfcec6e1fd5a2b",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner-mcp",
+      "task_id": "E-89",
+      "timestamp": "2026-11-17T23:38:42.172Z",
+      "summary": "[TIER_2] E-89 diff matches desktop.md V12 component 10 (a)+(b): browser keys F5/F7/F12-release/Alt+Left/Right/Ctrl|Cmd+R/P/F/G/U blocked outside .xterm, web-view context menu off, reset_page detaches (kills nothing) before the start-up restore; e2e asserts one client per session + no second rein start. align_diff WARN ORPHANED_WORK (ipc.rs, harden.ts, reload-screens.sh not named in architect.md) resolved by hand: covered by .ai/blueprints/desktop.md V12 10. Open per acceptance (post-commit): Windows manual right-click/F5 check, hosted CI, installer to Downloads.",
+      "sha": "4950cee0b182660dfbab6a5d96ed39316cc37dff",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-89",
+      "timestamp": "2026-11-17T23:38:42.357Z",
+      "summary": "standards-checker PASS — 13 files clean, 0 warnings, 0 errors (elapsed 6ms; ran via ~/.rein mirror, in-tree scripts/standards.mjs absent)",
+      "sha": "4950cee0b182660dfbab6a5d96ed39316cc37dff",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
