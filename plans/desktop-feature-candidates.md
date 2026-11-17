@@ -9,7 +9,7 @@ outlive the app (V12, E-69..E-71).
 | # | Feature | What the operator gets | Needs |
 |---|---|---|---|
 | 1 | **"Waiting for you" as a fact** | The tab and the notification say an agent is at a permission prompt or asked a question, per role, also for a session running while the app was closed | rein: the waiting signal (request sent 2026-11-17). Small on our side once it exists |
-| 2 | **All-projects overview** (the start screen becomes it) | One screen: every open and recent project with status, task in progress, whose turn, last handoff, what needs you; open or go to a project from it | Nothing new — reuses the status of D-062 |
+| 2 | **CHOSEN 2026-11-17 → D-064, E-80 ("Home").** **All-projects overview** (the start screen becomes it) | One screen: every open and recent project with status, task in progress, whose turn, last handoff, what needs you; open or go to a project from it | Nothing new — reuses the status of D-062 |
 | 3 | **"While you were away"** | On returning to a project: what happened since you last looked — handoffs, tasks finished, tasks blocked, agents ended — as one short list | A "last seen" time per project in the app's state; reuses the sources |
 | 4 | **Quick switcher** (`Ctrl+K`) | Type to jump to a project, a panel, a task or an action | Nothing new |
 | 5 | **Reviews and decisions panels** | Read critic stamps (`REVIEWS.md`) and decisions (`DECISIONS.md`) in the reader, with a filter | Two new read-only sources (Tier 3 each: new file reads) |

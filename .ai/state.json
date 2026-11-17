@@ -1212,6 +1212,24 @@
         "E-78"
       ],
       "updated_at": "2026-11-17T18:19:26.680Z"
+    },
+    {
+      "id": "E-80",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Build Home — a fixed first entry of the tab bar showing every project at a glance — per .ai/blueprints/status.md §Home H1-H5 (D-064). Operator direction 2026-11-17: \"home button at beginning of tabs on top bar; this should be the top system to check how everything is going\". After the tab-marks task (and the triage task, whose Now items it lists). Add the Home button (house icon, first, not closable, not movable, not numbered, carrying the count of Now items); the Home view replacing the start screen: summary line, \"Needs you now\" rows, one card per open project ordered by state and never moving under the pointer or keyboard focus, recent projects, the installation rows; the project card (mark and sentence, task in progress, whose turn, last handoff age and trigger, agents by role, task-count chips, Now count); the card fields on the project_status event from the summary source and the status script, with no new file read and no new IPC command; the action home.show (Ctrl+Shift+H, Space h, menu row) and tab.next / tab.prev cycling through Home; the side-menu rule H4; start-up rule H5. Going Home and back resizes or closes no pty. New code in its own files; shell.tsx must not grow. Acceptance: the web and core tests in §Home Tests; the window run with three fixture projects (a project that stops moves up and the Home badge counts it; no pty resize on return); 32 projects without a frame over 50 ms; screens in both themes at 1280×800 and one at 700 px — five projects in mixed states, none open, with \"Needs you now\" rows — every PNG opened before the handoff names it.",
+      "created_at": "2026-11-17T18:25:46.506Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-77"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-77"
+      ],
+      "updated_at": "2026-11-17T18:25:46.507Z"
     }
   ],
   "stamps": [

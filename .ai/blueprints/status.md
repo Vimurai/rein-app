@@ -1,4 +1,4 @@
-# Blueprint — Project status, notifications and readable panels (v1 · 2026-11-17, D-062, D-063)
+# Blueprint — Project status, notifications, readable panels and Home (v1 · 2026-11-17, D-062, D-063, D-064)
 
 > Architect-owned. Operator direction 2026-11-17: "we are missing notifications for each
 > project running so we can see when something is stuck or needs our attention, and also
@@ -274,3 +274,101 @@ task drawer (replaced by the reader), Execution Constraints (polling while hidde
 4. **E-77 (Tier 2)** — tab marks, status-bar segment, Dashboard row: component 3.
 5. **E-78 (Tier 2)** — notifications, channels 1 and 2, limits and settings: component 6.
 6. **E-79 (Tier 2, `dependency_gate`)** — system notifications: channel 3.
+
+## Home — every project at a glance (revision 2026-11-17, D-064)
+
+> Operator direction 2026-11-17, on candidate 1 of `plans/desktop-feature-candidates.md`:
+> "with home button at beginning of tabs on top bar; this should be the top system to
+> check how everything is going".
+
+### Goal
+One place, always one click away, that answers "how is everything going" for every
+project without opening any of them. **Home is a fixed first entry of the tab bar that
+shows one card per project, built from the status this file already defines.** It
+replaces the start screen: with no project open, Home is what the window shows.
+
+### Components
+H1. **Home button** — the first entry of the tab bar, left of every project tab: a house
+   icon with the accessible name "Home"; it cannot be closed, moved or renamed, and
+   project tabs cannot be dragged in front of it. It carries the count of Now items
+   across all projects (the rail badge's number; nothing when zero). It is not a
+   numbered tab: `tab.goto 1` is still the first project.
+H2. **Home view** — fills the stage when Home is selected. The terminals of the open
+   projects keep running and keep their size; no pty is resized or closed by going Home
+   or coming back. Top to bottom:
+   - **Summary line**: "<n> projects open · <n> working · <n> need you · <n> quiet ·
+     <n> ended" (a part with zero is left out).
+   - **Needs you now**: the Now items of every project (component 4), each a row that
+     goes to its tab, with Dismiss where allowed. Left out when empty.
+   - **Open projects**: one card per open tab (H3), ordered by state — `needs_you`,
+     `ended`, `setup`, `quiet`, `working`, `starting`, `unknown` — and by tab order
+     within a state. A card that changes state moves only when the pointer is not over
+     the grid and no card has keyboard focus, so a card never moves under a click.
+   - **Recent projects** not open now: the present start screen's rows (name, path,
+     last opened, open on click), and `Open a project…`.
+   - **Installation**: the health row and `Check installation`, the WSL set-up card on
+     Windows when needed — the start screen's, unchanged.
+H3. **Project card** — a button that goes to the project's tab. It shows: the project
+   name and the tab mark with its sentence; "In progress: <task id> — <task title>" or
+   "No task in progress"; "<whose turn>'s turn · last handoff <age>" and the last
+   handoff's trigger as one line (cut at 120 characters); the agents by role, each
+   "running" or "ended"; chips for open / in progress / blocked task counts; the number
+   of Now items. A project whose files cannot be read shows its state and "Tasks not
+   available" — never a guess.
+H4. **Side menu on Home** — "Needs you" works as on a project. The three per-project
+   panels have no project to show: their rail buttons are disabled with the tooltip
+   "Open a project to see this", and an open one closes when Home is selected and
+   comes back when a project tab is selected again.
+H5. **Start-up** — `[window] start = "dashboard"` (the existing key and default) opens
+   Home; `"last"` opens the last active project tab as V12 restores it. With no project
+   to restore, Home either way.
+
+### Data model
+```
+ProjectCard = ProjectStatus + { counts: {open, in_progress, blocked} | null,
+                                trigger: String | null (≤ 120 chars),
+                                agents: [{role, state: running|ended|unknown}] }
+```
+The core sends the card fields with the `project_status` event; they come from the
+`summary` source and the status script the core already runs. No new file is read and
+nothing is stored.
+
+### Interface contracts
+- **Action `home.show`** — selects Home. Simple style `Ctrl+Shift+H`, modal `Space h`;
+  if either is taken, the Engineer proposes the nearest free binding in the handoff.
+  A menu row "Home", and the button: pointer and keyboard parity as D-034.
+- `tab.next` / `tab.prev` cycle through Home and the project tabs.
+- No new IPC command: Home draws `project_status_all()` and the events, and opens a
+  recent project through the existing `project.open`.
+
+### Security
+Every string from a project (task title, trigger, role) is a text node, already cut and
+cleaned by the core. A card only switches tabs; Home runs no command, writes nothing and
+types into no terminal. No new read scope, no network, CSP unchanged.
+
+### Execution constraints
+- Home adds no poll: the status poll runs for every open tab already. While Home is in
+  front the summary facts of each open tab are re-read only when its two files change
+  (the 5 s stat). Idle Home runs no animation and no timer of its own.
+- Thirty-two open projects (V12's cap) draw without a frame over 50 ms in the window
+  run; the grid is one to four columns, cards at least 280 px wide, one column below
+  720 px.
+- Selecting a project tab from Home shows its terminal within the time a tab switch
+  takes today (the `panel-screens.sh` resume figure).
+
+### Tests
+- Web: the card order and the "does not move under the pointer" rule as a pure
+  function; summary-line wording with zero parts left out; the Home button is first, not
+  closable and not numbered; panels rule H4; pointer and key parity for `home.show`.
+- Core: the card fields for a readable project, an unreadable one and a team-mode one.
+- Window run: Home with three fixture projects in different states; a project that
+  stops moves up and the Home badge counts it; back to a tab with no pty resize.
+- Screens (D-052), both themes at 1280×800 and one at 700 px wide: Home with five
+  projects in mixed states, Home with none open (recent projects only), Home with
+  "Needs you now" rows. The Architect looks at every one.
+
+### Rollback
+The task is one commit; reverting it brings the start screen back. Nothing is stored.
+
+### Task
+7. **E-80 (Tier 2)** — Home: H1–H5. After the tab-marks and the triage tasks.

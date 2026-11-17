@@ -3822,3 +3822,24 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - `Activity.waiting` is reserved and unread; it depends on rein's answer to the request sent today.
 - Windows system notifications need an installed build (an app identity); the dev build may show them under another name or not at all — report what is seen.
 ---
+## Handoff — 2026-11-17 18:27 UTC
+**From**: Architect → Engineer
+**Trigger**: the operator picked the all-projects overview and shaped it — "home button at beginning of tabs on top bar; this should be the top system to check how everything is going". D-064; `status.md` §Home; E-80.
+
+### What was built
+- Nothing in source. `.ai/blueprints/status.md` (new section "Home", appended at the end), `.ai/DECISIONS.md` (D-064), `.ai/DIGEST.md`, `.ai/architect.md` (index row), `plans/desktop-feature-candidates.md` (candidate 2 marked chosen).
+
+### Decisions made
+- **D-064:** Home is a fixed, unclosable first entry of the tab bar. It shows a summary line, every project's Now items, one card per open project ordered by state, recent projects and the installation rows. It replaces the start screen. It is not a numbered tab (`tab.goto 1` stays the first project). It reads nothing new and has no IPC command of its own; a card only switches tabs. Per-project panels are disabled on Home; "Needs you" works.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **Engineer:** the order of the 18:22 handoff stands, with **E-80 after E-77**: E-69 → E-74 → E-75 → E-70 → E-71 → E-76 → E-77 → E-80, and E-78 → E-79. Nothing changes in the task you are on.
+- When you build E-76, send the card fields of §Home "Data model" on the `project_status` event if it costs nothing extra; otherwise E-80 adds them.
+- If `Ctrl+Shift+H` or `Space h` is taken, propose the nearest free binding in E-80's handoff.
+
+### Open risks
+- Home depends on E-76's reads. If they fail, Home is still built, without working / quiet — hand back first.
+---

@@ -2209,3 +2209,38 @@ Real task descriptions and handoffs are paragraphs of several hundred words; a 3
 
 ### Rollback
 Each task reverts as one commit; deleting `dismissed.json` is safe.
+
+---
+
+## D-064 — Home: a fixed first entry of the tab bar shows every project at a glance and replaces the start screen
+
+**Date**: 2026-11-17
+**Task**: operator direction on candidate 1 of `plans/desktop-feature-candidates.md` ("with home button at beginning of tabs on top bar; this should be the top system to check how everything is going"). E-80. Blueprint: `status.md` §Home.
+**Decision**: The tab bar's first entry is a Home button that cannot be closed. Home shows a summary line, the Now items of every project, one card per open project ordered by state, the recent projects and the installation rows. With no project open, Home is what the window shows.
+
+### Why needed
+D-062 puts a status on each tab, but with many tabs the operator still reads a row of small marks and opens panels one project at a time. The operator asked for one top-level place.
+
+### Rulings
+1. **Home replaces the start screen** rather than sitting beside it: both list projects, and two such screens would have to be kept in step. The start screen's rows (recent projects, `Open a project…`, health, the WSL card) move into Home unchanged.
+2. **Home is not a numbered tab.** `tab.goto 1` stays the first project, so no key the operator has learnt changes.
+3. **Cards are ordered by state, most urgent first**, and a card does not move while the pointer is over the grid or a card has focus — a list that reorders under a click is worse than a stale order.
+4. **Home reads nothing new and has no command of its own.** Cards come from the status event of D-062 with the summary source's counts added; a card only switches tabs.
+5. **Per-project panels are disabled on Home**; "Needs you" works there.
+6. `[window] start = "dashboard"` (existing key, existing default) now means Home.
+
+### Alternatives considered
+1. **A fifth side panel listing all projects** — rejected: the operator asked for it in the tab bar, and 400 px beside a terminal is not a top-level view.
+2. **A separate window** — rejected: a second window to manage, and tiling-WM users get a surprise window.
+3. **Keep tab order for cards** — rejected: the point of the screen is that what needs the operator is first.
+
+### Constraints driving this decision
+- No pty may be resized or closed by a view change (E-52's fit path; V12 keeps sessions).
+- `.ai/` text is untrusted (`panels.md` §Security).
+
+### Impact
+- Unlocks: E-80 (after E-77).
+- Risk if wrong: Home depends on the status of D-062; if E-76's reads fail, Home still lists projects, tasks and handoffs but without working / quiet.
+
+### Rollback
+Reverting E-80's commit brings the start screen back; nothing is stored.
