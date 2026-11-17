@@ -44,8 +44,13 @@ pub struct UiFile {
     /// V11 (E-66): closing a project or quitting with agents running does not ask.
     pub close_dont_ask: bool,
     /// The side menu (panels.md §Data Model, E-60): the rail, `shown` | `hidden`, and the
-    /// panels offered — Settings' choices; `[panels]` in config.toml wins.
+    /// panels the user switched **off** (D-056 addendum 2 ruling 4, E-73) — a panel the file
+    /// does not name is on, so a panel added later arrives on. `[panels]` in config.toml wins.
     pub panels_rail: Option<String>,
+    pub panels_disabled: Option<Vec<String>>,
+    /// The old key (E-60: the panels switched on). Read once by [`load`] into
+    /// `panels_disabled` and never written again.
+    #[serde(skip_serializing)]
     pub panels_enabled: Option<Vec<String>>,
     /// The panel's width once dragged, and the panel that was open last (or none).
     pub panel_width: Option<u32>,
@@ -68,6 +73,7 @@ impl Default for UiFile {
             update_dont_ask: Vec::new(),
             close_dont_ask: false,
             panels_rail: None,
+            panels_disabled: None,
             panels_enabled: None,
             panel_width: None,
             panel_open: None,
@@ -207,7 +213,15 @@ impl UiStore {
             panels_enabled: pick(
                 "panels.enabled",
                 Value::from(c.panels.enabled.clone()),
-                d.panels_enabled.clone().map(Value::from),
+                d.panels_disabled.as_ref().map(|off| {
+                    Value::from(
+                        PANEL_IDS
+                            .iter()
+                            .filter(|id| !off.iter().any(|o| o == *id))
+                            .map(|id| id.to_string())
+                            .collect::<Vec<_>>(),
+                    )
+                }),
                 Value::from(c.panels.enabled.clone()),
             ),
             // A hand-edited ui.json out of range falls back rather than reaching the page.
@@ -335,9 +349,11 @@ impl UiStore {
                     },
                 };
             }
+            // Settings sends the panels that are on (its switches are unchanged); the file
+            // keeps the ones that are off.
             "panels_enabled" => {
                 refuse_config("panels.enabled")?;
-                d.panels_enabled = match value {
+                d.panels_disabled = match value {
                     Value::Null => None,
                     v => {
                         let ids = v
@@ -348,7 +364,13 @@ impl UiStore {
                             .collect::<Option<Vec<String>>>()
                             .ok_or_else(bad)?;
                         crate::config::panels_enabled_ok(&ids).map_err(|_| bad())?;
-                        Some(ids)
+                        Some(
+                            PANEL_IDS
+                                .iter()
+                                .filter(|id| !ids.iter().any(|i| i == *id))
+                                .map(|id| id.to_string())
+                                .collect(),
+                        )
                     }
                 };
             }
@@ -390,13 +412,42 @@ impl UiStore {
     }
 }
 
+/// The panels that existed when ui.json stored the ones switched on (E-60's `panels_enabled`).
+pub const LEGACY_PANEL_IDS: &[&str] = &["dashboard", "communication", "tasks"];
+
+/// `panels_disabled` as read: an unknown id (a panel this version does not have) is dropped;
+/// a repeated id refuses the file. A stored `panels_enabled` (no `panels_disabled` beside it)
+/// is read once: of the legacy ids, those it lacks are off; any later panel is on.
+fn panels_read(u: &mut UiFile) -> Result<(), ()> {
+    let legacy = u.panels_enabled.take();
+    if u.panels_disabled.is_none()
+        && let Some(on) = legacy
+    {
+        u.panels_disabled = Some(
+            LEGACY_PANEL_IDS
+                .iter()
+                .filter(|id| !on.iter().any(|o| o == *id))
+                .map(|id| id.to_string())
+                .collect(),
+        );
+    }
+    if let Some(off) = &mut u.panels_disabled {
+        if off.iter().enumerate().any(|(i, a)| off[..i].contains(a)) {
+            return Err(());
+        }
+        off.retain(|id| PANEL_IDS.contains(&id.as_str()));
+    }
+    Ok(())
+}
+
 /// Anything unreadable, oversized, of another schema or holding an unknown value → defaults.
 fn load(file: &Path) -> UiFile {
     let ok = std::fs::metadata(file).is_ok_and(|m| m.len() <= MAX_BYTES);
     let parsed: Option<UiFile> = ok
         .then(|| std::fs::read_to_string(file).ok())
         .flatten()
-        .and_then(|t| serde_json::from_str(&t).ok());
+        .and_then(|t| serde_json::from_str::<UiFile>(&t).ok())
+        .and_then(|mut u| panels_read(&mut u).ok().map(|()| u));
     match parsed {
         Some(u)
             if u.schema == 1
@@ -632,6 +683,119 @@ mod tests {
                 .input_style
                 .value,
             "simple"
+        );
+    }
+
+    /// D-056 addendum 2 ruling 4 (E-73): the file keeps the panels switched off, so a panel
+    /// added later is on. Extends `the_panel_choices_are_closed_and_config_wins`.
+    #[test]
+    fn the_file_keeps_the_panels_switched_off() {
+        let t = tempfile::tempdir().unwrap();
+        let c = cfg(&[]);
+        let s = UiStore::open(Some(t.path().to_path_buf()));
+        s.set(
+            &c,
+            "panels_enabled",
+            &serde_json::json!(["tasks", "attention"]),
+        )
+        .unwrap();
+        let text = std::fs::read_to_string(t.path().join(FILE_NAME)).unwrap();
+        let file: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(
+            file["panels_disabled"],
+            serde_json::json!(["dashboard", "communication"])
+        );
+        assert!(file.get("panels_enabled").is_none());
+        // Round trip.
+        let again = UiStore::open(Some(t.path().to_path_buf())).view(&c);
+        assert_eq!(
+            again.panels_enabled.value,
+            serde_json::json!(["tasks", "attention"])
+        );
+        assert_eq!(again.panels_enabled.source, "ui");
+        // An id this version does not know is dropped, not a refusal of the file.
+        std::fs::write(
+            t.path().join(FILE_NAME),
+            r#"{"schema":1,"input_style":"modal","panels_disabled":["tasks","weather"]}"#,
+        )
+        .unwrap();
+        let v = UiStore::open(Some(t.path().to_path_buf())).view(&c);
+        assert_eq!(v.input_style.value, "modal");
+        assert_eq!(
+            v.panels_enabled.value,
+            serde_json::json!(["dashboard", "communication", "attention"])
+        );
+        // A repeated id or a value that is not a list refuses the file (the defaults apply).
+        for bad in [
+            r#"{"schema":1,"input_style":"modal","panels_disabled":["tasks","tasks"]}"#,
+            r#"{"schema":1,"input_style":"modal","panels_disabled":"tasks"}"#,
+        ] {
+            std::fs::write(t.path().join(FILE_NAME), bad).unwrap();
+            let v = UiStore::open(Some(t.path().to_path_buf())).view(&c);
+            assert_eq!(v.input_style.value, "simple", "{bad}");
+            assert_eq!(
+                v.panels_enabled.value,
+                serde_json::json!(PANEL_IDS),
+                "{bad}"
+            );
+        }
+        // config.toml still wins.
+        let mut from_cfg = cfg(&["panels.enabled"]);
+        from_cfg.config.panels.enabled = vec!["dashboard".into()];
+        std::fs::write(
+            t.path().join(FILE_NAME),
+            r#"{"schema":1,"panels_disabled":["dashboard"]}"#,
+        )
+        .unwrap();
+        let s = UiStore::open(Some(t.path().to_path_buf()));
+        let v = s.view(&from_cfg);
+        assert_eq!(
+            (v.panels_enabled.value, v.panels_enabled.source),
+            (serde_json::json!(["dashboard"]), "config")
+        );
+        assert_eq!(
+            s.set(&from_cfg, "panels_enabled", &serde_json::json!(["tasks"]))
+                .unwrap_err()
+                .kind,
+            "set_in_config"
+        );
+    }
+
+    /// A ui.json written before E-73 holds the panels switched on: read once, then gone.
+    #[test]
+    fn a_stored_panels_enabled_is_read_once() {
+        let t = tempfile::tempdir().unwrap();
+        let c = cfg(&[]);
+        let file = t.path().join(FILE_NAME);
+        let open = |text: &str| {
+            std::fs::write(&file, text).unwrap();
+            UiStore::open(Some(t.path().to_path_buf()))
+        };
+        // All three that existed then: all four on.
+        let s = open(r#"{"schema":1,"panels_enabled":["dashboard","communication","tasks"]}"#);
+        assert_eq!(
+            s.view(&c).panels_enabled.value,
+            serde_json::json!(PANEL_IDS)
+        );
+        // Only tasks: dashboard and communication off, attention on.
+        let s = open(r#"{"schema":1,"panels_enabled":["tasks"]}"#);
+        assert_eq!(
+            s.view(&c).panels_enabled.value,
+            serde_json::json!(["tasks", "attention"])
+        );
+        // The old key is gone after the next save, whatever is saved.
+        s.set(&c, "panel_width", &Value::from(400)).unwrap();
+        let saved: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        assert!(saved.get("panels_enabled").is_none());
+        assert_eq!(
+            saved["panels_disabled"],
+            serde_json::json!(["dashboard", "communication"])
+        );
+        // Both keys: the new one is the answer.
+        let s = open(r#"{"schema":1,"panels_enabled":["tasks"],"panels_disabled":[]}"#);
+        assert_eq!(
+            s.view(&c).panels_enabled.value,
+            serde_json::json!(PANEL_IDS)
         );
     }
 
