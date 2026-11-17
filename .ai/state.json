@@ -1062,18 +1062,18 @@
     {
       "id": "E-71",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Close a project 5 seconds after one of its agents exits, with a cancel, per .ai/blueprints/desktop.md §Look and feel v2 V12 component 7 (D-061). After the restore task. Operator direction: `/exit` in one pane closes both agents and the project's session; a countdown was chosen because the app cannot tell `/exit` from a crash. With `[project] close_when_agents_exit = true` (default), on the active tab of a visible window, replace V9's \"one of several ended\" bar by \"The Engineer exited. Closing <project> in 5 s.\" with Keep open (focused) and Close now; at zero run V9's close without its confirm, close the tab and drop it from the open-tabs record. Keep open stops the countdown and hides the bar until the set of ended roles changes. A tab that is not active, or a hidden window, never counts down: mark the tab and start from 5 when the user comes to it. On a restored tab the first status read counts a role pane that is not running as ended. The number in the bar is text, no animation (D-054). With the setting false keep V9's bar as built. Apply only on the app's server; on the user's server nothing is killed. Keep the poll limit (active tab, visible window, one process per 5 s). Acceptance: UI tests for the countdown state machine (start, cancel, restart on a changed set, background tab, hidden window, setting false); window run under Xvfb with two real role panes and on-screen proof (D-060 ruling 3): zero closes the project and the other role's process is gone, Keep open leaves both panes, a background tab does not count down; pointer and keyboard parity for both buttons; screens of the countdown bar and the marked background tab, both themes, under .ai/screens/, each opened before the handoff; local `rein ci run`, hosted ci x3 and desktop-windows green; Tier 2 stamps.",
       "created_at": "2026-11-16T14:34:28.948Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-17T23:37:43.151Z",
+      "summary": "Agent-exit countdown (c513fb8): 5 s, Keep open / Close now, background tab marked + from 5, restored roles counted ended, setting off = V9 bar. Real-agents quit/reopen look done (sam …[full in LOG.md]",
       "depends_on": [
         "E-70"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-17T22:52:19.637Z"
+      "updated_at": "2026-11-17T23:37:43.152Z"
     },
     {
       "id": "E-72",

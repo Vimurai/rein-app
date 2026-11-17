@@ -4105,3 +4105,28 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - E-86's read (a) may fail; then the self-update needs a dependency and a new ruling.
 - The operator has not yet created the update key; E-86 and E-87 are built against a test key.
 ---
+---
+## Handoff — 2026-11-18 00:30 UTC
+**From**: Engineer → Architect
+**Trigger**: E-71 complete (desktop.md V12 component 7, D-061; addendum 3's real-agents look).
+
+### What was built
+- **E-71** at c513fb8. Hosted ci 44198278661 green ×3, desktop-windows 44198278427 green; local `rein ci run` PASS.
+- `ui/src/countdown.ts` (pure, clock passed in): one of several agents ended on the active tab of a visible window → "The Engineer exited. Closing <project> in N s." (5 s, text, no animation), Keep open (focused) / Close now; a changed set starts from 5; Keep open hides it until the set changes; zero → V9's close without its confirm. A background tab or hidden window never counts down: the tab gets an hourglass and starts from 5 when shown. A restored tab counts a role not running at its first read as ended. Setting off → V9's bar as built; all ended → V9's close as built. `useAgentPoll` (agent-bar.tsx) applies it on each answer and on a 250 ms tick that runs only while a tab counts down or is marked (no IPC). `shell.tsx` 1129 → 1117.
+- Tests: `agents.test.mjs` +4 (state machine), `pointer.test.mjs` marker. New `tests/e2e/countdown-screens.sh` (Xvfb, two role panes, stand-in agents): bar up; away mid-countdown nothing closes and the tab is marked; back → from 5; Keep open by keyboard (mocha) and pointer (light) leaves both panes; zero (mocha) and Close now by keyboard (light) close the project, the Architect's pane and process gone; Close now by pointer closes — PASS. `agents-screens.sh` pins `close_when_agents_exit = false` (V9's bar) and drops its all-exited step.
+- Screens (each opened): `.ai/screens/E-71/countdown-bar-{both}`, `marked-background-tab-{both}`.
+- **Real agents (D-061 addendum 3), with the operator's go:** a throwaway `rein init` project in /tmp, real `rein start` on the live `rein-app` server (only that project's session touched): session `$4 e71check` tagged, real `claude` in both role panes; quit → window gone, session alive (0 clients); reopened with no project → the same `$4` attached, both agents still running; Close project → gone; `rein` / `rein-app` untouched. Screens `.ai/screens/E-71/real-before-quit`, `real-reattached`, `real-close-confirm` (both agents waited at Claude Code's folder-trust prompt, so they did no work). Two findings: (1) `rein start` on a never-started project first asks which Claude account to use — in the window that prompt sits in the tab; (2) right after re-attach the agents' already-printed text is wrapped at the narrower size the window attached at before its first resize (Xvfb's start size); Claude Code redraws its prompt at the new width, earlier lines stay wrapped — cosmetic, nothing lost.
+- **My error, cleaned up:** diagnosing (1) I ran `rein start` once directly in a shell without the app's shim, which created session `e71check` on the operator's **default** tmux server; I removed it at once with `rein start --kill --yes` for that project only; the default server's own sessions (`em-locize`, `main`) were not touched.
+
+### Decisions made
+- None new.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **Architect:** review E-71. **Engineer:** E-89 is built and in review; then E-90.
+
+### Open risks
+- /tmp/e71real.* (the throwaway project) is left on disk; harmless, removable.
+---
