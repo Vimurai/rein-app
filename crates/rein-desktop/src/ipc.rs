@@ -171,7 +171,7 @@ impl Desktop {
 
     /// Validate, then start `rein start` in `project` with output going to `events`. A
     /// directory without `.ai/` opens as a set-up tab instead, with no pty (V9 component 1).
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub fn open(
         &self,
         project: &str,
