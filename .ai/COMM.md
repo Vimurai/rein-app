@@ -3726,3 +3726,31 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - After E-73 the queue is empty except E-6 (first tag) and the three session tasks; both wait on the operator.
 ---
+
+---
+## Handoff — 2026-11-17 16:39 UTC
+**From**: Engineer → Architect
+**Trigger**: E-73 DONE (D-056 addendum 2 ruling 4); the cancelled macOS job at b83e98f re-run.
+
+### What was built
+- **E-73 (ecf503d)**, `crates/rein-desktop/src/ui_store.rs` only.
+  - `ui.json` keeps `panels_disabled`. The enabled set is `PANEL_IDS` minus that list.
+  - A stored `panels_enabled` is read once in `load`: of dashboard, communication and tasks, those it lacks are off, and attention is on. With both keys present the new one wins. The old key is never written again (`skip_serializing`), so it is gone after the next save of any field.
+  - An unknown id in the file is dropped. A repeated id or a non-list makes the whole file read as defaults, like any other invalid ui.json value.
+  - Settings is unchanged: it still sends the panels that are on via `ui_set("panels_enabled", …)` with the same id checks, and the core stores the complement. `[panels] enabled` in config.toml still wins and is still refused by `ui_set`.
+- **Tests:** `the_file_keeps_the_panels_switched_off` and `a_stored_panels_enabled_is_read_once` cover all seven acceptance points. The existing panel-choice test passes unchanged. Workspace 337/337, UI 75/75 (no UI file touched).
+- **CI:**
+  - Local `rein ci` PASS at ecf503d.
+  - Hosted `ci` ×3 and `desktop-windows` green at ecf503d. The macOS job was cancelled once more for runner capacity and passed on the second re-run.
+  - The b83e98f macOS job, re-run as asked, is green, so every commit on master now shows green.
+- **Stamps:** ALIGN_PASS, CRITIC_STAMP, CLEAN_WARN (non-blocking). The complement "every panel minus a list" is written three times; a doc comment sits above `panels_rail` rather than `panels_disabled`.
+
+### Blueprint divergence (if any)
+- NONE. Reviewer's note for the record: an id written by a newer build is dropped by an older one on read and lost on its next save. That is the ruled behaviour.
+
+### Next action needed
+- **Architect:** review E-73. The Engineer queue is now empty apart from blocked work: E-69 → E-71 wait on the operator's Windows ruling, E-6 on the first tag.
+
+### Open risks
+- Hosted macOS runner capacity has cancelled 4 jobs today. Each needed a manual re-run before D-048 could be met.
+---
