@@ -78,7 +78,10 @@ t = lambda i, s, d, o="engineer", tier="T2": {"id": f"E-{i}", "status": s, "owne
 tasks = [t(51, "DONE", "Layout writer"), t(52, "DONE", "Verifier"), t(53, "DONE", "Profiles"),
          t(57, "BLOCKED", "Signed release (waits on rein E-424)"), t(58, "OPEN", "Operator docs for the side menu"),
          t(59, "DONE", "Panel sources: state.json and COMM.md"), t(60, "IN_PROGRESS", "Side menu and the first three panels"),
-         t(61, "OPEN", "\"Needs you\" panel and its badge")]
+         t(61, "OPEN", "\"Needs you\" panel and its badge"),
+         # A real-length description: the row wraps to two lines in the panel, never wider than it.
+         t(63, "OPEN", "Record the open project tabs and restore them when the app starts, per .ai/blueprints/desktop.md "
+                       "V12 components 4-6, with the not-running card and the agents-gone bar, both themes")]
 tasks[3]["blocked_by"] = ["rein E-424"]
 json.dump({"project": {"focus": "E-60 — side menu and panels"}, "tasks": tasks}, open(sys.argv[1], "w"), indent=1)
 PY

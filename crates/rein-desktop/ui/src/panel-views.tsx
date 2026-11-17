@@ -51,7 +51,7 @@ function TaskRow({ t }: { t: Task }) {
           <ChevronRight size={14} aria-hidden="true" className="mt-0.5 shrink-0 text-muted-foreground" />
         )}
         <span className="shrink-0 font-mono text-[12px] text-muted-foreground">{t.id}</span>
-        <span className={open ? "[overflow-wrap:anywhere]" : "truncate"}>{t.description || "—"}</span>
+        <span className={`min-w-0 flex-1 [overflow-wrap:anywhere] ${open ? "" : "line-clamp-2"}`}>{t.description || "—"}</span>
       </button>
       {open && (
         <dl className="m-0 mb-2 ml-6 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
@@ -122,7 +122,7 @@ function EntryItem({ e, first }: { e: Entry; first: boolean }) {
           <span className="[overflow-wrap:anywhere]">{e.title}</span>
         </span>
         <span className="pl-5 text-[12px] text-muted-foreground">{e.when}</span>
-        {e.trigger && <span className={`pl-5 text-[12px] text-foreground ${open ? "[overflow-wrap:anywhere]" : "truncate"}`}>{e.trigger}</span>}
+        {e.trigger && <span className={`min-w-0 pl-5 text-[12px] text-foreground [overflow-wrap:anywhere] ${open ? "" : "line-clamp-2"}`}>{e.trigger}</span>}
       </button>
       {open && (
         <div className="grid gap-2 pt-1 pl-6">
