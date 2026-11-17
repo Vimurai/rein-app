@@ -78,11 +78,25 @@ revision that needs a contract answer (see "Deferred").
 - **Descriptor** (JSON, schema 1):
   `{schema: 1, id, title, icon, source, view, options}` — `id` `[a-z][a-z0-9-]{1,31}`;
   `title` ≤ 40 characters, shown as text; `icon` a name from the app's bundled icon list;
-  `source` and `view` from the closed lists; `options` a closed set per view (group
-  order, row limit ≤ 200). Nothing else is accepted.
+  `source` and `view` from the closed lists; `options` a closed set per (view, source)
+  pair — `list` + `tasks`: `{groups, limit, done}`; `list` + `attention`: `{limit}`;
+  row limit ≤ 200 (D-056 addendum 2). Nothing else is accepted.
 - **Settings**: `[panels] rail`, `[panels] enabled = [ids]` (default: all four) in
   `config.toml` and Settings (one switch per panel); `ui.json`: last open panel per
   window and the panel width. Both under the existing closed key lists.
+  **`ui.json` stores the panels switched off (E-73, D-056 addendum 2):**
+  `panels_disabled: [ids]`, same id checks as the enabled list, no duplicates. Enabled
+  = every known panel id minus that list, so a panel added later is on. A file that
+  still holds `panels_enabled` is read once: the ids among `dashboard`,
+  `communication`, `tasks` that it lacks become `panels_disabled`; the old key is not
+  written again. An unknown id in `panels_disabled` is dropped, not an error (a newer
+  build may have written it). `config.toml`'s `[panels] enabled` still wins when set,
+  and Settings then shows the switches as fixed by the file, as today.
+- **Attention as built (E-61, accepted 2026-11-17):** "an update available" is rein's
+  per-tab "project out of date" and is not listed after Not now / Don't ask; health
+  warn / fail is one item for every project with no "go to tab" (install-scope health
+  belongs to the machine); the known-gap text also says the prompt is invisible while
+  the app is closed.
 - **Source results** are typed structs with hard caps: 500 tasks, 30 handoffs, 8 KiB of
   text per handoff, 200 attention items; a field over its cap is cut with a marker.
 - Nothing is written to a project. No panel data is stored between runs.

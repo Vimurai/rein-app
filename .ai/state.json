@@ -1094,6 +1094,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-17T14:15:15.863Z"
+    },
+    {
+      "id": "E-73",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Store the panels a user switched off, not the ones that are on, per .ai/blueprints/panels.md §Data Model \"ui.json stores the panels switched off\" (D-056 addendum 2 ruling 4). Replace `panels_enabled` in the app's ui.json by `panels_disabled` (same id checks, no duplicates); the enabled set is every known panel id minus that list, so a panel added later is on. Read a file that still holds `panels_enabled` once: the ids among dashboard, communication, tasks that it lacks become `panels_disabled`, attention is on, and the old key is not written again. Drop an unknown id in `panels_disabled` instead of refusing the file. Leave `[panels] enabled` in config.toml as it is and winning; the Settings switches look and behave as today. Acceptance: Rust tests in ui_store — round trip of `panels_disabled`; a legacy file with all three ids gives all four panels on; a legacy file with [\"tasks\"] gives dashboard and communication off and attention on; the legacy key is gone after the next save; an unknown id is dropped; a duplicate or a non-list value is refused; config.toml set still wins; UI tests for the Settings switches unchanged or extended, none deleted; local `rein ci run`, hosted ci x3 and desktop-windows green (D-048); Tier 2 stamps. Also re-run the cancelled macOS job of hosted ci at b83e98f.",
+      "created_at": "2026-11-17T15:33:30.188Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-17T15:33:30.196Z"
     }
   ],
   "stamps": [
