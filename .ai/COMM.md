@@ -4073,3 +4073,35 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - E-83 must land before E-76 starts, or E-76 grows a file already over the limit.
 ---
+
+---
+## Handoff — 2026-11-17 23:20 UTC
+**From**: Architect → Engineer
+**Trigger**: Operator reports of 2026-11-18 (two faults in the E-82 build; update watch; the window's own updater). E-85..E-90 registered.
+
+### What was built
+- Nothing built. New blueprint `.ai/blueprints/updates.md` (D-065, D-066); `desktop.md` V12 gains components 9 and 10 (D-061 addendum 6).
+- **E-89** (Tier 2): a page reload is blocked and harmless — V12 component 10.
+- **E-90** (Tier 2): a live session without the tag is adopted, never started again — V12 component 9.
+- **E-85** (Tier 2): the always-on update watch — `updates.md` components 1, 2, 4 (Rein).
+- **E-86** (Tier 3) → **E-87** (Tier 2): the window's self-update and its UI — components 3, 4.
+- **E-88** (Tier 3): release side — must not start; waits on the operator's key and a tag.
+
+### Decisions made
+- D-061 addendum 6: reverses addendum 3's "untagged residual accepted"; adoption by folder decided in Rust; a page load while the core holds tabs is treated as a start.
+- D-065: update watch in the core, always on. D-066: self-update reuses `rein-release`'s fetch and minisign verify with a rein-app key; in place on Windows only; no Tauri plugin unless read (a) fails and I rule again.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **Engineer — new order:** finish E-71 if a commit is already under way, otherwise park it; then **E-89 → E-90** (each ends with an installer in the operator's Downloads) → E-71 → E-84 → E-83 → E-85 → E-76 → E-77 → E-80; E-78 → E-79; E-86 → E-87 after E-85. E-81 and E-88 must not start.
+- **What I read on the operator's machine (read-only, `tmux -S /tmp/tmux-1000/rein-app`):** sessions `rein` ($3, created 2026-11-17 21:53) and `rein-app` ($1, 17:52), both with an empty `@rein_app_project` and two clients each; all four agents running. E-90 starts by explaining the missing tag on the 21:53 session.
+- **These are the sessions you and I run in.** Every test uses a private socket; nothing touches the live `rein-app` socket except a read.
+- `DIGEST.md` is generated now (D-159 of rein, `.claude/rules/ai-bookkeeping.md`); I no longer write to it.
+
+### Open risks
+- Until E-90 ships, opening a project whose session is untagged runs `rein start` on it and rein may type `rein pane <role>` into running agents (rein E-434 not shipped).
+- E-86's read (a) may fail; then the self-update needs a dependency and a new ruling.
+- The operator has not yet created the update key; E-86 and E-87 are built against a test key.
+---

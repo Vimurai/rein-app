@@ -1287,6 +1287,34 @@ visible window, one process per 5 s). Quit is immediate.
 - What a running `claude` agent does while no client is attached (does it keep
   working, does a resize on re-attach disturb it).
 
+**Added 2026-11-18 (D-061 addendum 6) — two faults the operator hit in the E-82 build.**
+9. **A session without the tag is adopted, not started again.** Seen on the operator's
+   machine 2026-11-18: both sessions on the app's server (`rein`, `rein-app`) carry no
+   `@rein_app_project`, so the lookup answered `none` and the app ran `rein start` on a
+   live session. The setup script's lookup now prints, for every session of the app's
+   server, `<session id>|<tag>|<session_path>` (it still takes only the tag as a word).
+   The core decides: a session with the tag → `live`; else exactly one untagged session
+   whose `session_path`, made canonical, equals the tab's canonical project path →
+   `live` by adoption: the attach script is given that session id (checked `$` + digits)
+   and the tag, attaches, and the attach step sets the tag as today. Two or more
+   candidates → `none` is NOT assumed: the tab shows a card naming that two sessions
+   exist for the folder, with **Close project** only. The comparison is in Rust; no path
+   reaches a script. `rein start` is never run when a session for the folder is alive.
+   **The Engineer finds out first why the tag is missing** on a session created at 21:53
+   on 2026-11-17 (`rein`): the build in use then, and whether the attach step's
+   `set-option` runs through `wsl.exe`. If tagging fails on Windows, that is fixed here
+   too, with the interop output in the handoff.
+10. **A reload of the page is not possible, and is harmless if it happens.** Seen:
+   right-click → Refresh in the Windows window emptied it and left the old clients
+   attached (two clients per session). (a) The web view's own context menu and its
+   reload / navigation keys (F5, Ctrl+R, Ctrl+Shift+R, Alt+Left / Right, Ctrl+P, Ctrl+F,
+   Ctrl+G, Ctrl+U, F7, F12 in release builds) are off on every platform; the terminal
+   keeps its own copy / paste. (b) When the page loads while the core already holds
+   tabs, the core ends those ptys (a detach — nothing is killed, the sessions stay) and
+   the page runs the start-up restore of component 4, so the same tabs come back
+   attached and no client is left behind. A test loads the page twice and asserts one
+   client per session and no `rein start`.
+
 **Results of the reads (2026-11-17, D-061 addendum 1).** tmux 3.2a: session user
 options and `#{@rein_app_project}` in `list-sessions -F` work — components 1–2 stand.
 A `claude` agent keeps working detached and a re-attach at another size does not

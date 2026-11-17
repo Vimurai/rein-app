@@ -2323,3 +2323,85 @@ Review only; nothing to reverse.
 
 ### Rollback
 E-83 is moves only — revert its commit. E-84 touches test harnesses only.
+
+---
+
+## D-061 addendum 6 — an untagged session is adopted; a page reload is blocked and harmless (2026-11-18)
+
+**Date**: 2026-11-18
+**Task**: E-89, E-90 (operator report while using the E-82 build)
+**Decision**: Two faults go to the head of the queue. `desktop.md` V12 components 9 and 10.
+
+### Why needed
+The operator reported: (1) right-click → Refresh empties the window; (2) clicking a project "opened new sessions and not the existing ones". Read on their machine (read-only, the app's socket): sessions `rein` and `rein-app` have no `@rein_app_project` and two attached clients each. So the lookup said `none`, the app ran `rein start` on a live session, and the clients of the page before the reload were never released.
+
+1. **This reverses D-061 addendum 3 ruling "the untagged-session residual is accepted".** It was accepted because rein fixes the re-send at its source (rein E-434). The operator hit it before that shipped, and one of the two sessions is younger than the tagging build, so the tag may also be failing on Windows. The app must not depend on the tag alone.
+2. **Adoption by folder, decided in the core.** An untagged session on the app's own server whose `session_path` equals the project's canonical path is attached to and then tagged. **Alternatives rejected:** look the session up by name (rein's naming is not ours to know — V12's rule stays); pass the path to the script (no path reaches a script); keep `rein start` and wait for rein E-434 (the operator loses a turn of work to typed text today).
+3. **Two candidates for one folder is shown, not guessed.**
+4. **Reload:** blocked at the web view, and made harmless in the core by treating a page load as a start (detach, then restore). **Alternative rejected:** re-binding the old ptys to the new page — a second output path, when V12's restore already does the job.
+
+### Impact
+- Unlocks: nothing; E-89 → E-90 run before E-71.
+- Risk if wrong: adoption attaches to a session the user started by hand in the same folder on the app's server — that is the session they would want.
+
+### Rollback
+Revert the two commits; the lookup returns to tag-only.
+
+---
+
+## D-065 — The update watch runs all the time, in the core
+
+**Date**: 2026-11-18
+**Task**: E-85 (operator direction: "only on open the watcher for rein update activates … should be active all the time")
+**Decision**: The core watches the installed Rein version (seconds) and the published one (every 30 minutes and on focus), and re-checks every open project when the installed version changes. `.ai/blueprints/updates.md` components 1, 2, 4.
+
+### Why needed
+Today the published check runs only when the Update dialog is opened and the project check once per tab open; an update done elsewhere is invisible to an open window.
+
+### Alternatives considered
+1. **A timer on the web side** — rejected: a hidden web view's timers are throttled (the reason status moved to the core, D-062).
+2. **A file-system watcher on the Rein home** — rejected: on Windows the home is inside WSL and cannot be watched from the native window; one small read on a timer works on all three systems and needs no dependency.
+3. **Poll the published version every minute** — rejected: "immediate" for a publication would need a push service; 30 minutes plus a check on focus is the honest bound without network cost, and the installed-version change is seen in seconds.
+4. **Chosen: `UpdateWatch` in the core.**
+
+### Constraints driving this decision
+- No added process on Linux / macOS; one constant read-only `wsl.exe` line on Windows until E-76's read can carry it.
+- The window still reads only `installed:` / `newest:` and the exit code of the CLI (D-045).
+
+### Impact
+- Unlocks: E-85. Adds the event `update` to the notification list of `status.md` §6 (built by whichever of E-78 / E-85 lands second).
+- Risk if wrong: background requests to the release host; bounded by the interval and `[updates] check = false`.
+
+### Rollback
+`[updates] check = false`, or revert E-85.
+
+---
+
+## D-066 — The window updates itself: in place on Windows, verified with our own key; a button and one ask per version
+
+**Date**: 2026-11-18
+**Task**: E-86, E-87, E-88 (operator direction: "plan an updater for our own rein-app … a button should appear and automatically ask for update with cool animations")
+**Decision**: The window checks a signed-by-us release document, offers a newer version with a title-bar button and a non-modal card, and on a click downloads, verifies (minisign with a baked rein-app key, then sha256) and runs the installer. In place on Windows only; on Linux and macOS the same button shows the package-manager command. `.ai/blueprints/updates.md` components 3–5.
+
+### Why needed
+The window is in no release; the operator copies installers by hand from workflow artifacts.
+
+### Alternatives considered
+1. **Tauri's updater plugin** — not chosen first: it reverses D-035 (no Tauri plugin), adds a dependency and a second signature scheme beside the one `rein-release` already implements and that was reviewed. It is the fallback if `rein-release` cannot run in the native Windows executable — then `dependency_gate` and a new ruling.
+2. **Let `rein-app update` (the CLI in WSL) update the window** — rejected: it would write a Windows executable from inside WSL and start it across the boundary.
+3. **Install without asking** — rejected: the operator asked to be asked; a silent restart of the window is a surprise even though the projects keep running.
+4. **In-place update on Linux / macOS** — deferred: `.deb` and Homebrew own those files.
+5. **Chosen: reuse `rein-release`'s fetch and verify with a second key; Windows NSIS in place.**
+
+### Constraints driving this decision
+- Tier 3: the app downloads and starts a program. `security_engineer`, `SEC_CLEARED`.
+- No command takes a URL, a version or a path from the web side; the capability file gains command names only.
+- Motion: D-054 stands; the effects of `updates.md` component 4 each run once and never loop.
+- **Operator must do:** create the rein-app update key and store its secret in the repository; say go for the first tag. E-88 does not start before that. No OS code-signing certificate is needed for the update itself.
+
+### Impact
+- Unlocks: E-86 → E-87; E-88 on the operator.
+- Risk if wrong: a compromised key or release account ships code to every window — the key is the single trust root, held only as a repository secret; no downgrade is possible.
+
+### Rollback
+`[updates] app = false` per user; revert the tasks; a bad release is superseded by a higher version.
