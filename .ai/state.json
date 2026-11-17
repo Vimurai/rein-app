@@ -918,16 +918,16 @@
     {
       "id": "E-61",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Build the \"Needs you\" panel and its badge per .ai/blueprints/panels.md (D-056) §Components 6-7. After the side-menu task. Implement the attention source as a pure function over every open tab's state and source results: a tab whose process ended, a tmux setup that refused, health warn / fail, an update available, BLOCKED tasks, no handoff for more than 30 minutes while a task is in progress, a terminal bell received in a tab without focus, and \"the last handoff mentions the operator\" (lines of its \"Next action needed\" section holding the word operator, shown as a quote and labelled a mention, not a fact). Each item names its project and has a \"go to tab\" action that only switches tabs. Add the attention descriptor, the count badge on the rail, and the 5 s stat per open tab that the badge needs (read and parse only on a size or mtime change; nothing while the window is hidden). Cap at 200 items. State the known gap in the panel's empty state and in docs/operator-guide.md: a permission prompt in a pane is not visible to the app until rein provides a signal. Acceptance: the rules tested as a pure function (each rule on and off, several tabs, caps); the bell marks only an unfocused tab and clears on focus; no panel action writes, runs a command or types into the terminal (test); screens under .ai/screens/<task>/ (D-052): the panel with items from two projects, the rail badge, the empty state, both themes; hosted ci x3 and desktop-windows green (D-048).",
       "created_at": "2026-11-13T11:44:45.253Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-17T14:57:34.620Z",
+      "summary": "133be2c: Needs you panel + badge; attention source (Rust) + pure rules (attention.ts); bell; gap text incl. app closed. UI 75/75, panel-screens PASS; local ci, hosted ci x3, desktop-windows green.",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-13T11:44:45.253Z"
+      "updated_at": "2026-11-17T14:57:34.621Z"
     },
     {
       "id": "E-62",
@@ -3237,6 +3237,33 @@
       "timestamp": "2026-11-17T12:25:37.190Z",
       "summary": "[TIER_2] E-72 Blueprint aligned + clean-code gate clear — 1 warning ignored (ALIGN_PASS: move only per D-056 addendum 1 ruling 4, behaviour-equivalent, shell.tsx 1155 <= 1156; CLEAN_WARN: shell.tsx 1155 lines still over the 1000 cap, a further split is out of E-72 scope)",
       "sha": "fb515ac097063a21d26499fe5364f7a0633d4a43",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-61",
+      "timestamp": "2026-11-17T14:31:02.679Z",
+      "summary": "E-61 HEAD 133be2c: standards-checker PASS (installed mirror, per-file) — 18 changed code/doc files, 0 errors, 0 warnings. Note: in-tree scripts/standards.mjs and engineering-standards.md absent in this repo; shell.tsx is 1159 lines (was 1155, +4, pre-existing size, not flagged by checker).",
+      "sha": "133be2c11e900f34f7571942c9406b52bc90def4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "rein-review-tier2",
+      "task_id": "E-61",
+      "timestamp": "2026-11-17T14:31:15.814Z",
+      "summary": "E-61 HEAD 133be2c: manual align vs panels.md §Components 6-7, Exec Constraints, D-061 add.1 r3 — all 8 rules, go-to-tab only, cap 200, cached 5s stat (visible+enabled only), 4th descriptor, badge, gap text incl. app-closed in empty state + operator-guide. Notes (non-blocking): 'update available' read as V9 out-of-date and suppressed by Not now/Don't ask; health item has no tab; bell flag mutated on shell tab object.",
+      "sha": "133be2c11e900f34f7571942c9406b52bc90def4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-61",
+      "timestamp": "2026-11-17T14:31:18.259Z",
+      "summary": "[TIER_2] E-61 HEAD 133be2c: blueprint aligned (ALIGN_PASS) + clean-code gate clear (CLEAN_PASS, 0 errors/0 warnings) — 3 non-blocking alignment notes recorded",
+      "sha": "133be2c11e900f34f7571942c9406b52bc90def4",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
