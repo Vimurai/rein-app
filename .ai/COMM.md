@@ -3921,3 +3921,29 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - macOS runner capacity: a manual re-run per commit again today.
 ---
+---
+## Handoff — 2026-11-17 19:15 UTC
+**From**: Engineer → Architect
+**Trigger**: E-74 complete (status.md §Components 7, D-063).
+
+### What was built
+- **E-74** at 27a4680. Hosted ci 44152080446 green ×3 (macOS after a runner-capacity re-run), desktop-windows 44152080319 green; local `rein ci run` PASS.
+- New `ui/src/panel-text.ts` (pure: structured-text blocks and inline `code` / **bold**, unclosed markers literal, linear; task title = first sentence or line, ≤ 90, cut at a word; filter; reader keys and stepping), `ui/src/structured-text.tsx` (text children only, closed element set `STRUCTURED_TAGS`), `ui/src/panel-reader.tsx` (sheet over the stage beside the panel, ≤ 720 px, 72-character column, Esc / Close back to the row, Up / Down and k / j in modal, Previous / Next / Close buttons; no pty resize, no IPC).
+- Tasks: id + title + chips (Tier, owner, blocked by, age), filter box, collapsible groups, Done collapsed. Communication: who → who · age, trigger as title (inline code / bold), the first six lines of "Next action needed", Read all. Panel body 13 px / 1.5; width 320 px to min(720 px, half the window), default 400 (`ui_store` 320..=720). `shell.tsx` line count unchanged (1138; one existing line now passes `modal`).
+- Tests: `panels.test.mjs` +8 (each construct, link / image / HTML literal with only allowed element names, title cut, filter, reader keys / stepping, chips, reader render, Communication / Tasks render); `caps_hold` extended. `panel-screens.sh` gains a keyboard-only readable section on a copy of this repository's own `.ai/`; typing 6.5 vs 6.5 ms.
+- Screens (each opened): `.ai/screens/E-74/` — `panel-tasks-filter-{both}`, `panel-reader-task-{both}` (E-74's whole description), `panel-reader-task-next-{both}`, `panel-reader-closed-{both}` (focus ring back on the row), `panel-communication-readable-{both}`, `panel-reader-handoff-{both}`, `panel-reader-handoff-next-{both}`, `panel-tasks-catppuccin-mocha` (Done collapsed).
+
+### Decisions made
+- None new.
+
+### Blueprint divergence (if any)
+- **Description cap 1024 → 4096** (`panel_sources.rs`): 64 of this repository's 82 tasks exceeded 1024, so the reader could not show "the full description". No blueprint pinned 1024; the 1 MiB reply cap is unchanged (with long descriptions the oldest rows drop earlier, marked cut). The string pre-trim is now DESCRIPTION + 1 so the cut marker still shows.
+- Handoff order in Communication is file order (an 18:36 entry appended after an 18:40 one shows first) — as before E-74, not changed.
+- Reader Esc returns focus to the row of the item last shown (after Up / Down that is a different row than the one opened from).
+
+### Next action needed
+- **Architect:** review E-74. **Engineer:** E-75 is committed (c96443d, 23dc4da) and in hosted CI; its handoff follows.
+
+### Open risks
+- macOS runner capacity: one manual re-run per commit again.
+---

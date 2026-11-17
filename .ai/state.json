@@ -1110,21 +1110,21 @@
     {
       "id": "E-74",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Make the side panels readable, per .ai/blueprints/status.md §Components 7 (D-063). Operator report 2026-11-17: \"text cannot be read when long\". Build: panel body 13 px / line height 1.5, default width 400 px, range 320 px to min(720 px, half the window); one structured-text component (paragraphs, bullet and numbered lists, code spans, fenced code blocks, bold, heading lines) that builds elements with text children only and never a link, image or HTML; the task title rule (first sentence or line, at most 90 characters, cut at a word) with tier / owner / blocked-by / age chips; the reader sheet over the terminal (at most 720 px, 72-character column, Esc returns focus to the row, Up / Down and k / j move between items, no pty resize) replacing the in-place task drawer; Communication entries showing the trigger and the first six lines of \"Next action needed\" with \"Read all\"; the Tasks filter box, collapsible groups, Done collapsed. No new IPC call. New code goes in its own files; shell.tsx must not grow. Acceptance: the web tests in status.md §Tests (each construct; link, image and HTML stay literal with only allowed element names in the DOM; title cut; reader focus and keys; filter; pointer and key parity); panel-screens.sh typing figure unchanged; screens in both themes of the reader with a real long task and a real long handoff from this repository's own .ai/, the Tasks filter, and Communication — every PNG opened before the handoff names it.",
       "created_at": "2026-11-17T18:18:57.483Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-17T19:28:35.226Z",
+      "summary": "Readable panels (27a4680): structured text (closed element set), reader sheet (Esc to row, Up/Down, k/j modal), task title + chips, filter, Done collapsed, Communication trigger + 6 …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-17T18:18:57.488Z"
+      "updated_at": "2026-11-17T19:28:35.226Z"
     },
     {
       "id": "E-75",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Triage the \"Needs you\" panel so it lists only what the operator can act on, per .ai/blueprints/status.md §Components 4 and 5 (D-063). Operator report 2026-11-17: \"Needs you gives a lot of things that are not important\". After the readable-panels task. Split items into Now (counted in the rail badge) and For information (collapsed, not counted) by the table in component 4: blocked tasks become one information row per project, out-of-date and health warn become information, health fail stays Now. Group rows by project under one header with one \"Go to tab\"; a row also goes to the tab. Add Dismiss for bell and mention rows via the command attention_dismiss(tab, key), kept in $XDG_STATE_HOME/rein-app/dismissed.json (schema 1, at most 500, SHA-256 of the text, temp file + rename; a dismissed item returns when its text changes). Move the rules from attention.ts into the core with a table test and make the attention source return the now / info lists. Keep the old \"no handoff for 30 minutes\" rule ONLY for a tab whose agents are running (the status task replaces it with stuck); do not build stuck or waiting here. Empty state \"Nothing needs you.\"; the known-gap text moves behind an \"About this list\" disclosure, two sentences. Acceptance: the core table test for each rule and group; dismiss and its return on changed text; a key the core did not send is refused with the fixed sentence; the badge counts Now only; screens in both themes of the panel with two projects, with only information items, and empty.",
       "created_at": "2026-11-17T18:19:03.172Z",
@@ -1133,11 +1133,9 @@
       "depends_on": [
         "E-74"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-74"
-      ],
-      "updated_at": "2026-11-17T18:19:03.173Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-17T19:28:35.230Z"
     },
     {
       "id": "E-76",
@@ -3506,6 +3504,69 @@
       "timestamp": "2026-11-17T18:02:11.728Z",
       "summary": "E-69 CI fix 2 (Tier 1, test-only, self-review, no critic agents): tmux-server.sh \"no tmux\" lookup check used PATH=/nonexistent:/bin; on macOS find is in /usr/bin so the setup refused with 24 (run 44139875599). Now a PATH dir of links to the 8 tools the setup uses, without tmux. Local suite PASS.",
       "sha": "349648bb020eaabd640eba6929602ff025875cc2",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-74",
+      "timestamp": "2026-11-17T18:49:07.000Z",
+      "summary": "standards-checker PASS — 29 files clean, 0 warnings, 0 errors (35ms)",
+      "sha": "2ee88caa690311ec06a718198597a6d5bcc1653b",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner-mcp",
+      "task_id": "E-74",
+      "timestamp": "2026-11-17T18:49:21.291Z",
+      "summary": "[TIER_2] align_diff WARN (ORPHANED_WORK: panel_sources.rs, ui_store.rs, panel-screens.sh not in architect.md) resolved by review: all three are covered by status.md §Components 7 (width 320..min(720, half window), default 400; panel-screens.sh typing figure in §Tests). Divergence flagged for Architect: panel_sources DESCRIPTION 1024 -> 4096 (no blueprint fixes 1024; needed so the reader shows the full description, 64/82 tasks exceeded it), Lenient pre-trim DESCRIPTION+1 keeps the cut marker; panel_ipc::fit still enforces the 1 MiB reply cap by dropping the oldest rows with Tasks.cut.",
+      "sha": "2ee88caa690311ec06a718198597a6d5bcc1653b",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-74",
+      "timestamp": "2026-11-17T18:49:23.752Z",
+      "summary": "[TIER_2] Blueprint aligned + clean-code gate clear — 0 warnings ignored (ALIGN_PASS with flagged DESCRIPTION 1024->4096 divergence; CLEAN_PASS 29 files, 0 errors/0 warnings)",
+      "sha": "2ee88caa690311ec06a718198597a6d5bcc1653b",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-75",
+      "timestamp": "2026-11-17T19:09:38.796Z",
+      "summary": "standards-checker PASS — 26 files clean, 0 errors, 0 warnings (13ms); attention.rs 856 lines total, ~435 production before cfg(test) at L436, under limit either way",
+      "sha": "1900615b9d4e114dd63493e0c084e66c061135f0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner-mcp",
+      "task_id": "E-75",
+      "timestamp": "2026-11-17T19:09:44.750Z",
+      "summary": "[TIER_2] align_diff WARN only (ORPHANED_WORK: autogenerated attention_items/attention_dismiss permission TOMLs = Tauri build output for the two commands; agents.rs running(tab) = the status.md E-75 'old quiet rule only for a tab whose agents run'); reviewed against status.md §4/§5/§API: Now/Info table minus stuck/waiting as scoped, dismiss of bell/mention only with fixed refusal, dismissed.json in XDG_STATE_HOME, no path/title/sentence from web. Divergences for the Architect: (1) new command attention_items(tabs, health) instead of the panel_data attention source returning now/info (§API); (2) web side still supplies ended/refused/bell/update/health (allowed by §API 'reports what only it knows'); (3) refused tab title mapped by tab-bar index on web side; (4) quiet rule effective only for the active tab (agents polled only for it).",
+      "sha": "1900615b9d4e114dd63493e0c084e66c061135f0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-75",
+      "timestamp": "2026-11-17T19:09:47.550Z",
+      "summary": "[TIER_2] Blueprint aligned + clean-code gate clear — ALIGN_PASS (aligner WARN: 1 orphaned-work warning, explained; 4 divergences recorded for the Architect, chiefly the new attention_items command in place of panel_data's attention source) + CLEAN_PASS (standards checker: 26 files, 0 errors, 0 warnings)",
+      "sha": "1900615b9d4e114dd63493e0c084e66c061135f0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "engineer-self-review",
+      "task_id": "E-75",
+      "timestamp": "2026-11-17T19:11:11.054Z",
+      "summary": "E-75 test fix (Tier 1, test-only, self-review, no critic agents): tests/capabilities.rs ALLOWED gains allow-attention-items / allow-attention-dismiss (local rein ci FAIL at c96443d: \"permission allow-attention-items is not in the IPC table\"); stale allow-quit-cancelled (removed by E-69) dropped. cargo test -p rein-desktop all targets pass.",
+      "sha": "c96443d0eb367fadd04ddf36c7280c07575601dd",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
