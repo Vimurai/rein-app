@@ -311,7 +311,13 @@ fn main() -> ExitCode {
                     // The start DIR is set before any page script runs, so the UI reads it at
                     // start instead of racing an event (see `start_dir_script`).
                     .initialization_script(start_dir_script(dir.as_deref()))
-                    .initialization_script(chrome_script(chrome()));
+                    .initialization_script(chrome_script(chrome()))
+                    // V12 10 (E-89): the page keeps F12 (the inspector) in debug builds only.
+                    .initialization_script(if cfg!(debug_assertions) {
+                        "Object.defineProperty(globalThis, '__REIN_DEBUG__', { value: true, writable: false });"
+                    } else {
+                        "Object.defineProperty(globalThis, '__REIN_DEBUG__', { value: false, writable: false });"
+                    });
             // V2: Windows draws its own title bar (the shadow keeps Windows 11's rounded corners
             // and drop shadow); macOS overlays the traffic lights on ours; Linux keeps the
             // native decorations unless config.toml turns them off (tiling window managers).
@@ -328,6 +334,19 @@ fn main() -> ExitCode {
             #[cfg(not(target_os = "macos"))]
             let window = window.transparent(start.window.opacity < 1.0);
             let window = window.build()?;
+            // Debug builds only: `REIN_DESKTOP_RELOAD_AFTER_MS` reloads the page once after that
+            // long, so a window test can prove a reload harmless (V12 10, E-89) while every
+            // reload key and menu of the web view stays off; release builds ignore it.
+            #[cfg(debug_assertions)]
+            if let Some(ms) = dirs::process_env("REIN_DESKTOP_RELOAD_AFTER_MS")
+                .and_then(|v| v.parse::<u64>().ok())
+            {
+                let w = window.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(ms.min(600_000)));
+                    let _ = w.eval("location.reload()");
+                });
+            }
             // A save of config.toml reaches the web side as `config_changed`.
             {
                 let handle = app.handle().clone();

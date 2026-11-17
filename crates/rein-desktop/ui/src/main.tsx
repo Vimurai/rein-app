@@ -6,12 +6,14 @@ import { createRoot } from "react-dom/client";
 import { TooltipProvider } from "../components/tooltip.tsx";
 import { App } from "./app.tsx";
 import { DEFAULT_CONFIG, type ConfigView } from "./config.ts";
-import { hardenPrototypes } from "./harden.ts";
+import { blockBrowserUi, hardenPrototypes } from "./harden.ts";
 import { loadFonts } from "./fonts.ts";
 import { configGet, uiGet } from "./ipc.ts";
 
 // Every import above has run; nothing untrusted has been handled yet.
 hardenPrototypes();
+// V12 10 (E-89): no reload, history or context menu of the web view's own; F12 only in debug.
+blockBrowserUi((globalThis as { __REIN_DEBUG__?: boolean }).__REIN_DEBUG__ === true);
 
 // The DIR `rein-desktop DIR` was started with, set by the core before this script ran.
 const startDir = (globalThis as { __REIN_START_DIR__?: string | null }).__REIN_START_DIR__ ?? null;

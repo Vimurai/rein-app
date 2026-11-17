@@ -36,7 +36,7 @@ export async function restoreAtStart(
   show: (index: number) => void,
   extra: string | null,
 ): Promise<number> {
-  const rec = await tabsRestore().catch(() => ({ tabs: [] as string[], active: null }));
+  const rec = await tabsRestore().catch(() => ({ tabs: [] as string[], active: null, reloaded: false }));
   const starts = rec.tabs.map((p) => open(p, true));
   const first = rec.active ?? 0;
   if (rec.tabs.length) show(first);
@@ -46,7 +46,8 @@ export async function restoreAtStart(
     if (start) await start().catch(() => {});
   }
   if (rec.tabs.length) show(first);
-  if (extra !== null) open(extra, false)?.();
+  // After a reload (V12 10) the command-line project was handled at the first load already.
+  if (extra !== null && !rec.reloaded) open(extra, false)?.();
   return rec.tabs.length;
 }
 

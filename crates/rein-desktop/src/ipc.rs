@@ -482,6 +482,33 @@ impl Desktop {
         alive().then_some(outcome)
     }
 
+    /// The page loaded again while the core still held tabs (a reload, V12 component 10):
+    /// end their ptys — a detach, nothing is killed, the sessions stay — and forget the
+    /// set-up tabs and cards, so the page's start-up restore brings the same tabs back with
+    /// one client each. Returns how many were held.
+    pub fn reset_page(&self) -> usize {
+        let mut ids: Vec<u32> = self.tabs().keys().copied().collect();
+        ids.extend(
+            self.projects
+                .setup
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .keys()
+                .copied(),
+        );
+        ids.extend(
+            self.cards
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .keys()
+                .copied(),
+        );
+        for id in &ids {
+            self.detach(*id);
+        }
+        ids.len()
+    }
+
     /// The window is closing: detach every tab and reap every child before the process ends.
     pub fn detach_all(&self) {
         self.tabs().clear();

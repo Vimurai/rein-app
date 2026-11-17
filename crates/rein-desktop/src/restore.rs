@@ -100,6 +100,9 @@ pub fn start(
 pub struct Restore {
     pub tabs: Vec<String>,
     pub active: Option<usize>,
+    /// The page was loaded again while tabs were held (V12 10): the command-line project was
+    /// handled at the first load and is not opened (or focused) again.
+    pub reloaded: bool,
 }
 
 /// `tabs_restore()`: the recorded tabs of this machine (on Windows: of this window's distro),
@@ -107,6 +110,11 @@ pub struct Restore {
 /// validation holds a recorded path to the rule a picked one meets.
 #[tauri::command(async)]
 pub fn tabs_restore(state: State<'_, Desktop>, projects: State<'_, Arc<ProjectStore>>) -> Restore {
+    // The page asks once per load: tabs still held mean it was reloaded (V12 10, E-89).
+    let held = state.reset_page();
+    if cfg!(debug_assertions) && held > 0 {
+        eprintln!("page-reset held={held}"); // read by tests/e2e/reload-screens.sh
+    }
     let (open, active) = projects.open_tabs();
     let distro = state.platform.distro();
     let mut tabs = Vec::new();
@@ -121,7 +129,11 @@ pub fn tabs_restore(state: State<'_, Desktop>, projects: State<'_, Arc<ProjectSt
         }
         tabs.push(t.path);
     }
-    Restore { tabs, active: at }
+    Restore {
+        tabs,
+        active: at,
+        reloaded: held > 0,
+    }
 }
 
 /// `tabs_record(tabs, active)`: the web side's tabs as core ids, in tab order.
@@ -229,6 +241,37 @@ mod tests {
             project_of(&d, gone.id).is_none(),
             "closing a card forgets it"
         );
+        d.detach_all();
+    }
+
+    /// V12 10 (E-89): a page load while tabs are held ends their ptys and forgets set-up
+    /// tabs and cards, so the restore that follows attaches each session once.
+    #[test]
+    fn a_reload_detaches_every_held_tab_and_kills_nothing() {
+        let (d, log) = desk(&["/p/live"]);
+        let take = || std::mem::take(&mut *log.lock().unwrap());
+        assert!(matches!(
+            restore(&d, "/p/live", Server::App),
+            Opened::Tab(_)
+        ));
+        let Opened::Card { card } = restore(&d, "/p/dead", Server::App) else {
+            panic!()
+        };
+        take();
+        assert_eq!(d.reset_page(), 2);
+        assert!(project_of(&d, card.id).is_none());
+        assert_eq!(
+            take(),
+            Vec::<String>::new(),
+            "nothing killed, nothing started"
+        );
+        assert_eq!(d.reset_page(), 0, "a first load holds nothing");
+        // The same project attaches again after the reload.
+        assert!(matches!(
+            restore(&d, "/p/live", Server::App),
+            Opened::Tab(_)
+        ));
+        assert_eq!(take(), ["setup live", "attach /p/live"]);
         d.detach_all();
     }
 

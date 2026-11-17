@@ -91,7 +91,7 @@ export interface CardView {
 export const tabStart = (tab: number, cols: number, rows: number, output: Channel<ArrayBuffer>) =>
   invoke<Tab>("tab_start", { tab, cols, rows, output });
 /** The open-tabs record (V12 component 4): its projects in tab order and the current one. */
-export const tabsRestore = () => invoke<{ tabs: string[]; active: number | null }>("tabs_restore", {});
+export const tabsRestore = () => invoke<{ tabs: string[]; active: number | null; reloaded: boolean }>("tabs_restore", {});
 /** Rewrite the record from this window's tabs, as core ids in tab order — never paths. */
 export const tabsRecord = (tabs: number[], active: number | null) => invoke<void>("tabs_record", { tabs, active });
 /** V9: Set up this project — the set-up tab gets its terminal (`rein init`, then `rein start`). */
