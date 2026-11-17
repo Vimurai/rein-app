@@ -241,28 +241,64 @@ fn a_folder_without_ai_is_known_in_the_one_validation_and_set_up_on_the_start_pa
     );
 }
 
-/// E-66 (V11): quit's kill-server and the sweep go through `wsl.exe` with constant argv;
-/// the sweep is one more word for the setup process, never a process of its own.
+/// V12 (E-69): the live lookup rides in the setup process — the tag is its one word after
+/// `--`, the answer its last line of output — and the attach child is the tab's own start
+/// path with the attach script and the tag as its positional word. A word that is not a tag
+/// reaches no process.
 #[test]
-fn quit_and_sweep_are_constant_wsl_calls() {
+fn lookup_and_attach_are_constant_wsl_calls_with_the_tag_as_one_word() {
+    let tag = "a".repeat(64);
+    let other = "b".repeat(64);
     let h = host(
         ready()
-            .on(&["-d", "Ubuntu", "-e", "sh", "-ls"], 0, b"")
-            .on(&["-d", "Ubuntu", "-e", "sh", "-s"], 0, b"")
-            .on(&["-d", "Ubuntu", "-e", "sh", "-s", "--", "sweep"], 0, b""),
+            .on(
+                &["-d", "Ubuntu", "-e", "sh", "-s", "--", &tag],
+                0,
+                b"live\n",
+            )
+            .on(
+                &["-d", "Ubuntu", "-e", "sh", "-s", "--", &other],
+                0,
+                b"none\n",
+            ),
     );
-    assert!(h.tmux_kill_server());
-    assert_eq!(h.tmux_setup(false), Ok(()));
-    assert_eq!(h.tmux_setup(true), Ok(()));
-    let calls = h.shell.calls();
-    let n = calls.len();
-    assert_eq!(calls[n - 3], ["-d", "Ubuntu", "-e", "sh", "-ls"]);
-    assert_eq!(calls[n - 2], ["-d", "Ubuntu", "-e", "sh", "-s"]);
+    use crate::tmux_server::Lookup;
+    assert_eq!(h.tmux_setup(&tag), Ok(Lookup::Live));
+    assert_eq!(h.tmux_setup(&other), Ok(Lookup::None));
+    let before = h.shell.calls().len();
+    for bad in [
+        "sweep",
+        "",
+        &"A".repeat(64),
+        &format!("{};x", "a".repeat(62)),
+    ] {
+        assert!(h.tmux_setup(bad).is_err(), "{bad:?}");
+        assert!(h.rein_attach(Path::new("/home/me/p"), bad).is_err());
+    }
     assert_eq!(
-        calls[n - 1],
-        ["-d", "Ubuntu", "-e", "sh", "-s", "--", "sweep"]
+        h.shell.calls().len(),
+        before,
+        "no process for a refused word"
     );
-    assert!(!host(Stub::default()).tmux_kill_server(), "WSL missing");
+
+    let spec = h.rein_attach(Path::new("/home/me/p"), &tag).unwrap();
+    let argv: Vec<String> = spec
+        .args
+        .iter()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    let start: Vec<String> = h
+        .rein_start(Path::new("/home/me/p"), crate::tmux_server::Server::App)
+        .unwrap()
+        .args
+        .iter()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(argv[..7], start[..7], "the start's own path");
+    assert_eq!(argv[7], crate::tmux_server::attach_script_wsl());
+    assert_eq!(argv[8..], ["sh".to_string(), tag]);
+    assert!(spec.tty_line);
+    assert_eq!(spec.command().get_env("WSLENV"), None);
 }
 
 /// E-64 (security review C3, C8): `rein team add` reaches WSL as the constant script and

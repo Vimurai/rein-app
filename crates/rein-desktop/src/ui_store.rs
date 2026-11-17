@@ -41,7 +41,8 @@ pub struct UiFile {
     pub close_when_agents_exit: Option<bool>,
     /// Projects whose out-of-date bar is not shown ("Don't ask for this project", V9 3).
     pub update_dont_ask: Vec<String>,
-    /// V11 (E-66): closing a project or quitting with agents running does not ask.
+    /// V11 (E-66): closing a project with agents running does not ask (tab close only since
+    /// V12 component 8 — quit never asks).
     pub close_dont_ask: bool,
     /// The side menu (panels.md §Data Model, E-60): the rail, `shown` | `hidden`, and the
     /// panels the user switched **off** (D-056 addendum 2 ruling 4, E-73) — a panel the file

@@ -31,7 +31,6 @@ pub const COMMANDS: &[&str] = &[
     "project_fix_cancel",
     "tab_close",
     "app_quit",
-    "quit_cancelled",
     "team_get",
     "team_add",
     "team_mode",

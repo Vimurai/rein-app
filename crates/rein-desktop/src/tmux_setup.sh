@@ -13,7 +13,7 @@
 # Exit: 0 ready; 20 HOME is not an absolute path of safe characters (space, quote, newline,
 # glob…); 21 a directory could not be made; 22 a directory or file is a symlink, or not what
 # it should be; 23 not owned by this user; 24 writable by group or others (or not checkable);
-# 25 a file could not be written.
+# 25 a file could not be written; 26 the tag word is not 64 lower-case hex.
 
 LC_ALL=C
 export LC_ALL
@@ -72,12 +72,21 @@ for f in "$H/bin/tmux" "$H/tmux.conf"; do
   [ -O "$f" ] || exit 23
 done
 
-# V11 (D-059, E-66): before the app's first tab on its own server, a server left from an
-# earlier run (a crash, a killed window, Windows closed under WSL) is ended, so `rein start`
-# never meets a live session. Only with the word `sweep`; only the app's socket, never the
-# user's default server.
-if [ "${1-}" = sweep ]; then
+# V12 (D-061, E-69): the live lookup. With a project tag as the one positional word, answer on
+# stdout whether a session of the app's own server carries that tag in its user option
+# `@rein_app_project`: `live` or `none` (no server, no tmux: `none`). Only the app's socket is
+# read; nothing is started, attached or ended. The tag is re-checked here: exactly 64 lower-case
+# hex characters, else exit 26.
+if [ $# -gt 0 ]; then
+  tag=$1
+  [ ${#tag} -eq 64 ] || exit 26
+  case $tag in *[!0-9a-f]*) exit 26 ;; esac
   unset TMUX TMUX_PANE
-  command -v tmux >/dev/null 2>&1 && tmux -L rein-app kill-server >/dev/null 2>&1
+  if command -v tmux >/dev/null 2>&1 &&
+    tmux -L rein-app list-sessions -F '#{@rein_app_project}' 2>/dev/null | grep -qx "$tag"; then
+    echo live
+  else
+    echo none
+  fi
 fi
 exit 0

@@ -114,14 +114,16 @@ pub trait Host: Send + Sync {
     ) -> Result<crate::project_file::FileBytes, crate::project_file::Unavailable>;
 
     /// Make or check the tmux home before a tab opens on the app's server (V8 3a): the
-    /// constant setup script on stdin — `/bin/sh -s` here, `sh -s` inside WSL on Windows.
-    /// With `sweep` (the app's first tab on its server, V11 component 3) the same process
-    /// also ends a leftover `rein-app` server. `Err` is the app's fixed sentence for why not.
-    fn tmux_setup(&self, sweep: bool) -> Result<(), &'static str>;
+    /// constant setup script on stdin — `/bin/sh -s` here, `sh -s` inside WSL on Windows —
+    /// with the project's `tag` (64 hex, [`crate::session_tag`]) as its one word. The same
+    /// process answers the live lookup (V12 component 2): whether a session on the app's
+    /// server carries that tag. `Err` is the app's fixed sentence for why not.
+    fn tmux_setup(&self, tag: &str) -> Result<crate::tmux_server::Lookup, &'static str>;
 
-    /// Quit (V11 component 2): [`crate::tmux_server::KILL_SERVER`] on stdin, at most
-    /// [`crate::tmux_server::QUIT_LIMIT`]. `false`: it did not finish in time or could not start.
-    fn tmux_kill_server(&self) -> bool;
+    /// The pty child that attaches to the session tagged `tag` on the app's server (V12
+    /// component 3), in `project`: the constant attach script with the tag as its one word.
+    /// It never runs `rein start`.
+    fn rein_attach(&self, project: &Path, tag: &str) -> Result<ChildSpec, IpcError>;
 
     /// `:open` Tab completion (E-36): directories whose path starts with `prefix`, each ending
     /// in `/`, a bounded number, sorted. Hidden ones only when the typed name

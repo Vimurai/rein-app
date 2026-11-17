@@ -32,6 +32,7 @@ mod projects;
 mod pty;
 mod pty_sys;
 mod security;
+mod session_tag;
 #[cfg(unix)]
 mod single_instance;
 #[cfg(windows)]
@@ -276,7 +277,6 @@ fn main() -> ExitCode {
             project_setup::project_fix_cancel,
             lifecycle::tab_close,
             lifecycle::app_quit,
-            lifecycle::quit_cancelled,
             team::team_get,
             team::team_add,
             team::team_mode
@@ -355,26 +355,13 @@ fn main() -> ExitCode {
         })
         .build(tauri::generate_context!());
     let result = result.map(|app| {
-        app.run(|app, event| match event {
-            // V11 (E-66): a native close with projects on the app's server is held once for
-            // the web side's confirm.
-            tauri::RunEvent::WindowEvent {
-                event: tauri::WindowEvent::CloseRequested { api, .. },
-                ..
-            } => {
-                if !lifecycle::on_close_requested(app, &app.state::<ipc::Desktop>()) {
-                    api.prevent_close();
-                }
+        // Every exit: every tab is detached and every pty child reaped before the process ends
+        // (desktop.md §Components 2). No server is ended and nothing asks (V12 component 8,
+        // D-061): the sessions keep running and are attached to next time.
+        app.run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                app.state::<ipc::Desktop>().detach_all();
             }
-            // Every exit: the app's server is ended (V11 2, at most 3 s, once — a confirmed
-            // quit has done it already), then every tab is detached and every pty child reaped
-            // before the process ends (desktop.md §Components 2). The user's server: untouched.
-            tauri::RunEvent::Exit => {
-                let d = app.state::<ipc::Desktop>();
-                lifecycle::end_server(&d);
-                d.detach_all();
-            }
-            _ => {}
         })
     });
     match result {

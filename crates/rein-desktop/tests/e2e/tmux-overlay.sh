@@ -68,10 +68,13 @@ check() { # check <label> <expected> <actual>
   if [ "$2" = "$3" ]; then ok "$1"; else no "$1 — expected [$2], got [$3]"; fi
 }
 C='#1e1e2e #cdd6f4 #a6adc8 #6c7086 #cba6f7'
+# V12 (E-69): the project tag is the last word — set as @rein_app_project on the app's server.
+TAG=-
+[ "$SERVER" = app ] && TAG=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 overlay() { # overlay <tty> <mode> → exit code
   local code=0
   # shellcheck disable=SC2086
-  HOME="$W/home" /bin/sh -s -- "$1" "$2" $C "$SERVER" <"$SCRIPT" >/dev/null 2>&1 || code=$?
+  HOME="$W/home" /bin/sh -s -- "$1" "$2" $C "$SERVER" "$TAG" <"$SCRIPT" >/dev/null 2>&1 || code=$?
   echo "$code"
 }
 sopt() { tmux show-options -t "$1" -v "$2" 2>/dev/null || true; }
@@ -106,14 +109,22 @@ wait_for attached 2 || { echo "clients did not attach" >&2; exit 1; }
 app_tty="$(b display-message -p -t app '#{pane_tty}')"
 echo "app client: $app_tty"
 
-check "bad arguments exit 2" 2 "$(HOME="$W/home" /bin/sh -s -- /dev/sda hidden $C "$SERVER" <"$SCRIPT" >/dev/null 2>&1; echo $?)"
-check "a server word other than app or user exits 2" 2 "$(HOME="$W/home" /bin/sh -s -- /dev/pts/1 hidden $C mine <"$SCRIPT" >/dev/null 2>&1; echo $?)"
-check "a colour that is not #rrggbb exits 2" 2 "$(HOME="$W/home" /bin/sh -s -- "$app_tty" hidden red '#000000' '#000000' '#000000' '#000000' "$SERVER" <"$SCRIPT" >/dev/null 2>&1; echo $?)"
+check "bad arguments exit 2" 2 "$(HOME="$W/home" /bin/sh -s -- /dev/sda hidden $C "$SERVER" "$TAG" <"$SCRIPT" >/dev/null 2>&1; echo $?)"
+check "a server word other than app or user exits 2" 2 "$(HOME="$W/home" /bin/sh -s -- /dev/pts/1 hidden $C mine "$TAG" <"$SCRIPT" >/dev/null 2>&1; echo $?)"
+check "a colour that is not #rrggbb exits 2" 2 "$(HOME="$W/home" /bin/sh -s -- "$app_tty" hidden red '#000000' '#000000' '#000000' '#000000' "$SERVER" "$TAG" <"$SCRIPT" >/dev/null 2>&1; echo $?)"
 check "tmux older than 3.2 exits 4, nothing set" 4 "$(PATH="$W/old:/usr/bin:/bin" overlay "$app_tty" hidden)"
-check "no tmux exits 3" 3 "$(PATH=/nonexistent HOME="$W/home" /bin/sh -s -- "$app_tty" hidden $C "$SERVER" <"$SCRIPT" >/dev/null 2>&1; echo $?)"
+check "no tmux exits 3" 3 "$(PATH=/nonexistent HOME="$W/home" /bin/sh -s -- "$app_tty" hidden $C "$SERVER" "$TAG" <"$SCRIPT" >/dev/null 2>&1; echo $?)"
 check "  ... and left session one alone" "" "$(sopt one status)"
 
 check "hidden: exit 0" 0 "$(overlay "$app_tty" hidden)"
+if [ "$SERVER" = app ]; then
+  check "the tag is set on the app's session" "$TAG" "$(sopt one @rein_app_project)"
+  check "  ... and on no other session" "" "$(sopt two @rein_app_project)"
+  check "a tag on the user's server word exits 2" 2 "$(HOME="$W/home" /bin/sh -s -- "$app_tty" hidden $C user "$TAG" <"$SCRIPT" >/dev/null 2>&1; echo $?)"
+  check "a tag that is not 64 hex exits 2" 2 "$(HOME="$W/home" /bin/sh -s -- "$app_tty" hidden $C app "${TAG%?}G" <"$SCRIPT" >/dev/null 2>&1; echo $?)"
+else
+  check "no tag on the user's server" "" "$(sopt one @rein_app_project)"
+fi
 check "hidden: status off on the app's session" off "$(sopt one status)"
 check "hidden: message line in the accent" "fg=#cba6f7,bg=#1e1e2e" "$(sopt one message-style)"
 check "hidden: pane borders on every window" "fg=#6c7086" "$(wopt "$w1" pane-border-style)"
@@ -155,6 +166,7 @@ check "  ... and the user's own window value" 'fg=#654321' "$(wopt "$w2" pane-bo
 check "  ... and unsets every option the user had not set" "" "$(for o in status status-left message-style message-command-style; do sopt one "$o"; done)$(for w in "$w1" "$w3"; do for o in pane-border-style pane-active-border-style mode-style window-status-format window-status-current-format; do wopt "$w" "$o"; done; done)$(wopt "$w2" mode-style)"
 check "  ... and leaves no saved copy behind" 0 "$(tmux show-options -t one | grep -c @rein-saved || true)$(for w in $(tmux list-windows -t one -F '#{window_id}'); do tmux show-options -w -t "$w" | grep -c @rein-saved || true; done | tr -d '0\n')"
 check "the sessions are all still there" "one two" "$(tmux list-sessions -F '#{session_name}' | sort | tr '\n' ' ' | sed 's/ $//')"
+[ "$SERVER" = app ] && check "the tag outlives the detach (the restore never touches it)" "$TAG" "$(sopt one @rein_app_project)"
 
 # E-56: a fresh `rein start` attaches seconds after the tab opens (two panes, each waited on
 # until its shell is ready). The overlay waits for the client: here it attaches 12 s after

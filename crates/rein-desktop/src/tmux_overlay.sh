@@ -1,8 +1,10 @@
 # rein-app tmux overlay (desktop.md §Look and feel v2 V6, D-050). A constant script, fed on
-# stdin:   sh -s -- <client tty> <hidden|app|keep|off> <bg> <fg> <muted> <border> <accent> <app|user>
-# The last word is the tmux server the tab's session runs on (V8, E-57): `app` — rein-app's own
+# stdin:   sh -s -- <client tty> <hidden|app|keep|off> <bg> <fg> <muted> <border> <accent> <app|user> <tag|->
+# The eighth word is the tmux server the tab's session runs on (V8, E-57): `app` — rein-app's own
 # (socket rein-app; the script then calls `tmux -L rein-app` and never starts a server), `user`
-# — the user's default server.
+# — the user's default server. The last is the project tag (V12 component 1, E-69): 64
+# lower-case hex, set as the session's user option `@rein_app_project` on the app's server —
+# whatever the mode, `off` included — so the app finds the session again; `-` sets nothing.
 # It styles the session the client on <client tty> is attached to with a closed list of
 # session options (and window options per window of that session), and installs a
 # `client-detached` hook that puts the user's own values back when that client detaches.
@@ -15,9 +17,14 @@
 # session. Exit: 0 done, 2 bad arguments, 3 no tmux, 4 tmux older than 3.2, 5 no client on
 # that tty within 60 s, 6 tmux refused an option.
 
-[ $# -eq 8 ] || exit 2
-tty=$1 mode=$2 bg=$3 fg=$4 muted=$5 border=$6 accent=$7 server=$8
+[ $# -eq 9 ] || exit 2
+tty=$1 mode=$2 bg=$3 fg=$4 muted=$5 border=$6 accent=$7 server=$8 tag=$9
 case $server in app | user) ;; *) exit 2 ;; esac
+if [ "$tag" != - ]; then
+  [ "$server" = app ] || exit 2
+  [ ${#tag} -eq 64 ] || exit 2
+  case $tag in *[!0-9a-f]*) exit 2 ;; esac
+fi
 case $tty in
   /dev/pts/*) n=${tty#/dev/pts/} ;;
   /dev/ttys*) n=${tty#/dev/ttys} ;;
@@ -97,6 +104,10 @@ RESTORE=$(printf '{ for o in %s; do v=$(tmux show-options -qv -t \\$%s "@rein-sa
   "$SOPTS" "$s" "$s" "$s" "$s" "$s" "$WOPTS" "$HOOKS" "$s")
 
 tmux run-shell "$RESTORE" >/dev/null 2>&1
+# V12: the tag outlives the overlay — the detach hook's restore never touches it.
+if [ "$tag" != - ]; then
+  tmux set-option -t "$sid" @rein_app_project "$tag" >/dev/null 2>&1 || exit 6
+fi
 [ "$mode" = off ] && exit 0
 
 fail=0

@@ -1,26 +1,21 @@
-//! A project on the app's own tmux server lives only while its tab does (desktop.md §Look and
-//! feel v2 V11, D-059, E-66). Closing a started tab closes its project (V9's close); quitting
-//! ends the app's server with one constant `tmux -L rein-app kill-server`; the first tab of a
-//! run sweeps a server left from an earlier one (in the V8 setup process, `ipc.rs`). Nothing
-//! here touches the user's own server: a tab on it closes as before, its session running.
+//! Closing a project and quitting (desktop.md §Look and feel v2 V11 component 1, V12
+//! component 8; D-059, D-061). Closing a started tab on the app's own tmux server closes its
+//! project (V9's close). Quitting is not an event for the projects (V12): no confirm, nothing
+//! killed — the ptys end, tmux detaches the app's clients and the sessions keep running, to
+//! be attached to again (`ipc.rs`, the live lookup). Nothing here touches the user's own
+//! server: a tab on it closes as before, its session running.
 
-use std::sync::atomic::Ordering;
-
-use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
 use crate::agents::Close;
 use crate::ipc::{Desktop, IpcError};
 use crate::tmux_server::Server;
 
-/// Told to the web side when a native close was held for its confirm.
-pub const EVENT_QUIT_REQUESTED: &str = "quit_requested";
-
 /// Close `tab` (V11 component 1). On the app's server: V9's close — `{confirm: roles}` when an
 /// agent is running or not known and `confirm_running` is false, else `rein start --kill
 /// --yes`, then the tab detaches. On the user's server, or for a set-up tab: it detaches.
-/// The tab goes even when the kill failed (the next run's sweep ends that session); the
-/// failure is the answer's error.
+/// The tab goes even when the kill failed (that session keeps running and is attached to
+/// again when the project is next opened); the failure is the answer's error.
 pub fn close_tab(d: &Desktop, tab: u32, confirm_running: bool) -> Result<Close, IpcError> {
     let on_app = d
         .tab_target(tab)
@@ -39,28 +34,6 @@ pub fn close_tab(d: &Desktop, tab: u32, confirm_running: bool) -> Result<Close, 
     Ok(Close::Closed { closed: true })
 }
 
-/// `app_quit`'s answer when it does not exit.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct QuitConfirm {
-    /// How many projects run on the app's server.
-    pub confirm: usize,
-}
-
-/// End the app's server once for this quit (V11 component 2): at most 3 s, whatever the
-/// answer. Only when a tab runs on it — with `tmux.server = "user"` nothing is touched.
-pub fn end_server(d: &Desktop) {
-    if d.app_tabs() > 0 && !d.server_ended.swap(true, Ordering::AcqRel) {
-        let _ = d.platform.tmux_kill_server();
-    }
-}
-
-/// Quit: `{confirm: n}` when `n` projects run on the app's server and the operator has not
-/// confirmed; else the server is ended and the app exits.
-pub fn quit_answer(d: &Desktop, confirm_running: bool) -> Option<QuitConfirm> {
-    let n = d.app_tabs();
-    (n > 0 && !confirm_running).then_some(QuitConfirm { confirm: n })
-}
-
 #[tauri::command(async)]
 pub fn tab_close(
     state: State<'_, Desktop>,
@@ -70,37 +43,12 @@ pub fn tab_close(
     close_tab(&state, tab, confirm_running)
 }
 
-/// `app_quit(confirm_running)` → `{confirm: n}`, or the app exits (V11 "Interface contracts").
+/// `app_quit()` (V12 component 8): every tab detached, every pty child reaped, then the app
+/// exits. No confirm, no `kill-server`: the sessions outlive the app.
 #[tauri::command(async)]
-pub fn app_quit(
-    app: AppHandle,
-    state: State<'_, Desktop>,
-    confirm_running: bool,
-) -> Option<QuitConfirm> {
-    if let Some(ask) = quit_answer(&state, confirm_running) {
-        return Some(ask);
-    }
-    end_server(&state);
+pub fn app_quit(app: AppHandle, state: State<'_, Desktop>) {
     state.detach_all();
     app.exit(0);
-    None
-}
-
-/// A native close (title bar, window manager): with projects on the app's server, the first
-/// one is held and the web side asks (`quit_requested`); a second one while that is pending
-/// goes through, so a stuck page cannot keep the window open. `true`: let it close.
-pub fn on_close_requested(app: &AppHandle, d: &Desktop) -> bool {
-    if d.app_tabs() == 0 || d.close_held.swap(true, Ordering::AcqRel) {
-        return true;
-    }
-    let _ = app.emit(EVENT_QUIT_REQUESTED, ());
-    false
-}
-
-/// The web side answered the held close with Cancel: the next native close is held again.
-#[tauri::command(async)]
-pub fn quit_cancelled(state: State<'_, Desktop>) {
-    state.close_held.store(false, Ordering::Release);
 }
 
 #[cfg(all(test, unix))]
@@ -110,23 +58,32 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::{Arc, Mutex};
 
-    /// Records the lifecycle calls; every child is a short `sleep`.
+    /// Records the lifecycle calls; every child is a short `sleep`. The lookup answers `live`
+    /// for the tags in `.1`.
     #[derive(Default)]
-    struct Rec(Arc<Mutex<Vec<String>>>);
+    struct Rec(Arc<Mutex<Vec<String>>>, Vec<String>);
+
+    fn sleeper(project: &Path) -> ChildSpec {
+        ChildSpec {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), "sleep 30".into()],
+            cwd: Some(project.into()),
+            env_remove: crate::local_host::ENV_REMOVED,
+            env_set: crate::local_host::ENV_SET,
+            tty_line: false,
+        }
+    }
 
     impl crate::host::Host for Rec {
         fn project_dir(&self, input: &str) -> Result<(PathBuf, crate::host::Found), IpcError> {
             Ok((PathBuf::from(input), crate::host::Found::Project))
         }
-        fn rein_start(&self, project: &Path, _: Server) -> Result<ChildSpec, IpcError> {
-            Ok(ChildSpec {
-                program: "/bin/sh".into(),
-                args: vec!["-c".into(), "sleep 30".into()],
-                cwd: Some(project.into()),
-                env_remove: crate::local_host::ENV_REMOVED,
-                env_set: crate::local_host::ENV_SET,
-                tty_line: false,
-            })
+        fn rein_start(&self, project: &Path, s: Server) -> Result<ChildSpec, IpcError> {
+            self.0
+                .lock()
+                .unwrap()
+                .push(format!("start {} {}", project.display(), s.word()));
+            Ok(sleeper(project))
         }
         fn rein_setup(&self, _: &Path, _: Server) -> Result<ChildSpec, IpcError> {
             unreachable!()
@@ -153,13 +110,25 @@ mod tests {
         ) -> Result<crate::project_file::FileBytes, crate::project_file::Unavailable> {
             unreachable!()
         }
-        fn tmux_setup(&self, sweep: bool) -> Result<(), &'static str> {
-            self.0.lock().unwrap().push(format!("setup sweep={sweep}"));
-            Ok(())
+        fn tmux_setup(&self, tag: &str) -> Result<crate::tmux_server::Lookup, &'static str> {
+            let live = self.1.iter().any(|t| t == tag);
+            self.0
+                .lock()
+                .unwrap()
+                .push(format!("setup {}", if live { "live" } else { "none" }));
+            Ok(if live {
+                crate::tmux_server::Lookup::Live
+            } else {
+                crate::tmux_server::Lookup::None
+            })
         }
-        fn tmux_kill_server(&self) -> bool {
-            self.0.lock().unwrap().push("kill-server".into());
-            true
+        fn rein_attach(&self, project: &Path, tag: &str) -> Result<ChildSpec, IpcError> {
+            assert_eq!(tag, crate::session_tag::tag(None, project));
+            self.0
+                .lock()
+                .unwrap()
+                .push(format!("attach {}", project.display()));
+            Ok(sleeper(project))
         }
         fn complete_dir(&self, _: &str) -> Result<Vec<String>, IpcError> {
             unreachable!()
@@ -207,26 +176,28 @@ mod tests {
     }
 
     #[test]
-    fn the_app_server_lives_with_its_tabs_and_the_users_is_never_touched() {
+    fn a_live_session_is_attached_to_and_quit_kills_nothing() {
         let log = Arc::new(Mutex::new(Vec::new()));
-        let d = Desktop::new(Box::new(Rec(Arc::clone(&log))));
+        let live = crate::session_tag::tag(None, Path::new("/tmp/b"));
+        let d = Desktop::new(Box::new(Rec(Arc::clone(&log), vec![live])));
         let take = || std::mem::take(&mut *log.lock().unwrap());
         let open = |p: &str, s: Server| opened(d.open(p, 80, 24, Arc::new(Quiet), s).unwrap());
 
-        // The user's server: no setup, no sweep, no kill on close, nothing at quit.
+        // The user's server: no setup, no lookup, no kill on close.
         let u = open("/tmp/user-proj", Server::User);
+        assert_eq!(take(), ["start /tmp/user-proj user"]);
         assert_eq!(
             close_tab(&d, u.id, false).unwrap(),
             Close::Closed { closed: true }
         );
-        assert_eq!(quit_answer(&d, false), None);
-        end_server(&d);
         assert_eq!(take(), Vec::<String>::new());
 
-        // The app's server: the first tab sweeps in its setup, the second does not.
+        // The app's server: no session tagged for /tmp/a → rein start; /tmp/b's session is
+        // live → attached to, and rein start is never run on it (V12 components 2-3).
         let a = open("/tmp/a", Server::App);
+        assert_eq!(take(), ["setup none", "start /tmp/a app"]);
         let b = open("/tmp/b", Server::App);
-        assert_eq!(take(), ["setup sweep=true", "setup sweep=false"]);
+        assert_eq!(take(), ["setup live", "attach /tmp/b"]);
 
         // Tab close with the agents' status not known: asks, kills nothing, keeps the tab.
         assert_eq!(
@@ -243,36 +214,47 @@ mod tests {
         assert_eq!(take(), ["kill /tmp/a app"]);
         assert!(d.tab_project(a.id).is_none() && d.tab_project(b.id).is_some());
 
-        // Quit: asks with the count, then ends the app's server once.
-        assert_eq!(quit_answer(&d, false), Some(QuitConfirm { confirm: 1 }));
-        assert_eq!(quit_answer(&d, true), None);
-        end_server(&d);
-        end_server(&d); // the exit after a confirmed quit: not again
-        assert_eq!(take(), ["kill-server"]);
+        // Quit (V12 component 8): the tabs detach, nothing is asked or killed.
         d.detach_all();
+        assert_eq!(take(), Vec::<String>::new());
     }
 
-    /// The constants: `kill-server` only ever with the app's socket name.
+    /// V12 "Security": with the sweep and the quit kill gone, no script the app runs holds
+    /// `kill-server` — every `.sh` beside the source and every script built in Rust.
     #[test]
-    fn kill_server_names_the_apps_socket_only() {
-        for script in [
-            crate::tmux_server::KILL_SERVER,
-            include_str!("tmux_setup.sh"),
-        ] {
-            let code: Vec<&str> = script
-                .lines()
-                .filter(|l| !l.trim_start().starts_with('#'))
-                .collect();
-            let uses: Vec<&&str> = code.iter().filter(|l| l.contains("kill-server")).collect();
-            assert!(!uses.is_empty());
-            for l in uses {
-                assert!(l.contains("tmux -L rein-app kill-server"), "{l}");
+    fn no_script_holds_kill_server() {
+        fn shell_files(dir: &Path, out: &mut Vec<PathBuf>) {
+            for e in std::fs::read_dir(dir).unwrap() {
+                let p = e.unwrap().path();
+                if p.is_dir() {
+                    shell_files(&p, out);
+                } else if p.extension().is_some_and(|x| x == "sh") {
+                    out.push(p);
+                }
             }
-            assert!(!code.iter().any(|l| l.contains("kill-session")));
         }
-        assert_eq!(
-            crate::tmux_server::QUIT_LIMIT,
-            std::time::Duration::from_secs(3)
+        let mut files = Vec::new();
+        shell_files(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut files,
         );
+        assert!(files.len() >= 5, "{files:?}");
+        let mut scripts: Vec<(String, String)> = files
+            .iter()
+            .map(|f| (f.display().to_string(), std::fs::read_to_string(f).unwrap()))
+            .collect();
+        for (name, text) in [
+            ("setup", crate::tmux_server::setup_script()),
+            ("start", crate::tmux_server::start_script().to_string()),
+            ("start wsl", crate::tmux_server::start_script_wsl()),
+            ("attach", crate::tmux_server::attach_script()),
+            ("attach wsl", crate::tmux_server::attach_script_wsl()),
+            ("kill", crate::tmux_server::kill_script()),
+        ] {
+            scripts.push((name.into(), text));
+        }
+        for (name, text) in scripts {
+            assert!(!text.contains("kill-server"), "{name} holds kill-server");
+        }
     }
 }

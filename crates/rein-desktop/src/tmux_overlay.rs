@@ -66,11 +66,14 @@ pub fn colour_ok(s: &str) -> bool {
 }
 
 /// The script's positional words, every one validated. `mode` is a settings word or `off`.
+/// `tag`: the project tag the attach step sets on the session (V12 component 1) — only on
+/// the app's server; the last word is `-` without one.
 pub fn args(
     tty: &str,
     mode: &str,
     c: &Colours,
     server: crate::tmux_server::Server,
+    tag: Option<&str>,
 ) -> Result<Vec<String>, String> {
     if !tty_ok(tty) {
         return Err("the terminal's tty is not one tmux would name".into());
@@ -88,6 +91,13 @@ pub fn args(
     let mut v = vec![tty.to_string(), mode.to_string()];
     v.extend(colours.into_iter().cloned());
     v.push(server.word().to_string());
+    match tag {
+        None => v.push("-".into()),
+        Some(t) if server == crate::tmux_server::Server::App && crate::session_tag::is_tag(t) => {
+            v.push(t.into())
+        }
+        Some(_) => return Err("the project tag is not one the app sets".into()),
+    }
     Ok(v)
 }
 
@@ -336,7 +346,7 @@ mod tests {
     #[test]
     fn only_validated_words_reach_the_script() {
         assert_eq!(
-            args("/dev/pts/3", "hidden", &mocha(), Server::App).unwrap(),
+            args("/dev/pts/3", "hidden", &mocha(), Server::App, None).unwrap(),
             [
                 "/dev/pts/3",
                 "hidden",
@@ -345,16 +355,36 @@ mod tests {
                 "#a6adc8",
                 "#6c7086",
                 "#cba6f7",
-                "app"
+                "app",
+                "-"
             ]
         );
+        // V12 (E-69): on the app's server the tag is the last word; never on the user's.
+        let tag = "0123456789abcdef".repeat(4);
+        assert_eq!(
+            args("/dev/pts/3", "off", &mocha(), Server::App, Some(&tag)).unwrap()[8],
+            tag
+        );
+        assert!(args("/dev/pts/3", "off", &mocha(), Server::User, Some(&tag)).is_err());
+        for bad in [
+            "",
+            "-",
+            &"A".repeat(64),
+            &"a".repeat(63),
+            &format!("{};", "a".repeat(63)),
+        ] {
+            assert!(
+                args("/dev/pts/3", "off", &mocha(), Server::App, Some(bad)).is_err(),
+                "{bad:?}"
+            );
+        }
         // E-57 (V8): the last word is the tab's tmux server, from a closed pair.
         assert_eq!(
-            args("/dev/pts/3", "hidden", &mocha(), Server::User).unwrap()[7],
+            args("/dev/pts/3", "hidden", &mocha(), Server::User, None).unwrap()[7],
             "user"
         );
-        assert!(args("/dev/ttys004", "app", &mocha(), Server::App).is_ok());
-        assert!(args("/dev/pts/3", "off", &mocha(), Server::App).is_ok());
+        assert!(args("/dev/ttys004", "app", &mocha(), Server::App, None).is_ok());
+        assert!(args("/dev/pts/3", "off", &mocha(), Server::App, None).is_ok());
         for tty in [
             "",
             "/dev/pts/",
@@ -368,13 +398,13 @@ mod tests {
             "/tmp/pts/3",
         ] {
             assert!(
-                args(tty, "hidden", &mocha(), Server::App).is_err(),
+                args(tty, "hidden", &mocha(), Server::App, None).is_err(),
                 "{tty:?}"
             );
         }
         for mode in ["", "Hidden", "on", "keep;", "app "] {
             assert!(
-                args("/dev/pts/3", mode, &mocha(), Server::App).is_err(),
+                args("/dev/pts/3", mode, &mocha(), Server::App, None).is_err(),
                 "{mode:?}"
             );
         }
@@ -384,7 +414,7 @@ mod tests {
             let mut c = mocha();
             c.accent = bad.into();
             assert!(
-                args("/dev/pts/3", "app", &c, Server::App).is_err(),
+                args("/dev/pts/3", "app", &c, Server::App, None).is_err(),
                 "{bad:?}"
             );
         }
@@ -393,7 +423,7 @@ mod tests {
     #[test]
     fn the_script_is_the_constant_file_and_its_hook_text_is_safe_for_tmux_and_sh() {
         assert!(SCRIPT.contains("client-detached[4271]"));
-        assert!(SCRIPT.contains("[ $# -eq 8 ] || exit 2"));
+        assert!(SCRIPT.contains("[ $# -eq 9 ] || exit 2"));
         assert!(SCRIPT.contains("case $server in app | user) ;; *) exit 2 ;; esac"));
         // The restore text sits inside tmux single quotes in the hook: none may appear in it.
         let line = SCRIPT

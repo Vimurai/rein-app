@@ -19,10 +19,22 @@ const SETUP_TEMPLATE: &str = include_str!("tmux_setup.sh");
 /// The start script (Linux / macOS): the tmux home checked, the shim first on `PATH`, then
 /// `rein start`. One line, no quote character.
 const START: &str = include_str!("tmux_start.sh");
-/// Quit (V11 component 2): end the app's own server — on stdin, `-L rein-app` only.
-pub const KILL_SERVER: &str = include_str!("tmux_kill_server.sh");
-/// Quit waits at most this long, then exits (V11 "Execution constraints").
-pub const QUIT_LIMIT: Duration = Duration::from_secs(3);
+/// The attach path (V12 component 3, E-69): after the start script's checks and `PATH`, the
+/// tag (`$1`) is re-checked as 64 hex, the session carrying it is looked up again on the app's
+/// server, its id checked as `$` plus digits, and `tmux attach` is exec'd on that id. A session
+/// gone since the lookup exits [`ATTACH_GONE`]; it never falls back to `rein start`. One line,
+/// no quote character: `#` only inside a word (an interactive shell's comment starts a word).
+fn attach_tail() -> String {
+    format!(
+        "echo $1 | grep -qxE [0-9a-f]{{64}} || exit {ATTACH_REFUSED}; s=; for l in $(tmux list-sessions -F x#{{session_id}}:#{{@rein_app_project}} 2>/dev/null); do case $l in *:$1) s=${{l%%:*}};; esac; done; n=${{s#x?}}; [ ${{#n}} -gt 0 ] || exit {ATTACH_GONE}; echo $n | grep -qxE [0-9]+ || exit {ATTACH_GONE}; [ ${{s%$n}} = x$ ] || exit {ATTACH_GONE}; exec tmux attach -t ${{s#x}}"
+    )
+}
+/// The attach script's word was not a tag (the app never sends one that is not).
+pub const ATTACH_REFUSED: i32 = 75;
+/// The attach script found no session with the tag: it ended between the lookup and the attach.
+pub const ATTACH_GONE: i32 = 76;
+/// The most output the setup's lookup may print (one word).
+pub const SETUP_CAP: u64 = 4096;
 
 /// How long the setup may run (V8 "Execution constraints").
 pub const SETUP_LIMIT: Duration = Duration::from_secs(15);
@@ -77,6 +89,31 @@ pub fn kill_script() -> String {
     format!("{} --kill --yes", start_script())
 }
 
+/// The attach script for Linux and macOS (V12 component 3): the start script's checks and
+/// `PATH`, then the attach on the tagged session in place of `rein start`. The tag is the one
+/// positional word after it (`sh -c <script> sh <tag>`).
+pub fn attach_script() -> String {
+    start_script().replacen("exec ~/.rein/bin/rein start", &attach_tail(), 1)
+}
+
+/// The attach script inside WSL: the same, printing the tty first (V6 "Client tty").
+pub fn attach_script_wsl() -> String {
+    start_script().replacen(
+        "exec ~/.rein/bin/rein start",
+        &format!("tty; {}", attach_tail()),
+        1,
+    )
+}
+
+/// The setup's live lookup (V12 component 2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lookup {
+    /// A session on the app's server carries the tab's tag: attach to it.
+    Live,
+    /// None does (or no server runs): `rein start`.
+    None,
+}
+
 /// The start script inside WSL: the same, printing the tty first (V6 "Client tty").
 pub fn start_script_wsl() -> String {
     start_script().replacen(
@@ -104,6 +141,7 @@ pub fn setup_reason(code: Option<i32>) -> &'static str {
             "~/.local, ~/.local/state or ~/.local/state/rein-app can be written by other users"
         }
         Some(25) => "the app's tmux files could not be written",
+        Some(26) => "the app's project tag was refused",
         None => "the tmux setup did not finish within 15 seconds",
         Some(_) => "the tmux setup could not run",
     }
@@ -118,11 +156,22 @@ pub fn setup_message(why: &str) -> String {
     format!("tmux setup failed: {why}. {USE_YOUR_OWN}.")
 }
 
-/// A finished setup run as the host reports it.
-pub fn setup_outcome(run: std::io::Result<Option<i32>>) -> Result<(), &'static str> {
+/// A finished setup run as the host reports it, with its lookup's answer: the last line of
+/// its output, `live` or `none` (a login shell's start-up text may come first).
+pub fn setup_outcome(
+    run: std::io::Result<Option<rein_platform::process::Output>>,
+) -> Result<Lookup, &'static str> {
     match run {
-        Ok(Some(0)) => Ok(()),
-        Ok(code) => Err(setup_reason(code)),
+        Ok(Some((Some(0), out))) => {
+            let text = String::from_utf8_lossy(&out);
+            match text.lines().map(str::trim).rfind(|l| !l.is_empty()) {
+                Some("live") => Ok(Lookup::Live),
+                Some("none") => Ok(Lookup::None),
+                _ => Err(setup_reason(Some(-1))),
+            }
+        }
+        Ok(Some((code, _))) => Err(setup_reason(code)),
+        Ok(None) => Err(setup_reason(None)),
         Err(_) => Err(setup_reason(Some(-1))),
     }
 }
@@ -225,6 +274,44 @@ mod tests {
         assert!(start_script_wsl().contains("; tty; exec ~/.rein/bin/rein start"));
     }
 
+    /// V12 component 3: the attach scripts keep the argv rule, re-check the tag before any
+    /// tmux call, check the session id, and never start rein.
+    #[test]
+    fn the_attach_scripts_are_argv_safe_and_never_start_rein() {
+        for s in [attach_script(), attach_script_wsl()] {
+            assert!(!s.contains(['\'', '"', '\n', '`', '\\']), "{s}");
+            // An interactive bash may expand `!` history: only `! ` (test's negation) occurs.
+            assert!(
+                s.match_indices('!')
+                    .all(|(i, _)| s[i + 1..].starts_with(' ')),
+                "{s}"
+            );
+            assert!(s.starts_with("set -o noglob; H=$HOME/.local/state/rein-app/tmux; "));
+            assert!(s.contains("unset TMUX TMUX_PANE; PATH=$H/bin:$PATH;"));
+            assert!(!s.contains("rein start") && !s.contains(".rein/bin"), "{s}");
+            let check = s
+                .find("grep -qxE [0-9a-f]{64} || exit 75")
+                .expect("tag check");
+            assert!(
+                check < s.find("tmux list-sessions").unwrap(),
+                "the tag is checked first"
+            );
+            assert!(s.contains("grep -qxE [0-9]+ || exit 76; [ ${s%$n} = x$ ] || exit 76;"));
+            assert!(s.ends_with("exec tmux attach -t ${s#x}"));
+            // An interactive shell starts a comment at a word's `#`: none does here.
+            assert!(!s.split_whitespace().any(|w| w.starts_with('#')), "{s}");
+        }
+        // The window names the "gone" exit by the same number (term.ts).
+        assert!(
+            include_str!("../ui/src/term.ts")
+                .contains(&format!("export const ATTACH_GONE = {ATTACH_GONE};"))
+        );
+        assert_ne!(ATTACH_GONE, ATTACH_REFUSED);
+        assert!(![0, 126, 127, crate::project_setup::INIT_FAILED].contains(&ATTACH_GONE));
+        assert!(!attach_script().contains("tty;"));
+        assert!(attach_script_wsl().contains("PATH=$H/bin:$PATH; tty; echo $1"));
+    }
+
     #[test]
     fn every_setup_exit_has_a_fixed_sentence() {
         for code in [
@@ -234,12 +321,32 @@ mod tests {
             Some(23),
             Some(24),
             Some(25),
+            Some(26),
             Some(9),
             None,
         ] {
             assert!(!setup_reason(code).is_empty());
         }
-        assert_eq!(setup_outcome(Ok(Some(0))), Ok(()));
+        assert_eq!(
+            setup_outcome(Ok(Some((Some(0), b"live\n".to_vec())))),
+            Ok(Lookup::Live)
+        );
+        assert_eq!(
+            setup_outcome(Ok(Some((Some(0), b"motd\nnone\n".to_vec())))),
+            Ok(Lookup::None)
+        );
+        // No answer, or another word: not a lookup the app acts on.
+        for out in [&b""[..], b"maybe\n", b"live\nextra\n"] {
+            assert!(setup_outcome(Ok(Some((Some(0), out.to_vec())))).is_err());
+        }
+        assert_eq!(
+            setup_outcome(Ok(Some((Some(26), vec![])))),
+            Err("the app's project tag was refused")
+        );
+        assert_eq!(
+            setup_outcome(Ok(None)),
+            Err("the tmux setup did not finish within 15 seconds")
+        );
         assert_eq!(
             setup_outcome(Err(std::io::Error::other("os words"))),
             Err("the tmux setup could not run")

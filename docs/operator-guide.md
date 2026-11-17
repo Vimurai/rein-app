@@ -282,8 +282,10 @@ default prefix, `Ctrl+b`. Each pane's border shows its rein role and Claude acco
 
 - **From a terminal**, reach the window's sessions with `tmux -L rein-app ls` and
   `tmux -L rein-app attach -t <session>`. Plain `tmux ls` does not list them.
-- **Closing the window** detaches its tabs; the sessions keep running on the `rein-app`
-  server, as they did on yours.
+- **Quitting the window** asks nothing and stops nothing: its tabs detach, the agents keep
+  working in their sessions on the `rein-app` server, and opening the same project again
+  attaches the tab to its running session instead of starting a new one. See
+  [Sessions outlive the window](#sessions-outlive-the-window).
 - **The window's files.** rein-app keeps two files in `~/.local/state/rein-app/tmux/`
   (inside WSL on Windows): `bin/tmux`, a small script that sends every `tmux` the tab runs to
   the `rein-app` server, and `tmux.conf`. It rewrites them each time a tab opens, so a change
@@ -307,6 +309,42 @@ default prefix, `Ctrl+b`. Each pane's border shows its rein role and Claude acco
   The change applies to tabs opened after it. With your own server the window still
   recolours the session it shows (`[tmux] overlay` / `status`) and puts your look back when
   the tab closes.
+
+### Sessions outlive the window
+
+On the window's own tmux server (the default), a project's session ends only when you close the
+project: the tab's **×**, **Close project** or `Ctrl+Shift+W`, which stops its agents after one
+confirm. Quitting the window does not end it.
+
+- **How the window finds a session again.** When a tab attaches, the window marks its session
+  with the tmux option `@rein_app_project`, set to the SHA-256 of the project's path (on
+  Windows, of the distro name and the Linux path). Opening a project looks for a session with
+  that mark on the `rein-app` server: found → the tab attaches to it; not found → `rein start`
+  as before. Session names are never used. `tmux -L rein-app show-options -t <session>
+  @rein_app_project` shows the mark.
+- **After a reboot** (or `wsl --shutdown`, or the `rein-app` server ending) there is no session
+  to find, and opening the project starts it again.
+- **With your own tmux server** (`[tmux] server = "user"`) nothing here applies: sessions are
+  yours and are not marked.
+
+**On Windows the sessions live inside WSL, and WSL may stop.** The window starts no process to
+keep the distro running and does not read or change your WSL settings. If WSL stops the distro
+while the window is closed, the sessions and their agents end with it, and the next start of
+the window starts the projects again. To keep the distro running while nothing is attached, set
+both idle timeouts in `%UserProfile%\.wslconfig` and restart WSL (`wsl --shutdown`):
+
+```ini
+[wsl2]
+vmIdleTimeout=-1
+
+[general]
+instanceIdleTimeout=-1
+```
+
+What was measured: with both set to `-1`, on WSL 3.0.5, the window's tmux server and a running
+agent were still alive after the window closed. **What WSL does with its default settings was
+not measured**; do not rely on it. The cost of keeping the distro running: the WSL virtual
+machine keeps its memory in use until you run `wsl --shutdown` or restart Windows.
 
 ### Needs you
 

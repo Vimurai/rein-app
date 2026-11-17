@@ -154,46 +154,50 @@ impl Host for LocalHost {
         crate::project_file::read_local(project, which, read)
     }
 
-    /// `/bin/sh -s` with the setup script on stdin, in `/`, the start's variables removed.
-    fn tmux_setup(&self, sweep: bool) -> Result<(), &'static str> {
-        let mut cmd = std::process::Command::new("/bin/sh");
-        cmd.arg("-s").current_dir("/");
-        if sweep {
-            cmd.args(["--", "sweep"]);
+    /// `/bin/sh -s -- <tag>` with the setup script on stdin, in `/`, the start's variables
+    /// removed; its one line of output is the lookup's answer.
+    fn tmux_setup(&self, tag: &str) -> Result<crate::tmux_server::Lookup, &'static str> {
+        if !crate::session_tag::is_tag(tag) {
+            return Err(crate::tmux_server::setup_reason(Some(26)));
         }
+        let mut cmd = std::process::Command::new("/bin/sh");
+        cmd.args(["-s", "--", tag])
+            .current_dir("/")
+            .stderr(std::process::Stdio::null());
         for k in ENV_REMOVED {
             cmd.env_remove(k);
         }
         rein_platform::process::hide_console(&mut cmd);
-        crate::tmux_server::setup_outcome(tmux_overlay::run_stdin(
+        crate::tmux_server::setup_outcome(rein_platform::process::output_with_stdin(
             &mut cmd,
-            &crate::tmux_server::setup_script(),
+            Some(&crate::tmux_server::setup_script()),
             crate::tmux_server::SETUP_LIMIT,
-            &|| true,
+            crate::tmux_server::SETUP_CAP,
         ))
+    }
+
+    /// `/bin/sh -c <attach script> sh <tag>` in the project (V12 component 3).
+    fn rein_attach(&self, project: &Path, tag: &str) -> Result<ChildSpec, IpcError> {
+        if !crate::session_tag::is_tag(tag) {
+            return Err(err("tmux_setup", "the app's project tag was refused"));
+        }
+        Ok(ChildSpec {
+            program: PathBuf::from("/bin/sh"),
+            args: vec![
+                "-c".into(),
+                crate::tmux_server::attach_script().into(),
+                "sh".into(),
+                tag.into(),
+            ],
+            cwd: Some(project.to_path_buf()),
+            env_remove: ENV_REMOVED,
+            env_set: ENV_SET,
+            tty_line: false,
+        })
     }
 
     fn complete_dir(&self, prefix: &str) -> Result<Vec<String>, IpcError> {
         complete_dir(prefix)
-    }
-
-    /// `/bin/sh -s` with the kill-server constant on stdin, the start's variables removed.
-    fn tmux_kill_server(&self) -> bool {
-        let mut cmd = std::process::Command::new("/bin/sh");
-        cmd.arg("-s").current_dir("/");
-        for k in ENV_REMOVED {
-            cmd.env_remove(k);
-        }
-        rein_platform::process::hide_console(&mut cmd);
-        matches!(
-            tmux_overlay::run_stdin(
-                &mut cmd,
-                crate::tmux_server::KILL_SERVER,
-                crate::tmux_server::QUIT_LIMIT,
-                &|| true,
-            ),
-            Ok(Some(_))
-        )
     }
 
     /// `/bin/sh -s -- <args>` with the constant script on stdin, in `/`, with the same

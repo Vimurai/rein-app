@@ -120,12 +120,6 @@ pub struct Desktop {
     pub agents: crate::agents::AgentWatch,
     /// Set-up tabs and the out-of-date checks (V9 components 1–3, E-63).
     pub projects: crate::project_setup::ProjectState,
-    /// A tab on the app's server has opened in this run: the start-up sweep is done (V11 3).
-    swept: std::sync::atomic::AtomicBool,
-    /// The app's server was ended for this quit (V11 2): the exit does not end it again.
-    pub server_ended: std::sync::atomic::AtomicBool,
-    /// A native close was held for the web side's confirm; a second one goes through.
-    pub close_held: std::sync::atomic::AtomicBool,
 }
 
 impl Desktop {
@@ -141,9 +135,6 @@ impl Desktop {
             panels: crate::panel_ipc::PanelCache::default(),
             agents: crate::agents::AgentWatch::default(),
             projects: crate::project_setup::ProjectState::default(),
-            swept: std::sync::atomic::AtomicBool::new(false),
-            server_ended: std::sync::atomic::AtomicBool::new(false),
-            close_held: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -158,12 +149,9 @@ impl Desktop {
             .map(|t| (t.pty, t.server, std::path::PathBuf::from(&t.project)))
     }
 
-    /// How many open tabs run on the app's own tmux server (V11).
-    pub fn app_tabs(&self) -> usize {
-        self.tabs()
-            .values()
-            .filter(|t| t.server == crate::tmux_server::Server::App)
-            .count()
+    /// The project tag of `project` (V12 component 1): with the distro on Windows.
+    fn tag_of(&self, project: &Path) -> String {
+        crate::session_tag::tag(self.platform.distro().as_deref(), project)
     }
 
     /// The project a tab of this window runs in, as recorded when it opened — the only path a
@@ -204,7 +192,9 @@ impl Desktop {
 
     /// The child of a tab: `rein start`, or with `setup` `rein init` first (V9 component 2).
     /// V8 3a: the tmux home is made or checked before the pty opens; on failure the pty is not
-    /// opened and the window shows the app's fixed sentence.
+    /// opened and the window shows the app's fixed sentence. V12 components 2–3: on the app's
+    /// server the same setup process answers whether a session tagged for this project is
+    /// alive — then the child attaches to it and `rein start` is never run on it.
     fn start_spec(
         &self,
         project: &Path,
@@ -212,12 +202,14 @@ impl Desktop {
         setup: bool,
     ) -> Result<ChildSpec, IpcError> {
         if server == crate::tmux_server::Server::App {
-            // V11 component 3: the first tab on the app's server sweeps a leftover server in
-            // the same setup process; later tabs never do (their sessions are this run's).
-            let sweep = !self.swept.swap(true, Ordering::AcqRel);
-            self.platform
-                .tmux_setup(sweep)
+            let tag = self.tag_of(project);
+            let found = self
+                .platform
+                .tmux_setup(&tag)
                 .map_err(|why| err("tmux_setup", crate::tmux_server::setup_message(why)))?;
+            if found == crate::tmux_server::Lookup::Live {
+                return self.platform.rein_attach(project, &tag);
+            }
         }
         if setup {
             self.platform.rein_setup(project, server)
@@ -372,11 +364,13 @@ impl Desktop {
         mode: &str,
         colours: &Colours,
     ) -> Option<Result<(), String>> {
-        let (pty, server) = {
+        let (pty, server, project) = {
             let tabs = self.tabs();
             let t = tabs.get(&tab)?;
-            (t.pty, t.server)
+            (t.pty, t.server, std::path::PathBuf::from(&t.project))
         };
+        // V12 component 1: the attach step tags the session on the app's server only.
+        let tag = (server == crate::tmux_server::Server::App).then(|| self.tag_of(&project));
         let seq = |f: &mut dyn FnMut(&mut HashMap<u32, u64>) -> u64| {
             f(&mut self.overlay_seq.lock().unwrap_or_else(|e| e.into_inner()))
         };
@@ -400,7 +394,7 @@ impl Desktop {
                 Err(_) => return None,
             }
         };
-        let args = match tmux_overlay::args(&tty, mode, colours, server) {
+        let args = match tmux_overlay::args(&tty, mode, colours, server, tag.as_deref()) {
             Ok(a) => a,
             Err(why) => return Some(Err(why)),
         };
@@ -582,6 +576,7 @@ pub fn tab_tmux(
         &mode,
         &colours,
         crate::tmux_server::Server::App,
+        None,
     )
     .map_err(|why| err("bad_value", why))?;
     let outcome = state.tmux_overlay(tab, &mode, &colours);
@@ -962,10 +957,10 @@ mod tests {
         ) -> Result<ChildSpec, IpcError> {
             unreachable!()
         }
-        fn tmux_setup(&self, _: bool) -> Result<(), &'static str> {
+        fn tmux_setup(&self, _: &str) -> Result<crate::tmux_server::Lookup, &'static str> {
             unreachable!()
         }
-        fn tmux_kill_server(&self) -> bool {
+        fn rein_attach(&self, _: &Path, _: &str) -> Result<ChildSpec, IpcError> {
             unreachable!()
         }
         fn read_project_file(

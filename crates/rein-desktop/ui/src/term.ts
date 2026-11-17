@@ -18,6 +18,11 @@ import { START_BYTES, START_LIMIT_MS, tabPhase, type TabPhase } from "./phase.ts
 export const START_REFUSED = 126;
 export const START_REFUSED_SENTENCE =
   "tmux check failed: the app's tmux files are not as it wrote them (owner, type or symlink).";
+/** V12 component 3: the attach script found no session with the project's tag — it ended
+ *  between the lookup and the attach (tmux_server::ATTACH_GONE). Enter opens the project again,
+ *  which then starts it. */
+export const ATTACH_GONE = 76;
+export const ATTACH_GONE_SENTENCE = "The project's session ended before it could be attached.";
 /** The way out, as the core words it for a failed setup (tmux_server::USE_YOUR_OWN). */
 export const USE_YOUR_OWN = "Settings → tmux server → my own uses your own tmux instead.";
 import { PtySize } from "./pty-size.ts";
@@ -305,6 +310,10 @@ export class TermTab {
     }
     if (code === START_REFUSED && !this.#alt) {
       this.term.write(`\r\n\x1b[7m ${START_REFUSED_SENTENCE} \x1b[0m\r\n${USE_YOUR_OWN} Press Enter to try again.\r\n`);
+      return;
+    }
+    if (code === ATTACH_GONE && !this.#alt) {
+      this.term.write(`\r\n\x1b[7m ${ATTACH_GONE_SENTENCE} \x1b[0m\r\nPress Enter to start it.\r\n`);
       return;
     }
     this.term.write(`\r\n\x1b[7m rein start exited with code ${code} — press Enter to restart \x1b[0m\r\n`);

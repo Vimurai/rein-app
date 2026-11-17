@@ -295,26 +295,42 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
         }
     }
 
-    /// `wsl.exe -d D -e sh -s` with the setup script on stdin (V8 3a): the tmux home inside
-    /// WSL. Only the distro's name is put in argv; the script is a constant.
-    fn tmux_setup(&self, sweep: bool) -> Result<(), &'static str> {
+    /// `wsl.exe -d D -e sh -s -- <tag>` with the setup script on stdin (V8 3a): the tmux home
+    /// inside WSL, and the live lookup's answer on stdout (V12 component 2). Only the distro's
+    /// name and the tag (64 hex) are put in argv; the script is a constant.
+    fn tmux_setup(&self, tag: &str) -> Result<crate::tmux_server::Lookup, &'static str> {
+        if !crate::session_tag::is_tag(tag) {
+            return Err(crate::tmux_server::setup_reason(Some(26)));
+        }
         let d = self
             .probe_distro()
             .map_err(|_| crate::tmux_server::setup_reason(Some(-1)))?;
-        let mut argv: Vec<OsString> = ["-d", d.name.as_str(), "-e", "sh", "-s"]
+        let argv: Vec<OsString> = ["-d", d.name.as_str(), "-e", "sh", "-s", "--", tag]
             .into_iter()
             .map(OsString::from)
             .collect();
-        if sweep {
-            argv.extend(["--", "sweep"].map(OsString::from));
-        }
-        crate::tmux_server::setup_outcome(self.shell.run_script(
+        crate::tmux_server::setup_outcome(self.shell.run_script_output(
             &self.wsl_exe,
             &argv,
             &crate::tmux_server::setup_script(),
             crate::tmux_server::SETUP_LIMIT,
-            &|| true,
+            crate::tmux_server::SETUP_CAP,
         ))
+    }
+
+    /// The tab's own `wsl.exe` start (same distro, `--cd`, shell and flags) running the attach
+    /// script, the tag its one positional word (V12 component 3); the tty line first.
+    fn rein_attach(&self, project: &Path, tag: &str) -> Result<ChildSpec, IpcError> {
+        if !crate::session_tag::is_tag(tag) {
+            return Err(err("tmux_setup", "the app's project tag was refused"));
+        }
+        let mut spec = self.rein_start(project, crate::tmux_server::Server::App)?;
+        if let Some(last) = spec.args.last_mut() {
+            *last = OsString::from(crate::tmux_server::attach_script_wsl());
+        }
+        spec.args
+            .extend([OsString::from("sh"), OsString::from(tag)]);
+        Ok(spec)
     }
 
     /// `wsl.exe -d D -e sh -ls -- <args>` with the constant script on stdin: the login shell's
@@ -333,28 +349,6 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
             tmux_overlay::LIMIT,
             alive,
         ))
-    }
-
-    /// `wsl.exe -d D -e sh -ls` with the kill-server constant on stdin (the login shell's
-    /// `PATH` finds the tmux the tabs used), at most 3 s.
-    fn tmux_kill_server(&self) -> bool {
-        let Ok(d) = self.probe_distro() else {
-            return false;
-        };
-        let argv: Vec<OsString> = ["-d", d.name.as_str(), "-e", "sh", "-ls"]
-            .into_iter()
-            .map(OsString::from)
-            .collect();
-        matches!(
-            self.shell.run_script(
-                &self.wsl_exe,
-                &argv,
-                crate::tmux_server::KILL_SERVER,
-                crate::tmux_server::QUIT_LIMIT,
-                &|| true,
-            ),
-            Ok(Some(_))
-        )
     }
 
     /// `wsl.exe -d D -e sh -ls -- <args>` with the status script on stdin, as the overlay.

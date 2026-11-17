@@ -177,9 +177,8 @@ export const projectClose = (tab: number, confirmRunning: boolean) =>
 export const tabClose = (tab: number, confirmRunning: boolean) =>
   invoke<import("./agents.ts").CloseReply>("tab_close", { tab, confirmRunning });
 /** V11: quit — `{confirm: n}` while not confirmed; otherwise the app's server ends and the app exits. */
-export const appQuit = (confirmRunning: boolean) => invoke<{ confirm: number } | null>("app_quit", { confirmRunning });
+export const appQuit = () => invoke<void>("app_quit", {});
 /** V11: the confirm for a held native close was cancelled. */
-export const quitCancelled = () => invoke<void>("quit_cancelled", {});
 /** V10 (E-64): `rein team show` and `rein trunk` for `tab`'s project, and the output's shape. */
 export const teamGet = (tab: number) => invoke<import("./team.ts").TeamView>("team_get", { tab });
 /** V10: `rein team add`; the core checks every value again and refuses with a fixed sentence. */

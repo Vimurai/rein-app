@@ -4,7 +4,8 @@
 # app builds it), the shim (src/tmux_shim.sh), the app config (src/tmux_app.conf) and the
 # start constant (src/tmux_start.sh) — at the process boundary they are made for, Linux and
 # macOS. New suite: nothing tested a tmux home or a PATH shim before; the V6 overlay keeps
-# tests/e2e/tmux-overlay.sh.
+# tests/e2e/tmux-overlay.sh. V12 (D-061, E-69): the setup's live lookup and the attach script
+# (built from tmux_server.rs) in every shell present, on the app's socket only.
 # Isolation: every HOME is a mktemp dir; every tmux server lives under a private
 # TMUX_TMPDIR (TMUX unset, so it cannot point elsewhere); the user's own servers are never
 # reached. Needs: tmux >= 3.2, sh; bash and zsh are used when present.
@@ -192,28 +193,81 @@ check "user: the user's own label format applies" USER-FORMAT "$(tm show-options
 for _ in $(seq 1 20); do [ -e "$W/plugin-ran-user" ] && break; sleep 0.1; done
 check "user: the user's run-shell ran" yes "$([ -e "$W/plugin-ran-user" ] && echo yes || echo no)"
 
-# ── lifecycle (V11, D-059, E-66): the start-up sweep and quit reach the app's socket only ──
-# A session `demo` on BOTH servers under a private TMUX_TMPDIR; the default one must survive
-# every path (the standing "never kill the user's tmux" rule).
-KILL="$SRC/tmux_kill_server.sh"
+# ── V12 (D-061, E-69): the live lookup and the attach script reach the app's socket only ──
+# A session `demo` on BOTH servers under a private TMUX_TMPDIR; nothing here may end either
+# (the standing "never kill the user's tmux" rule; V12 kills nothing).
 both() { # both <dir> → a session on the app's socket and one of the same name on the default
   mkdir -p "$1" && chmod 700 "$1"
   TMUX_TMPDIR="$1" "$REAL_TMUX" -L rein-app new-session -d -s demo 2>/dev/null
   TMUX_TMPDIR="$1" "$REAL_TMUX" new-session -d -s demo 2>/dev/null
 }
 alive() { TMUX_TMPDIR="$1" "$REAL_TMUX" ${2:+-L "$2"} has-session -t demo 2>/dev/null && echo yes || echo no; }
+TAG=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+OTHER=fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
+look() { # look <tmpdir> <word> → "<output> <exit>"
+  local out code=0
+  out=$(HOME="$h" TMUX_TMPDIR="$1" TMUX=/x /bin/sh -s -- "$2" <"$SETUP" 2>/dev/null) || code=$?
+  echo "$out $code"
+}
 h="$W/ok"
 t="$W/tmp-lc1"
+mkdir -p "$t" && chmod 700 "$t"
+check "lookup: no server → none" "none 0" "$(look "$t" "$TAG")"
 both "$t"
-check "lifecycle: setup without the sweep word ends nothing" "0 yes yes" "$(HOME="$h" TMUX_TMPDIR="$t" /bin/sh -s <"$SETUP" >/dev/null 2>&1; echo $?) $(alive "$t" rein-app) $(alive "$t")"
-check "lifecycle: setup with sweep ends the app's leftover server" "0 no" "$(HOME="$h" TMUX_TMPDIR="$t" TMUX=/x /bin/sh -s -- sweep <"$SETUP" >/dev/null 2>&1; echo $?) $(alive "$t" rein-app)"
-check "lifecycle: … and the default server's same-named session stays" yes "$(alive "$t")"
-t="$W/tmp-lc2"
-both "$t"
-check "lifecycle: quit's kill-server ends the app's server" "0 no" "$(TMUX_TMPDIR="$t" TMUX=/x /bin/sh -s <"$KILL" >/dev/null 2>&1; echo $?) $(alive "$t" rein-app)"
-check "lifecycle: … and the default server's session stays" yes "$(alive "$t")"
-check "lifecycle: quit with no app server is a no-op (exit 0)" "0 yes" "$(TMUX_TMPDIR="$t" /bin/sh -s <"$KILL" >/dev/null 2>&1; echo $?) $(alive "$t")"
-check "lifecycle: no tmux → exit 0" 0 "$( (PATH=/nonexistent /bin/sh -s <"$KILL" >/dev/null 2>&1); echo $?)"
+check "lookup: untagged sessions → none" "none 0" "$(look "$t" "$TAG")"
+TMUX_TMPDIR="$t" "$REAL_TMUX" set-option -t demo @rein_app_project "$TAG" # the user's server
+check "lookup: the tag on the DEFAULT server is not looked at → none" "none 0" "$(look "$t" "$TAG")"
+TMUX_TMPDIR="$t" "$REAL_TMUX" -L rein-app set-option -t demo @rein_app_project "$TAG"
+check "lookup: the app's session with the tag → live" "live 0" "$(look "$t" "$TAG")"
+check "lookup: another project's tag → none" "none 0" "$(look "$t" "$OTHER")"
+for bad in sweep "" "${TAG%?}" "${TAG}0" "$(printf %s "$TAG" | tr a-f A-F)" "${TAG%?};"; do
+  check "lookup: a word that is not a tag ($(printf %.12s "$bad")) → exit 26" " 26" "$(look "$t" "$bad")"
+done
+check "lookup: setup with no word prints nothing (exit 0)" "|0" "$(out=$(HOME="$h" TMUX_TMPDIR="$t" /bin/sh -s <"$SETUP" 2>/dev/null); echo "$out|$?")"
+check "lookup: both servers' sessions survive every lookup" "yes yes" "$(alive "$t" rein-app) $(alive "$t")"
+check "lookup: the sweep is gone (no kill-server in the setup)" 0 "$(grep -c kill-server "$SETUP" || true)"
+check "lookup: no tmux → none" "none 0" "$(out=$(PATH=/nonexistent:/bin HOME="$h" /bin/sh -s -- "$TAG" <"$SETUP" 2>/dev/null); echo "$out $?")"
+
+# The attach script exactly as tmux_server.rs builds it (Linux / macOS form), its last command
+# replaced by an echo of the target so no terminal is needed; one real attach under `script`.
+ATTACH="$(python3 - "$SRC" <<'PY'
+import re, sys
+src = sys.argv[1]
+rs = open(src + '/tmux_server.rs').read()
+tail = re.search(r'"(echo \$1 .*?)"\n', rs).group(1)
+for a, b in (('{{', '{'), ('}}', '}'),
+             ('{ATTACH_REFUSED}', re.search(r'ATTACH_REFUSED: i32 = (\d+)', rs).group(1)),
+             ('{ATTACH_GONE}', re.search(r'ATTACH_GONE: i32 = (\d+)', rs).group(1))):
+    tail = tail.replace(a, b)
+print(open(src + '/tmux_start.sh').read().strip().replace('exec ~/.rein/bin/rein start', tail))
+PY
+)"
+DRY="${ATTACH%exec tmux attach -t*}echo target \${s#x}"
+sid=$(TMUX_TMPDIR="$t" "$REAL_TMUX" -L rein-app display-message -p -t demo '#{session_id}')
+shells="sh -c"
+command -v bash >/dev/null && shells="$shells|bash -lic"
+command -v zsh >/dev/null && shells="$shells|zsh -lic"
+IFS='|' read -r -a SHS <<<"$shells"
+for shc in "${SHS[@]}"; do
+  read -r -a sh_argv <<<"$shc"
+  r=$(HOME="$h" TMUX_TMPDIR="$t" "${sh_argv[@]}" "$DRY" sh "$TAG" </dev/null 2>/dev/null | tail -n1)
+  check "attach ($shc): the tagged session's id" "target $sid" "$r"
+  HOME="$h" TMUX_TMPDIR="$t" "${sh_argv[@]}" "$DRY" sh "$OTHER" </dev/null >/dev/null 2>&1
+  check "attach ($shc): no session with the tag → exit 76, never rein start" 76 "$?"
+  for bad in sweep "${TAG%?}" "${TAG%?};"; do
+    HOME="$h" TMUX_TMPDIR="$t" "${sh_argv[@]}" "$DRY" sh "$bad" </dev/null >/dev/null 2>&1
+    check "attach ($shc): a word that is not a tag → exit 75" 75 "$?"
+  done
+done
+check "attach: the script names no rein" 0 "$(printf %s "$ATTACH" | grep -c 'rein start' || true)"
+# util-linux and BSD `script` differ: run the attach in a detached tmux window instead (its
+# PATH spelled out: a PATH with a space, as under WSL, would split the command line).
+HOME="$h" TMUX_TMPDIR="$t" "$REAL_TMUX" -L host -f /dev/null new-session -d -x 80 -y 20 \
+  "env -u TMUX HOME=$h TMUX_TMPDIR=$t PATH=$(dirname "$REAL_TMUX"):/usr/bin:/bin /bin/sh -c '$ATTACH' sh $TAG"
+for _ in $(seq 1 50); do [ "$(TMUX_TMPDIR="$t" "$REAL_TMUX" -L rein-app list-clients -F '#{session_name}' 2>/dev/null)" = demo ] && break; sleep 0.1; done
+check "attach: a real client lands on the tagged session" demo "$(TMUX_TMPDIR="$t" "$REAL_TMUX" -L rein-app list-clients -F '#{session_name}' 2>/dev/null)"
+TMUX_TMPDIR="$t" "$REAL_TMUX" -L host kill-server 2>/dev/null # the test's own helper socket
+check "attach: both servers' sessions are still there" "yes yes" "$(alive "$t" rein-app) $(alive "$t")"
 
 if [ "$fails" -eq 0 ]; then echo "PASS: tmux server"; else echo "$fails failure(s)"; fi
 [ "$fails" -eq 0 ]

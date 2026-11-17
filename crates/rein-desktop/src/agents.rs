@@ -442,10 +442,14 @@ mod tests {
         ) -> Result<crate::project_file::FileBytes, crate::project_file::Unavailable> {
             unreachable!()
         }
-        fn tmux_setup(&self, _: bool) -> Result<(), &'static str> {
+        fn tmux_setup(&self, _: &str) -> Result<crate::tmux_server::Lookup, &'static str> {
             unreachable!()
         }
-        fn tmux_kill_server(&self) -> bool {
+        fn rein_attach(
+            &self,
+            _: &std::path::Path,
+            _: &str,
+        ) -> Result<crate::pty::ChildSpec, IpcError> {
             unreachable!()
         }
         fn complete_dir(&self, _: &str) -> Result<Vec<String>, IpcError> {

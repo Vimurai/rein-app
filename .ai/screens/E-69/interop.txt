@@ -1,0 +1,33 @@
+date: 2026-11-17T17:17:10Z
+wsl.exe: WSL version: 3.0.5.0; distro: Ubuntu; shell: /usr/bin/zsh; tmux: tmux 3.8
+attach script: 642 bytes, quote characters: 0
+
+== lookup: no server yet → none
+$ wsl.exe -d Ubuntu -e sh -s -- fc66b711fd2b… < setup script
+  | none
+  exit 0 in 133 ms
+
+== lookup: the project's tagged session → live
+$ wsl.exe -d Ubuntu -e sh -s -- fc66b711fd2b… < setup script
+  | live
+  exit 0 in 130 ms
+
+== lookup: another project's tag → none
+$ wsl.exe -d Ubuntu -e sh -s -- 4d2bf0a0c23d… < setup script
+  | none
+  exit 0 in 138 ms
+
+== lookup: a word that is not a tag → exit 26
+$ wsl.exe -d Ubuntu -e sh -s -- sweep… < setup script
+  | 
+  exit 26 in 131 ms
+
+== attach: a session gone since the lookup (another project's tag) → exit 76, no rein start
+  | not a tty
+  exit 76 in 871 ms
+
+attach run 1: tty line /dev/pts/17; first tmux frame (1049h) at 388 ms; agent pane marker at 402 ms
+attach run 2: tty line /dev/pts/14; first tmux frame (1049h) at 422 ms; agent pane marker at 426 ms
+attach run 3: tty line /dev/pts/14; first tmux frame (1049h) at 381 ms; agent pane marker at 382 ms
+clients now: 0 (the probe ended each attach); sessions: proj untagged 
+rein start run: never (no rein call in the attach script)

@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
-# lifecycle-screens.sh <out-dir> [W H] — V11 (D-059, E-66) end to end in the real window (debug
-# build) on Xvfb, and the screens of both confirms in catppuccin-mocha and github-light:
+# lifecycle-screens.sh <out-dir> [W H] — V11 component 1 and V12 (D-059, D-061, E-66, E-69) end
+# to end in the real window (debug build) on Xvfb, with screens in catppuccin-mocha and
+# github-light:
 #   close-tab-confirm — closing a tab whose Engineer runs: "Closing this tab stops …";
-#   quit-confirm      — quitting with projects on the app's server.
+#   reattached        — the second run's tab, attached to the session the first run left: the
+#                       agent pane's line carries the first run's start time.
 # Checked, with a `tmux` wrapper that maps the app's socket (`-L rein-app`) and the default
 # server to two private sockets:
-#   - a leftover app server (a session for the project) is gone before the first `rein start`,
-#     and the stand-in rein never starts on a live session;
+#   - each session the app opens carries @rein_app_project = SHA-256 of its project path;
 #   - closing a tab removes that project's session only; another tab's stays;
-#   - quit ends the app's server; a same-named session on the default server stays;
-#   - with tmux.server = "user" neither the sweep nor the quit touches anything.
+#   - quit asks nothing, kills nothing: the window exits, the session keeps running, a
+#     same-named session on the default server stays;
+#   - a second run on the project attaches: the stand-in rein records no second start;
+#   - a session tagged for another project is not attached to (a new project starts);
+#   - with tmux.server = "user" no tag is set and quit touches nothing.
 # The stand-in rein builds one role pane per project running a stand-in agent. A local tool
 # only: it refuses to run when CI is set. Needs: Xvfb, tmux, cc, Xlib + XTest headers, ffmpeg,
 # a debug build.
@@ -64,7 +68,7 @@ case "$*" in
       p=$(tmux list-panes -t "$w:$w" -F '#{pane_id}' | head -n1)
       tmux set-option -p -t "$p" @rein_role engineer
       sleep 1
-      tmux send-keys -t "$p" 'clear; sleep 600' Enter
+      tmux send-keys -t "$p" "clear; echo $w engineer, started $(date +%T); sleep 600" Enter
     fi
     exec tmux attach -t "$w:$w" ;;
 esac
@@ -76,6 +80,8 @@ TD() { "$REAL_TMUX" -S "$W/default.sock" "$@"; }
 X() { "$W/bin/xinput" "$@"; sleep 0.7; }
 shot() { ffmpeg -loglevel error -y -f x11grab -draw_mouse 0 -video_size "${GW}x${GH}" -i "$DISPLAY" -frames:v 1 "$OUT/$1-${GW}x${GH}.png" && echo "  $OUT/$1-${GW}x${GH}.png"; }
 fails=0
+tag() { printf %s "$1" | sha256sum | cut -d' ' -f1; }
+tag_of() { TA show-options -v -t "$1" @rein_app_project 2>/dev/null; }
 check() { if [ "$2" = "$3" ]; then echo "  ok   $1"; else echo "  FAIL $1 — expected [$2], got [$3]"; fails=$((fails + 1)); fi; }
 has() { if "$@" >/dev/null 2>&1; then echo yes; else echo no; fi; }
 
@@ -113,17 +119,16 @@ gone() { for _ in $(seq 1 50); do kill -0 "$APP" 2>/dev/null || { APP=""; return
 for theme in catppuccin-mocha github-light; do
   echo "[$theme ${GW}x${GH}]"
   : >"$W/rein.log"
-  a="$W/Dev/alpha-$theme" b="$W/Dev/beta-$theme"
-  mkdir -p "$a/.ai" "$b/.ai"
-  # A leftover app server holding alpha's session, and the same name on the default server.
-  TA new-session -d -s "alpha-$theme" -n "alpha-$theme" "sh"
+  a="$W/Dev/alpha-$theme" b="$W/Dev/beta-$theme" g="$W/Dev/gamma-$theme"
+  mkdir -p "$a/.ai" "$b/.ai" "$g/.ai"
+  # The same name on the default server: never touched.
   TD new-session -d -s "alpha-$theme" -n "alpha-$theme" "sh"
   app "$theme" app "$a"
   sleep 7
-  check "sweep: alpha started fresh, never on a live session" "alpha-$theme: start" "$(cat "$W/rein.log")"
   second "$b"
   sleep 7
-  check "two tabs: both sessions on the app's server" "yes yes" "$(has TA has-session -t "alpha-$theme") $(has TA has-session -t "beta-$theme")"
+  check "first run: both started once" "alpha-$theme: start|beta-$theme: start" "$(paste -sd'|' "$W/rein.log")"
+  check "each session carries its project's tag" "$(tag "$a") $(tag "$b")" "$(tag_of "alpha-$theme") $(tag_of "beta-$theme")"
   # Close beta's tab (the current one): its Engineer runs → the confirm.
   X key ctrl+shift+w
   sleep 2.5
@@ -131,21 +136,35 @@ for theme in catppuccin-mocha github-light; do
   X key Tab; X key Return # Cancel is focused; Close is next
   sleep 3
   check "tab close: beta's session ended, alpha's stays" "no yes" "$(has TA has-session -t "beta-$theme") $(has TA has-session -t "alpha-$theme")"
-  # Quit with alpha open: the quit confirm, then the app's server ends.
+  # Quit with alpha open: no confirm, nothing killed.
   X key ctrl+shift+q
-  sleep 1.5
-  shot "quit-confirm-$theme"
-  X key Tab; X key Return # Cancel is focused; Quit is next
-  sleep 1
-  check "quit: the window exited" yes "$(gone && echo yes || echo no)"
-  check "quit: the app's server is gone" no "$(has TA list-sessions)"
+  check "quit: the window exited at once" yes "$(gone && echo yes || echo no)"
+  check "quit: alpha's session keeps running on the app's server" yes "$(has TA has-session -t "alpha-$theme")"
+  check "quit: no client is left attached" 0 "$(TA list-clients 2>/dev/null | wc -l | tr -d ' ')"
   check "quit: the default server's same-named session stays" yes "$(has TD has-session -t "alpha-$theme")"
   [ -n "$APP" ] && { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; }
+  # Second run on alpha: attached to the session, no second start.
+  first=$(TA capture-pane -p -t "alpha-$theme" | grep -m1 'engineer, started')
+  app "$theme" app "$a"
+  sleep 6
+  check "second run: no second start (attached)" "1 0" "$(grep -c "^alpha-$theme: start" "$W/rein.log") $(grep -c LIVE "$W/rein.log")"
+  check "second run: the app's client is on alpha's session" "alpha-$theme" "$(TA list-clients -F '#{session_name}' 2>/dev/null)"
+  check "second run: the same agent pane" "$first" "$(TA capture-pane -p -t "alpha-$theme" | grep -m1 'engineer, started')"
+  shot "reattached-$theme"
+  # A project whose tag no session carries starts, even with alpha's tagged session alive.
+  second "$g"
+  sleep 7
+  check "another project's tagged session is not attached to" "gamma-$theme: start" "$(tail -n1 "$W/rein.log")"
+  check "  ... and gamma got its own tag" "$(tag "$g")" "$(tag_of "gamma-$theme")"
+  X key ctrl+shift+q
+  gone >/dev/null
+  [ -n "$APP" ] && { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; }
+  TA kill-server 2>/dev/null # the test's own cleanup between themes, not the app's
   TD kill-server 2>/dev/null
   sleep 0.5
 done
 
-# tmux.server = "user": a leftover on the app's socket and the user's own session both stay.
+# tmux.server = "user": something on the app's socket and the user's own session both stay.
 echo "[user server]"
 : >"$W/rein.log"
 u="$W/Dev/user-proj"; mkdir -p "$u/.ai"
@@ -159,7 +178,8 @@ sleep 1
 check "user: the window exited" yes "$(gone && echo yes || echo no)"
 check "user: no kill on the user's server" "user-proj: start" "$(cat "$W/rein.log")"
 check "user: the user's session keeps running" yes "$(has TD has-session -t user-proj)"
-check "user: the app's socket is not touched (no sweep, no quit kill)" yes "$(has TA has-session -t leftover)"
+check "user: the app's socket is not touched" yes "$(has TA has-session -t leftover)"
+check "user: no tag on the user's session" "" "$(TD show-options -v -t user-proj @rein_app_project 2>/dev/null)"
 [ -n "$APP" ] && { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; }
 
 echo "rein log:"; sed 's/^/  /' "$W/rein.log"
