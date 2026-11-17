@@ -226,7 +226,11 @@ done
 check "lookup: setup with no word prints nothing (exit 0)" "|0" "$(out=$(HOME="$h" TMUX_TMPDIR="$t" /bin/sh -s <"$SETUP" 2>/dev/null); echo "$out|$?")"
 check "lookup: both servers' sessions survive every lookup" "yes yes" "$(alive "$t" rein-app) $(alive "$t")"
 check "lookup: the sweep is gone (no kill-server in the setup)" 0 "$(grep -c kill-server "$SETUP" || true)"
-check "lookup: no tmux → none" "none 0" "$(out=$(PATH=/nonexistent:/bin HOME="$h" /bin/sh -s -- "$TAG" <"$SETUP" 2>/dev/null); echo "$out $?")"
+# No tmux: a PATH holding only the tools the setup uses (find is /usr/bin/find on macOS, and
+# tmux is /usr/bin/tmux on Linux, so neither /bin nor /usr/bin alone would do).
+mkdir -p "$W/notmux"
+for c in mkdir find chmod rm cat cmp mv grep; do ln -sf "$(command -v "$c")" "$W/notmux/$c"; done
+check "lookup: no tmux → none" "none 0" "$(out=$(PATH="$W/notmux" HOME="$h" /bin/sh -s -- "$TAG" <"$SETUP" 2>/dev/null); echo "$out $?")"
 
 # The attach script exactly as tmux_server.rs builds it (Linux / macOS form), its last command
 # replaced by an echo of the target so no terminal is needed; one real attach under `script`.
