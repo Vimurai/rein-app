@@ -322,8 +322,16 @@ confirm. Quitting the window does not end it.
   that mark on the `rein-app` server: found → the tab attaches to it; not found → `rein start`
   as before. Session names are never used. `tmux -L rein-app show-options -t <session>
   @rein_app_project` shows the mark.
+- **Your open tabs come back.** The window remembers which project tabs were open, in order,
+  and which one was in front (in `projects.json`, beside `ui.json`). At its next start it opens
+  them again, attached to their running sessions; nothing is started. A project you closed
+  (× / Close project) is not reopened. A project given on the command line opens as well.
 - **After a reboot** (or `wsl --shutdown`, or the `rein-app` server ending) there is no session
-  to find, and opening the project starts it again.
+  to find: the tab shows "*project* is not running. Its session ended while the app was
+  closed." with **Start** and **Close project**, and nothing starts until you choose. A folder
+  that is gone says so and offers only **Close project**. A tab whose session is there but
+  whose agents have all exited shows "The agents in *project* are no longer running." with
+  **Start again** and **Close project**.
 - **With your own tmux server** (`[tmux] server = "user"`) nothing here applies: sessions are
   yours and are not marked.
 

@@ -1,0 +1,8 @@
+date: 2026-11-17T21:23:42Z
+wsl.exe: WSL version: 3.0.5.0; distro: Ubuntu; shell: /usr/bin/zsh; tmux: tmux 3.8
+record: one (live), two (live), three (its session ended between runs)
+
+tab one: lookup live in 148 ms; attach: first tmux frame 856 ms, its pane's marker 859 ms
+tab two: lookup live in 138 ms; attach: first tmux frame 394 ms, its pane's marker 396 ms
+tab three: lookup none in 142 ms; no process — the not-running card
+sessions afterwards: one two (none started)

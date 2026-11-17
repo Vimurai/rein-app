@@ -120,6 +120,8 @@ pub struct Desktop {
     pub agents: crate::agents::AgentWatch,
     /// Set-up tabs and the out-of-date checks (V9 components 1–3, E-63).
     pub projects: crate::project_setup::ProjectState,
+    /// Restored tabs with no process: "not running" or "missing" cards (V12 5, E-70).
+    pub(crate) cards: Mutex<HashMap<u32, crate::restore::Card>>,
 }
 
 impl Desktop {
@@ -135,6 +137,7 @@ impl Desktop {
             panels: crate::panel_ipc::PanelCache::default(),
             agents: crate::agents::AgentWatch::default(),
             projects: crate::project_setup::ProjectState::default(),
+            cards: Mutex::new(HashMap::new()),
         }
     }
 
@@ -168,6 +171,7 @@ impl Desktop {
 
     /// Validate, then start `rein start` in `project` with output going to `events`. A
     /// directory without `.ai/` opens as a set-up tab instead, with no pty (V9 component 1).
+    #[cfg(test)]
     pub fn open(
         &self,
         project: &str,
@@ -176,8 +180,30 @@ impl Desktop {
         events: Arc<dyn Events>,
         server: crate::tmux_server::Server,
     ) -> Result<crate::project_setup::Opened, IpcError> {
+        self.open_as(project, cols, rows, events, server, false)
+    }
+
+    /// [`open`](Self::open); with `restore` (a tab from the open-tabs record, V12 components
+    /// 4–5) a folder that is gone, or a project whose session is not alive on the app's
+    /// server, opens as a card with no process instead.
+    pub fn open_as(
+        &self,
+        project: &str,
+        cols: u32,
+        rows: u32,
+        events: Arc<dyn Events>,
+        server: crate::tmux_server::Server,
+        restore: bool,
+    ) -> Result<crate::project_setup::Opened, IpcError> {
         let size = validate_size(cols, rows)?;
-        let (project, found) = self.platform.project_dir(project)?;
+        let (project, found) = match self.platform.project_dir(project) {
+            Err(e) if restore && e.kind == "not_a_directory" => {
+                let gone =
+                    crate::project_path::check(project).map_err(|why| err("unsafe_path", why))?;
+                return self.open_card(gone, server, true);
+            }
+            other => other?,
+        };
         match found {
             crate::host::Found::Project => {}
             crate::host::Found::Plain => return self.open_setup(project, server, None),
@@ -185,7 +211,9 @@ impl Desktop {
                 return self.open_setup(project, server, Some(parent));
             }
         }
-        let spec = self.start_spec(&project, server, false)?;
+        let Some(spec) = self.start_spec(&project, server, false, restore)? else {
+            return self.open_card(project, server, false);
+        };
         self.open_spec_as(&spec, &project, size, events, server, None)
             .map(crate::project_setup::Opened::Tab)
     }
@@ -195,12 +223,14 @@ impl Desktop {
     /// opened and the window shows the app's fixed sentence. V12 components 2–3: on the app's
     /// server the same setup process answers whether a session tagged for this project is
     /// alive — then the child attaches to it and `rein start` is never run on it.
-    fn start_spec(
+    /// With `restore`, `None` when no session is alive for the project: nothing starts.
+    pub(crate) fn start_spec(
         &self,
         project: &Path,
         server: crate::tmux_server::Server,
         setup: bool,
-    ) -> Result<ChildSpec, IpcError> {
+        restore: bool,
+    ) -> Result<Option<ChildSpec>, IpcError> {
         if server == crate::tmux_server::Server::App {
             let tag = self.tag_of(project);
             let found = self
@@ -208,14 +238,53 @@ impl Desktop {
                 .tmux_setup(&tag)
                 .map_err(|why| err("tmux_setup", crate::tmux_server::setup_message(why)))?;
             if found == crate::tmux_server::Lookup::Live {
-                return self.platform.rein_attach(project, &tag);
+                return self.platform.rein_attach(project, &tag).map(Some);
+            }
+            if restore {
+                return Ok(None);
             }
         }
         if setup {
-            self.platform.rein_setup(project, server)
+            self.platform.rein_setup(project, server).map(Some)
         } else {
-            self.platform.rein_start(project, server)
+            self.platform.rein_start(project, server).map(Some)
         }
+    }
+
+    /// A card tab (V12 component 5): an id and the project, counted against the tab limit,
+    /// no process. `missing`: the folder is gone (only Close project is offered).
+    fn open_card(
+        &self,
+        project: std::path::PathBuf,
+        server: crate::tmux_server::Server,
+        missing: bool,
+    ) -> Result<crate::project_setup::Opened, IpcError> {
+        let tabs = self.tabs();
+        let waiting = self
+            .projects
+            .setup
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut cards = self.cards.lock().unwrap_or_else(|e| e.into_inner());
+        if tabs.len() + waiting.len() + cards.len() >= MAX_TABS {
+            return Err(err("too_many_tabs", "at most 16 tabs are open at once"));
+        }
+        let id = self.next_tab.fetch_add(1, Ordering::Relaxed) + 1;
+        let view = crate::restore::CardView {
+            id,
+            project: project.to_string_lossy().into_owned(),
+            title: title_of(&project),
+            missing,
+        };
+        cards.insert(
+            id,
+            crate::restore::Card {
+                project,
+                server,
+                missing,
+            },
+        );
+        Ok(crate::project_setup::Opened::Card { card: view })
     }
 
     /// A set-up tab: an id and the project, counted against the tab limit, no process.
@@ -231,7 +300,8 @@ impl Desktop {
             .setup
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        if tabs.len() + setup.len() >= MAX_TABS {
+        let cards = self.cards.lock().unwrap_or_else(|e| e.into_inner()).len();
+        if tabs.len() + setup.len() + cards >= MAX_TABS {
             return Err(err("too_many_tabs", "at most 16 tabs are open at once"));
         }
         let id = self.next_tab.fetch_add(1, Ordering::Relaxed) + 1;
@@ -273,7 +343,9 @@ impl Desktop {
                 "this folder is inside a Rein project — open that project instead",
             ));
         }
-        let spec = self.start_spec(&s.project, s.server, true)?;
+        let spec = self
+            .start_spec(&s.project, s.server, true, false)?
+            .ok_or_else(|| err("spawn", "nothing to start"))?;
         // Taken out under the tabs lock in `open_spec_as`, so it counts once throughout.
         self.open_spec_as(&spec, &s.project, size, events, s.server, Some(tab))
     }
@@ -299,7 +371,7 @@ impl Desktop {
 
     /// [`open_spec`](Self::open_spec), recording the tmux server the child reaches; `setup`:
     /// the set-up tab this becomes (its id kept).
-    fn open_spec_as(
+    pub(crate) fn open_spec_as(
         &self,
         spec: &ChildSpec,
         project: &Path,
@@ -316,10 +388,11 @@ impl Desktop {
             .setup
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        if setup.is_some_and(|t| !waiting.contains_key(&t)) {
+        let mut cards = self.cards.lock().unwrap_or_else(|e| e.into_inner());
+        if setup.is_some_and(|t| !waiting.contains_key(&t) && !cards.contains_key(&t)) {
             return Err(err("unknown_tab", "the tab is not waiting for set-up"));
         }
-        let others = waiting.len() - usize::from(setup.is_some());
+        let others = waiting.len() + cards.len() - usize::from(setup.is_some());
         if tabs.len() + others >= MAX_TABS {
             return Err(err("too_many_tabs", "at most 16 tabs are open at once"));
         }
@@ -327,6 +400,7 @@ impl Desktop {
         let id = match setup {
             Some(t) => {
                 waiting.remove(&t);
+                cards.remove(&t);
                 t
             }
             None => self.next_tab.fetch_add(1, Ordering::Relaxed) + 1,
@@ -426,6 +500,10 @@ impl Desktop {
         self.panels.forget(tab);
         self.agents.forget(tab);
         self.projects.forget(tab);
+        self.cards
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&tab);
     }
 }
 
@@ -476,11 +554,14 @@ pub fn tab_open(
     cols: u32,
     rows: u32,
     output: Channel<InvokeResponseBody>,
+    restore: Option<bool>,
 ) -> Result<crate::project_setup::Opened, IpcError> {
     // V8: which tmux server this tab reaches, from the settings as they are now.
     let view = ui.view(&config.view());
     let server = crate::tmux_server::Server::from_setting(view.tmux_server.value.as_str());
-    let opened = state.open(&project, cols, rows, channel_events(output, app), server)?;
+    let events = channel_events(output, app);
+    let restore = restore.unwrap_or(false);
+    let opened = state.open_as(&project, cols, rows, events, server, restore)?;
     // Recent projects (E-38): the canonical path the tab runs in — only a project, never a
     // folder still waiting for set-up. A failed save only loses the list entry.
     if let crate::project_setup::Opened::Tab(tab) = &opened {

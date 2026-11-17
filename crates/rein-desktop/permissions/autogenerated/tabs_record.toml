@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tabs-record"
+description = "Enables the tabs_record command without any pre-configured scope."
+commands.allow = ["tabs_record"]
+
+[[permission]]
+identifier = "deny-tabs-record"
+description = "Denies the tabs_record command without any pre-configured scope."
+commands.deny = ["tabs_record"]

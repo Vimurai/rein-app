@@ -77,8 +77,23 @@ export interface Tab {
 }
 
 /** A tab with its terminal, or (V9, E-63) a folder without `.ai/`: a set-up tab, no pty. */
-export const tabOpen = (project: string, cols: number, rows: number, output: Channel<ArrayBuffer>) =>
-  invoke<Tab | { setup: import("./project.ts").SetupView }>("tab_open", { project, cols, rows, output });
+export const tabOpen = (project: string, cols: number, rows: number, output: Channel<ArrayBuffer>, restore = false) =>
+  invoke<Tab | { setup: import("./project.ts").SetupView } | { card: CardView }>("tab_open", { project, cols, rows, output, restore });
+/** A restored tab with no process (V12 component 5, E-70). */
+export interface CardView {
+  id: number;
+  project: string;
+  title: string;
+  /** The folder is gone: only Close project. */
+  missing: boolean;
+}
+/** The card's Start: `rein start` in place of the card, under its id. */
+export const tabStart = (tab: number, cols: number, rows: number, output: Channel<ArrayBuffer>) =>
+  invoke<Tab>("tab_start", { tab, cols, rows, output });
+/** The open-tabs record (V12 component 4): its projects in tab order and the current one. */
+export const tabsRestore = () => invoke<{ tabs: string[]; active: number | null }>("tabs_restore", {});
+/** Rewrite the record from this window's tabs, as core ids in tab order — never paths. */
+export const tabsRecord = (tabs: number[], active: number | null) => invoke<void>("tabs_record", { tabs, active });
 /** V9: Set up this project — the set-up tab gets its terminal (`rein init`, then `rein start`). */
 export const projectSetup = (tab: number, cols: number, rows: number, output: Channel<ArrayBuffer>) =>
   invoke<Tab>("project_setup", { tab, cols, rows, output });

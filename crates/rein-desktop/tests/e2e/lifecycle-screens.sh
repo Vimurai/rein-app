@@ -13,6 +13,11 @@
 #     same-named session on the default server stays;
 #   - a second run on the project attaches: the stand-in rein records no second start;
 #   - a session tagged for another project is not attached to (a new project starts);
+#   - E-70: the open tabs are recorded (a closed project leaves the record) and a run with no
+#     project restores them attached, starting nothing; a session that ended between runs
+#     opens as the "not running" card and starts only on Start; an attached tab whose agents
+#     are gone shows the "no longer running" bar (screens restored-tabs, not-running-card,
+#     agents-gone-bar);
 #   - with tmux.server = "user" no tag is set and quit touches nothing.
 # The stand-in rein builds one role pane per project running a stand-in agent. A local tool
 # only: it refuses to run when CI is set. Needs: Xvfb, tmux, cc, Xlib + XTest headers, ffmpeg,
@@ -82,6 +87,8 @@ shot() { ffmpeg -loglevel error -y -f x11grab -draw_mouse 0 -video_size "${GW}x$
 fails=0
 tag() { printf %s "$1" | sha256sum | cut -d' ' -f1; }
 tag_of() { TA show-options -v -t "$1" @rein_app_project 2>/dev/null; }
+# The open-tabs record's folder names, in order (projects.json, V12 component 4).
+open_rec() { python3 -c 'import json,sys,os; d=json.load(open(sys.argv[1])); print(" ".join(os.path.basename(t["path"]) for t in d.get("open",[])))' "$W/xdg/state/rein-app/projects.json" 2>/dev/null; }
 check() { if [ "$2" = "$3" ]; then echo "  ok   $1"; else echo "  FAIL $1 — expected [$2], got [$3]"; fails=$((fails + 1)); fi; }
 has() { if "$@" >/dev/null 2>&1; then echo yes; else echo no; fi; }
 
@@ -106,7 +113,7 @@ app() { # app <theme> <server> <dir>
     XDG_RUNTIME_DIR="$W/run" XDG_CONFIG_HOME="$W/xdg/config" XDG_DATA_HOME="$W/xdg/data" \
     XDG_STATE_HOME="$W/xdg/state" XDG_CACHE_HOME="$W/xdg/cache" \
     WEBKIT_DISABLE_DMABUF_RENDERER=1 \
-    "$REPO/target/debug/rein-desktop" "$3" >>"$W/app.log" 2>&1 &
+    "$REPO/target/debug/rein-desktop" ${3:+"$3"} >>"$W/app.log" 2>&1 &
   APP=$!
   for _ in $(seq 1 300); do "$W/bin/xresize" rein "$GW" "$GH" >/dev/null 2>&1 && break; sleep 0.05; done
 }
@@ -119,6 +126,7 @@ gone() { for _ in $(seq 1 50); do kill -0 "$APP" 2>/dev/null || { APP=""; return
 for theme in catppuccin-mocha github-light; do
   echo "[$theme ${GW}x${GH}]"
   : >"$W/rein.log"
+  rm -f "$W/xdg/state/rein-app/projects.json" # each theme starts with no open-tabs record
   a="$W/Dev/alpha-$theme" b="$W/Dev/beta-$theme" g="$W/Dev/gamma-$theme"
   mkdir -p "$a/.ai" "$b/.ai" "$g/.ai"
   # The same name on the default server: never touched.
@@ -159,6 +167,36 @@ for theme in catppuccin-mocha github-light; do
   X key ctrl+shift+q
   gone >/dev/null
   [ -n "$APP" ] && { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; }
+  # E-70 (V12 components 4-5): the record is what was open — closed beta is not in it.
+  check "record: alpha and gamma, in tab order (beta was closed)" "alpha-$theme gamma-$theme" "$(open_rec)"
+  starts=$(grep -c ': start$' "$W/rein.log")
+  # Third run, no project given: both tabs come back attached, nothing is started again.
+  app "$theme" app ""
+  sleep 9
+  check "restore: no start on a restored tab" "$starts" "$(grep -c ': start$' "$W/rein.log")"
+  check "restore: both sessions have the app's client (attached, in order)" "alpha-$theme gamma-$theme" "$(TA list-clients -F '#{session_name}' 2>/dev/null | sort | tr '\n' ' ' | sed 's/ $//')"
+  shot "restored-tabs-$theme"
+  X key ctrl+shift+q
+  gone >/dev/null
+  [ -n "$APP" ] && { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; }
+  # Between runs: alpha's agent stops (its pane back at a shell); gamma's session ends.
+  TA send-keys -t "alpha-$theme" C-c
+  TA kill-session -t "gamma-$theme"
+  sleep 1
+  app "$theme" app ""
+  sleep 8 # the restore; gamma was the current tab when the last run quit
+  check "restore: still no start (gamma waits on its card)" "$starts" "$(grep -c ': start$' "$W/rein.log")"
+  shot "not-running-card-$theme"
+  check "the card started nothing" "no" "$(has TA has-session -t "gamma-$theme")"
+  X key ctrl+Tab; sleep 7 # alpha: its first 5 s status read finds no agent running
+  shot "agents-gone-bar-$theme"
+  X key ctrl+Tab; sleep 1.5
+  X key Return; sleep 7 # back on gamma: Start is focused on the card
+  check "Start runs rein start for gamma, once" "$((starts + 1))" "$(grep -c ': start$' "$W/rein.log")"
+  check "  ... and gamma runs again" yes "$(has TA has-session -t "gamma-$theme")"
+  X key ctrl+shift+q
+  gone >/dev/null
+  [ -n "$APP" ] && { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; }
   TA kill-server 2>/dev/null # the test's own cleanup between themes, not the app's
   TD kill-server 2>/dev/null
   sleep 0.5
@@ -168,6 +206,7 @@ done
 echo "[user server]"
 : >"$W/rein.log"
 u="$W/Dev/user-proj"; mkdir -p "$u/.ai"
+rm -f "$W/xdg/state/rein-app/projects.json" # no record from the theme runs
 TA new-session -d -s leftover "sh"
 app catppuccin-mocha user "$u"
 sleep 7

@@ -94,6 +94,7 @@ launch() { # launch <theme> <tmux status>
   now=$(date +%s)
   mkdir -p "$st"
   printf '{"schema":1,"input_style":"simple","first_run_done":true,"theme":"%s","tmux_status":"%s"}' "$1" "$2" >"$st/ui.json"
+  rm -f "$st/projects.json" # E-70: each launch starts with no open-tabs record (no restore)
   printf '{"schema":1,"recent":[{"path":"%s","last_opened":%d},{"path":"%s","last_opened":%d},{"path":"%s","last_opened":%d}]}' \
     "$W/Dev/schraubr_laravel" $((now - 7200)) "$W/Dev/energy-api" $((now - 90000)) "$W/Dev/docs" $((now - 5 * 86400)) >"$st/projects.json"
   env -u TMUX -u TMUX_PANE -u CLAUDECODE \

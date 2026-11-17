@@ -1,12 +1,68 @@
 // The agent-exit bar and the close confirm (desktop.md §Look and feel v2 V9 component 4, E-62),
 // drawn from the pure `agents.ts`. Text goes in as React text nodes only.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/button.tsx";
 import { Switch } from "../components/switch.tsx";
 import { Dialog, DialogContent, DialogFooter } from "../components/dialog.tsx";
 import { Spinner } from "../components/loaders.tsx";
-import { confirmText } from "./agents.ts";
+import { POLL_MS, agentBar, confirmText, shouldPoll, type Agent } from "./agents.ts";
+import { projectAgents } from "./ipc.ts";
+import { agentsGone } from "./restore-ui.tsx";
+
+/** What the poll reads and sets on a tab (the shell's own tab entry). */
+export interface PolledTab {
+  term: { tab: { id: number } | null };
+  open: boolean;
+  exited: boolean;
+  closing?: boolean;
+  agents?: Agent[];
+  autoFailed?: boolean;
+  kept?: string | null;
+  restored?: boolean;
+  gone?: boolean;
+}
+
+/** V9 (E-62): ask the core which agents of the active tab still run — every 5 s, only while
+ *  the window is visible and the tab's process runs. All ended (setting on): close by itself.
+ *  E-70: a restored tab's first answer tells whether its agents are gone (V12 component 5).
+ *  Moved out of `shell.tsx` unchanged otherwise. */
+export function useAgentPoll<T extends PolledTab>(
+  current: () => T | undefined,
+  stillOpen: (t: T) => boolean,
+  closeProject: (t: T, confirmed: boolean, auto?: boolean) => void,
+  closeWhenAgentsExit: boolean,
+  rerender: () => void,
+) {
+  const closeRef = useRef(closeProject);
+  closeRef.current = closeProject;
+  const whenRef = useRef(closeWhenAgentsExit);
+  whenRef.current = closeWhenAgentsExit;
+  const at = useRef({ current, stillOpen, rerender });
+  at.current = { current, stillOpen, rerender };
+  useEffect(() => {
+    const tick = () => {
+      const t = at.current.current();
+      const id = t?.term.tab?.id;
+      if (!t || id === undefined) return;
+      const visible = document.visibilityState === "visible";
+      if (!shouldPoll({ active: true, visible, open: t.open, exited: t.exited }) || t.closing) return;
+      projectAgents(id).then(
+        (r) => {
+          if (!at.current.stillOpen(t) || t.exited || !("agents" in r)) return;
+          t.agents = r.agents;
+          if (t.restored) Object.assign(t, { restored: false, gone: agentsGone(r.agents) });
+          const view = agentBar(r.agents, { closeWhenAllExit: whenRef.current && !t.autoFailed, kept: t.kept ?? null });
+          if (view.kind === "close") closeRef.current(t, false, true);
+          at.current.rerender();
+        },
+        () => {},
+      );
+    };
+    const timer = setInterval(tick, POLL_MS);
+    return () => clearInterval(timer);
+  }, []);
+}
 
 /** One line above the terminal: what exited, Close project, Keep open. */
 export function AgentBar({

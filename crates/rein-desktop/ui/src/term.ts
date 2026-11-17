@@ -10,7 +10,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { concat, splitInput } from "./chunks.ts";
-import { Channel, projectSetup, ptyAck, ptyResize, ptyWrite, tabDetach, tabOpen, type Tab } from "./ipc.ts";
+import { Channel, projectSetup, ptyAck, ptyResize, ptyWrite, tabDetach, tabOpen, tabStart, type CardView, type Tab } from "./ipc.ts";
 import { INIT_FAILED, INIT_FAILED_SENTENCE, type SetupView } from "./project.ts";
 import { START_BYTES, START_LIMIT_MS, tabPhase, type TabPhase } from "./phase.ts";
 
@@ -160,12 +160,20 @@ export class TermTab {
 
   /** A folder without `.ai/` (V9): the tab waits for Set up this project, with no pty. */
   onSetup: (view: SetupView) => void = () => {};
-  /** The set-up tab's id while it waits (closed through `tab_detach` like any tab). */
+  /** The set-up tab's (or card's) id while it waits (closed through `tab_detach` like any tab). */
   #setupId: number | null = null;
+  /** V12 (E-70): the next open is a restore — a session that is not alive gives a card. */
+  restore = false;
+  /** A restored tab with no process: the "not running" or "missing" card. */
+  onCard: (view: CardView) => void = () => {};
+  /** The core id this tab has now: its terminal's, or the waiting card's (the record). */
+  get coreId(): number | null {
+    return this.#tab?.id ?? this.#setupId;
+  }
 
   /** Start (or restart) `rein start` in the project, sized to the stage. With `setupId`, the
    *  set-up tab's terminal: `rein init`, then `rein start` (V9 component 2). */
-  async start(setupId?: number): Promise<void> {
+  async start(setupId?: number, cardId?: number): Promise<void> {
     this.#exited = false;
     this.#alt = this.term.buffer.active.type === "alternate";
     this.#bytes = 0;
@@ -190,8 +198,26 @@ export class TermTab {
     });
     try {
       const { cols, rows } = this.term;
+      const restore = this.restore;
+      this.restore = false; // only the first open: Enter after an exit starts as always
       const answer =
-        setupId === undefined ? await tabOpen(this.#project, cols, rows, output) : await projectSetup(setupId, cols, rows, output);
+        cardId !== undefined
+          ? await tabStart(cardId, cols, rows, output)
+          : setupId === undefined
+            ? await tabOpen(this.#project, cols, rows, output, restore)
+            : await projectSetup(setupId, cols, rows, output);
+      if ("card" in answer) {
+        this.#setupId = answer.card.id;
+        if (gen !== this.#gen) {
+          await tabDetach(answer.card.id).catch(() => {});
+          return;
+        }
+        this.#exited = true; // no child: nothing is starting
+        clearTimeout(this.#limit);
+        this.onPhase();
+        this.onCard(answer.card);
+        return;
+      }
       if ("setup" in answer) {
         this.#setupId = answer.setup.id;
         if (gen !== this.#gen) {
@@ -220,7 +246,7 @@ export class TermTab {
       // A set-up tab's pane sat under the card: paint it as a shown tab is painted (E-63
       // review — `rein init`'s output and the fixed line were written but, 4 runs in 8, not
       // drawn until the window was resized).
-      if (setupId !== undefined) requestAnimationFrame(() => this.shown());
+      if (setupId !== undefined || cardId !== undefined) requestAnimationFrame(() => this.shown());
       this.onOpen(this.#tab);
     } catch (e) {
       if (gen !== this.#gen) return; // closed or restarted meanwhile: not this tab's error
@@ -341,6 +367,14 @@ export class TermTab {
     document.fonts?.removeEventListener("loadingdone", this.#fontsLoaded);
     this.term.dispose();
     this.#el.replaceChildren();
+  }
+
+  /** Start again in place (E-70 "Start again"): the old pty detached, then a fresh open. */
+  async restart(): Promise<void> {
+    const old = this.#tab;
+    this.#tab = null;
+    if (old) await tabDetach(old.id).catch(() => {});
+    await this.start();
   }
 
   #input(s: string): void {

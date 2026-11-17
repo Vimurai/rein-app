@@ -52,7 +52,7 @@ pub fn app_quit(app: AppHandle, state: State<'_, Desktop>) {
 }
 
 #[cfg(all(test, unix))]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::pty::{ChildSpec, Events, PtyId};
     use std::path::{Path, PathBuf};
@@ -61,7 +61,7 @@ mod tests {
     /// Records the lifecycle calls; every child is a short `sleep`. The lookup answers `live`
     /// for the tags in `.1`.
     #[derive(Default)]
-    struct Rec(Arc<Mutex<Vec<String>>>, Vec<String>);
+    pub(crate) struct Rec(pub Arc<Mutex<Vec<String>>>, pub Vec<String>);
 
     fn sleeper(project: &Path) -> ChildSpec {
         ChildSpec {
@@ -76,6 +76,9 @@ mod tests {
 
     impl crate::host::Host for Rec {
         fn project_dir(&self, input: &str) -> Result<(PathBuf, crate::host::Found), IpcError> {
+            if input.starts_with("/gone/") {
+                return Err(crate::ipc::err("not_a_directory", "not a directory"));
+            }
             Ok((PathBuf::from(input), crate::host::Found::Project))
         }
         fn rein_start(&self, project: &Path, s: Server) -> Result<ChildSpec, IpcError> {
@@ -162,7 +165,7 @@ mod tests {
         }
     }
 
-    struct Quiet;
+    pub(crate) struct Quiet;
     impl Events for Quiet {
         fn output(&self, _: PtyId, _: Vec<u8>) {}
         fn exit(&self, _: PtyId, _: u32) {}

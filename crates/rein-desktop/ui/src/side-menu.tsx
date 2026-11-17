@@ -64,9 +64,10 @@ export interface SideMenu {
 const HEALTH_WORDS = { ok: "OK", warn: "Warnings", fail: "Failing", unknown: "Not checked yet" } as const;
 
 /** The panel (E-60) keeps its own keys (Tab, Enter, arrows, Esc back to the terminal); only
- *  the shortcuts still act there, as in every mode. True when the key was the panel's. */
+ *  the shortcuts still act there, as in every mode. True when the key was the panel's. The
+ *  restored tab's card and bar (E-70, `data-own-keys`) keep theirs the same way. */
 export function panelOwnsKey(e: KeyboardEvent, shortcut: ActionCall | undefined, run: (c: ActionCall) => void): boolean {
-  if (!(e.target instanceof Element && e.target.closest("[data-panel-host]"))) return false;
+  if (!(e.target instanceof Element && e.target.closest("[data-panel-host], [data-own-keys]"))) return false;
   if (shortcut) {
     e.preventDefault();
     e.stopPropagation();

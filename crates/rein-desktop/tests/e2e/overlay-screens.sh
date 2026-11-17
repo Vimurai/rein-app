@@ -79,6 +79,7 @@ run() { # run <label> <status mode> [old]
   mkdir -p "$W/xdg/state/rein-app"
   printf '{"schema":1,"input_style":"simple","first_run_done":true,"tmux_status":"%s"}' "$mode" \
     >"$W/xdg/state/rein-app/ui.json"
+  rm -f "$W/xdg/state/rein-app/projects.json" # E-70: each launch starts with no open-tabs record
   env -u TMUX -u TMUX_PANE -u CLAUDECODE \
     HOME="$W/home" PATH="$W/bin:$PATH" SHELL=/bin/sh \
     XDG_RUNTIME_DIR="$W/run" XDG_CONFIG_HOME="$W/xdg/config" XDG_DATA_HOME="$W/xdg/data" \

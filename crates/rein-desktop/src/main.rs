@@ -33,6 +33,7 @@ mod project_setup;
 mod projects;
 mod pty;
 mod pty_sys;
+mod restore;
 mod security;
 mod session_tag;
 #[cfg(unix)]
@@ -276,6 +277,9 @@ fn main() -> ExitCode {
             panel_ipc::panel_data,
             attention::attention_items,
             attention::attention_dismiss,
+            restore::tabs_restore,
+            restore::tabs_record,
+            restore::tab_start,
             agents::project_agents,
             agents::project_close,
             project_setup::project_check,

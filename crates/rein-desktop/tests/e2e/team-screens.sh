@@ -97,6 +97,7 @@ app() { # app <theme> <dir>
   local st="$W/xdg/state/rein-app"
   mkdir -p "$st"
   printf '{"schema":1,"input_style":"simple","first_run_done":true,"theme":"%s"}' "$1" >"$st/ui.json"
+  rm -f "$st/projects.json" # E-70: each launch starts with no open-tabs record (no restore)
   env -u TMUX -u TMUX_PANE -u CLAUDECODE \
     HOME="$W/home" PATH="$W/bin:$PATH" SHELL=/bin/sh \
     XDG_RUNTIME_DIR="$W/run" XDG_CONFIG_HOME="$W/xdg/config" XDG_DATA_HOME="$W/xdg/data" \

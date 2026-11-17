@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tab-start"
+description = "Enables the tab_start command without any pre-configured scope."
+commands.allow = ["tab_start"]
+
+[[permission]]
+identifier = "deny-tab-start"
+description = "Denies the tab_start command without any pre-configured scope."
+commands.deny = ["tab_start"]

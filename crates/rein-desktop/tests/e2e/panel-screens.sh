@@ -154,6 +154,7 @@ app() { # app <theme> <dir>
   local st="$W/xdg/state/rein-app"
   mkdir -p "$st"
   printf '{"schema":1,"input_style":"simple","first_run_done":true,"theme":"%s"}' "$1" >"$st/ui.json"
+  rm -f "$st/projects.json" # E-70: each launch starts with no open-tabs record (no restore)
   desktop "$2" &
   APP=$!
   for _ in $(seq 1 300); do "$W/bin/xresize" rein "$GW" "$GH" >/dev/null 2>&1 && break; sleep 0.05; done

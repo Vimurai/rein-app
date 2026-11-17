@@ -35,7 +35,6 @@ import {
   tabTmux,
   listen,
   appQuit,
-  projectAgents,
   projectCheck,
   projectClose,
   tabClose,
@@ -51,12 +50,14 @@ import { MenuOverlay, PasteConfirm, ProjectPicker, WhichKey, label } from "./ove
 import { startScreen, withStartKeys, type RecentView } from "./start.ts";
 import { StartScreen } from "./start-screen.tsx";
 import { TermTab } from "./term.ts";
-import { POLL_MS, agentBar, shouldPoll, type Agent } from "./agents.ts";
-import { AgentBar, CloseConfirm, StopConfirm } from "./agent-bar.tsx";
+import { agentBar, type Agent } from "./agents.ts";
+import { AgentBar, CloseConfirm, StopConfirm, useAgentPoll } from "./agent-bar.tsx";
 import { closeTabText, closedNote } from "./lifecycle.ts";
 import { shouldCheck, type CheckReply } from "./project.ts";
 import { SetupCard, UpdateBar, UpdateSheet } from "./project-ui.tsx";
 import { TeamSheet } from "./team-sheet.tsx";
+import { AgentsGoneBar, RestoreCard, restoreAtStart, useTabsRecord } from "./restore-ui.tsx";
+import type { CardView } from "./ipc.ts";
 import { SideRow, panelOwnsKey, useSideMenu, useStageFit, type SideMenuProps } from "./side-menu.tsx";
 import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
 
@@ -146,6 +147,12 @@ interface OpenTab {
   autoFailed?: boolean;
   /** V9 (E-63): a folder without `.ai/` — the set-up card, no terminal yet. */
   setup?: { id: number; reply: CheckReply | null; inside: string | null } | undefined;
+  /** V12 (E-70): a restored tab — its card (no session / no folder), the first status read
+   *  still owed, its agents found gone, and opened without taking the front. */
+  card?: CardView | undefined;
+  restored?: boolean;
+  gone?: boolean;
+  quiet?: boolean;
   /** The out-of-date check ran for this tab (once per open). */
   asked?: boolean;
   /** rein's rows when it reported the project out of date; the bar shows while set. */
@@ -183,6 +190,9 @@ export function Shell(props: ShellProps) {
   const [healthRuns, setHealthRuns] = useState(0);
   /** The recent projects have arrived once (V7: skeleton rows until then). */
   const [recentLoaded, setRecentLoaded] = useState(false);
+  /** V12 (E-70): the record is written only once the start-up restore is done. */
+  const [restored, setRestored] = useState(false);
+  useTabsRecord(restored, () => tabs.current, () => cur.current);
   /** The copy icon shows a check for COPIED_MS after a copy (V7). */
   const [copied, setCopied] = useState(0);
   /** `:open` completion is asking the core for directories (V7). */
@@ -347,23 +357,25 @@ export function Shell(props: ShellProps) {
 
   /** Open `project` in a new tab: `rein start` in a pty, drawn by xterm.js (at most 16). */
   const open = useCallback(
-    (project: string) => {
+    (project: string, restore = false): (() => Promise<void>) | null => {
       const same = tabs.current.findIndex((t) => t.project === project || t.requested === project);
       if (same >= 0) {
         showTab(same);
-        return;
+        return null;
       }
       if (tabs.current.length >= MAX_TABS) {
         say(`at most ${MAX_TABS} tabs — close one first (ZZ or :q)`, true);
-        return;
+        return null;
       }
       const host = termsEl.current;
-      if (!host) return;
+      if (!host) return null;
       const el = document.createElement("div");
       el.className = "term-pane";
       host.append(el);
       const term = new TermTab(el, project, { fontFamily, fontSize, lineHeight, theme });
-      const entry: OpenTab = { id: ++tabSeq.current, term, el, requested: project, project, title: project.split(/[/\\]/).pop() || "/", open: false, exited: false };
+      const entry: OpenTab = { id: ++tabSeq.current, term, el, requested: project, project, title: project.split(/[/\\]/).pop() || "/", open: false, exited: false, restored: restore, quiet: restore };
+      term.restore = restore;
+      term.onCard = (v) => Object.assign(entry, { card: v, project: v.project, title: v.title, restored: false }) && rerender();
       tabs.current.push(entry);
       term.keyFilter = (e) => terminalKeyRef.current(e);
       term.term.onBell(() => side.bell(entry, tabs.current[cur.current] === entry));
@@ -415,9 +427,12 @@ export function Shell(props: ShellProps) {
         entry.exited = entry.refused = false;
         entry.project = opened.project;
         entry.title = opened.title;
-        showTab(tabs.current.indexOf(entry));
-        showCommand(`cd ${shellWord(opened.project)} && rein start`);
-        setMode({ mode: "TERMINAL", pending: [] });
+        // A restored tab opening behind the current one does not take the front (V12 4).
+        const front = !entry.quiet || tabs.current[cur.current] === entry;
+        entry.quiet = false;
+        if (front) showTab(tabs.current.indexOf(entry));
+        if (front) showCommand(`cd ${shellWord(opened.project)} && rein start`);
+        if (front) setMode({ mode: "TERMINAL", pending: [] });
         refreshRecent();
         // The window's tmux look on the session the tab shows (V6, D-050), then health —
         // which is checked when a tab opens (desktop.md §Components 5) and carries the
@@ -431,8 +446,10 @@ export function Shell(props: ShellProps) {
         showTab(cur.current);
         say(`E: cannot open ${project}: ${msg}`, true);
       };
+      if (restore) return () => term.start();
       showTab(tabs.current.length - 1);
       void term.start();
+      return null;
     },
     [fontFamily, fontSize, lineHeight, theme, say, showCommand, setMode, showTab, refreshRecent, side.bell],
   );
@@ -542,34 +559,8 @@ export function Shell(props: ShellProps) {
     },
     [detach, say, showCommand],
   );
-  const closeProjectRef = useRef(closeProject);
-  closeProjectRef.current = closeProject;
-  const closeWhenRef = useRef(closeWhenAgentsExit);
-  closeWhenRef.current = closeWhenAgentsExit;
-
-  // V9: ask the core which agents of the active tab still run — every 5 s, only while the
-  // window is visible and the tab's process runs. All ended (setting on): close by itself.
-  useEffect(() => {
-    const tick = () => {
-      const t = tabs.current[cur.current];
-      const id = t?.term.tab?.id;
-      if (!t || id === undefined) return;
-      const visible = document.visibilityState === "visible";
-      if (!shouldPoll({ active: true, visible, open: t.open, exited: t.exited }) || t.closing) return;
-      projectAgents(id).then(
-        (r) => {
-          if (!tabs.current.includes(t) || t.exited || !("agents" in r)) return;
-          t.agents = r.agents;
-          const view = agentBar(r.agents, { closeWhenAllExit: closeWhenRef.current && !t.autoFailed, kept: t.kept ?? null });
-          if (view.kind === "close") closeProjectRef.current(t, false, true);
-          rerender();
-        },
-        () => {},
-      );
-    };
-    const timer = setInterval(tick, POLL_MS);
-    return () => clearInterval(timer);
-  }, []);
+  // V9: the active tab's agents every 5 s while visible (agent-bar.tsx; moved there by E-70).
+  useAgentPoll(() => tabs.current[cur.current], (t) => tabs.current.includes(t), closeProject, closeWhenAgentsExit, rerender);
 
   /** Run one action — from a key, the command line or (E-40) a click: the same closed list. */
   const run = useCallback(
@@ -871,18 +862,16 @@ export function Shell(props: ShellProps) {
       rerender();
     });
     void listen<string>("open_dir", (dir) => openRef.current(dir));
-    projectsList().then(
-      (list) => {
-        setRecent(list);
-        setRecentLoaded(true);
-        if (typeof startDir === "string") openRef.current(startDir);
-        else if (startLast && list[0]) openRef.current(list[0].path);
-      },
-      () => {
-        setRecentLoaded(true);
-        if (typeof startDir === "string") openRef.current(startDir);
-      },
-    );
+    // V12 (E-70): the recorded tabs first, then the command-line project; with no record,
+    // `window.start = "last"` opens the newest recent project as before.
+    void projectsList()
+      .then((list) => (setRecent(list), list), () => [] as RecentView[])
+      .then((list) =>
+        restoreAtStart((p, r) => openRef.current(p, r), (i) => showTab(i), typeof startDir === "string" ? startDir : null).then((n) => {
+          if (n === 0 && typeof startDir !== "string" && startLast && list[0]) openRef.current(list[0].path);
+        }),
+      )
+      .finally(() => (setRecentLoaded(true), setRestored(true)));
     // Listeners live as long as the window; `open` is stable for a given font and theme.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -932,6 +921,7 @@ export function Shell(props: ShellProps) {
             }}
           />
         )}
+        {current?.gone && !current.exited && <AgentsGoneBar t={current} rerender={rerender} say={say} onClose={() => closeProject(current, true)} />}
         {current && agentView.kind === "bar" && (
           <AgentBar
             text={agentView.text}
@@ -948,7 +938,8 @@ export function Shell(props: ShellProps) {
           {sideView.over && sideView.panel}
           {/* V7: the tab is starting — a 2 px line in the stage's own top padding, never over
               the terminal. */}
-          {status.starting && !current?.setup && <ProgressLine className="absolute inset-x-0 top-0 z-10" />}
+          {status.starting && !current?.setup && !current?.card && <ProgressLine className="absolute inset-x-0 top-0 z-10" />}
+          {current?.card && <RestoreCard t={current} rerender={rerender} onClose={() => detach(cur.current, `${current.title} closed`)} />}
           {current?.setup && (
             <SetupCard
               project={current.project}

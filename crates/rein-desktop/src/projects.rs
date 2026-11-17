@@ -15,6 +15,8 @@ use crate::project_path;
 
 pub const FILE_NAME: &str = "projects.json";
 pub const MAX_RECENT: usize = 64;
+/// The most open tabs the record keeps (desktop.md V12 §Data model, E-70).
+pub const MAX_OPEN: usize = 32;
 /// A projects.json larger than this is not ours; it is ignored (and replaced on next write).
 const MAX_BYTES: u64 = 1024 * 1024;
 
@@ -29,10 +31,27 @@ pub struct Recent {
     pub distro: Option<String>,
 }
 
+/// One open project tab, as the record keeps it (V12 component 4).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpenTab {
+    /// Canonical absolute path (the Linux path inside WSL on Windows).
+    pub path: String,
+    /// Windows: the WSL distro the path belongs to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distro: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectsFile {
     pub schema: u32,
     pub recent: Vec<Recent>,
+    /// The open project tabs, in tab order (V12 component 4): written on tab open, close,
+    /// reorder and switch; a tab leaves it only by Close project, never by quit.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub open: Vec<OpenTab>,
+    /// Which of `open` was the current tab.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active: Option<usize>,
 }
 
 impl Default for ProjectsFile {
@@ -40,8 +59,37 @@ impl Default for ProjectsFile {
         Self {
             schema: 1,
             recent: Vec::new(),
+            open: Vec::new(),
+            active: None,
         }
     }
+}
+
+/// A distro name the record keeps: what `wsl.exe --list` could print, nothing else.
+fn distro_ok(d: &str) -> bool {
+    !d.is_empty()
+        && d.len() <= 64
+        && d.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+}
+
+/// The record as read from a file: a malformed entry is dropped, never repaired; at most
+/// [`MAX_OPEN`]; an `active` that names no entry is dropped.
+fn clean_open(open: Vec<OpenTab>, active: Option<usize>) -> (Vec<OpenTab>, Option<usize>) {
+    let mut kept = Vec::new();
+    let mut new_active = None;
+    for (i, t) in open.into_iter().enumerate() {
+        let good = project_path::check(&t.path).is_ok()
+            && t.distro.as_deref().is_none_or(distro_ok)
+            && !kept.iter().any(|k: &OpenTab| k == &t);
+        if good && kept.len() < MAX_OPEN {
+            if active == Some(i) {
+                new_active = Some(kept.len());
+            }
+            kept.push(t);
+        }
+    }
+    (kept, new_active)
 }
 
 /// One row as the web side shows it.
@@ -109,6 +157,25 @@ impl ProjectStore {
         self.save(&d)
     }
 
+    /// The open-tabs record (V12 component 4).
+    pub fn open_tabs(&self) -> (Vec<OpenTab>, Option<usize>) {
+        let d = self.lock();
+        (d.open.clone(), d.active)
+    }
+
+    /// Rewrite the open-tabs record: the tabs in tab order and the current one. Cleaned as a
+    /// read record is; saved with a temp file and a rename.
+    pub fn set_open(&self, open: Vec<OpenTab>, active: Option<usize>) -> std::io::Result<()> {
+        let (open, active) = clean_open(open, active);
+        let mut d = self.lock();
+        if d.open == open && d.active == active {
+            return Ok(());
+        }
+        d.open = open;
+        d.active = active;
+        self.save(&d)
+    }
+
     /// `projects_forget`: drop one entry (the operator's choice, never automatic).
     pub fn forget(&self, path: &str) -> std::io::Result<()> {
         let mut d = self.lock();
@@ -142,6 +209,9 @@ fn load(file: &Path) -> ProjectsFile {
         Some(mut p) if p.schema == 1 => {
             p.recent.retain(|r| project_path::check(&r.path).is_ok());
             p.recent.truncate(MAX_RECENT);
+            let (open, active) = clean_open(std::mem::take(&mut p.open), p.active);
+            p.open = open;
+            p.active = active;
             p
         }
         _ => ProjectsFile::default(),
@@ -170,6 +240,64 @@ mod tests {
 
     fn store(dir: &Path) -> ProjectStore {
         ProjectStore::open(Some(dir.to_path_buf()), true)
+    }
+
+    /// V12 component 4 (E-70): the open-tabs record round trip, a malformed entry dropped,
+    /// the cap, and a path from the file held to the same rule as a picked one.
+    #[test]
+    fn the_open_tabs_record_round_trips_and_drops_what_is_odd() {
+        let t = tempfile::tempdir().unwrap();
+        let s = store(t.path());
+        let tab = |p: &str, d: Option<&str>| OpenTab {
+            path: p.into(),
+            distro: d.map(Into::into),
+        };
+        s.set_open(
+            vec![tab("/p/a", None), tab("/p/b", Some("Ubuntu"))],
+            Some(1),
+        )
+        .unwrap();
+        assert_eq!(
+            store(t.path()).open_tabs(),
+            s.open_tabs(),
+            "read back the same"
+        );
+        assert_eq!(s.open_tabs().1, Some(1));
+        // The cap, and an active index past it dropped.
+        let many: Vec<OpenTab> = (0..40).map(|i| tab(&format!("/p/{i}"), None)).collect();
+        s.set_open(many, Some(35)).unwrap();
+        assert_eq!(s.open_tabs().0.len(), MAX_OPEN);
+        assert_eq!(s.open_tabs().1, None);
+        // A file written by hand: each odd entry dropped, the rest kept in order.
+        std::fs::write(
+            t.path().join(FILE_NAME),
+            r#"{"schema":1,"recent":[],"open":[
+                {"path":"/p/ok"},
+                {"path":"relative/x"},
+                {"path":"/p/bidi\u202ename"},
+                {"path":"/p/two","distro":"Ub untu"},
+                {"path":"/p/ok"},
+                {"path":"/p/last","distro":"Debian-12"}
+              ],"active":5}"#,
+        )
+        .unwrap();
+        let (open, active) = store(t.path()).open_tabs();
+        assert_eq!(
+            open,
+            [tab("/p/ok", None), tab("/p/last", Some("Debian-12"))]
+        );
+        assert_eq!(active, Some(1), "active follows its entry");
+        // An entry of another shape drops the record, not the recent list.
+        std::fs::write(
+            t.path().join(FILE_NAME),
+            r#"{"schema":1,"recent":[{"path":"/p/r","last_opened":1}],"open":"nope"}"#,
+        )
+        .unwrap();
+        let again = store(t.path());
+        assert_eq!(again.open_tabs(), (vec![], None));
+        // A file without the fields: as before (the start screen).
+        std::fs::write(t.path().join(FILE_NAME), r#"{"schema":1,"recent":[]}"#).unwrap();
+        assert_eq!(store(t.path()).open_tabs(), (vec![], None));
     }
 
     #[test]

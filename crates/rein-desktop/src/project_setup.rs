@@ -279,7 +279,13 @@ pub struct SetupView {
 #[serde(untagged)]
 pub enum Opened {
     Tab(Tab),
-    SetUp { setup: SetupView },
+    SetUp {
+        setup: SetupView,
+    },
+    /// A restored tab with no process (V12 component 5, E-70).
+    Card {
+        card: crate::restore::CardView,
+    },
 }
 
 /// `project_check`'s answer.
