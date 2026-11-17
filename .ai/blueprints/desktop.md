@@ -1282,6 +1282,16 @@ visible window, one process per 5 s). Quit is immediate.
 - What a running `claude` agent does while no client is attached (does it keep
   working, does a resize on re-attach disturb it).
 
+**Results of the reads (2026-11-17, D-061 addendum 1).** tmux 3.2a: session user
+options and `#{@rein_app_project}` in `list-sessions -F` work — components 1–2 stand.
+A `claude` agent keeps working detached and a re-attach at another size does not
+disturb it; it does wait for good at a permission prompt (a risk, stated in E-61's gap
+text; no app-side workaround). **The Windows read is open:** this machine's
+`.wslconfig` disables both idle timeouts, so the default cannot be measured here
+without the operator. E-69..E-71 are not started until the operator chooses: measure
+under defaults, build V12 on Windows depending on a kept-alive distro, or keep V11 on
+Windows.
+
 **Tests.** Rust: the tag (stable, differs by distro, 64 hex); record round trip, a
 malformed entry dropped, the 32 cap; script text (no `kill-server` anywhere, the hex
 re-check). End to end (Linux, macOS; private `TMUX_TMPDIR`, stand-in rein recording
