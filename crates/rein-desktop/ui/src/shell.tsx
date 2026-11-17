@@ -58,9 +58,7 @@ import { closeTabText, closedNote, quitText } from "./lifecycle.ts";
 import { shouldCheck, type CheckReply } from "./project.ts";
 import { SetupCard, UpdateBar, UpdateSheet } from "./project-ui.tsx";
 import { TeamSheet } from "./team-sheet.tsx";
-import { PanelHost } from "./panel-host.tsx";
-import { Rail } from "./rail.tsx";
-import { clampWidth, descriptor, enabledPanels, overlays as panelOverlays } from "./panels.ts";
+import { SideRow, panelOwnsKey, useSideMenu, useStageFit, type SideMenuProps } from "./side-menu.tsx";
 import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
 
 /** What an action handler supplied by the app may do on the command line. */
@@ -71,7 +69,7 @@ export interface Ui {
 
 export type Handlers = Partial<Record<ActionName, (call: ActionCall, ui: Ui) => void>>;
 
-export interface ShellProps {
+export interface ShellProps extends SideMenuProps {
   theme: Theme;
   keys: KeyTable;
   fontFamily: string;
@@ -99,12 +97,6 @@ export interface ShellProps {
   /** V11: closing a project or quitting does not ask; and how to set it. */
   closeDontAsk: boolean;
   onCloseDontAsk: () => void;
-  /** The side menu (panels.md, E-60): the rail, the panels on offer, the panel last open and
-   *  its width as ui.json had them (null until ui.json is read), and how to keep them. */
-  panelsRail: "shown" | "hidden";
-  panelsEnabled: readonly string[];
-  panelInit: { open: string | null; width: number } | null;
-  onPanelState: (field: "panel_open" | "panel_width", value: string | number | null) => void;
 }
 
 const VERSION = "0.5.0";
@@ -163,32 +155,6 @@ interface OpenTab {
 export function Shell(props: ShellProps) {
   const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, tmuxKey, handlers, notice, startDir, startLast, closeWhenAgentsExit, dontAskUpdate, onDontAskUpdate, closeDontAsk, onCloseDontAsk } =
     props;
-  const { panelsRail, panelsEnabled, panelInit, onPanelState } = props;
-  /** The open panel (one at a time) and its width; `liveWidth` follows a drag of its edge. */
-  const [panel, setPanel] = useState<string | null>(null);
-  const [panelWidth, setPanelWidth] = useState(360);
-  const [liveWidth, setLiveWidth] = useState<number | null>(null);
-  /** While the panel's edge is dragged the terminal is not fitted (one pty resize at the end). */
-  const resizing = useRef(false);
-  const [panelRefresh, setPanelRefresh] = useState(0);
-  const [panelFocus, setPanelFocus] = useState(0);
-  const [winWidth, setWinWidth] = useState(() => (typeof window === "undefined" ? 1280 : window.innerWidth));
-  const panelSeeded = useRef(false);
-  useEffect(() => {
-    if (!panelInit || panelSeeded.current) return;
-    panelSeeded.current = true;
-    setPanel(panelInit.open);
-    setPanelWidth(panelInit.width);
-  }, [panelInit]);
-  useEffect(() => {
-    const on = () => setWinWidth(window.innerWidth);
-    window.addEventListener("resize", on);
-    return () => window.removeEventListener("resize", on);
-  }, []);
-  const panelRef = useRef<string | null>(null);
-  panelRef.current = panel;
-  const enabledRef = useRef(panelsEnabled);
-  enabledRef.current = panelsEnabled;
   /** V11: a stop confirm — closing one project's tab, or quitting with `n` projects. */
   const [stop, setStop] = useState<{ kind: "tab"; entry: OpenTab; roles: string[] } | { kind: "quit"; n: number } | null>(null);
   const closeDontAskRef = useRef(closeDontAsk);
@@ -259,6 +225,7 @@ export function Shell(props: ShellProps) {
     (text: string, error = false) => setMessage((m) => ({ text, error, seq: (m?.seq ?? 0) + 1 })),
     [],
   );
+  const side = useSideMenu(props, say, () => tab.current);
   useEffect(() => {
     if (!message) return;
     if (message.leaving) {
@@ -627,6 +594,7 @@ export function Shell(props: ShellProps) {
         say("modes belong to the modal input style — menu → Input style: modal");
         return;
       }
+      if (side.act(call)) return;
       switch (call.name) {
         case "mode.normal":
           setMode({ mode: "NORMAL", pending: [] });
@@ -658,44 +626,6 @@ export function Shell(props: ShellProps) {
           // `×` names its tab; the key form closes the current one (V11: its project too).
           closeTab(call.arg ? Number(call.arg) - 1 : cur.current);
           return;
-        // panels.md §API (E-60): one panel at a time; the same toggle again closes it.
-        case "panel.toggle": {
-          const id = call.arg ?? "";
-          const d = descriptor(id);
-          if (!d || !enabledRef.current.includes(id)) {
-            say(`the ${d?.title ?? id} panel is turned off — Settings → Panel: ${d?.title ?? id}`, true);
-            return;
-          }
-          const next = panelRef.current === id ? null : id;
-          setPanel(next);
-          onPanelState("panel_open", next);
-          if (next === null) tab.current?.focus();
-          return;
-        }
-        case "panel.close":
-          if (panelRef.current !== null) {
-            setPanel(null);
-            onPanelState("panel_open", null);
-          }
-          tab.current?.focus();
-          return;
-        case "panel.refresh":
-          setPanelRefresh((n) => n + 1);
-          return;
-        case "panel.focus": {
-          // No panel open: the first one on offer opens, then takes the keyboard.
-          if (panelRef.current === null) {
-            const first = enabledPanels(enabledRef.current)[0];
-            if (!first) {
-              say("every panel is turned off — Settings → Panel", true);
-              return;
-            }
-            setPanel(first.id);
-            onPanelState("panel_open", first.id);
-          }
-          setPanelFocus((n) => n + 1);
-          return;
-        }
         case "project.team": {
           // V10 (E-64): the Project sheet for the active tab's project — a started tab only.
           const t = tabs.current[cur.current];
@@ -814,7 +744,7 @@ export function Shell(props: ShellProps) {
         }
       }
     },
-    [open, detach, say, setMode, setCmd, showCommand, handlers, showTab, recent, refreshRecent, keys.style, onPanelState],
+    [open, detach, say, setMode, setCmd, showCommand, handlers, showTab, recent, refreshRecent, keys.style, side.act],
   );
 
   /** TERMINAL keys, seen by xterm first: hold a chord prefix, take the chord, pass the rest. */
@@ -884,17 +814,7 @@ export function Shell(props: ShellProps) {
       if (e.target instanceof Element && e.target.closest('[role="dialog"], [role="menu"], [role="listbox"]')) return;
       const k = keyName(e);
       if (!k) return;
-      // The panel (E-60) keeps its own keys (Tab, Enter, arrows, Esc back to the terminal);
-      // only the shortcuts still act there, as in every mode.
-      if (e.target instanceof Element && e.target.closest("[data-panel-host]")) {
-        const sc = keys.shortcuts.get(k);
-        if (sc) {
-          e.preventDefault();
-          e.stopPropagation();
-          run(sc);
-        }
-        return;
-      }
+      if (panelOwnsKey(e, keys.shortcuts.get(k), run)) return;
       if (modeRef.current.mode === "TERMINAL") {
         // A TERMINAL key that missed the terminal (focus was on the page): give the terminal
         // focus and pass the key through the same chord logic, so none is lost.
@@ -1001,58 +921,9 @@ export function Shell(props: ShellProps) {
     copied: copied > 0,
   });
 
-  // The side menu (panels.md, E-60): the rail while a project is open, and the open panel for
-  // the current tab — beside the terminal, or over it in a narrow window.
-  const offered = enabledPanels(panelsEnabled);
-  const coreTab = current?.term.tab;
-  const showRail = termOpen && panelsRail === "shown" && offered.length > 0;
-  const openPanel = panel !== null && panelsEnabled.includes(panel) ? descriptor(panel) : null;
-  const panelOver = panelOverlays(winWidth);
-  const healthWords = { ok: "OK", warn: "Warnings", fail: "Failing", unknown: "Not checked yet" } as const;
-  const panelEl =
-    termOpen && openPanel && current && coreTab ? (
-      <PanelHost
-        d={openPanel}
-        tab={coreTab.id}
-        project={current.title}
-        width={liveWidth ?? panelWidth}
-        overlay={panelOver}
-        refreshSeq={panelRefresh}
-        focusSeq={panelFocus}
-        app={{
-          health: healthWords[health?.status ?? "unknown"],
-          server: coreTab.server === "app" ? "rein-app's own" : "your own",
-        }}
-        onClose={() => run({ name: "panel.close" })}
-        onEscape={() => tab.current?.focus()}
-        onDrag={(phase, w) => {
-          if (phase === "start") resizing.current = true;
-          else if (phase === "move") setLiveWidth(w);
-          else {
-            resizing.current = false;
-            setLiveWidth(null);
-            setPanelWidth(clampWidth(w));
-            onPanelState("panel_width", clampWidth(w));
-            // The terminal is fitted once, after the layout has its final width.
-            requestAnimationFrame(() => tab.current?.fit());
-          }
-        }}
-      />
-    ) : null;
-
-  // The stage is borderless and fills what the bars leave (V2): the terminal follows its size
-  // in whole cells, centred; the window itself is never snapped to cells.
-  useEffect(() => {
-    const el = termsEl.current;
-    if (!el) return;
-    const o = new ResizeObserver(() => {
-      if (!resizing.current) tab.current?.fit();
-    });
-    o.observe(el);
-    return () => o.disconnect();
-    // `tab` reads the current tab when the observer fires.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // The side menu (E-60): the rail, the open panel beside or over the stage; the stage's fit.
+  const sideView = side.view({ termOpen, current, health, runner });
+  useStageFit(termsEl, () => tab.current, side);
 
   return (
     <>
@@ -1086,11 +957,9 @@ export function Shell(props: ShellProps) {
             }}
           />
         )}
-        <div className="flex min-h-0 flex-1">
-        {showRail && <Rail panels={offered} open={openPanel ? openPanel.id : null} r={runner} />}
-        {!panelOver && panelEl}
+        <SideRow v={sideView}>
         <div id="stage" className="relative min-h-0 min-w-0 flex-1" aria-busy={status.starting || undefined}>
-          {panelOver && panelEl}
+          {sideView.over && sideView.panel}
           {/* V7: the tab is starting — a 2 px line in the stage's own top padding, never over
               the terminal. */}
           {status.starting && !current?.setup && <ProgressLine className="absolute inset-x-0 top-0 z-10" />}
@@ -1141,7 +1010,7 @@ export function Shell(props: ShellProps) {
             </ContextMenuContent>
           </ContextMenu>
         </div>
-        </div>
+        </SideRow>
         <StatusBar bar={status} r={runner} />
       </div>
       <Toast message={message} />
@@ -1154,7 +1023,7 @@ export function Shell(props: ShellProps) {
         show={overlay === "menu"}
         render={() => (
           <MenuOverlay
-            entries={menuEntries(keys, otherTable, { tabs: tabs.current.length, panels: panelsEnabled })}
+            entries={menuEntries(keys, otherTable, { tabs: tabs.current.length, panels: props.panelsEnabled })}
             initialQuery={menuQuery}
             onRun={(c) => {
               closeOverlay();
