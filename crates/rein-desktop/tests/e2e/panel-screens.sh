@@ -6,7 +6,11 @@
 #     appear as literal text (checked by eye on the screen; the render test checks the markup);
 #   panel-tasks-updated (mocha)  — a task added to state.json is on screen within 6 s;
 #   panel-narrow-overlay (mocha) — at 860 px wide the panel lies over the terminal;
-#   panel-unavailable            — a team-mode state.json: "Not available" and its reason.
+#   panel-unavailable            — a team-mode state.json: "Not available" and its reason;
+#   panel-attention              — "Needs you" (E-61) with items from two projects (the second
+#     opened by a second start) and the rail's badge; the first tab's bell rung while it is in
+#     the background; checked: the bell item is there, and gone once that tab is shown;
+#   panel-attention-empty        — a quiet project: "Nothing needs you" and the known gap.
 # Checked from the core's debug trace (REIN_DESKTOP_TRACE_PANELS, debug builds only):
 #   - the open Tasks panel reads state.json again within 6 s of a change;
 #   - with the window unmapped (hidden) nothing is read for 12 s, and reads resume once it is
@@ -131,16 +135,19 @@ done
 [ -n "$started" ] || { echo "no Xvfb" >&2; exit 2; }
 export DISPLAY=$started
 
-app() { # app <theme> <dir>
-  local st="$W/xdg/state/rein-app"
-  mkdir -p "$st"
-  printf '{"schema":1,"input_style":"simple","first_run_done":true,"theme":"%s"}' "$1" >"$st/ui.json"
-  env -u TMUX -u TMUX_PANE -u CLAUDECODE \
+desktop() { # desktop <dir>: the window, or (a second start) a handoff to the running one
+  exec env -u TMUX -u TMUX_PANE -u CLAUDECODE \
     HOME="$W/home" PATH="$W/bin:$PATH" SHELL=/bin/sh REIN_DESKTOP_TRACE_PANELS=1 \
     XDG_RUNTIME_DIR="$W/run" XDG_CONFIG_HOME="$W/xdg/config" XDG_DATA_HOME="$W/xdg/data" \
     XDG_STATE_HOME="$W/xdg/state" XDG_CACHE_HOME="$W/xdg/cache" \
     WEBKIT_DISABLE_DMABUF_RENDERER=1 \
-    "$REPO/target/debug/rein-desktop" "$2" >>"$W/app.log" 2>&1 &
+    "$REPO/target/debug/rein-desktop" "$1" >>"$W/app.log" 2>&1
+}
+app() { # app <theme> <dir>
+  local st="$W/xdg/state/rein-app"
+  mkdir -p "$st"
+  printf '{"schema":1,"input_style":"simple","first_run_done":true,"theme":"%s"}' "$1" >"$st/ui.json"
+  desktop "$2" &
   APP=$!
   for _ in $(seq 1 300); do "$W/bin/xresize" rein "$GW" "$GH" >/dev/null 2>&1 && break; sleep 0.05; done
   sleep 4
@@ -192,6 +199,25 @@ PY
     shot "panel-narrow-overlay-$theme"
     "$W/bin/xresize" rein "$GW" "$GH" >/dev/null; sleep 1
   fi
+  # Needs you: a second project by a second start (it becomes the current tab), then a bell
+  # in the first tab's pane while that tab is in the background.
+  o="$W/Dev/other-$theme"; mkdir -p "$o/.ai"
+  echo '{"tasks":[{"id":"E-7","status":"BLOCKED","description":"Waits on the operator'"'"'s signing key"}]}' >"$o/.ai/state.json"
+  timeout 20 bash -c "$(declare -f desktop); W='$W' REPO='$REPO' desktop '$o'"; sleep 4
+  T send-keys -t "demo-$theme" "printf '\\a'" Enter; sleep 1
+  X key ctrl+shift+4; sleep 6
+  shot "panel-attention-$theme"
+  bell_before=$(grep -c "panel-trace" "$W/app.log")
+  [ "$bell_before" -gt 0 ]; ok "the attention facts are read (trace lines present)" $?
+  X key alt+1; sleep 1.5; X key alt+2; sleep 1.5
+  shot "panel-attention-after-bell-$theme"
+  quit
+  # Needs you, empty: one quiet project.
+  c="$W/Dev/calm-$theme"; mkdir -p "$c/.ai"
+  echo '{"tasks":[{"id":"E-1","status":"DONE","description":"Done"}]}' >"$c/.ai/state.json"
+  app "$theme" "$c"
+  X key ctrl+shift+4; sleep 6
+  shot "panel-attention-empty-$theme"
   quit
   # Not available: a team-mode state.json (no tasks[]).
   q="$W/Dev/teammode-$theme"; mkdir -p "$q/.ai"; echo '{"project":{"focus":""}}' >"$q/.ai/state.json"

@@ -1,14 +1,17 @@
 // The side menu's wiring into the shell (panels.md §Components, E-60; moved out of
 // `shell.tsx` by E-72 with no behaviour change): which panel is open and how wide, the four
 // `panel.*` actions, the key rule inside a panel, and the rail and panel elements the shell
-// places beside (or, in a narrow window, over) the terminal stage.
+// places beside (or, in a narrow window, over) the terminal stage. E-61 adds "Needs you":
+// every open tab's attention facts read every 5 s while the window is visible (the core
+// stats the two files and parses only on a change), the bell mark, the items and the badge.
 
 import { useCallback, useEffect, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
+import { attentionItems, bellClears, bellMarks, goToTab, type AttentionFacts } from "./attention.ts";
 import type { Runner } from "./frame.tsx";
-import type { HealthView } from "./ipc.ts";
+import { panelData, type HealthView } from "./ipc.ts";
 import type { ActionCall } from "./keymap.ts";
-import { PanelHost } from "./panel-host.tsx";
-import { clampWidth, descriptor, enabledPanels, overlays as panelOverlays } from "./panels.ts";
+import { PanelHost, useVisible, type AttentionFeed } from "./panel-host.tsx";
+import { POLL_MS, clampWidth, descriptor, enabledPanels, overlays as panelOverlays } from "./panels.ts";
 import { Rail } from "./rail.tsx";
 import type { TermTab } from "./term.ts";
 
@@ -20,6 +23,19 @@ export interface SideMenuProps {
   panelsEnabled: readonly string[];
   panelInit: { open: string | null; width: number } | null;
   onPanelState: (field: "panel_open" | "panel_width", value: string | number | null) => void;
+}
+
+/** An open tab as the side menu sees it (the shell's own tab entries fit this shape). The
+ *  bell mark is the one field the side menu sets. */
+export interface SideTab {
+  term: { tab: { id: number } | null };
+  title: string;
+  exited: boolean;
+  refused?: boolean | undefined;
+  bell?: boolean | undefined;
+  update?: string[] | undefined;
+  updateHidden?: boolean | undefined;
+  setup?: unknown;
 }
 
 /** What the shell knows at render time that the side menu shows. */
@@ -37,6 +53,8 @@ export interface SideMenu {
   act: (call: ActionCall) => boolean;
   /** The rail (or null), the open panel (or null), and whether it lies over the stage. */
   view: (v: SideMenuView) => { rail: ReactNode; panel: ReactNode; over: boolean };
+  /** A tab's terminal rang its bell (E-61): marked unless it is in front of the user. */
+  bell: (t: SideTab, isCurrent: boolean) => void;
 }
 
 const HEALTH_WORDS = { ok: "OK", warn: "Warnings", fail: "Failing", unknown: "Not checked yet" } as const;
@@ -57,6 +75,7 @@ export function useSideMenu(
   props: SideMenuProps,
   say: (text: string, error?: boolean) => void,
   terminal: () => TermTab | null,
+  openTabs: () => { tabs: readonly SideTab[]; current: number },
 ): SideMenu {
   const { panelsRail, panelsEnabled, panelInit, onPanelState } = props;
   /** The open panel (one at a time) and its width; `liveWidth` follows a drag of its edge. */
@@ -85,6 +104,69 @@ export function useSideMenu(
   enabledRef.current = panelsEnabled;
   const terminalRef = useRef(terminal);
   terminalRef.current = terminal;
+
+  // "Needs you" (E-61): each open tab's facts, read every POLL_MS while the window can be
+  // seen; nothing at all while it is hidden or the panel is turned off. The shell is drawn
+  // again only when a fact changed, or while the panel is open (its "updated" age).
+  const visible = useVisible();
+  const watching = panelsEnabled.includes("attention");
+  const [facts, setFacts] = useState<{ byTab: ReadonlyMap<number, AttentionFacts | null>; at: number | null }>({ byTab: new Map(), at: null });
+  const [, bump] = useState(0);
+  const tabsRef = useRef(openTabs);
+  tabsRef.current = openTabs;
+  const idsKey = openTabs()
+    .tabs.map((t) => t.term.tab?.id ?? "-")
+    .join(",");
+  useEffect(() => {
+    if (!watching || !visible) return;
+    let alive = true;
+    const load = () => {
+      const ids = tabsRef.current().tabs.flatMap((t) => (t.term.tab ? [t.term.tab.id] : []));
+      void Promise.all(
+        ids.map((id) =>
+          panelData<AttentionFacts>(id, "attention").then(
+            (r) => [id, "ok" in r ? r.ok : null] as const,
+            () => [id, null] as const,
+          ),
+        ),
+      ).then((rows) => {
+        if (!alive) return;
+        const at = Math.floor(Date.now() / 1000);
+        const byTab = new Map(rows);
+        setFacts((prev) => {
+          const same = JSON.stringify([...prev.byTab]) === JSON.stringify([...byTab]);
+          if (same && panelRef.current !== "attention") return prev;
+          return { byTab: same ? prev.byTab : byTab, at };
+        });
+      });
+    };
+    load();
+    const t = setInterval(load, POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [watching, visible, idsKey, panelRefresh]);
+
+  // The bell mark goes once its tab is the current tab of a focused window.
+  useEffect(() => {
+    const { tabs, current } = tabsRef.current();
+    const t = tabs[current];
+    if (t?.bell && bellClears(true, document.hasFocus())) {
+      t.bell = false;
+      bump((n) => n + 1);
+    }
+  });
+  useEffect(() => {
+    const on = () => bump((n) => n + 1);
+    window.addEventListener("focus", on);
+    return () => window.removeEventListener("focus", on);
+  }, []);
+  const bell = useCallback((t: SideTab, isCurrent: boolean) => {
+    if (t.bell || !bellMarks(isCurrent, document.hasFocus())) return;
+    t.bell = true;
+    bump((n) => n + 1);
+  }, []);
 
   // panels.md §API (E-60): one panel at a time; the same toggle again closes it.
   const act = useCallback(
@@ -140,9 +222,36 @@ export function useSideMenu(
     const offered = enabledPanels(panelsEnabled);
     const coreTab = current?.term.tab;
     const openPanel = panel !== null && panelsEnabled.includes(panel) ? descriptor(panel) : null;
+    const items = watching
+      ? attentionItems(
+          openTabs().tabs.flatMap((t, index) =>
+            t.setup
+              ? []
+              : [
+                  {
+                    index,
+                    title: t.title,
+                    exited: t.exited && !t.refused,
+                    refused: t.refused === true,
+                    bell: t.bell === true,
+                    update: (t.update?.length ?? 0) > 0 && t.updateHidden !== true,
+                    facts: t.term.tab ? (facts.byTab.get(t.term.tab.id) ?? null) : null,
+                  },
+                ],
+          ),
+          health?.status ?? "unknown",
+          Date.now(),
+        )
+      : [];
+    const feed: AttentionFeed = {
+      items,
+      readAt: facts.at,
+      goTo: goToTab(runner.run),
+      refresh: () => setPanelRefresh((n) => n + 1),
+    };
     const rail =
       termOpen && panelsRail === "shown" && offered.length > 0 ? (
-        <Rail panels={offered} open={openPanel ? openPanel.id : null} r={runner} />
+        <Rail panels={offered} open={openPanel ? openPanel.id : null} r={runner} badge={items.length} />
       ) : null;
     const el =
       termOpen && openPanel && current && coreTab ? (
@@ -154,6 +263,7 @@ export function useSideMenu(
           overlay={panelOverlays(winWidth)}
           refreshSeq={panelRefresh}
           focusSeq={panelFocus}
+          attention={feed}
           app={{
             health: HEALTH_WORDS[health?.status ?? "unknown"],
             server: coreTab.server === "app" ? "rein-app's own" : "your own",
@@ -177,7 +287,7 @@ export function useSideMenu(
     return { rail, panel: el, over: panelOverlays(winWidth) };
   };
 
-  return { resizing, act, view };
+  return { resizing, act, view, bell };
 }
 
 /** The row under the bars: the rail, the panel beside the stage (when it is not over it), and

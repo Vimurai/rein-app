@@ -18,7 +18,8 @@ import { Skeleton } from "../components/loaders.tsx";
 import { ScrollArea } from "../components/scroll-area.tsx";
 import { RefreshCw, TriangleAlert, X } from "./icons.ts";
 import { panelData } from "./ipc.ts";
-import { ListView, SummaryView, TimelineView } from "./panel-views.tsx";
+import type { AttentionItem } from "./attention.ts";
+import { AttentionView, ListView, SummaryView, TimelineView } from "./panel-views.tsx";
 import {
   POLL_MS,
   clampWidth,
@@ -78,8 +79,33 @@ function Unavailable({ text }: { text: string }) {
   );
 }
 
+/** "Needs you" is not read by the host: the side menu reads every open tab's facts for the
+ *  badge and hands the panel the items, the time of the last read, and "go to tab". */
+export interface AttentionFeed {
+  items: AttentionItem[];
+  readAt: number | null;
+  goTo: (tab: number) => void;
+  refresh: () => void;
+}
+
 /** What the descriptor's view draws for one answer. Exported for the render test. */
-export function PanelBody({ d, reply, app, nowMs }: { d: Descriptor; reply: Reply<unknown> | null; app: { health: string; server: string }; nowMs: number }) {
+export function PanelBody({
+  d,
+  reply,
+  app,
+  nowMs,
+  attention,
+}: {
+  d: Descriptor;
+  reply: Reply<unknown> | null;
+  app: { health: string; server: string };
+  nowMs: number;
+  attention?: AttentionFeed | undefined;
+}) {
+  if (d.source === "attention") {
+    if (attention?.readAt == null) reply = null;
+    else return <AttentionView items={attention.items} goTo={attention.goTo} />;
+  }
   if (reply === null) {
     return (
       <div className="grid gap-3" aria-hidden="true">
@@ -116,6 +142,7 @@ export function PanelHost({
   refreshSeq,
   focusSeq,
   app,
+  attention,
   onClose,
   onEscape,
   onDrag,
@@ -132,6 +159,8 @@ export function PanelHost({
   refreshSeq: number;
   focusSeq: number;
   app: { health: string; server: string };
+  /** The "Needs you" items, for that panel only. */
+  attention?: AttentionFeed | undefined;
   onClose: () => void;
   onEscape: () => void;
   /** A drag of the edge: `start`, then the width while it moves, then `end` with the width. */
@@ -149,7 +178,7 @@ export function PanelHost({
   const root = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (!shouldRead(true, visible)) return;
+    if (d.source === "attention" || !shouldRead(true, visible)) return;
     let alive = true;
     const load = () => {
       setBusy(true);
@@ -203,7 +232,8 @@ export function PanelHost({
   };
 
   const nowMs = Date.now();
-  const readAt = reply && "ok" in reply ? reply.read_at : null;
+  const own = d.source === "attention" ? attention : undefined;
+  const readAt = own ? own.readAt : reply && "ok" in reply ? reply.read_at : null;
   return (
     <aside
       ref={root}
@@ -226,11 +256,11 @@ export function PanelHost({
         <div className="grid min-w-0 flex-1 gap-0.5">
           <h2 className="m-0 truncate text-[13px] font-medium">{d.title}</h2>
           <span className="flex min-w-0 gap-1 text-[12px] text-muted-foreground">
-            <span className="truncate">{project}</span>
+            <span className="truncate">{d.source === "attention" ? "Every open project" : project}</span>
             {readAt !== null && <span className="shrink-0">· {updatedAgo(readAt, nowMs)}</span>}
           </span>
         </div>
-        <Button variant="ghost" size="icon" aria-label="Refresh the panel" aria-busy={busy || undefined} onClick={() => setRefreshed((n) => n + 1)}>
+        <Button variant="ghost" size="icon" aria-label="Refresh the panel" aria-busy={busy || undefined} onClick={() => (own ? own.refresh() : setRefreshed((n) => n + 1))}>
           <RefreshCw size={14} aria-hidden="true" />
         </Button>
         <Button variant="ghost" size="icon" aria-label="Close the panel" onClick={onClose}>
@@ -240,7 +270,7 @@ export function PanelHost({
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-3" aria-busy={reply === null || undefined}>
           <PanelGuard resetKey={`${d.id}:${key}`}>
-            <PanelBody d={d} reply={reply} app={app} nowMs={nowMs} />
+            <PanelBody d={d} reply={reply} app={app} nowMs={nowMs} attention={own} />
           </PanelGuard>
         </div>
       </ScrollArea>

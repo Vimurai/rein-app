@@ -1,0 +1,15 @@
+panel-screens.sh (E-61), local Xvfb run on the E-61 tree, 2026-11-17:
+[catppuccin-mocha 1280x800]
+  ok   state.json read again 1712 ms after the change (limit 6000)
+  ok   no panel read for 12 s while the window is hidden   (the 5 s attention stat included)
+  ok   reads resume 117 ms after the window is shown again
+  ok   the attention facts are read (trace lines present)
+[github-light 1280x800]
+  ok   the attention facts are read (trace lines present)
+[typing latency, catppuccin-mocha]
+  median key latency: panel closed 6.5 ms, panel open 6.3 ms
+  ok   typing latency unchanged with a panel open (open <= 1.5 x closed + 5 ms)
+PASS: panel screens
+Screens opened by eye: panel-attention-* (5 items from two projects, badge 5; bell item on the
+background tab), panel-attention-after-bell-* (bell item gone after the tab was shown; badge 4),
+panel-attention-empty-* (empty state with the known-gap text), both themes.

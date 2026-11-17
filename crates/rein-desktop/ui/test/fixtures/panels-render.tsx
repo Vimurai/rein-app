@@ -1,4 +1,4 @@
-// Rendered to HTML by test/panels.test.mjs (E-60): the three panel views with text a project's
+// Rendered to HTML by test/panels.test.mjs (E-60; "Needs you" added by E-61): the panel views with text a project's
 // `.ai/` files could hold — a script tag, an image with an onerror, a Markdown link — which
 // must come out as text, never as markup.
 import { renderToString } from "react-dom/server";
@@ -82,4 +82,30 @@ export function unavailable(): string {
 
 export function loading(): string {
   return renderToString(<PanelBody d={d("tasks")} app={app} nowMs={NOW} reply={null} />);
+}
+
+const feed = (items: import("../../src/attention.ts").AttentionItem[]) => ({ items, readAt: NOW / 1000, goTo: () => {}, refresh: () => {} });
+
+export function attention(): string {
+  return renderToString(
+    <PanelBody
+      d={d("attention")}
+      app={app}
+      nowMs={NOW}
+      reply={null}
+      attention={feed([
+        { key: "a", kind: "blocked", project: HOSTILE, tab: 0, text: "E-2 is blocked.", quote: HOSTILE },
+        { key: "b", kind: "mention", project: "demo", tab: 1, text: "The last handoff mentions the operator:", quote: HOSTILE },
+        { key: "c", kind: "health", project: "Every project", tab: null, text: "The installation health check is failing.", quote: null },
+      ])}
+    />,
+  );
+}
+
+export function attentionEmpty(): string {
+  return renderToString(<PanelBody d={d("attention")} app={app} nowMs={NOW} reply={null} attention={feed([])} />);
+}
+
+export function attentionLoading(): string {
+  return renderToString(<PanelBody d={d("attention")} app={app} nowMs={NOW} reply={null} attention={{ ...feed([]), readAt: null }} />);
 }

@@ -76,6 +76,7 @@ test("the leader waits, and which-key lists what can follow it", () => {
       ["P 1", "panel.toggle"],
       ["P 2", "panel.toggle"],
       ["P 3", "panel.toggle"],
+      ["P 4", "panel.toggle"],
       ["P x", "panel.close"],
       ["P r", "panel.refresh"],
       ["P f", "panel.focus"],

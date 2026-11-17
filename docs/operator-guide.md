@@ -308,6 +308,33 @@ default prefix, `Ctrl+b`. Each pane's border shows its rein role and Claude acco
   recolours the session it shows (`[tmux] overlay` / `status`) and puts your look back when
   the tab closes.
 
+### Needs you
+
+The side menu's **Needs you** panel (the bell icon on the rail, `Ctrl+Shift+4`, modal
+`Space P 4`) lists what only you can move, across every open tab. Each item names its project
+and has **Go to tab**, which only switches to that tab. The rail's bell shows how many items
+there are. Items:
+
+- a tab whose `rein start` has ended, or whose tmux setup was refused;
+- the installation health check warning or failing (for every project, so it has no tab);
+- rein saying the project is out of date (unless you chose **Not now** or **Don't ask**);
+- a `BLOCKED` task;
+- a task in progress with no handoff for more than 30 minutes;
+- a terminal bell in a tab that was not in front of you (cleared when you look at that tab);
+- lines of the last handoff's "Next action needed" holding the word *operator*. These are
+  quoted and labelled as a mention: the panel repeats what the handoff says, it does not check it.
+
+While the window is visible the app checks each open tab's `.ai/state.json` and `.ai/COMM.md`
+every 5 seconds. It only reads one again if its size or time changed. Nothing is read while the
+window is hidden or minimised, or when the panel is turned off (Settings → Panel: Needs you,
+or `[panels] enabled` in `config.toml`).
+
+**Known gap: a permission prompt is not shown.** An agent waiting at a permission prompt
+in a pane is not visible to the app. That is true while the window is open, and also while
+the app is closed, when the session keeps running and the agent can wait there for hours with
+nobody looking. Until rein provides a signal for it, a bell from the tab is the only hint, and
+only if Claude Code rings one.
+
 ### The health badge
 
 The status bar's health badge is the result of `rein doctor --scope install --json`. It

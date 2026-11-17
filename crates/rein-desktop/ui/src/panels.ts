@@ -4,10 +4,10 @@
 // a string here and is put on the page as text by the views — never HTML.
 
 /** The sources the core serves (`panel_data`, panel_ipc.rs) and the views the app draws. */
-export const SOURCES = ["summary", "handoffs", "tasks"] as const;
+export const SOURCES = ["summary", "handoffs", "tasks", "attention"] as const;
 export const VIEWS = ["summary", "list", "timeline"] as const;
 /** The icon names a descriptor may use; rail.tsx maps each to a bundled lucide icon. */
-export const PANEL_ICONS = ["layout-dashboard", "messages-square", "list-checks"] as const;
+export const PANEL_ICONS = ["layout-dashboard", "messages-square", "list-checks", "bell"] as const;
 export type Source = (typeof SOURCES)[number];
 export type View = (typeof VIEWS)[number];
 export type PanelIcon = (typeof PANEL_ICONS)[number];
@@ -33,7 +33,11 @@ export interface TimelineOptions {
   /** `whose_turn`: the last handoff's "to" is pinned above the entries. */
   pin: "whose_turn" | null;
 }
-export type Options = Record<string, never> | ListOptions | TimelineOptions;
+/** The `list` view over the `attention` source (E-61): only a row limit. */
+export interface AttentionOptions {
+  limit: number;
+}
+export type Options = Record<string, never> | ListOptions | TimelineOptions | AttentionOptions;
 
 export interface Descriptor {
   schema: 1;
@@ -46,7 +50,7 @@ export interface Descriptor {
 }
 
 /** The ids the core knows (config.rs `PANEL_IDS`), in rail order. */
-export const PANEL_IDS = ["dashboard", "communication", "tasks"] as const;
+export const PANEL_IDS = ["dashboard", "communication", "tasks", "attention"] as const;
 export type PanelId = (typeof PANEL_IDS)[number];
 
 /** The compiled-in descriptors (panels.md §Components 7). */
@@ -70,6 +74,7 @@ export const DESCRIPTORS: readonly Descriptor[] = [
     view: "list",
     options: { groups: ["IN_PROGRESS", "OPEN", "BLOCKED", "DONE"], limit: 200, done: 10 },
   },
+  { schema: 1, id: "attention", title: "Needs you", icon: "bell", source: "attention", view: "list", options: { limit: 200 } },
 ];
 
 const ID = /^[a-z][a-z0-9-]{1,31}$/;
@@ -78,9 +83,14 @@ const keysExactly = (o: Record<string, unknown>, keys: readonly string[]) =>
   Object.keys(o).length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(o, k));
 const intIn = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
 
-/** A view's options, checked against its closed set. */
-function optionsOk(view: View, o: unknown): string | null {
+/** A view's options, checked against its closed set (the `list` view's set depends on the
+ *  source: task groups for `tasks`, only a limit for `attention`). */
+function optionsOk(view: View, source: Source, o: unknown): string | null {
   if (!isObject(o)) return "options is not an object";
+  if (view === "list" && source === "attention") {
+    if (!keysExactly(o, ["limit"])) return "attention list options are {limit}";
+    return intIn(o.limit, 1, 200) ? null : "limit is 1–200";
+  }
   switch (view) {
     case "summary":
       return keysExactly(o, []) ? null : "summary takes no options";
@@ -112,7 +122,8 @@ export function checkDescriptor(raw: unknown): { ok: Descriptor } | { refused: s
   if (!(PANEL_ICONS as readonly unknown[]).includes(raw.icon)) return { refused: "an unknown icon" };
   if (!(SOURCES as readonly unknown[]).includes(raw.source)) return { refused: "an unknown source" };
   if (!(VIEWS as readonly unknown[]).includes(raw.view)) return { refused: "an unknown view" };
-  const why = optionsOk(raw.view as View, raw.options);
+  if (raw.source === "attention" && raw.view !== "list") return { refused: "the attention source is drawn by the list view" };
+  const why = optionsOk(raw.view as View, raw.source as Source, raw.options);
   if (why) return { refused: why };
   return { ok: raw as unknown as Descriptor };
 }

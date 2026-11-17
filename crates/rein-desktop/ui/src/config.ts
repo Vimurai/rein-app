@@ -30,7 +30,7 @@ export const DEFAULT_CONFIG: ConfigFile = {
   keys: { escape: ["C-\\", "C-n"], leader: "Space", normal: {} },
   tmux: { overlay: true, status: "hidden", server: "app" },
   project: { close_when_agents_exit: true },
-  panels: { rail: "shown", enabled: ["dashboard", "communication", "tasks"] },
+  panels: { rail: "shown", enabled: ["dashboard", "communication", "tasks", "attention"] },
   wsl: { distro: null },
 };
 

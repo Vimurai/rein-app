@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::ipc::Desktop;
+use crate::panel_attention::{self, Attention};
 use crate::panel_sources::{self, Handoffs, Summary, Tasks};
 use crate::project_file::{FileStamp, ProjectFile, Unavailable};
 
@@ -21,6 +22,8 @@ pub enum Source {
     Tasks,
     Handoffs,
     Summary,
+    /// The "Needs you" facts of one tab (E-61): asked for every 5 s for every open tab.
+    Attention,
 }
 
 /// The largest answer sent (security review of E-59, P2-4); a larger one drops its oldest
@@ -33,6 +36,7 @@ pub enum Data {
     Tasks(Tasks),
     Handoffs(Handoffs),
     Summary(Box<Summary>),
+    Attention(Attention),
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -139,6 +143,13 @@ pub fn panel_reply(d: &Desktop, tab: u32, source: Source, now: u64) -> Reply {
             });
             Data::Summary(Box::new(panel_sources::summary(&t, &h)))
         }),
+        // Each file on its own: a missing one gives no facts, the other still counts. Only a
+        // tab that is gone is "not available".
+        Source::Attention => d.tab_project(tab).ok_or(Unavailable::Unreadable).map(|_| {
+            let t = tasks(d, tab).ok();
+            let h = handoffs(d, tab).ok();
+            Data::Attention(panel_attention::attention(t.as_deref(), h.as_deref()))
+        }),
     };
     match data {
         Ok(data) => Reply::Ok {
@@ -241,10 +252,22 @@ mod tests {
             panel_reply(&d, tab, Source::Summary, 3),
             Reply::Ok { ok, .. } if matches!(*ok, Data::Summary(_))
         ));
+        // "Needs you" (E-61): no COMM.md is no handoff facts, not "not available".
+        assert!(matches!(
+            panel_reply(&d, tab, Source::Attention, 3),
+            Reply::Ok { ok, .. } if matches!(&*ok, Data::Attention(a)
+                if a.tasks_read && !a.in_progress && a.last_handoff.is_none())
+        ));
         // A closed tab: nothing is read and nothing is kept.
         d.detach(tab);
         assert_eq!(
             panel_reply(&d, tab, Source::Tasks, 4),
+            Reply::Unavailable {
+                unavailable: Unavailable::Unreadable.sentence()
+            }
+        );
+        assert_eq!(
+            panel_reply(&d, tab, Source::Attention, 4),
             Reply::Unavailable {
                 unavailable: Unavailable::Unreadable.sentence()
             }
@@ -297,6 +320,10 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<Source>("\"summary\"").unwrap(),
             Source::Summary
+        );
+        assert_eq!(
+            serde_json::from_str::<Source>("\"attention\"").unwrap(),
+            Source::Attention
         );
     }
 }

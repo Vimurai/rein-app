@@ -160,7 +160,7 @@ impl Default for Project {
 
 /// The panel ids the app knows (panels.md §Components 7, D-056): the compiled-in descriptors,
 /// in rail order. A `[panels] enabled` entry or a `panel.toggle` binding names one of these.
-pub const PANEL_IDS: &[&str] = &["dashboard", "communication", "tasks"];
+pub const PANEL_IDS: &[&str] = &["dashboard", "communication", "tasks", "attention"];
 /// `[panels] rail`.
 pub const RAIL_WORDS: &[&str] = &["shown", "hidden"];
 
@@ -242,7 +242,7 @@ pub const DEFAULTS_FILE: &str = r##"# rein-app window configuration (desktop.md)
 
 # [panels]                # the side menu: read-only panels beside the terminal
 # rail = "shown"          # shown | hidden (panels still open from the menu and keys)
-# enabled = ["dashboard", "communication", "tasks"]
+# enabled = ["dashboard", "communication", "tasks", "attention"]
 
 # [wsl]                   # Windows only
 #   distro = "Ubuntu"     # unset: WSL's default distro

@@ -132,6 +132,9 @@ interface OpenTab {
   open: boolean;
   /** `rein start` exited (Enter restarts it): a dot on the tab. */
   exited: boolean;
+  /** E-61: `exited` because the tmux setup was refused; a bell rang while out of sight. */
+  refused?: boolean;
+  bell?: boolean;
   /** A failed tmux overlay was told in a toast already (V6: once per tab). */
   overlayTold?: boolean;
   /** V9 (E-62): the last answer about the project's agents. */
@@ -225,7 +228,7 @@ export function Shell(props: ShellProps) {
     (text: string, error = false) => setMessage((m) => ({ text, error, seq: (m?.seq ?? 0) + 1 })),
     [],
   );
-  const side = useSideMenu(props, say, () => tab.current);
+  const side = useSideMenu(props, say, () => tab.current, () => ({ tabs: tabs.current, current: cur.current }));
   useEffect(() => {
     if (!message) return;
     if (message.leaving) {
@@ -364,6 +367,7 @@ export function Shell(props: ShellProps) {
       const entry: OpenTab = { id: ++tabSeq.current, term, el, requested: project, project, title: project.split(/[/\\]/).pop() || "/", open: false, exited: false };
       tabs.current.push(entry);
       term.keyFilter = (e) => terminalKeyRef.current(e);
+      term.term.onBell(() => side.bell(entry, tabs.current[cur.current] === entry));
       term.onPhase = () => {
         rerender(); // starting → running / exited (V7)
         // V9 3: once the tab has started (never delaying it), rein's verdict, once per open.
@@ -404,12 +408,12 @@ export function Shell(props: ShellProps) {
         );
       };
       term.onRefused = () => {
-        entry.exited = true; // V8: the tmux setup was refused; the tab says why
+        entry.exited = entry.refused = true; // V8: the tmux setup was refused; the tab says why
         rerender();
       };
       term.onOpen = (opened) => {
         entry.open = true;
-        entry.exited = false;
+        entry.exited = entry.refused = false;
         entry.project = opened.project;
         entry.title = opened.title;
         showTab(tabs.current.indexOf(entry));
@@ -431,7 +435,7 @@ export function Shell(props: ShellProps) {
       showTab(tabs.current.length - 1);
       void term.start();
     },
-    [fontFamily, fontSize, lineHeight, theme, say, showCommand, setMode, showTab, refreshRecent],
+    [fontFamily, fontSize, lineHeight, theme, say, showCommand, setMode, showTab, refreshRecent, side.bell],
   );
 
   /** The chip shows the current tab's own command again once a sheet closes (E-66: it kept

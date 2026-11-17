@@ -4,6 +4,8 @@
 // React text child only — never HTML, never Markdown, never a link.
 
 import { useState } from "react";
+import { Button } from "../components/button.tsx";
+import { KNOWN_GAP, type AttentionItem } from "./attention.ts";
 import { ChevronDown, ChevronRight } from "./icons.ts";
 import type { Entry, Group, Row, Task } from "./panels.ts";
 
@@ -158,5 +160,43 @@ export function TimelineView({ whoseTurn, entries, cut }: { whoseTurn: string | 
       )}
       {cut && <p className="m-0 text-[12px] text-muted-foreground">Older handoffs are left out.</p>}
     </div>
+  );
+}
+
+/** Needs you (E-61): one row per item across the open tabs, each naming its project; "Go to
+ *  tab" only switches tabs. Text from a file is a quote, and a mention is labelled as one. */
+export function AttentionView({ items, goTo }: { items: AttentionItem[]; goTo: (tab: number) => void }) {
+  if (items.length === 0) {
+    return (
+      <div className="grid gap-2 text-[12px]">
+        <p className="m-0 text-[13px] text-foreground">Nothing needs you right now.</p>
+        <p className="m-0 text-muted-foreground">{KNOWN_GAP}</p>
+      </div>
+    );
+  }
+  return (
+    <ul aria-label="Needs you" className="m-0 grid list-none gap-1 p-0">
+      {items.map((it) => (
+        <li key={it.key} className="grid gap-1 border-b border-border/50 py-1.5 last:border-b-0">
+          <span className="flex items-start gap-2">
+            <span className="grid min-w-0 flex-1 gap-0.5">
+              <span className="truncate text-[12px] font-medium text-muted-foreground">{it.project}</span>
+              <span className="text-[13px] [overflow-wrap:anywhere] text-foreground">{it.text}</span>
+            </span>
+            {it.tab !== null && (
+              <Button variant="default" size="sm" className="shrink-0" aria-label={`Go to tab ${it.tab + 1}, ${it.project}`} onClick={() => goTo(it.tab as number)}>
+                Go to tab
+              </Button>
+            )}
+          </span>
+          {it.quote !== null && (
+            <figure className="m-0 grid gap-0.5">
+              {it.kind === "mention" && <figcaption className="text-[11px] text-muted-foreground">Quoted from the handoff — a mention, not a fact</figcaption>}
+              <blockquote className="m-0 border-l-2 border-border pl-2 text-[12px] [overflow-wrap:anywhere] whitespace-pre-wrap text-foreground">{it.quote}</blockquote>
+            </figure>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

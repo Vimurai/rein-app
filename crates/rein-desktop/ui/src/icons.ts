@@ -2,6 +2,7 @@
 // the bundle carries these and no others. Every icon-only button keeps a tooltip and an
 // accessible name from its action.
 export {
+  Bell,
   Check,
   ChevronDown,
   ChevronRight,
