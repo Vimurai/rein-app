@@ -2244,3 +2244,16 @@ D-062 puts a status on each tab, but with many tabs the operator still reads a r
 
 ### Rollback
 Reverting E-80's commit brings the start screen back; nothing is stored.
+
+### D-062 addendum 1 (2026-11-17) — rein will give the waiting signal (rein D-160, E-433); how the app reads it
+
+rein's Architect answered the request the day it was sent: yes, as tmux pane options — `@rein_waiting` (`permission` / `question`), `@rein_waiting_since`, and `@rein_signals`, which says whether a pane reports at all. Planned in rein as E-433, not built. Detail: `status.md` §Waiting signal.
+
+1. **Ruling 1 of D-062 is lifted for a pane that reports.** There the app says "waiting for your approval" / "has asked you a question", per role. A pane without `@rein_signals` stays "quiet" / "stopped" — unknown is never shown as working or as not waiting.
+2. **Nothing is built until rein names the merge commit** and its fixture is vendored; E-81 carries that start condition. E-76 is unchanged and reads none of it.
+3. **The item is dismissable**, because rein states a report can outlive a prompt that was denied by hand or escaped. A waiting option on a pane whose agent is not running is ignored (rein: a killed agent's pane keeps its options).
+4. **Only the closed forms are taken from the options**; the raw text is never shown. They live in the user's tmux server and any program of that user can set them.
+5. **The app runs no `rein sync`** for a project that does not report; it says so in one information row. rein's project-scope doctor check `waiting_signal_registered` is not read by the app (it runs the install scope only, D-029).
+6. "Finished" stays derived from quiet; with every running pane reporting and none waiting, the `stopped` sentence may say "it is finished".
+
+**Not ruled by rein yet:** items 1, 3, a–f, c2–c4 of `plans/rein-panels-request.md` (c2 is next there).

@@ -1230,6 +1230,24 @@
         "E-77"
       ],
       "updated_at": "2026-11-17T18:25:46.507Z"
+    },
+    {
+      "id": "E-81",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Read rein's waiting signal so the window says which agent waits for the operator, per .ai/blueprints/status.md §Waiting signal W1-W7 (D-062 addendum 1; rein D-160, rein E-433). After the notifications task AND the Home task (E-80). DO NOT START until the Architect has named rein's merge commit for E-433 in a handoff; the first step is then to vendor rein's tests/fixtures/release/pane-options.json and the \"Pane options\" contract text at that commit. Then: add @rein_signals, @rein_waiting and @rein_waiting_since to the status script's per-pane line (the tab's own window only, no new argument); parse them in the core against the closed forms (reports; waiting only on a pane whose agent runs; kind permission | question | other; since 1–12 digits, not future, under 30 days) and never pass the raw text on; add the dismissable Now item waiting with its three sentences and the pattern-checked role; make the needs_you and stopped sentences exact as W4 says; show each role's state in the tab tooltip and the Home card; add the information row for a project whose panes do not report; raise one notification per project for items still present when the start-up silence ends. Acceptance: the parser tests over the vendored fixture and hostile values; no item without @rein_signals and none on a dead pane; dismiss returns on a new since; a real-tmux run that sets the three options on a fixture pane on Linux and macOS, and Windows interop output; screens in both themes of a tab tooltip and a Home card with one role waiting.",
+      "created_at": "2026-11-17T18:27:21.095Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-78"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-78"
+      ],
+      "updated_at": "2026-11-17T18:27:21.095Z"
     }
   ],
   "stamps": [

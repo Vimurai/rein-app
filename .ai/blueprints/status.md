@@ -372,3 +372,72 @@ The task is one commit; reverting it brings the start screen back. Nothing is st
 
 ### Task
 7. **E-80 (Tier 2)** — Home: H1–H5. After the tab-marks and the triage tasks.
+
+## Waiting signal — "waiting for you" as a fact (revision 2026-11-17, D-062 addendum 1)
+
+> rein ruled on our request the same day: **rein D-160, task E-433 (planned, not built)**;
+> normative text rein `.ai/blueprints/release-artifact.md` §Component 7 at rein 7f209e1.
+> It will be published as "Pane options" in `docs/app-contract.md` with the fixture
+> `tests/fixtures/release/pane-options.json`. **Nothing here is built until rein's
+> Architect names the merge commit and the fixture is vendored** (as E-17 did).
+
+### What rein gives (per agent pane, in the tmux server)
+- `@rein_signals` — holds the word `waiting` while the pane's session reports. Without
+  it the pane's waiting state is **unknown**, never "working" (any session started
+  before `rein sync` on the rein version that ships E-433).
+- `@rein_waiting` — `permission` or `question` while the agent waits; unset otherwise.
+  Any non-empty value is waiting; rein may add values inside a major version.
+- `@rein_waiting_since` — epoch seconds, set and unset with it.
+- Bounds, not exactness: a prompt on screen for 7 s is reported; a report can outlive a
+  prompt that was denied by hand or escaped, until the turn ends; a killed agent's pane
+  keeps its options. No prompt text is stored. It is not a "finished" signal.
+
+### Components
+W1. **Read** — the status script's per-pane line gains the three options, read only for
+   the panes of the tab's own window as today (no `-a`, no new argument).
+W2. **Parse (core)** — per pane: `reports` = `@rein_signals` holds the word `waiting`;
+   `waiting` = `reports` and `@rein_waiting` is non-empty **and the pane's agent is
+   running** by the existing liveness rule (a dead or shell pane never waits). `kind` =
+   `permission` | `question` | `other` (any other non-empty value). `since` = the number
+   if it is 1–12 digits, not in the future and under 30 days old; else none. The raw
+   option text is never shown, logged or sent to the web side.
+W3. **Item `waiting`** (Now, one per waiting role) — "The <role> is waiting for your
+   approval." / "The <role> has asked you a question." / "The <role> is waiting for
+   you.", plus "for <span>" when `since` is known. `<role>` is `@rein_role` when it
+   matches `[a-z][a-z0-9-]{0,31}`, else "An agent". Dismissable, because a report can
+   outlive its prompt; a dismissed one returns when `since` changes.
+W4. **Sentences that become exact** — the `needs_you` notification says the item's
+   sentence with the project name ("<project>: the engineer is waiting for your
+   approval."). `stopped` says "<project> has stopped — it is finished." only when every
+   running agent pane `reports` and none waits; otherwise the D-062 sentence stays.
+W5. **Per role in the window** — the tab tooltip and the Home card list each role as
+   "waiting for approval" / "asked a question" / "running" / "ended"; the Home card's
+   agent `state` gains `waiting`.
+W6. **A project that does not report** — when a tab's agents run and no pane `reports`,
+   one information item: "This project does not report when an agent waits. `rein sync`
+   in the project adds it." The app runs nothing. The "About this list" text is shown
+   only then.
+W7. **A session that waited while the app was closed** — items still present when a
+   tab's 30 s start-up silence ends raise one notification per project, once.
+
+### Data model
+`Activity.waiting: bool | null` becomes `roles: [{ role, state: running | ended |
+unknown | waiting, kind: permission | question | other | null, since: u64 | null,
+reports: bool }]`.
+
+### Security
+The three options are text set inside the user's own tmux server, where any program of
+that user can set them: they are parsed against the closed forms above and nothing else
+is taken from them. The role in a system notification is the pattern-checked role or
+"An agent". No new process, argument or file.
+
+### Tests
+The parser over rein's vendored `pane-options.json` and over hostile values (long,
+control characters, a `|` in a value, a future `since`); `reports` absent → unknown, no
+item; waiting on a dead pane → no item; each sentence; dismiss returns on a new `since`;
+W7 raised once; real-tmux run setting the three options on a fixture pane (Linux, macOS;
+Windows interop output).
+
+### Task
+8. **E-81 (Tier 2)** — W1–W7. After the notifications task and Home, and only once
+   rein's E-433 is merged and the Architect has named the commit.

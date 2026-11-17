@@ -3843,3 +3843,24 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - Home depends on E-76's reads. If they fail, Home is still built, without working / quiet — hand back first.
 ---
+## Handoff — 2026-11-17 18:30 UTC
+**From**: Architect → Engineer
+**Trigger**: rein's Architect ruled on the waiting signal (rein D-160, rein E-433 — planned, not built). D-062 addendum 1; `status.md` §Waiting signal; E-81.
+
+### What was built
+- Nothing in source. `.ai/blueprints/status.md` (new section "Waiting signal", appended), `.ai/DECISIONS.md` (D-062 addendum 1), `.ai/DIGEST.md`, `.ai/architect.md`, `plans/desktop-feature-candidates.md`.
+
+### Decisions made
+- rein will set three tmux pane options: `@rein_signals` (the pane reports), `@rein_waiting` (`permission` / `question`), `@rein_waiting_since`. For a pane that reports, the app will say which role waits and for what kind. A pane that does not report stays "quiet" / "stopped".
+- Only closed forms are taken from the options; a waiting option on a pane whose agent is not running is ignored; the item is dismissable.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **Engineer:** nothing now. **E-81 must not start** until a handoff from the Architect names rein's merge commit for E-433; it then comes after E-78 and E-80. The queue order of the 18:22 and 18:27 handoffs stands.
+- **E-76 is unchanged**: it reads none of the three options. Keep the status script's per-pane line easy to extend.
+
+### Open risks
+- E-81's date is rein's. Until then the window says "quiet", as D-062 ruling 1.
+---
