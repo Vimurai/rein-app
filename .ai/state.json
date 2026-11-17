@@ -1098,16 +1098,16 @@
     {
       "id": "E-73",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Store the panels a user switched off, not the ones that are on, per .ai/blueprints/panels.md §Data Model \"ui.json stores the panels switched off\" (D-056 addendum 2 ruling 4). Replace `panels_enabled` in the app's ui.json by `panels_disabled` (same id checks, no duplicates); the enabled set is every known panel id minus that list, so a panel added later is on. Read a file that still holds `panels_enabled` once: the ids among dashboard, communication, tasks that it lacks become `panels_disabled`, attention is on, and the old key is not written again. Drop an unknown id in `panels_disabled` instead of refusing the file. Leave `[panels] enabled` in config.toml as it is and winning; the Settings switches look and behave as today. Acceptance: Rust tests in ui_store — round trip of `panels_disabled`; a legacy file with all three ids gives all four panels on; a legacy file with [\"tasks\"] gives dashboard and communication off and attention on; the legacy key is gone after the next save; an unknown id is dropped; a duplicate or a non-list value is refused; config.toml set still wins; UI tests for the Settings switches unchanged or extended, none deleted; local `rein ci run`, hosted ci x3 and desktop-windows green (D-048); Tier 2 stamps. Also re-run the cancelled macOS job of hosted ci at b83e98f.",
       "created_at": "2026-11-17T15:33:30.188Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-17T16:39:05.249Z",
+      "summary": "ecf503d: ui.json stores panels_disabled; legacy panels_enabled read once (attention on); unknown id dropped. Local ci + hosted ci x3 + desktop-windows green; b83e98f macOS re-run green.",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-17T15:33:30.196Z"
+      "updated_at": "2026-11-17T16:39:05.251Z"
     }
   ],
   "stamps": [
@@ -3278,6 +3278,33 @@
       "timestamp": "2026-11-17T14:31:18.259Z",
       "summary": "[TIER_2] E-61 HEAD 133be2c: blueprint aligned (ALIGN_PASS) + clean-code gate clear (CLEAN_PASS, 0 errors/0 warnings) — 3 non-blocking alignment notes recorded",
       "sha": "133be2c11e900f34f7571942c9406b52bc90def4",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "rein-review-tier2",
+      "task_id": "E-73",
+      "timestamp": "2026-11-17T15:39:34.077Z",
+      "summary": "[TIER_2] ecf503d matches D-056 add.2 r4 + panels.md: panels_disabled stored, enabled = PANEL_IDS minus it; legacy panels_enabled read once over dashboard/communication/tasks (attention on), skip_serializing; unknown id dropped; dup/non-list refuse file; config.toml wins; Settings IPC unchanged. All 7 Rust acceptance cases present, ui_store 8/8 green. Hosted ci/desktop-windows at ecf503d still running at review time.",
+      "sha": "ecf503da28c3d4b4adbcd8fa55cc4fc5fc1c5c22",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_WARN",
+      "agent": "rein-review-tier2",
+      "task_id": "E-73",
+      "timestamp": "2026-11-17T15:39:35.957Z",
+      "summary": "[TIER_2] ecf503d: fmt + clippy -D warnings clean, unwraps test-only. Warnings: (1) the PANEL_IDS-minus-list complement is written out 3x (view, set, panels_read) - a helper would do; (2) the panels_disabled doc comment sits above panels_rail, so panels_disabled has no doc of its own.",
+      "sha": "ecf503da28c3d4b4adbcd8fa55cc4fc5fc1c5c22",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-73",
+      "timestamp": "2026-11-17T15:39:38.227Z",
+      "summary": "[TIER_2] Blueprint aligned + clean-code gate clear — 2 warnings ignored (repeated complement code, misplaced doc comment). D-048 CI evidence at ecf503d still pending.",
+      "sha": "ecf503da28c3d4b4adbcd8fa55cc4fc5fc1c5c22",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
