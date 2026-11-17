@@ -3609,3 +3609,30 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - An optimised-build regression between 100 ms and the debug guard would not fail CI. It would show in the local figure each handoff carries.
 ---
+
+---
+## Handoff — 2026-11-17 14:15 UTC
+**From**: Engineer → Architect
+**Trigger**: E-60 and E-72 DONE; E-69's three reads (D-061 V12 "Open to the Engineer") — the first cannot be answered on this machine, so per V12 I stopped before any E-69 write.
+
+### What was built
+- **E-60 DONE.** Hosted CI on the E-60 commit was red on Windows only: `project_file::windows_tests` — a directory in place of `COMM.md` came back `Unreadable`, not `NotRegular` (opening a directory on Windows is access-denied without `FILE_FLAG_BACKUP_SEMANTICS`). Fixed in 0819bd7 (`crates/rein-desktop/src/project_file.rs`: the flag added to the open; no effect on a regular file or on the reparse-point refusal). Hosted ci ×3 + desktop-windows green at 0819bd7; local `rein ci` PASS. Optimised-build timing (ruling 1) as in the E-60 commit: 17–18 ms.
+- **E-72 DONE (fb515ac).** `crates/rein-desktop/ui/src/side-menu.tsx` (210 lines): panel state and ui.json seeding, the four `panel.*` actions (`side.act`, tried just before the switch, same order), the panel key rule (`panelOwnsKey`), the rail and panel elements, `SideRow` (the row beside the stage) and `useStageFit` (the stage's ResizeObserver — moved too because its only side-menu part is the hold while dragging; without it shell.tsx stayed at 1170). `ShellProps extends SideMenuProps`. **shell.tsx 1286 → 1155** (target ≤ 1156). UI tests 70/70 untouched; cargo 168/168; `panel-screens.sh` PASS: update seen 1710 ms, no read hidden 12 s, resume 120 ms, typing 6.9 / 6.8 ms. Screens compared to `.ai/screens/E-60` (PSNR ~41 dB); opened communication-mocha and narrow-overlay-mocha old vs new: identical except relative times ("1 d ago", "updated 1 s ago") and the temp path. Stamps: CLEAN_WARN (shell.tsx still > 1000), ALIGN_PASS (by hand on the commit), CRITIC_STAMP. Local ci + hosted ci ×3 + desktop-windows green at fb515ac.
+
+### E-69 reads
+- **(a) Does the app's tmux server survive on Windows with every app `wsl.exe` gone? — NOT ANSWERABLE HERE; needs the operator.** This machine: WSL 3.0.5.0, one distro (Ubuntu), systemd on, and the operator's `%USERPROFILE%\.wslconfig` sets `instanceIdleTimeout=-1` and `vmIdleTimeout=-1` (comment: Docker stacks live in the distro). So here the distro never idles out *by configuration*, and this Engineer session itself runs inside that distro — any measurement here would say "survives" and prove nothing about the default. Measuring the default needs those two lines removed and `wsl --shutdown`, which ends this session and the operator's Docker stacks, and a machine with no other WSL user process for 60 min. That is the operator's call; nothing was changed. Honest expectation, unmeasured: with default settings WSL 2.x/3.x stops an instance some seconds after its last `wsl.exe` client exits, which would end the tmux server.
+- **(b) tmux 3.2 (oldest supported, `OLD_TMUX`): works.** In a throwaway ubuntu:22.04 container (tmux 3.2a): `set-option -t <s> @rein_app_project <64 hex>` exits 0; `list-sessions -F "#{session_id} #{@rein_app_project}"` prints the tag for the tagged session and empty for the untagged one; the `awk` lookup returns `$0`; `show-options -v` reads it back.
+- **(c) A running `claude` agent with no client: keeps working; re-attach at a new size does not disturb it.** claude (haiku) in a session on a private `-S` socket, never attached: a Bash loop appending 1..30 at 1 s ran while detached (10 lines at +10 s, 0 clients); a real client attached at 90×30 (window 120×40 → 90×28), held 5 s, detached; the loop finished — 30 lines, no duplicates, agent replied DONE, its UI reflowed to the new width. **Also seen:** while detached, the agent stops at a permission prompt and waits indefinitely (here "A variable in this command can't be checked…") — with sessions outliving the app, an agent can sit blocked with nobody looking; this is the E-61 "permission prompt not visible to the app" gap, now longer-lived.
+
+### Blueprint divergence (if any)
+- E-72: `useStageFit` (the stage's fit observer) moved into side-menu.tsx alongside the panel wiring — needed to reach the line target; behaviour identical.
+- E-69: none — no write made.
+
+### Next action needed
+- **Operator:** decide whether to measure (a) under default WSL settings (remove `instanceIdleTimeout` / `vmIdleTimeout` from .wslconfig, `wsl --shutdown`, run the app, close it, check at 1 / 10 / 60 min, with and without systemd) — or rule that V12 on Windows relies on / sets those settings, or Windows skips V12.
+- **Architect:** rule on E-69 for Windows given (a); Linux/macOS could proceed now if you split it. Until then the queue E-69 → E-70 → E-71 is blocked; E-61 (after the side menu) is independent — say if I should take it first.
+
+### Open risks
+- On default WSL settings the session may die with the last `wsl.exe` — V12 would then restore "not running" cards on Windows every time.
+- An agent blocked on a permission prompt in a session nobody is attached to (c).
+---
