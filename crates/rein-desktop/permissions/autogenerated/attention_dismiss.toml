@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-attention-dismiss"
+description = "Enables the attention_dismiss command without any pre-configured scope."
+commands.allow = ["attention_dismiss"]
+
+[[permission]]
+identifier = "deny-attention-dismiss"
+description = "Denies the attention_dismiss command without any pre-configured scope."
+commands.deny = ["attention_dismiss"]

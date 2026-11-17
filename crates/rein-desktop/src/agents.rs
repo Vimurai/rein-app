@@ -182,6 +182,15 @@ impl AgentWatch {
         w.last.remove(&tab);
     }
 
+    /// The tab's agents were last seen running (any role) — the old quiet rule of "Needs you"
+    /// applies only then (status.md §4, E-75). Unknown is not running.
+    pub fn running(&self, tab: u32) -> bool {
+        self.lock()
+            .last
+            .get(&tab)
+            .is_some_and(|a| a.iter().any(|x| x.state == AgentState::Running))
+    }
+
     /// Claim the one status run per [`POLL_EVERY`]; `Err` carries the last answer instead.
     fn claim(&self, tab: u32, now: Instant, force: bool) -> Result<(), Vec<Agent>> {
         let mut w = self.lock();

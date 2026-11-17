@@ -4,10 +4,11 @@
 // and bidi characters visible. It is put on the page as a React text child, or through the
 // closed structured text (`structured-text.tsx`) — never HTML, never a link, never an image.
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "../components/button.tsx";
 import { Input } from "../components/input.tsx";
-import { KNOWN_GAP, type AttentionItem } from "./attention.ts";
+import { KNOWN_GAP, byProject, type Item, type ProjectGroup } from "./attention.ts";
+import type { AttentionFeed } from "./panel-host.tsx";
 import { ChevronDown, ChevronRight } from "./icons.ts";
 import { Chips, taskChips, type ReaderItem } from "./panel-reader.tsx";
 import { filterTasks, firstLines, taskTitle } from "./panel-text.ts";
@@ -176,40 +177,132 @@ export function TimelineView({ whoseTurn, entries, cut, onRead }: { whoseTurn: s
   );
 }
 
-/** Needs you (E-61): one row per item across the open tabs, each naming its project; "Go to
- *  tab" only switches tabs. Text from a file is a quote, and a mention is labelled as one. */
-export function AttentionView({ items, goTo }: { items: AttentionItem[]; goTo: (tab: number) => void }) {
-  if (items.length === 0) {
-    return (
-      <div className="grid gap-2 text-[12px]">
-        <p className="m-0 text-[13px] text-foreground">Nothing needs you right now.</p>
-        <p className="m-0 text-muted-foreground">{KNOWN_GAP}</p>
-      </div>
-    );
-  }
+/** One row: a button to its tab (when it has one) with the app's sentence, a quote for a
+ *  mention, the blocked tasks it opens to, and Dismiss for a bell or mention. */
+function AttentionRow({ it, feed, project }: { it: Item; feed: AttentionFeed; project: string }) {
+  const [open, setOpen] = useState(false);
+  const go = it.index !== null ? () => feed.goTo(it.index as number) : undefined;
+  const text = <span className="[overflow-wrap:anywhere]">{it.text}</span>;
   return (
-    <ul aria-label="Needs you" className="m-0 grid list-none gap-1 p-0">
-      {items.map((it) => (
-        <li key={it.key} className="grid gap-1 border-b border-border/50 py-1.5 last:border-b-0">
-          <span className="flex items-start gap-2">
-            <span className="grid min-w-0 flex-1 gap-0.5">
-              <span className="truncate text-[12px] font-medium text-muted-foreground">{it.project}</span>
-              <span className="text-[13px] [overflow-wrap:anywhere] text-foreground">{it.text}</span>
-            </span>
-            {it.tab !== null && (
-              <Button variant="default" size="sm" className="shrink-0" aria-label={`Go to tab ${it.tab + 1}, ${it.project}`} onClick={() => goTo(it.tab as number)}>
-                Go to tab
-              </Button>
-            )}
-          </span>
-          {it.quote !== null && (
-            <figure className="m-0 grid gap-0.5">
-              {it.kind === "mention" && <figcaption className="text-[11px] text-muted-foreground">Quoted from the handoff — a mention, not a fact</figcaption>}
-              <blockquote className="m-0 border-l-2 border-border pl-2 text-[12px] [overflow-wrap:anywhere] whitespace-pre-wrap text-foreground">{it.quote}</blockquote>
-            </figure>
-          )}
-        </li>
-      ))}
-    </ul>
+    <li className="grid gap-1 py-1">
+      <span className="flex items-start gap-2">
+        {it.list.length > 0 ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+            className="flex min-w-0 flex-1 items-start gap-1 rounded-md px-1 py-0.5 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            {open ? <ChevronDown size={14} aria-hidden="true" className="mt-1 shrink-0" /> : <ChevronRight size={14} aria-hidden="true" className="mt-1 shrink-0" />}
+            {text}
+          </button>
+        ) : go ? (
+          <button
+            type="button"
+            aria-label={`${it.text} — go to ${project}`}
+            onClick={go}
+            className="min-w-0 flex-1 rounded-md px-1 py-0.5 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            {text}
+          </button>
+        ) : (
+          <span className="min-w-0 flex-1 px-1 py-0.5">{text}</span>
+        )}
+        {it.dismissable && it.tab !== null && (
+          <Button variant="ghost" size="sm" className="shrink-0" aria-label={`Dismiss: ${it.text}`} onClick={() => feed.dismiss(it.tab as number, it.key)}>
+            Dismiss
+          </Button>
+        )}
+      </span>
+      {it.quote !== null && (
+        <figure className="m-0 ml-1 grid gap-0.5">
+          {it.kind === "mention" && <figcaption className="text-[11px] text-muted-foreground">Quoted from the handoff — a mention, not a fact</figcaption>}
+          <blockquote className="m-0 border-l-2 border-border pl-2 text-[12px] [overflow-wrap:anywhere] whitespace-pre-wrap text-foreground">{it.quote}</blockquote>
+        </figure>
+      )}
+      {open && (
+        <ul className="m-0 ml-6 grid list-none gap-0.5 p-0 text-[12px]">
+          {it.list.map((b) => (
+            <li key={b.id} className="flex gap-2">
+              <span className="shrink-0 font-mono text-muted-foreground">{b.id}</span>
+              <span className="[overflow-wrap:anywhere]">{taskTitle(b.description) || "—"}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+/** One project: its name and one "Go to tab", then its rows. */
+function ProjectBlock({ g, feed }: { g: ProjectGroup; feed: AttentionFeed }) {
+  return (
+    <section aria-label={g.project} className="grid gap-0.5 border-b border-border/50 pb-2 last:border-b-0">
+      <header className="flex items-center gap-2">
+        <h3 className="m-0 min-w-0 flex-1 truncate text-[13px] font-semibold">{g.project}</h3>
+        {g.index !== null && (
+          <Button variant="default" size="sm" className="shrink-0" aria-label={`Go to tab ${g.index + 1}, ${g.project}`} onClick={() => feed.goTo(g.index as number)}>
+            Go to tab
+          </Button>
+        )}
+      </header>
+      <ul className="m-0 grid list-none p-0">
+        {g.items.map((it) => (
+          <AttentionRow key={it.key} it={it} feed={feed} project={g.project} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** A disclosure: a button that opens what follows it. */
+function Disclosure({ label, children, start = false }: { label: string; children: ReactNode; start?: boolean }) {
+  const [open, setOpen] = useState(start);
+  return (
+    <section className="grid gap-2">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 rounded-md px-1 py-0.5 text-left text-[12px] font-medium text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        {open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+        {label}
+      </button>
+      {open && children}
+    </section>
+  );
+}
+
+/** Needs you (E-61; triaged by E-75, status.md §5): the Now items grouped by project, then
+ *  "For information (n)" collapsed, then "About this list". Text from a file is a quote,
+ *  and a mention is labelled as one. The panel's actions only switch tabs or dismiss. */
+export function AttentionView({ feed }: { feed: AttentionFeed }) {
+  const now = byProject(feed.lists.now, feed.title);
+  const info = byProject(feed.lists.info, feed.title);
+  return (
+    <div className="grid gap-4">
+      {now.length === 0 ? (
+        <p className="m-0 text-foreground">Nothing needs you.</p>
+      ) : (
+        <div className="grid gap-2">
+          {now.map((g) => (
+            <ProjectBlock key={g.key} g={g} feed={feed} />
+          ))}
+        </div>
+      )}
+      {info.length > 0 && (
+        <Disclosure label={`For information (${feed.lists.info.length})`}>
+          <div className="grid gap-2">
+            {info.map((g) => (
+              <ProjectBlock key={g.key} g={g} feed={feed} />
+            ))}
+          </div>
+        </Disclosure>
+      )}
+      <Disclosure label="About this list">
+        <p className="m-0 pl-5 text-[12px] text-muted-foreground">{KNOWN_GAP}</p>
+      </Disclosure>
+    </div>
   );
 }

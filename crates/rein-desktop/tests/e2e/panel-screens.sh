@@ -13,7 +13,8 @@
 #   panel-attention              — "Needs you" (E-61) with items from two projects (the second
 #     opened by a second start) and the rail's badge; the first tab's bell rung while it is in
 #     the background; checked: the bell item is there, and gone once that tab is shown;
-#   panel-attention-empty        — a quiet project: "Nothing needs you" and the known gap.
+#   panel-attention-empty        — a quiet project: "Nothing needs you" and the known gap;
+#   panel-attention-info-only    — E-75: only For information (two blocked tasks, one row).
 # Checked from the core's debug trace (REIN_DESKTOP_TRACE_PANELS, debug builds only):
 #   - the open Tasks panel reads state.json again within 6 s of a change;
 #   - with the window unmapped (hidden) nothing is read for 12 s, and reads resume once it is
@@ -232,6 +233,13 @@ PY
   T send-keys -t "demo-$theme" "printf '\\a'" Enter; sleep 1
   X key ctrl+shift+4; sleep 6
   shot "panel-attention-$theme"
+  if [ "$GW" = 1280 ] && [ "$GH" = 800 ]; then # E-75: by pointer, at the default layout only
+    X click 120 281; sleep 1; shot "panel-attention-info-open-$theme" # For information
+    X click 128 343; sleep 1                                           # its blocked row opens
+    shot "panel-attention-info-blocked-$theme"
+    X click 396 152; sleep 2; shot "panel-attention-dismissed-$theme" # Dismiss the bell
+    check "a dismissed bell is kept in dismissed.json for this project" yes "$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print("yes" if any(i["key"]=="bell" and i["project"].endswith(sys.argv[2]) for i in d["items"]) else "no")' "$W/xdg/state/rein-app/dismissed.json" "/demo-$theme" 2>/dev/null || echo no)"
+  fi
   bell_before=$(grep -c "panel-trace" "$W/app.log")
   [ "$bell_before" -gt 0 ]; ok "the attention facts are read (trace lines present)" $?
   X key alt+1; sleep 1.5; X key alt+2; sleep 1.5
@@ -243,6 +251,13 @@ PY
   app "$theme" "$c"
   X key ctrl+shift+4; sleep 6
   shot "panel-attention-empty-$theme"
+  quit
+  # Needs you with only information (E-75): a project whose one item is a blocked task.
+  f="$W/Dev/blocked-$theme"; mkdir -p "$f/.ai"
+  echo '{"tasks":[{"id":"E-7","status":"BLOCKED","description":"Waits on the signing key"},{"id":"E-8","status":"BLOCKED","description":"Waits on E-7"}]}' >"$f/.ai/state.json"
+  app "$theme" "$f"
+  X key ctrl+shift+4; sleep 6
+  shot "panel-attention-info-only-$theme"
   quit
   # Not available: a team-mode state.json (no tasks[]).
   q="$W/Dev/teammode-$theme"; mkdir -p "$q/.ai"; echo '{"project":{"focus":""}}' >"$q/.ai/state.json"

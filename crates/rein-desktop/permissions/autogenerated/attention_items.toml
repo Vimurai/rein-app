@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-attention-items"
+description = "Enables the attention_items command without any pre-configured scope."
+commands.allow = ["attention_items"]
+
+[[permission]]
+identifier = "deny-attention-items"
+description = "Denies the attention_items command without any pre-configured scope."
+commands.deny = ["attention_items"]

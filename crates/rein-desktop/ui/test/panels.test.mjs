@@ -30,7 +30,7 @@ import {
   updatedAgo,
 } from "../src/panels.ts";
 import { DEFAULT_MODAL, DEFAULT_SIMPLE, expanded } from "../src/keymap.ts";
-import { KNOWN_GAP, MAX_ITEMS, QUIET_S, attentionItems, badgeText, bellClears, bellMarks, goToTab, span } from "../src/attention.ts";
+import { KNOWN_GAP, badgeText, bellClears, bellMarks, byProject, goToTab } from "../src/attention.ts";
 import { describe as describeAction, menuEntries } from "../src/menu.ts";
 import { TITLE_MAX, blocks, filterTasks, firstLines, inline, readerKey, step, taskTitle } from "../src/panel-text.ts";
 
@@ -193,62 +193,30 @@ test("the not-available state and the first load", () => {
   assert.match(rendered.loading(), /data-slot="skeleton"/, "a skeleton until the first answer");
 });
 
-// ── Needs you (E-61) ────────────────────────────────────────────────────────────────────
+// ── Needs you (E-61; triaged in the core by E-75 — the rules' table test is attention.rs) ──
 
-const NOW = Date.UTC(2026, 11 - 1, 17, 12, 0);
-const noFacts = { tasks_read: true, blocked: [], in_progress: false, last_handoff: null, mentions: [] };
-const tab = (index, over = {}) => ({ index, title: `p${index}`, exited: false, refused: false, bell: false, update: false, facts: noFacts, ...over });
-const kinds = (tabs, health = "ok") => attentionItems(tabs, health, NOW).map((i) => `${i.project}:${i.kind}`);
+const item = (over) => ({ key: "k", kind: "bell", index: 0, tab: 10, text: "t", quote: null, list: [], dismissable: false, ...over });
 
-test("each attention rule on and off", () => {
-  assert.deepEqual(kinds([tab(0)]), [], "a quiet tab has nothing");
-  assert.deepEqual(kinds([tab(0, { exited: true })]), ["p0:ended"]);
-  assert.deepEqual(kinds([tab(0, { exited: true, refused: true })]), ["p0:refused"], "a refusal is one item, not also 'ended'");
-  assert.deepEqual(kinds([tab(0, { update: true })]), ["p0:update"]);
-  assert.deepEqual(kinds([tab(0, { bell: true })]), ["p0:bell"]);
-  assert.deepEqual(kinds([tab(0)], "warn"), ["Every project:health"]);
-  assert.deepEqual(kinds([tab(0)], "fail"), ["Every project:health"]);
-  assert.deepEqual(kinds([tab(0)], "unknown"), []);
-  const health = attentionItems([], "fail", NOW)[0];
-  assert.equal(health.tab, null, "health is no one tab's: no go-to");
-  const blocked = attentionItems([tab(0, { facts: { ...noFacts, blocked: [{ id: "E-2", description: "waits on rein" }, { id: "E-4", description: "" }] } })], "ok", NOW);
-  assert.deepEqual(blocked.map((i) => [i.text, i.quote]), [["E-2 is blocked.", "waits on rein"], ["E-4 is blocked.", null]]);
-  // No handoff for more than 30 minutes while a task is in progress.
-  const at = (min) => new Date(NOW - min * 60000).toISOString().replace("T", " ").slice(0, 16) + " UTC";
-  const quiet = (over) => kinds([tab(0, { facts: { ...noFacts, in_progress: true, last_handoff: at(31), ...over } })]);
-  assert.deepEqual(quiet({}), ["p0:quiet"]);
-  assert.match(attentionItems([tab(0, { facts: { ...noFacts, in_progress: true, last_handoff: at(31) } })], "ok", NOW)[0].text, /31 min/);
-  assert.deepEqual(quiet({ last_handoff: at(29) }), [], "29 min is not yet");
-  assert.deepEqual(quiet({ in_progress: false }), [], "nothing in progress");
-  assert.deepEqual(quiet({ last_handoff: "yesterday" }), [], "an odd timestamp is not guessed at");
-  assert.deepEqual(quiet({ last_handoff: null }), [], "no handoff at all: no time to measure");
-  assert.ok(QUIET_S === 1800);
-  assert.deepEqual([span(31 * 60), span(119 * 60), span(26 * 3600 + 40 * 60), span(3 * 86400)], ["31 min", "119 min", "26 h", "3 d"]);
-  // The last handoff mentions the operator: a quote, labelled as a mention.
-  const m = attentionItems([tab(0, { facts: { ...noFacts, mentions: ["- **Operator:** choose", "ask the operator"] } })], "ok", NOW);
-  assert.deepEqual(m.map((i) => [i.kind, i.quote]), [["mention", "- **Operator:** choose"], ["mention", "ask the operator"]]);
-  assert.match(m[0].text, /mentions the operator/);
-  // Facts not read yet (or not available): only the app's own rules apply.
-  assert.deepEqual(kinds([tab(0, { exited: true, facts: null })]), ["p0:ended"]);
-});
-
-test("attention across several tabs: tab order, each item names its project and its tab, capped", () => {
-  const items = attentionItems(
-    [tab(0, { bell: true }), tab(1), tab(2, { exited: true, facts: { ...noFacts, blocked: [{ id: "E-9", description: "x" }] } })],
-    "warn",
-    NOW,
+test("Needs you groups the core's items by project in first-seen order; the badge counts what it is given", () => {
+  const titles = ["alpha", "beta"];
+  const groups = byProject(
+    [item({ index: null, key: "health", kind: "health_fail" }), item({ index: 1, key: "bell" }), item({ index: 0, key: "ended" }), item({ index: 1, key: "mention:0" })],
+    (i) => titles[i],
   );
-  assert.deepEqual(items.map((i) => [i.project, i.kind, i.tab]), [
-    ["Every project", "health", null],
-    ["p0", "bell", 0],
-    ["p2", "ended", 2],
-    ["p2", "blocked", 2],
+  assert.deepEqual(groups.map((g) => [g.project, g.index, g.items.map((x) => x.key)]), [
+    ["Every project", null, ["health"]],
+    ["beta", 1, ["bell", "mention:0"]],
+    ["alpha", 0, ["ended"]],
   ]);
-  assert.equal(new Set(items.map((i) => i.key)).size, items.length, "keys are unique");
-  const many = Array.from({ length: 300 }, (_, i) => ({ id: `E-${i}`, description: "" }));
-  assert.equal(attentionItems([tab(0, { facts: { ...noFacts, blocked: many } }), tab(1, { bell: true })], "fail", NOW).length, MAX_ITEMS);
+  assert.deepEqual(byProject([], () => "x"), []);
   assert.equal(badgeText(3), "3");
   assert.equal(badgeText(200), "99+");
+  // The web side sends no title, path or sentence to the core: only booleans, ids and a count.
+  const ipc = readFileSync(join(ui, "src/ipc.ts"), "utf8");
+  assert.match(ipc, /invoke<import\("\.\/attention\.ts"\)\.Lists>\("attention_items", \{ tabs, health \}\)/);
+  const side = readFileSync(join(ui, "src/side-menu.tsx"), "utf8");
+  const sent = /const tabStates = \(\): TabState\[\] =>[\s\S]*?\];\n/.exec(side)?.[0] ?? "";
+  assert.ok(sent.includes("index,") && !/title|project|path/.test(sent), "tab state holds no title or path");
 });
 
 test("the bell marks only a tab out of sight and clears when it is in front of the user", () => {
@@ -260,33 +228,44 @@ test("the bell marks only a tab out of sight and clears when it is in front of t
   assert.equal(bellClears(false, true), false);
 });
 
-test("the panel's one action only switches tabs; nothing in it writes, runs or types", () => {
+test("the panel's actions only switch tabs or dismiss; nothing in it runs or types", () => {
   const calls = [];
   goToTab((c) => calls.push(c))(2);
   assert.deepEqual(calls, [{ name: "tab.goto", arg: "3" }]);
-  // The rules and the view reach no IPC at all: the side menu reads the facts, read-only.
+  // The view reaches no IPC: the side menu asks for the lists and sends a dismiss (E-75).
   for (const f of ["src/attention.ts", "src/panel-views.tsx"]) {
     const src = readFileSync(join(ui, f), "utf8");
     assert.doesNotMatch(src, /from "\.\/ipc\.ts"/, `${f} imports no IPC`);
     assert.doesNotMatch(src, /\binvoke\(|\.write\(|\.paste\(|sendBytes/, `${f} writes nothing`);
   }
   const side = readFileSync(join(ui, "src/side-menu.tsx"), "utf8");
-  assert.deepEqual([...side.matchAll(/\b(panelData|[a-z][A-Za-z]*(?:Write|Close|Apply|Send))(?:<[^>(]*>)?\(/g)].map((m) => m[1]), ["panelData"], "the side menu only reads");
+  assert.deepEqual(
+    [...side.matchAll(/\b(panelData|attention[A-Z]\w*|[a-z][A-Za-z]*(?:Write|Close|Apply|Send))(?:<[^>(]*>)?\(/g)].map((m) => m[1]),
+    ["attentionItems", "attentionDismiss"],
+    "the side menu asks for the lists and dismisses, nothing else",
+  );
 });
 
-test("the Needs you panel: items with their project, a quote labelled as a mention, the gap stated when empty", () => {
+test("the Needs you panel: Now grouped by project with one Go to tab, information collapsed, Dismiss, the empty state", () => {
   const html = rendered.attention();
-  assert.ok(html.includes("E-2 is blocked."));
-  assert.equal((html.match(/>Go to tab</g) ?? []).length, 2, "health has no go-to");
-  assert.ok(html.includes("a mention, not a fact"));
-  assert.ok(html.includes("<blockquote"));
+  assert.equal((html.match(/>Go to tab</g) ?? []).length, 2, "one per project; health has none");
+  assert.ok(html.includes(">alpha<") && html.includes(">beta<") && html.includes(">Every project<"));
+  assert.ok(html.includes("a mention, not a fact") && html.includes("<blockquote"));
+  assert.equal((html.match(/>Dismiss</g) ?? []).length, 2, "the bell and the mention");
+  assert.ok(html.includes("For information (2)"));
+  assert.ok(!html.includes("12 tasks are blocked"), "information starts collapsed");
+  assert.match(html, /aria-expanded="false"[^>]*>.*For information/s);
+  assert.ok(html.includes("About this list"));
+  const info = rendered.attentionInfoOnly();
+  assert.ok(info.includes("Nothing needs you.") && info.includes("For information (1)"));
   const empty = rendered.attentionEmpty();
-  assert.ok(empty.includes("Nothing needs you right now."));
-  assert.ok(empty.includes(KNOWN_GAP.replace(/'/g, "&#x27;")));
+  assert.ok(empty.includes("Nothing needs you.") && !empty.includes("For information"));
   assert.match(KNOWN_GAP, /permission prompt/);
-  assert.match(KNOWN_GAP, /while the app is closed/, "D-061 addendum 1: the gap holds while the app is closed too");
+  assert.match(KNOWN_GAP, /open or closed/, "D-061 addendum 1: the gap holds while the app is closed too");
+  assert.equal(KNOWN_GAP.split(/\.\s/).length, 2, "two sentences");
   assert.match(rendered.attentionLoading(), /data-slot="skeleton"/);
 });
+
 
 // ── Readable panels (E-74, status.md §Components 7, D-063) ──────────────────────────────
 

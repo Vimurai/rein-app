@@ -93,7 +93,10 @@ export function loading(): string {
   return renderToString(<PanelBody d={d("tasks")} app={app} nowMs={NOW} reply={null} />);
 }
 
-const feed = (items: import("../../src/attention.ts").AttentionItem[]) => ({ items, readAt: NOW / 1000, goTo: () => {}, refresh: () => {} });
+type Lists = import("../../src/attention.ts").Lists;
+type Item = import("../../src/attention.ts").Item;
+const feed = (lists: Lists) => ({ lists, title: (i: number) => ["alpha", "beta"][i] ?? "?", readAt: NOW / 1000, goTo: () => {}, refresh: () => {}, dismiss: () => {} });
+const it = (over: Partial<Item>): Item => ({ key: "k", kind: "bell", index: 0, tab: 10, text: "The terminal rang its bell.", quote: null, list: [], dismissable: false, ...over });
 
 export function attention(): string {
   return renderToString(
@@ -102,21 +105,34 @@ export function attention(): string {
       app={app}
       nowMs={NOW}
       reply={null}
-      attention={feed([
-        { key: "a", kind: "blocked", project: HOSTILE, tab: 0, text: "E-2 is blocked.", quote: HOSTILE },
-        { key: "b", kind: "mention", project: "demo", tab: 1, text: "The last handoff mentions the operator:", quote: HOSTILE },
-        { key: "c", kind: "health", project: "Every project", tab: null, text: "The installation health check is failing.", quote: null },
-      ])}
+      attention={feed({
+        now: [
+          it({ key: "health", kind: "health_fail", index: null, tab: null, text: "The installation health check is failing." }),
+          it({ key: "bell", dismissable: true }),
+          it({ key: "ended", kind: "ended", index: 1, tab: 11, text: "rein start has ended in this tab." }),
+          it({ key: "mention:0", kind: "mention", index: 1, tab: 11, text: "The last handoff mentions the operator:", quote: HOSTILE, dismissable: true }),
+        ],
+        info: [
+          it({ key: "blocked", kind: "blocked", text: "12 tasks are blocked", list: [{ id: "E-1", description: HOSTILE }] }),
+          it({ key: "update", kind: "update", index: 1, tab: 11, text: "rein says the project is out of date." }),
+        ],
+      })}
     />,
   );
 }
 
+export function attentionInfoOnly(): string {
+  return renderToString(
+    <PanelBody d={d("attention")} app={app} nowMs={NOW} reply={null} attention={feed({ now: [], info: [it({ key: "blocked", kind: "blocked", text: "1 task is blocked" })] })} />,
+  );
+}
+
 export function attentionEmpty(): string {
-  return renderToString(<PanelBody d={d("attention")} app={app} nowMs={NOW} reply={null} attention={feed([])} />);
+  return renderToString(<PanelBody d={d("attention")} app={app} nowMs={NOW} reply={null} attention={feed({ now: [], info: [] })} />);
 }
 
 export function attentionLoading(): string {
-  return renderToString(<PanelBody d={d("attention")} app={app} nowMs={NOW} reply={null} attention={{ ...feed([]), readAt: null }} />);
+  return renderToString(<PanelBody d={d("attention")} app={app} nowMs={NOW} reply={null} attention={{ ...feed({ now: [], info: [] }), readAt: null }} />);
 }
 
 // E-74: every construct of the structured text, with the hostile strings inside each one.

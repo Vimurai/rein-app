@@ -10,10 +10,12 @@
 
 mod actions;
 mod agents;
+mod attention;
 mod cli;
 mod cli_ipc;
 mod config;
 mod dirs;
+mod dismissed;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod handoff_dir;
 mod host;
@@ -242,6 +244,9 @@ fn main() -> ExitCode {
         .manage(std::sync::Arc::clone(&config))
         .manage(cli_ipc::CliState::default())
         .manage(ui_store)
+        .manage(attention::AttentionState::new(dismissed::Dismissed::open(
+            dirs::state_dir(&dirs::process_env),
+        )))
         // Recent projects (E-38). On Windows they live inside WSL: not probed per row (W2).
         .manage(std::sync::Arc::new(projects::ProjectStore::open(
             dirs::state_dir(&dirs::process_env),
@@ -269,6 +274,8 @@ fn main() -> ExitCode {
             pointer_ipc::ui_get,
             pointer_ipc::ui_set,
             panel_ipc::panel_data,
+            attention::attention_items,
+            attention::attention_dismiss,
             agents::project_agents,
             agents::project_close,
             project_setup::project_check,

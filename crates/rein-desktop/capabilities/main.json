@@ -26,6 +26,8 @@
     "allow-ui-get",
     "allow-ui-set",
     "allow-panel-data",
+    "allow-attention-items",
+    "allow-attention-dismiss",
     "allow-project-agents",
     "allow-project-close",
     "allow-project-check",

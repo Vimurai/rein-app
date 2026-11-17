@@ -20,7 +20,7 @@ import { Skeleton } from "../components/loaders.tsx";
 import { ScrollArea } from "../components/scroll-area.tsx";
 import { RefreshCw, TriangleAlert, X } from "./icons.ts";
 import { panelData } from "./ipc.ts";
-import type { AttentionItem } from "./attention.ts";
+import type { Lists } from "./attention.ts";
 import { Reader, type ReaderItem } from "./panel-reader.tsx";
 import { AttentionView, ListView, SummaryView, TimelineView, type OnRead } from "./panel-views.tsx";
 import {
@@ -85,10 +85,15 @@ function Unavailable({ text }: { text: string }) {
 /** "Needs you" is not read by the host: the side menu reads every open tab's facts for the
  *  badge and hands the panel the items, the time of the last read, and "go to tab". */
 export interface AttentionFeed {
-  items: AttentionItem[];
+  /** The core's two lists (E-75). */
+  lists: Lists;
+  /** A tab's title by its tab-bar index: the core names tabs by index only. */
+  title: (index: number) => string;
   readAt: number | null;
   goTo: (tab: number) => void;
   refresh: () => void;
+  /** Dismiss a row the core sent as dismissable. */
+  dismiss: (tab: number, key: string) => void;
 }
 
 /** What the descriptor's view draws for one answer. Exported for the render test. */
@@ -110,7 +115,7 @@ export function PanelBody({
 }) {
   if (d.source === "attention") {
     if (attention?.readAt == null) reply = null;
-    else return <AttentionView items={attention.items} goTo={attention.goTo} />;
+    else return <AttentionView feed={attention} />;
   }
   if (reply === null) {
     return (

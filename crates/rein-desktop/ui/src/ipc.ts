@@ -202,3 +202,9 @@ export const configGet = (reload = false) =>
  *  from the tab, never a path from here. */
 export const panelData = <T>(tab: number, source: import("./panels.ts").Source) =>
   invoke<import("./panels.ts").Reply<T>>("panel_data", { tab, source });
+/** status.md §4 (E-75): "Needs you" for every open tab — the core adds the facts and the
+ *  rules; this side sends only booleans, a bell count and the health word. */
+export const attentionItems = (tabs: import("./attention.ts").TabState[], health: "ok" | "warn" | "fail" | "unknown") =>
+  invoke<import("./attention.ts").Lists>("attention_items", { tabs, health });
+/** Dismiss a bell or mention row the core sent for `tab` (anything else is refused). */
+export const attentionDismiss = (tab: number, key: string) => invoke<void>("attention_dismiss", { tab, key });

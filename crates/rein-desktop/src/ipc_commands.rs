@@ -23,6 +23,8 @@ pub const COMMANDS: &[&str] = &[
     "ui_get",
     "ui_set",
     "panel_data",
+    "attention_items",
+    "attention_dismiss",
     "project_agents",
     "project_close",
     "project_check",

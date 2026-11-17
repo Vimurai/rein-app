@@ -349,18 +349,29 @@ machine keeps its memory in use until you run `wsl --shutdown` or restart Window
 ### Needs you
 
 The side menu's **Needs you** panel (the bell icon on the rail, `Ctrl+Shift+4`, modal
-`Space P 4`) lists what only you can move, across every open tab. Each item names its project
-and has **Go to tab**, which only switches to that tab. The rail's bell shows how many items
-there are. Items:
+`Space P 4`) lists, across every open tab, what only you can act on. Items are grouped by
+project: one header with **Go to tab**, and each row also goes to its tab. The rail's bell
+counts only the first group.
+
+**Now** (counted):
 
 - a tab whose `rein start` has ended, or whose tmux setup was refused;
-- the installation health check warning or failing (for every project, so it has no tab);
-- rein saying the project is out of date (unless you chose **Not now** or **Don't ask**);
-- a `BLOCKED` task;
-- a task in progress with no handoff for more than 30 minutes;
 - a terminal bell in a tab that was not in front of you (cleared when you look at that tab);
-- lines of the last handoff's "Next action needed" holding the word *operator*. These are
-  quoted and labelled as a mention: the panel repeats what the handoff says, it does not check it.
+- lines of the last handoff's "Next action needed" holding the word *operator*, quoted and
+  labelled as a mention — the panel repeats what the handoff says, it does not check it;
+- the installation health check failing (for every project, so it has no tab);
+- a task in progress with no handoff for more than 30 minutes — only while that tab's agents
+  are seen running.
+
+**For information** (listed collapsed under it, not counted):
+
+- one row per project with blocked tasks ("3 tasks are blocked"), opening to the list;
+- rein saying the project is out of date (unless you chose **Not now** or **Don't ask**);
+- the installation health check warning.
+
+**Dismiss** hides a bell or a mention row until its text changes (a new bell, a new
+handoff line). Dismissals are kept in `dismissed.json` beside `ui.json` (a hash of the text,
+never the text); deleting the file brings them back.
 
 While the window is visible the app checks each open tab's `.ai/state.json` and `.ai/COMM.md`
 every 5 seconds. It only reads one again if its size or time changed. Nothing is read while the
