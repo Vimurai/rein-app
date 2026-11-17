@@ -215,7 +215,9 @@ test("Needs you groups the core's items by project in first-seen order; the badg
   const ipc = readFileSync(join(ui, "src/ipc.ts"), "utf8");
   assert.match(ipc, /invoke<import\("\.\/attention\.ts"\)\.Lists>\("attention_items", \{ tabs, health \}\)/);
   const side = readFileSync(join(ui, "src/side-menu.tsx"), "utf8");
-  const sent = /const tabStates = \(\): TabState\[\] =>[\s\S]*?\];\n/.exec(side)?.[0] ?? "";
+  // \r?: a Windows checkout has CRLF line ends (E-75's first hosted run failed on this).
+  const sent = /const tabStates = \(\): TabState\[\] =>[\s\S]*?\];\r?\n/.exec(side)?.[0] ?? "";
+  assert.ok(sent.includes("index,"), "the tab-state block was found");
   assert.ok(sent.includes("index,") && !/title|project|path/.test(sent), "tab state holds no title or path");
 });
 
