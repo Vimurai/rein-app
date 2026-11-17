@@ -3661,3 +3661,41 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - E-69..E-71 idle until the operator answers.
 - An agent waiting at a permission prompt with nobody attached (your read (c)); only rein can signal it.
 ---
+
+---
+## Handoff — 2026-11-17 14:58 UTC
+**From**: Engineer → Architect
+**Trigger**: E-61 DONE (D-061 addendum 1 ruling 6). The Engineer queue is now empty apart from blocked work: E-69 → E-71 wait on the operator's Windows ruling, E-6 on the first tag.
+
+### What was built
+- **E-61 (133be2c)**, panels.md §Components 6–7.
+  - Core: `crates/rein-desktop/src/panel_attention.rs` + `Source::Attention` in `panel_ipc.rs`. Per tab it returns the BLOCKED tasks (cap 200), whether a task is in progress, the last handoff's timestamp, and the lines of its "Next action needed" holding *operator* / *operators* as a word (cap 20, 300 chars). A missing file gives no facts, never "not available"; only a closed tab is. Same cache as the other sources: a stat each call, a read and parse only on a size/mtime change.
+  - Web: `ui/src/attention.ts` holds the 8 rules as a pure function, capped at 200 items. It also holds the bell rule (marks when the tab is not current or the window is unfocused; clears when the tab is current in a focused window) and `goToTab` (`tab.goto` only).
+  - `side-menu.tsx` polls `panel_data(tab, "attention")` for every open tab every 5 s, only while the window is visible and the panel is enabled. It re-renders the shell only on a change, or while the panel is open.
+  - Fourth descriptor `attention` ("Needs you", bell icon, `list` view with options `{limit}`; any other view for that source is refused), `Ctrl+Shift+4` / `Space P 4`, a rail badge (99+), the Settings switch and `PANEL_IDS`.
+  - `shell.tsx` +4 lines (now 1159): the `refused` / `bell` tab flags and the xterm `onBell` hook.
+  - The known gap, in the empty state and in `docs/operator-guide.md` (new section "Needs you"), says the prompt is invisible "not while the window is open, and not while the app is closed".
+- **Tests:**
+  - Rust: 4 new in `panel_attention.rs`, and `panel_ipc`'s tab test is extended.
+  - UI: 75/75. `panels.test.mjs` is extended with each rule on and off, several tabs, the cap, the bell, the one action (a static check that the rules and view import no IPC, and that the side menu only calls `panelData`), text-only markup and the empty state.
+  - `panel-screens.sh` is extended with a second start for a second project, a bell in the background tab, the panel, the panel after showing that tab, and the empty state. PASS: update 1712 ms, no reads in 12 s hidden (the attention stat included), resume 117 ms, typing 6.5 / 6.3 ms.
+- **Screens:** `.ai/screens/E-61/`, all opened. `panel-attention-*` has 5 items from two projects and a badge of 5. `panel-attention-after-bell-*` shows the bell item gone (4). `panel-attention-empty-*` shows the gap text. Both themes. The E-60 shots in that folder now show the fourth rail icon.
+- **CI:** local `rein ci` PASS. Hosted `ci` ×3 + `desktop-windows` green at 133be2c. The macOS job was first cancelled as "not acquired by a hosted runner" (GitHub capacity), then passed on re-run.
+- **Review stamps:** ALIGN_PASS (by hand on the commit), CLEAN_PASS, CRITIC_STAMP.
+
+### Blueprint divergence (if any) — please rule
+1. **"An update available"** = rein's per-tab "project out of date" (V9). It is hidden once the user chose **Not now** / **Don't ask**. The app's own update check runs only on demand, so there is nothing to watch for it.
+2. **Health warn/fail is one item for "Every project" with no Go to tab.** Its only other action would be `health.show`, which runs `rein doctor`, and panel actions must not run commands.
+3. **The `list` view's options depend on the source:** `{groups, limit, done}` for tasks, `{limit}` for attention. The blueprint says "a closed set per view".
+4. **Existing users:** a `ui.json` that already stores `panels_enabled` from an earlier Settings change keeps its three ids, so "Needs you" stays off for them until switched on. The default config enables all four.
+5. No optimised timing figure: the read/parse path is unchanged, and `attention()` is one pass over the parsed tasks.
+
+### Next action needed
+- **Architect:** review E-61 and rule on 1–4.
+- **Operator:** the Windows choice for V12 (D-061 addendum 1 ruling 4) unblocks E-69 → E-71.
+
+### Open risks
+- Reviewer's note: the bell mark is stored on the shell's own tab objects, and `side-menu.tsx` sets and clears it there. It works, but it couples the side menu to the shell's tab record.
+- `shell.tsx` is at 1159 lines, over the 1000-line standard. The session tasks will add to it.
+- The permission-prompt gap remains; only rein can close it.
+---
