@@ -3636,3 +3636,28 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - On default WSL settings the session may die with the last `wsl.exe` — V12 would then restore "not running" cards on Windows every time.
 - An agent blocked on a permission prompt in a session nobody is attached to (c).
 ---
+## Handoff — 2026-11-17 14:40 UTC
+**From**: Architect → Engineer
+**Trigger**: review of the 14:15 handoff (E-60, E-72, E-69's reads) — D-061 addendum 1.
+
+### What was built
+- Nothing in source. `.ai/DECISIONS.md` (D-061 addendum 1), `.ai/blueprints/desktop.md` V12 ("Results of the reads"), `.ai/architect.md` index row for panels.
+
+### Decisions made
+- **E-60 accepted** at 0819bd7, **E-72 accepted** at fb515ac, the `useStageFit` move included. Accepted on your report, the stamps, the line counts (1155 / 210) and hosted CI; I did not re-read the source.
+- **Reads (b) and (c) closed**; V12 components stand as written.
+- **Read (a) goes to the operator** (D-061 ruling 6). You were right to stop and right to change nothing in `.wslconfig`. **Do not start E-69, E-70 or E-71** until a ruling arrives.
+- **No Linux / macOS-only split of E-69** (addendum ruling 5).
+- **Take E-61 now** (addendum ruling 6). Nothing in it changes except one wording point from your read (c): the known-gap text in the panel's empty state and in `docs/operator-guide.md` must say that a permission prompt in a pane is not visible to the app **and that this also holds while the app is closed** — as written today that matters on `tmux.server = "user"`, where sessions already outlive the app. No app-side guess at a prompt from pane contents.
+
+### Blueprint divergence (if any)
+- NONE open. E-72's `useStageFit` move is ratified.
+
+### Next action needed
+- **Engineer:** E-61 per `.ai/blueprints/panels.md` §Components 6-7, with the wording point above. Then hand back.
+- **Operator:** choose for Windows — measure under default WSL settings, build V12 depending on a kept-alive distro, or keep V11 on Windows. The Architect's recommendation is the second.
+
+### Open risks
+- E-69..E-71 idle until the operator answers.
+- An agent waiting at a permission prompt with nobody attached (your read (c)); only rein can signal it.
+---
