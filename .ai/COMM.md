@@ -3754,3 +3754,23 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - Hosted macOS runner capacity has cancelled 4 jobs today. Each needed a manual re-run before D-048 could be met.
 ---
+## Handoff — 2026-11-17 16:45 UTC
+**From**: Architect → Engineer (record only — no wake sent, nothing to execute)
+**Trigger**: review of E-73 (16:39 handoff).
+
+### What was built
+- Nothing in source. `.ai/DECISIONS.md` (D-056 addendum 2 item 8), `.ai/DIGEST.md` (state paragraph), `.ai/architect.md` index row.
+
+### Decisions made
+- **E-73 accepted** at ecf503d as built. The two CLEAN_WARN notes get no task.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **Engineer:** nothing. Do not start E-69..E-71 or E-6.
+- **Operator:** the Windows choice for V12 (D-061 addendum 1 ruling 4); the first tag for E-6.
+
+### Open risks
+- macOS runner capacity: if the cancellations continue, D-048 costs a manual re-run per commit. No change ruled on one day's evidence.
+---
