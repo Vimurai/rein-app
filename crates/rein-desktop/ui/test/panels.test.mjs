@@ -32,7 +32,7 @@ import {
 import { DEFAULT_MODAL, DEFAULT_SIMPLE, expanded } from "../src/keymap.ts";
 import { KNOWN_GAP, badgeText, bellClears, bellMarks, byProject, goToTab } from "../src/attention.ts";
 import { describe as describeAction, menuEntries } from "../src/menu.ts";
-import { TITLE_MAX, blocks, filterTasks, firstLines, inline, readerKey, step, taskTitle } from "../src/panel-text.ts";
+import { LONG_PARAGRAPH, TITLE_MAX, blocks, filterTasks, firstLines, inline, labelOf, readerBody, readerKey, splitParagraph, step, taskTitle } from "../src/panel-text.ts";
 
 const ui = fileURLToPath(new URL("..", import.meta.url));
 
@@ -356,6 +356,7 @@ test("the reader: id, title and chips for a task; who → who, trigger and every
   assert.match(task, /role="dialog"/);
   for (const name of ["Previous", "Next", "Close the reader"]) assert.ok(task.includes(`aria-label="${name}"`), `${name}: a pointer control`);
   assert.ok(task.includes("Task 1 of 1"));
+  assert.equal(task.split("readable, per status.md §Components 7 (D-063).").length - 1, 1, "E-82: the title sentence is shown once");
   const ho = rendered.readerHandoff();
   assert.ok(ho.includes("Architect → Engineer") && ho.includes("Handoff 2 of 2"));
   assert.ok(ho.includes("The rest of this handoff is left out."));
@@ -389,4 +390,67 @@ test("Communication shows the trigger, six lines of Next action needed and Read 
   );
   assert.deepEqual(rendered.taskChips({ id: "E-1", status: "", owner: "", tier: "", description: "", blocked_by: [], updated_at: "not a date" }, NOW), [], "no chip for what is not known");
   assert.match(t, /aria-expanded="true"[^>]*>.*Open/s);
+});
+
+// ── Long paragraphs in the reader (E-82, status.md §7 "Long paragraphs", D-063 addendum 1) ──
+
+const pad = (s, n) => s + " " + "x".repeat(Math.max(0, n - s.length - 2)) + ".";
+
+test("a short paragraph is untouched; a long one splits into pieces of at most three sentences or 320 characters", () => {
+  assert.deepEqual(splitParagraph("One. Two. Three. Four."), ["One. Two. Three. Four."], "short: one piece");
+  const s = (k) => pad(`Sentence ${k}`, 60);
+  const long = [1, 2, 3, 4, 5, 6, 7].map(s).join(" ");
+  assert.ok(long.length > LONG_PARAGRAPH);
+  const pieces = splitParagraph(long);
+  assert.equal(pieces.join(""), long, "the pieces are the source, in order");
+  assert.deepEqual(pieces.map((p) => (p.match(/Sentence \d/g) ?? []).length), [3, 3, 1]);
+  for (const p of pieces) assert.ok(p.trimEnd().length <= LONG_PARAGRAPH, p.length);
+  // Four 100-character sentences: the 320 limit, not the count, ends the piece.
+  const wide = [1, 2, 3, 4].map((k) => pad(`Wide ${k}`, 100)).join(" ");
+  assert.deepEqual(splitParagraph(wide).map((p) => (p.match(/Wide \d/g) ?? []).length), [3, 1]);
+});
+
+test("each label form starts a piece and is found; no split in a code span, at e.g. or before lower case", () => {
+  const body = pad("First words go here", 200) + " Build: the parts. Acceptance: the tests. Operator report 2026-11-17: text cannot be read. " + pad("More", 150);
+  const pieces = splitParagraph(body);
+  assert.equal(pieces.join(""), body);
+  const labels = pieces.map((p) => labelOf(p));
+  assert.deepEqual(labels.filter(Boolean), ["Build:", "Acceptance:", "Operator report 2026-11-17:"]);
+  assert.equal(labelOf("Not a label because it is far too long to be one: x"), null);
+  assert.equal(labelOf("lower: no"), null);
+  const code = pad("Run `cargo test. Then this` stays", 340);
+  assert.deepEqual(splitParagraph(code), [code], "no split inside a code span");
+  const eg = pad("Use a tool, e.g. this one. and approx. ten more, i.e. nothing", 340);
+  assert.deepEqual(splitParagraph(eg), [eg], "no split before a lower-case letter");
+  const quoted = pad("He wrote it.", 200) + ' "Text cannot be read." ' + pad("And", 150);
+  assert.ok(splitParagraph(quoted).length >= 2, "a quote starts a sentence");
+});
+
+test("the reader drops the sentence the title already shows, and only that", () => {
+  const d = "Fix the bar. Then the rest of it.";
+  assert.deepEqual(readerBody(d, taskTitle(d)), { drop: "Fix the bar. ", pieces: ["Then the rest of it."] });
+  const cut = "x ".repeat(80) + "end.";
+  const t = taskTitle(cut);
+  assert.ok(t.endsWith("…"));
+  assert.equal(readerBody(cut, t).drop, "", "a cut title is not a repeated sentence");
+  assert.deepEqual(readerBody("Only the title.", "Only the title."), { drop: "Only the title.", pieces: [] });
+  const listed = "Title here.\n\n- one\n- two\n\nAfter.";
+  const r = readerBody(listed, taskTitle(listed));
+  assert.equal(r.drop + r.pieces.join(""), listed);
+  assert.ok(r.pieces.some((p) => p.startsWith("- one")), "a list stays whole for the structured text");
+});
+
+test("joining the pieces gives every real task description of this repository back", () => {
+  const state = JSON.parse(readFileSync(join(ui, "../../../.ai/state.json"), "utf8"));
+  let split = 0;
+  for (const task of state.tasks) {
+    const d = task.description ?? "";
+    const r = readerBody(d, taskTitle(d));
+    assert.equal(r.drop + r.pieces.join(""), d, task.id);
+    for (const p of r.pieces) if (!p.includes("\n")) assert.ok(p.trimEnd().length <= LONG_PARAGRAPH || (p.match(/[.?!]\s+[A-Z"'`]/g) ?? []).length === 0, `${task.id}: an over-long piece holds one sentence`);
+    if (r.pieces.length > 1) split += 1;
+  }
+  // Whatever the file holds today: a long one-paragraph description is split.
+  const long = state.tasks.some((x) => (x.description ?? "").length > 2 * LONG_PARAGRAPH && !(x.description ?? "").includes("\n"));
+  assert.ok(!long || split > 0, `long descriptions are split (${split})`);
 });

@@ -166,3 +166,84 @@ export function readerKey(key: string, modal: boolean): "prev" | "next" | "close
   if (key === "ArrowDown" || (modal && key === "j")) return "next";
   return null;
 }
+
+// ── Long paragraphs in the reader (status.md §7 "Long paragraphs", D-063 addendum 1; E-82) ──
+
+/** A paragraph longer than this is split at sentence ends. */
+export const LONG_PARAGRAPH = 320;
+/** At most this many sentences in one piece of a split paragraph. */
+export const SENTENCES_PER_PARAGRAPH = 3;
+/** A sentence that starts with a label: an upper-case letter, up to 30 letters, digits,
+ *  spaces or hyphens, then a colon ("Acceptance:", "Operator report 2026-11-17:"). */
+const LABEL = /^[A-Z][A-Za-z0-9 -]{0,30}:/;
+
+/** The label a piece starts with (drawn bold), or null. */
+export function labelOf(piece: string): string | null {
+  return LABEL.exec(piece.trimStart())?.[0] ?? null;
+}
+
+/** Where the sentences of `p` start: after `.`, `?` or `!` and whitespace, when the next
+ *  character is an upper-case letter, a quote or a backtick — never inside a `code` span. */
+function sentenceStarts(p: string): number[] {
+  const starts = [0];
+  let inCode = false;
+  for (let i = 0; i < p.length; i++) {
+    const c = p[i] as string;
+    if (c === "`") inCode = !inCode;
+    if (inCode || (c !== "." && c !== "?" && c !== "!")) continue;
+    let j = i + 1;
+    while (j < p.length && (p[j] === " " || p[j] === "\t")) j++;
+    if (j === i + 1 || j >= p.length) continue;
+    if (/[A-Z"'“‘`]/.test(p[j] as string)) starts.push(j);
+  }
+  return starts;
+}
+
+/** One long paragraph as pieces of at most three sentences or 320 characters; a labelled
+ *  sentence always starts a piece. The pieces are slices of `p`: joined, they are `p`. */
+export function splitParagraph(p: string): string[] {
+  if (p.length <= LONG_PARAGRAPH) return [p];
+  const starts = sentenceStarts(p);
+  const sentences = starts.map((s, k) => p.slice(s, starts[k + 1] ?? p.length));
+  const out: string[] = [];
+  let cur = "";
+  let n = 0;
+  for (const s of sentences) {
+    const fresh = cur === "" || labelOf(s) !== null || n >= SENTENCES_PER_PARAGRAPH || (cur + s).trimEnd().length > LONG_PARAGRAPH;
+    if (fresh && cur !== "") {
+      out.push(cur);
+      cur = "";
+      n = 0;
+    }
+    cur += s;
+    n += 1;
+  }
+  if (cur !== "") out.push(cur);
+  return out;
+}
+
+/** A task's body in the reader: the description without its first sentence when that is the
+ *  title shown above it, then each plain paragraph split. Every piece is a slice of the
+ *  source, in order; `drop` + the pieces joined give the description back. Paragraphs with
+ *  structure (a list, a heading, a fence) are left whole for the structured text. */
+export function readerBody(description: string, title: string): { drop: string; pieces: string[] } {
+  let drop = "";
+  if (title !== "" && !title.endsWith("…") && description.startsWith(title)) {
+    const rest = description.slice(title.length);
+    drop = title + (/^\s*/.exec(rest)?.[0] ?? "");
+  }
+  const body = description.slice(drop.length);
+  const pieces: string[] = [];
+  // Paragraphs are separated by blank lines; the separators stay attached to the piece before.
+  const re = /\n[ \t]*\n\s*/g;
+  let at = 0;
+  for (let m = re.exec(body); ; m = re.exec(body)) {
+    const end = m ? m.index + m[0].length : body.length;
+    const para = body.slice(at, end);
+    const plain = !/^\s*([-*+]\s|\d{1,4}[.)]\s|#{1,6}\s|```)/m.test(para) && !para.trimEnd().includes("\n");
+    pieces.push(...(plain ? splitParagraph(para) : [para]));
+    if (!m) break;
+    at = end;
+  }
+  return { drop, pieces: pieces.filter((x) => x !== "") };
+}

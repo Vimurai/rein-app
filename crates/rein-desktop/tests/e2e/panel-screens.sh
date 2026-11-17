@@ -171,11 +171,15 @@ for theme in catppuccin-mocha github-light; do
   app "$theme" "$r"
   X key ctrl+shift+3; sleep 1.5; X key ctrl+shift+e # open Tasks, give the panel the keyboard
   X key Tab; X key Tab; X key Tab # refresh, close, then the filter box
-  X type "E-74"; sleep 1; shot "panel-tasks-filter-$theme"
+  X type "one status per open project"; sleep 1; shot "panel-tasks-filter-$theme" # E-76 alone
   X key Tab; X key Return; sleep 1.5 # the row (a group header takes no focus while filtering): the reader
-  shot "panel-reader-task-$theme"
-  X key Down; sleep 1; shot "panel-reader-task-next-$theme" # one match: Down stays on it
-  X key Escape; sleep 1; shot "panel-reader-closed-$theme"    # the row has the keyboard again
+  shot "panel-reader-task-$theme"    # E-82: a long description in paragraphs, labels bold
+  X key Escape; sleep 1; shot "panel-reader-closed-$theme" # the row has the keyboard again
+  # A filter that leaves several tasks: back to the box, a new query, the first row, Down.
+  X key shift+Tab; X key ctrl+a; X type "status.md"; sleep 1
+  X key Tab; X key Return; sleep 1.5; X key Down; sleep 1
+  shot "panel-reader-task-next-$theme"
+  X key Escape; sleep 0.5
   X key ctrl+shift+2; sleep 1.5; X key ctrl+shift+e; shot "panel-communication-readable-$theme"
   X key Tab; X key Tab; X key Tab; X key Return; sleep 1.5 # refresh, close, the first Read all
   shot "panel-reader-handoff-$theme"

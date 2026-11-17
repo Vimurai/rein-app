@@ -6,7 +6,7 @@
 import { useEffect, useRef } from "react";
 import { Button } from "../components/button.tsx";
 import { ChevronDown, ChevronUp, X } from "./icons.ts";
-import { readerKey, step, taskTitle } from "./panel-text.ts";
+import { labelOf, readerBody, readerKey, step, taskTitle } from "./panel-text.ts";
 import { age, type Entry, type Task } from "./panels.ts";
 import { InlineText, StructuredText } from "./structured-text.tsx";
 
@@ -61,8 +61,31 @@ function Header({ item, nowMs }: { item: ReaderItem; nowMs: number }) {
   );
 }
 
+/** A task's description (E-82): without the sentence the title already shows, each long
+ *  paragraph in pieces of a few sentences, a leading label bold. Only the source's text. */
+function TaskBody({ description }: { description: string }) {
+  const { pieces } = readerBody(description, taskTitle(description));
+  // Nothing beyond the title: nothing more to show; no description at all: a dash.
+  if (pieces.length === 0) return description ? null : <p className="m-0 text-muted-foreground">—</p>;
+  return (
+    <div className="grid gap-3 [overflow-wrap:anywhere]">
+      {pieces.map((piece, i) => {
+        const text = piece.trim();
+        if (text.includes("\n")) return <StructuredText key={i} text={text} />;
+        const label = labelOf(text);
+        return (
+          <p key={i} className="m-0">
+            {label && <strong className="font-semibold">{label}</strong>}
+            <InlineText text={label ? text.slice(label.length) : text} />
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 function Body({ item }: { item: ReaderItem }) {
-  if (item.kind === "task") return <StructuredText text={item.task.description || "—"} />;
+  if (item.kind === "task") return <TaskBody description={item.task.description} />;
   const e = item.entry;
   return (
     <div className="grid gap-4">
