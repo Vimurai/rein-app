@@ -91,7 +91,8 @@ pub fn kill_script() -> String {
 
 /// The attach script for Linux and macOS (V12 component 3): the start script's checks and
 /// `PATH`, then the attach on the tagged session in place of `rein start`. The tag is the one
-/// positional word after it (`sh -c <script> sh <tag>`).
+/// positional word after it (`sh -c <script> sh <tag>`). Windows attaches through WSL only.
+#[cfg(any(unix, test))]
 pub fn attach_script() -> String {
     start_script().replacen("exec ~/.rein/bin/rein start", &attach_tail(), 1)
 }
