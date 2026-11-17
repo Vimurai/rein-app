@@ -1082,18 +1082,18 @@
     {
       "id": "E-72",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Move the side-menu panel wiring out of crates/rein-desktop/ui/src/shell.tsx (1286 lines) into its own module with no behaviour change, per D-056 addendum 1 ruling 4 and .ai/blueprints/panels.md §Components. After the side-menu task, before the session tasks add to the file. Bring shell.tsx back to at most its size before the side menu (1156 lines) or lower; move tests with what they test; no new prop drilling beyond what the move needs. Acceptance: the UI test count is unchanged and every UI test passes untouched; pointer-parity and both key-table tests pass; `panel-screens.sh` passes locally with the same checks and its screens are unchanged to the eye (open two of them before the handoff); local `rein ci run`, hosted ci x3 and desktop-windows green; Tier 2 stamps.",
       "created_at": "2026-11-16T14:35:49.736Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-17T14:15:15.861Z",
+      "summary": "fb515ac: side-menu wiring -> side-menu.tsx (210); shell.tsx 1286->1155. UI 70/70 untouched, panel-screens PASS, screens unchanged; local ci + hosted ci x3 + desktop-windows green.",
       "depends_on": [
         "E-60"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-17T12:21:03.801Z"
+      "updated_at": "2026-11-17T14:15:15.863Z"
     }
   ],
   "stamps": [
@@ -3210,6 +3210,33 @@
       "timestamp": "2026-11-16T14:37:22.708Z",
       "summary": "[TIER_2] E-60 re-run after D-056 addendum 1: blueprint aligned (ALIGN_PASS — timing ruling (b) met at panel_sources.rs:736-742, window e2e local-only, P keys per amended §API, pointercancel ends resize) + clean-code gate clear (CLEAN_WARN) — 2 warnings ignored: shell.tsx 1286 lines (handed to E-72 by addendum item 4), src/ipc.rs 1140 lines",
       "sha": "88e3dfa26b5368602a4be7ac2d8524e238cffc5d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_WARN",
+      "agent": "critic_clean_code",
+      "task_id": "E-72",
+      "timestamp": "2026-11-17T12:25:10.984Z",
+      "summary": "[TIER_2] E-72 standards-checker per-file (~/.rein) PASS 0 errors on shell.tsx + side-menu.tsx, but manual pass WARN: file_size_limit_lines shell.tsx 1155 lines (>1000, down from 1286, meets <=1156 goal; side-menu.tsx 210 OK). No secrets, no stdout writes, kebab-case ok, extraction is a move not a duplication. scripts/standards.mjs and src/shared/standards.json absent in repo.",
+      "sha": "fb515ac097063a21d26499fe5364f7a0633d4a43",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner (manual, rein-review-tier2)",
+      "task_id": "E-72",
+      "timestamp": "2026-11-17T12:25:33.781Z",
+      "summary": "[TIER_2] E-72 manual review of fb515ac (committed, no staged diff for align_diff). D-056 addendum 1 ruling 4 met: panel wiring moved to side-menu.tsx (210), shell.tsx 1286->1155 (<=1156). Move only: 4 panel.* cases byte-equivalent (tab.current -> terminal() getter of the same ref), side.act runs at the old switch position after the modal check; panelOwnsKey same rule (shortcut lookup now unconditional, pure); onClose runner.run === run (shell.tsx:910); useStageFit same [] effect at same position, side.resizing a stable ref; SideRow keeps the rail / beside / over layout. Props: ShellProps extends SideMenuProps, same 4 fields, no new drilling. panels.md Components unchanged. No UI test referenced the moved code, so none to move. Nits: panelOverlays(winWidth) computed twice in view(); view() is a fresh closure per render (as before).",
+      "sha": "fb515ac097063a21d26499fe5364f7a0633d4a43",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-72",
+      "timestamp": "2026-11-17T12:25:37.190Z",
+      "summary": "[TIER_2] E-72 Blueprint aligned + clean-code gate clear — 1 warning ignored (ALIGN_PASS: move only per D-056 addendum 1 ruling 4, behaviour-equivalent, shell.tsx 1155 <= 1156; CLEAN_WARN: shell.tsx 1155 lines still over the 1000 cap, a further split is out of E-72 scope)",
+      "sha": "fb515ac097063a21d26499fe5364f7a0633d4a43",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
