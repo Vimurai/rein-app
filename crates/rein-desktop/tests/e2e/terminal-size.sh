@@ -28,7 +28,10 @@ cleanup() {
   [ -n "$APP" ] && kill "$APP" 2>/dev/null || true
   "$W/bin/tmux" kill-server 2>/dev/null || true # the private socket only
   [ -n "$XV" ] && kill "$XV" 2>/dev/null || true
-  if [ -n "${KEEP:-}" ]; then echo "kept $W" >&2; else rm -rf "$W"; fi
+  # WebKit's child processes can still write under xdg/ for a moment after the app is killed
+  # (hosted run 44269589716: "Directory not empty"), so the removal is tried again, and a
+  # cleanup never decides the result.
+  if [ -n "${KEEP:-}" ]; then echo "kept $W" >&2; else rm -rf "$W" 2>/dev/null || { sleep 1; rm -rf "$W"; } || true; fi
 }
 trap cleanup EXIT
 
@@ -76,7 +79,7 @@ export DISPLAY="$started"
 run() {
   local label=$1 slow=$2 max=$3 size=""
   "$W/bin/tmux" kill-server 2>/dev/null || true
-  rm -rf "$W/xdg"
+  rm -rf "$W/xdg" 2>/dev/null || { sleep 1; rm -rf "$W/xdg"; } # the last run's WebKit children (cleanup above)
   env -u TMUX -u TMUX_PANE -u CLAUDECODE \
     HOME="$W/home" PATH="$W/bin:$PATH" SHELL=/bin/sh \
     XDG_RUNTIME_DIR="$W/run" XDG_CONFIG_HOME="$W/xdg/config" XDG_DATA_HOME="$W/xdg/data" \
