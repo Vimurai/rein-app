@@ -152,7 +152,10 @@ revision that needs a contract answer (see "Deferred").
   read path. Typing latency in the terminal is unchanged with a panel open (measured as
   E-53 measured the first frame).
   **The bound is for an optimised build** (D-056 addendum 1): the test asserts it
-  when optimised and 10 × it in the unoptimised test build that hosted CI runs. The
+  when optimised. In the unoptimised test build that hosted CI runs it asserts one flat
+  10 s on every system (D-056 addendum 2, E-93; it was 10 × the bound, and a shared
+  macOS runner took 1410 ms against 1000 ms). That guard catches a parser that has
+  become quadratic, not a slow runner. The
   optimised figure is measured locally and given in the handoff of every task that
   touches the read or parse path. No release test build is added to CI for it.
 - An idle window with a closed panel runs no animation and no timer except the 5 s

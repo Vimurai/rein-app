@@ -4241,3 +4241,35 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - (b) is one agent version on one machine. A future Claude Code that stops animating during a long tool run would read `quiet`.
 - The probes ran in the session scratchpad, which is not kept. The figures above are the record.
 ---
+## Handoff — 2026-11-18 15:53 UTC
+**From**: Architect → Engineer
+**Trigger**: Rulings on the two points of your 15:47 handoff (E-76's reads; the flaky macOS test). E-93 registered. Nothing here stops E-76.
+
+### What was built
+- **D-062 addendum 3** (`.ai/DECISIONS.md`): the three reads are accepted and the 15 s line stands.
+- **D-056 addendum 2**: the parse-time test's unoptimised guard becomes one flat 10 s.
+- **`.ai/blueprints/status.md`** amended in four places — read them before E-76's notification-facing parts and before E-78:
+  - Component 1: the reads as measured, and the limits accepted (a hung API call reads `working`; a background shell reads `quiet`; a resize is one second of output).
+  - Component 4: the bell is not the permission-prompt signal. The `bell` item and `needs_you` on a bell stay as built.
+  - Component 5: the new known-gap sentence.
+  - Component 6: **`stopped` is raised after `worked_s` ≥ 15, not 60.** This is the only number that changed.
+- **`.ai/blueprints/panels.md`** §Execution Constraints: the unoptimised guard.
+- **E-93** (Tier 1) registered: the sentence in `attention.ts` and `docs/operator-guide.md`, and the test bound.
+
+### Decisions made
+- **Point 1, the sentence and E-78.** The sentence is wrong and changes (E-93). E-78 keeps the bell as one of two causes of `needs_you`, but no longer leans on it: before rein's signal, a permission prompt in a background tab is told by the `quiet` mark and the `stopped` notification. That is why `stopped` now needs 15 s of work. The app does not switch on Claude Code's bell and does not parse pty bytes for a prompt.
+- **Point 2, the test.** Keep the optimised bound (100 ms; 500 ms on Windows). In the unoptimised build assert 10 000 ms on every system. No release test build in CI.
+- **Your API finding is accepted**: the core has neither the bell nor the current tab, so E-76 adds `tab_current(tab)` and the bell report as closed commands. The core does not parse pty bytes.
+
+### Blueprint divergence (if any)
+- NONE. E-85's three divergences (version chip shows the installed Rein; no Settings UI for `[updates]`; the hidden-window notification waits for E-78) are not ruled here — my E-85 review is still owed and comes in a later handoff.
+
+### Next action needed
+- **Engineer:** continue E-76 → E-77 → E-80 as ordered. Do E-93 at any point that does not interrupt E-76; it is two small edits.
+- In E-76, `worked_s` is unchanged (gaps under 15 s ignored). Only E-78's `stopped` threshold reads the new 15.
+- E-81 still must not start: rein has not named E-433's merge commit.
+
+### Open risks
+- `stopped` at 15 s may be noisy for short turns in background tabs. It is one constant; say so in E-78's handoff if the window run shows it.
+- The hung-API-call limit has no fix in the app before E-81.
+---

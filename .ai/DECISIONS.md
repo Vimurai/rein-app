@@ -2455,3 +2455,56 @@ Operator direction 2026-11-18 (typed in the rein pane, relayed by `rein · Archi
 
 ### Rollback
 Revert E-92's commit: `+` runs `project.open` again. Nothing is stored.
+
+---
+
+### D-062 addendum 3 (2026-11-18) — E-76's three reads accepted; the bell is not the permission-prompt signal
+
+**Task**: E-76 (reads, Engineer handoff 2026-11-18 15:47 UTC, e72a377), E-78, E-93. Blueprint: `status.md` components 1, 4, 5 and 6.
+**Decision**: The three reads pass and the 15 s line stands. The bell stays an attention item but is no longer described as the hint for a waiting agent; a project going quiet after working is. `stopped` is raised after 15 s of work, not 60.
+
+### Why needed
+The Engineer measured that Claude Code (v2.1.327) rings no bell at a permission prompt: all five `\x07` bytes it wrote ended OSC sequences, which tmux does not pass on as a bell. The window's known-gap sentence said "a bell from the tab is the only hint", which is false for the agent the app is built around, and E-78's `needs_you` notification is raised by `waiting` (not built) or `bell` (not rung). So before rein's signal (E-81), `stopped` is the only notification a permission prompt gets.
+
+### Rulings
+1. **Reads accepted.** `window_activity` behaves on tmux 3.2a, 3.6 and 3.8; a working agent prints every second, also through a 3-minute tool run; idle and a permission prompt are silent. E-76 builds as written.
+2. **The sentence changes** (E-93) to: "The app cannot see an agent waiting at a permission prompt, whether the window is open or closed. Until rein gives a signal, a project that goes quiet after working is the only hint: its agent has finished or is waiting for you." The same text in `docs/operator-guide.md`.
+3. **The `bell` item and `needs_you` on a bell stay.** The path works end to end and costs nothing; another program, or an agent the operator has set to ring, still uses it.
+4. **`stopped` needs 15 s of work, not 60.** An agent often asks for permission within its first minute, and with 60 s that prompt raised nothing. 15 s keeps a resize redraw or a one-line print from raising it; the current tab of a focused window is never notified, and a project gets at most one system notification per 60 s.
+5. **Three limits are accepted and written into the blueprint**: a hung API call reads `working` and is never `stuck`; an agent at its prompt with a background shell reads `quiet`; a resize reads as one second of output. Only rein's signal resolves the first.
+
+### Alternatives considered
+1. **Parse the pty bytes in the core for a prompt, or read the screen** — rejected, as D-062 alternative 1: another program's undocumented output.
+2. **Have the app switch on Claude Code's own bell notification** — rejected: it is the operator's Claude Code setting, and the app writes three allowed profile keys only (D-001). rein's waiting signal is the agreed way.
+3. **Remove the `bell` item** — rejected, ruling 3.
+4. **Keep 60 s** — rejected, ruling 4. Risk taken: more `stopped` toasts for short turns in background tabs.
+
+### Impact
+- E-78 builds from the amended table; its task text names no number. E-93 changes the sentence.
+- Risk if wrong: `stopped` is noisy at 15 s. The figure is one constant, and `[notifications] events` switches the event off.
+
+### Rollback
+Set the constant back to 60; revert E-93's commit for the sentence.
+
+---
+
+### D-056 addendum 2 (2026-11-18) — the parse-time test guards order of growth in an unoptimised build
+
+**Task**: E-93 (test from E-59 / E-60). Blueprint: `panels.md` §Execution Constraints.
+**Decision**: `panel_sources::tests::parsing_is_fast_enough` asserts the blueprint's bound (100 ms; 500 ms on Windows) only in an optimised build. In the unoptimised build that hosted CI runs it asserts one flat 10 s on every system and prints the time.
+
+### Why needed
+The hosted macOS run on 54176c3 failed at 1410 ms against the 1000 ms unoptimised guard and passed on the next commit with no change to the parser. An absolute time on a shared runner tests the runner.
+
+### Alternatives considered
+1. **Measure in release only; no assert when unoptimised** — rejected: CI runs no release test build (D-056 addendum 1), so nothing would catch a parser that became quadratic.
+2. **Add a release test build to CI** — rejected, as in addendum 1: minutes on three systems for one test, and still a shared runner.
+3. **Raise the multiplier to 30 ×** — rejected: still a figure tuned to one bad run.
+4. **A flat 10 s guard** — chosen: about 75 × the local unoptimised figure (113–134 ms), far above runner noise and far below what a quadratic parse of 2.5 MiB takes.
+
+### Impact
+- The optimised figure is still measured locally and given in the handoff of every task that touches the read or parse path.
+- Risk if wrong: a slowdown under 10 s in the parser passes CI and is caught only by that local figure.
+
+### Rollback
+Revert E-93's commit.

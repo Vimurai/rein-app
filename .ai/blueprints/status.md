@@ -53,6 +53,19 @@ If (a) fails, the fallback is the time of the last byte the tab's pty gave the a
 valid only while the tmux status line is `hidden` (V6); with `app` / `keep` activity is
 then `unknown`. If (b) fails, stop and hand back — the states below are then wrong.
 
+**The reads, as measured (E-76, 2026-11-18; D-062 addendum 3).** (a) passes on tmux 3.2a,
+3.6 and 3.8; the value is whole seconds. (b) passes: a working Claude Code agent prints
+every second, also through a 3-minute tool run; it is silent at its prompt and at a
+permission prompt. (c) a background tab's bell reaches the app, but Claude Code rings
+none at a permission prompt. Known limits, accepted:
+- A window resize makes a full-screen agent redraw, which reads as one second of output.
+- A hung API call keeps the agent's spinner moving, so the tab reads `working` and is
+  never `stuck`. Only rein's signal can tell; the app does not read the screen (D-062
+  alternative 1).
+- An agent at its prompt with a background shell still running reads `quiet`.
+- The cadence is one agent version on one machine. If a later one stops printing during
+  a long tool run, `quiet` and `stopped` come early; the line is then measured again.
+
 ### 2. Status (core, a pure function with a table test)
 First match wins:
 
@@ -104,11 +117,23 @@ stays hidden until its text changes (a new handoff, a new bell, quiet again afte
 Dismissals are kept in `$XDG_STATE_HOME/rein-app/dismissed.json` so a restart does not
 bring them back.
 
+**The bell is not the permission-prompt signal** (D-062 addendum 3). Claude Code rings no
+bell at a permission prompt with its default settings; every `\x07` it wrote was the end
+of an OSC sequence. The `bell` item stays for whatever does ring: another program, or an
+agent the operator has set to ring. The app never sets that for the operator. Until
+`waiting` is built, a permission prompt in a background tab is told only by the tab
+turning `quiet` and by the `stopped` notification.
+
 ### 5. "Needs you" panel (web)
 Items grouped by project: one header per project (name, tab mark, one "Go to tab"), its
 rows below; a row is also a button that goes to the tab. Then "For information (n)",
 collapsed. Empty state: "Nothing needs you." The known-gap paragraph moves behind an
 "About this list" disclosure at the bottom and is shortened to two sentences.
+
+The two sentences, from E-93 on (D-062 addendum 3; the same text in
+`docs/operator-guide.md`): "The app cannot see an agent waiting at a permission prompt,
+whether the window is open or closed. Until rein gives a signal, a project that goes
+quiet after working is the only hint: its agent has finished or is waiting for you."
 
 ### 6. Notifications (core)
 A notification is raised on a **change**, once, never repeated while the state stays.
@@ -116,7 +141,7 @@ A notification is raised on a **change**, once, never repeated while the state s
 | Event | Raised when | Fixed sentence |
 |---|---|---|
 | `needs_you` | a `waiting` or `bell` item appears | "<project> needs you." |
-| `stopped` | `worked_s` ≥ 60, then quiet for 30 s | "<project> has stopped — it is finished or waiting." |
+| `stopped` | `worked_s` ≥ 15, then quiet for 30 s | "<project> has stopped — it is finished or waiting." |
 | `stuck` | a `stuck` item appears | "<project> has been quiet for <n> min with a task in progress." |
 | `ended` | an `ended` item appears | "<project>: an agent has ended." |
 | `handoff` | a `mention` item appears for a handoff newer than the last one seen | "<project>: the last handoff names you." |
@@ -137,6 +162,10 @@ Limits: nothing for the current tab of a focused window; nothing in the first 30
 a tab opens or is restored (V12 restores many at once); at most one system notification
 per project per 60 s — later events in that minute become one "<project>: <n> things
 need you."; `stopped` is not raised when a `needs_you` was raised for the same stop.
+
+`stopped` needs 15 s of work, not 60 (D-062 addendum 3). It is the only notification a
+permission prompt gets before `waiting` exists, and an agent often asks within its first
+minute. 15 s still keeps a resize redraw or a one-line print from raising it.
 
 ### 7. Readable panels (web)
 - **Type and width.** Panel body 13 px with line height 1.5; default width 400 px, range
