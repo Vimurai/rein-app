@@ -70,7 +70,7 @@ export function titleBar(tabs: readonly TabView[], version: string): TitleBar {
       select: { name: "tab.goto", arg: String(i + 1) },
       close: { name: "tab.detach", arg: String(i + 1) },
     })),
-    add: { name: "project.open" },
+    add: { name: "project.pick" },
     version: { label: version, action: { name: "release.update" } },
     menu: { name: "menu.show" },
   };

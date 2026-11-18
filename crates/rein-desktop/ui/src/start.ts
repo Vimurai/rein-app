@@ -112,3 +112,33 @@ export function fuzzy(query: string, items: readonly RecentView[]): RecentView[]
   };
   return items.filter((r) => matches(r.name) || matches(r.path));
 }
+
+/** A row of the Open project dialog (desktop.md V13, D-067). */
+export type PickRow =
+  | { kind: "project"; path: string; name: string; ago: string; open: boolean; missing: boolean }
+  | { kind: "choose" };
+
+/** The dialog's rows: the recent projects (core order, filtered by `query`), each marked
+ *  open when a tab has it and missing when its folder is gone; then always, exactly once,
+ *  Choose a folder…. `now` in seconds since the epoch. */
+export function pickRows(recent: readonly RecentView[], openPaths: readonly string[], query: string, now: number): PickRow[] {
+  const open = new Set(openPaths);
+  const rows: PickRow[] = fuzzy(query, recent).map((r) => ({
+    kind: "project",
+    path: r.path,
+    name: r.name,
+    ago: ago(r.last_opened, now),
+    open: open.has(r.path),
+    missing: r.exists === false,
+  }));
+  rows.push({ kind: "choose" });
+  return rows;
+}
+
+/** The text above Choose a folder… when it is the only row. */
+export function pickEmptyText(recent: readonly RecentView[]): string {
+  return recent.length ? "No project matches." : "No recent projects yet.";
+}
+
+/** What a missing row says instead of opening. */
+export const missingText = (name: string, path: string) => `${name} is no longer at ${path} — Del forgets it`;

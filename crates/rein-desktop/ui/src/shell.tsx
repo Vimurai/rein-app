@@ -46,7 +46,8 @@ import { HealthOverlay, ProfilesOverlay, ReleaseOverlay } from "./release.tsx";
 import { keyBytes, keyName } from "./keys.ts";
 import type { ActionCall, KeyTable } from "./keymap.ts";
 import { WHICH_KEY_DELAY_MS, continuations, step, type ModeState } from "./modes.ts";
-import { MenuOverlay, PasteConfirm, ProjectPicker, WhichKey, label } from "./overlays.tsx";
+import { MenuOverlay, PasteConfirm, WhichKey, label } from "./overlays.tsx";
+import { ProjectPicker } from "./project-picker.tsx";
 import { startScreen, withStartKeys, type RecentView } from "./start.ts";
 import { StartScreen } from "./start-screen.tsx";
 import { TermTab } from "./term.ts";
@@ -1098,17 +1099,14 @@ export function Shell(props: ShellProps) {
         render={() => (
           <ProjectPicker
             recent={recent}
-            onPick={(path) => {
-              setPicker(false);
-              open(path);
-            }}
+            loading={!recentLoaded}
+            openPaths={tabs.current.map((t) => t.project)}
+            onPick={(path) => { setPicker(false); open(path); }}
+            onChoose={() => { setPicker(false); run({ name: "project.open" }); }}
             onForget={(path) => {
               projectsForget(path).then(setRecent, () => say(`E: cannot forget ${path}`, true));
             }}
-            onClose={() => {
-              setPicker(false);
-              if (tabs.current.length) setMode({ mode: "TERMINAL", pending: [] });
-            }}
+            onClose={() => { setPicker(false); if (tabs.current.length) setMode({ mode: "TERMINAL", pending: [] }); }}
           />
         )}
       />

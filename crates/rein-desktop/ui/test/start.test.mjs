@@ -85,3 +85,42 @@ test("the picker's fuzzy filter keeps recency order", async () => {
   assert.deepEqual(fuzzy("", items).length, 3);
   assert.deepEqual(fuzzy("zzz", items), []);
 });
+
+// V13 (D-067, E-92): the Open project dialog's rows — the recent projects in the core's order,
+// marked open and missing, then always exactly one Choose a folder…; the filter never hides it.
+test("the Open project rows: recency kept, open and missing marked, Choose a folder… always last", async () => {
+  const { pickRows, pickEmptyText, missingText } = await import("../src/start.ts");
+  const recent = [r(1), r(2, false), r(3), r(4, null), r(5)];
+  const rows = pickRows(recent, ["/home/me/p3", "/elsewhere"], "", NOW);
+  assert.deepEqual(
+    rows.map((x) => (x.kind === "project" ? [x.name, x.open, x.missing, x.ago] : ["choose"])),
+    [
+      ["p1", false, false, "1 h ago"],
+      ["p2", false, true, "2 h ago"],
+      ["p3", true, false, "3 h ago"],
+      ["p4", false, false, "4 h ago"], // exists null (Windows, not probed) counts as present
+      ["p5", false, false, "5 h ago"],
+      ["choose"],
+    ],
+  );
+  // A full list: every project (64), then the one last row.
+  const full = pickRows(Array.from({ length: 64 }, (_, i) => r(i + 1)), [], "", NOW);
+  assert.equal(full.length, 65);
+  assert.deepEqual(full.at(-1), { kind: "choose" });
+  assert.equal(full.filter((x) => x.kind === "choose").length, 1);
+  // The filter applies to project rows only.
+  assert.deepEqual(pickRows(recent, [], "p3", NOW).map((x) => x.kind === "project" ? x.name : "choose"), ["p3", "choose"]);
+  assert.deepEqual(pickRows(recent, [], "zzz", NOW), [{ kind: "choose" }]);
+  assert.deepEqual(pickRows([], [], "", NOW), [{ kind: "choose" }]);
+  assert.equal(pickEmptyText([]), "No recent projects yet.");
+  assert.equal(pickEmptyText(recent), "No project matches.");
+  assert.equal(missingText("p2", "/home/me/p2"), "p2 is no longer at /home/me/p2 — Del forgets it");
+});
+
+test("Sixty-four rows filter well under a frame", async () => {
+  const { pickRows } = await import("../src/start.ts");
+  const many = Array.from({ length: 64 }, (_, i) => r(i + 1));
+  const t0 = performance.now();
+  for (const q of ["p", "p1", "p12", "home", "zz"]) pickRows(many, ["/home/me/p7"], q, NOW);
+  assert.ok(performance.now() - t0 < 50);
+});

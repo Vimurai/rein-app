@@ -126,7 +126,8 @@ test("every title-bar and status-bar control carries its action", async () => {
   assert.deepEqual(bar.tabs.map((t) => t.marked), [false, false]);
   // E-71 (V12 7): an agent exited out of sight — the tab carries the marker.
   assert.equal(titleBar([{ title: "pc", current: false, exited: false, marked: true }], "0.5.0").tabs[0].marked, true);
-  assert.deepEqual(calls(bar.add), ["project.open", null]);
+  // V13 (D-067): + opens the Open project dialog, not the system folder dialog.
+  assert.deepEqual(calls(bar.add), ["project.pick", null]);
   assert.deepEqual([bar.version.label, ...calls(bar.version.action)], ["0.5.0", "release.update", null]);
   assert.deepEqual(calls(bar.menu), ["menu.show", null]);
   const status = statusBar("/home/me/p", { status: "ok", checks: [], reason: null, setup: null, taken_at: 0 }, "cd /home/me/p && rein start", null);
