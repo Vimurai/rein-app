@@ -15,6 +15,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 BIN="${1:-$HERE/../../../../target/debug/rein-desktop}"
+. "$(dirname "$0")/window-binary.sh" && window_binary "$BIN" # cargo test's binary or a stale UI never reaches the window (E-84)
 BIN="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"
 for tool in Xvfb tmux cc; do
   command -v "$tool" >/dev/null || { echo "terminal-size: $tool not found" >&2; exit 2; }

@@ -24,6 +24,7 @@ if [ -n "${CI:-}" ]; then echo "motion-screens.sh: not in CI (it uses the operat
 OUT=$1
 GW=${2:-1280} GH=${3:-800}
 REPO="$(cd "$(dirname "$0")/../../../.." && pwd)"
+. "$(dirname "$0")/window-binary.sh" && window_binary # cargo test's binary or a stale UI never reaches the window (E-84)
 REAL_HOME=$HOME
 REAL_REIN="$REAL_HOME/.rein/bin/rein"
 REAL_TMUX="$(command -v tmux)"

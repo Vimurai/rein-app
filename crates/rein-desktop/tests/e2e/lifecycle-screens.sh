@@ -27,6 +27,7 @@ if [ -n "${CI:-}" ]; then echo "lifecycle-screens.sh: not in CI (it drives a rea
 OUT=$1
 GW=${2:-1280} GH=${3:-800}
 REPO="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+. "$(dirname "$0")/window-binary.sh" && window_binary # cargo test's binary or a stale UI never reaches the window (E-84)
 REAL_TMUX="$(command -v tmux)"
 W="" APP="" XV=""
 cleanup() {

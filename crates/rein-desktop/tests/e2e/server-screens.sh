@@ -19,6 +19,7 @@ if [ -n "${CI:-}" ]; then echo "server-screens.sh: not in CI (it links the opera
 OUT=$1
 GW=${2:-1280} GH=${3:-800}
 REPO="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+. "$(dirname "$0")/window-binary.sh" && window_binary # cargo test's binary or a stale UI never reaches the window (E-84)
 REAL_HOME=$HOME
 REAL_TMUX="$(command -v tmux)"
 [ -x "$REAL_HOME/.rein/bin/rein" ] || { echo "no rein install" >&2; exit 2; }

@@ -10,6 +10,7 @@ set -uo pipefail
 GW=$1 GH=$2 OUT=$3
 REPO="$(cd "$(dirname "$0")/../../../.." && pwd)"
 BIN="${4:-$REPO/target/debug/rein-desktop}"
+. "$(dirname "$0")/window-binary.sh" && window_binary "$BIN" # cargo test's binary or a stale UI never reaches the window (E-84)
 REAL="$(command -v tmux)"
 W="$(mktemp -d /tmp/rein-ovs.XXXXXX)"
 APP="" XV=""
