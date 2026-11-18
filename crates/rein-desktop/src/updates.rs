@@ -13,8 +13,6 @@
 //! Nothing runs while a CLI run of the window's own is in progress; its end triggers one read.
 //! The schedule is a pure function of a clock passed in ([`Watch::step`]).
 
-use std::io::Read;
-use std::path::Path;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -111,7 +109,9 @@ pub fn parse_version(bytes: &[u8]) -> Option<String> {
 }
 
 /// At most 65 bytes of `path` (one more than a version, so a longer one reads as unknown).
-pub fn read_version_file(path: &Path) -> Option<Vec<u8>> {
+#[cfg(unix)] // LocalHost (Linux, macOS); WslHost reads through wsl.exe
+pub fn read_version_file(path: &std::path::Path) -> Option<Vec<u8>> {
+    use std::io::Read;
     let mut out = Vec::new();
     std::fs::File::open(path)
         .ok()?
