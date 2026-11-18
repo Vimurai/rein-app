@@ -2,7 +2,7 @@
 //! component 8; D-059, D-061). Closing a started tab on the app's own tmux server closes its
 //! project (V9's close). Quitting is not an event for the projects (V12): no confirm, nothing
 //! killed — the ptys end, tmux detaches the app's clients and the sessions keep running, to
-//! be attached to again (`ipc.rs`, the live lookup). Nothing here touches the user's own
+//! be attached to again (`ipc/mod.rs`, the live lookup). Nothing here touches the user's own
 //! server: a tab on it closes as before, its session running.
 
 use tauri::{AppHandle, State};
