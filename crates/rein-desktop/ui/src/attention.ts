@@ -40,7 +40,7 @@ export const NO_ITEMS: Lists = { now: [], info: [] };
 
 /** The known gap, behind "About this list" (and in docs/operator-guide.md): two sentences. */
 export const KNOWN_GAP =
-  "The app cannot see an agent waiting at a permission prompt, whether the window is open or closed. Until rein gives a signal, a bell from the tab is the only hint.";
+  "The app cannot see an agent waiting at a permission prompt, whether the window is open or closed. Until rein gives a signal, a project that goes quiet after working is the only hint: its agent has finished or is waiting for you.";
 
 /** The rows of one project: its name and tab, then its items in the core's order. */
 export interface ProjectGroup {

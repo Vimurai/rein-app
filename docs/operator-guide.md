@@ -386,11 +386,9 @@ every 5 seconds. It only reads one again if its size or time changed. Nothing is
 window is hidden or minimised, or when the panel is turned off (Settings → Panel: Needs you,
 or `[panels] enabled` in `config.toml`).
 
-**Known gap: a permission prompt is not shown.** An agent waiting at a permission prompt
-in a pane is not visible to the app. That is true while the window is open, and also while
-the app is closed, when the session keeps running and the agent can wait there for hours with
-nobody looking. Until rein provides a signal for it, a bell from the tab is the only hint, and
-only if Claude Code rings one.
+**Known gap: a permission prompt is not shown.** The app cannot see an agent waiting at a
+permission prompt, whether the window is open or closed. Until rein gives a signal, a project
+that goes quiet after working is the only hint: its agent has finished or is waiting for you.
 
 ### The health badge
 

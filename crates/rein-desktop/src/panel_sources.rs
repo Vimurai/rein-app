@@ -723,9 +723,10 @@ mod tests {
 
     /// panels.md §Execution Constraints: a 2 MiB state.json and a 512 KiB COMM.md tail parse
     /// within the blueprint's bound — 100 ms, 500 ms on Windows — in an optimised build (the
-    /// app ships one; `cargo test --release`). An unoptimised test build runs this code about
-    /// six times slower (measured E-60: 113–134 ms against 18 ms), so there it keeps a 10x
-    /// guard and prints the time.
+    /// app ships one; `cargo test --release`). An unoptimised test build is not a speed figure:
+    /// its time depends on the runner (a hosted macOS run took 1410 ms), so there one flat
+    /// 10 000 ms on every system only catches a parser that became quadratic. The time is
+    /// printed either way (D-056 addendum 2).
     #[test]
     fn parsing_is_fast_enough() {
         let task = r#"{"id":"E-1","owner":"Engineer (Claude)","status":"DONE","tier":"2","description":"DESC","created_at":"2026-11-13T11:44:45.253Z","blocked_by":[],"updated_at":"2026-11-13T11:44:45.253Z"}"#
@@ -743,11 +744,12 @@ mod tests {
             state.len() / 1024,
             comm.len() / 1024
         );
-        let bound = if cfg!(windows) { 500 } else { 100 };
         let bound = if cfg!(debug_assertions) {
-            bound * 10
+            10_000
+        } else if cfg!(windows) {
+            500
         } else {
-            bound
+            100
         };
         assert!(ms < bound, "{ms} ms (bound {bound} ms)");
     }
