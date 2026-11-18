@@ -19,6 +19,8 @@ import {
   type ProfilesRun,
   type ReleaseCheck,
 } from "./ipc.ts";
+import type { UpdateRow } from "./updates.ts";
+import { UpdateRows } from "./update-ui.tsx";
 
 const errText = (e: unknown) => (e as { message?: string }).message ?? String(e);
 
@@ -155,8 +157,11 @@ export function ReleaseOverlay({
   kind,
   onClose,
   onCommand,
+  rows,
 }: {
   kind: "update" | "rollback";
+  /** The Update dialog's two rows from the update watch (updates.md component 4). */
+  rows?: readonly UpdateRow[];
   onClose: () => void;
   /** The exact CLI command this run is, for the command line (`y` copies it). */
   onCommand: (cmd: string) => void;
@@ -247,6 +252,7 @@ export function ReleaseOverlay({
         ) : null
       }
     >
+      {kind === "update" && rows && <UpdateRows rows={rows} />}
       {phase.at === "checking" && <StatusLine status="busy">Checking for a newer release…</StatusLine>}
       {phase.at === "confirm" && kind === "update" && phase.check && (
         <>

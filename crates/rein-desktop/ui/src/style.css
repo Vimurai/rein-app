@@ -56,6 +56,11 @@ html, body {
 @keyframes rein-rise-in { from { opacity: 0; transform: translateY(8px); } }
 @keyframes rein-grow-in { from { max-width: 0; opacity: 0; } to { max-width: 220px; } }
 @keyframes rein-pop-out { to { opacity: 0; transform: scale(0.98); } }
+/* updates.md component 4 (D-054 motion, the one expressive place): each effect runs once. */
+@keyframes rein-update-in { from { opacity: 0; transform: translateX(8px); } }
+@keyframes rein-ring { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 35%, transparent); } }
+@keyframes rein-card-in { from { opacity: 0; transform: translateY(12px); } }
+@keyframes rein-card-out { to { opacity: 0; transform: translateY(12px); } }
 @keyframes rein-slide-in { from { opacity: 0; transform: translateX(-8px); } }
 
 /* The loading primitives (components/loaders.tsx). Each is held invisible for
@@ -106,6 +111,9 @@ html, body {
 .fade-in { animation: rein-fade-in var(--motion-base) var(--motion-ease); }
 /* panels.md §Components 2 (E-60): the panel slides in beside the terminal, never over its text. */
 .panel-in { animation: rein-slide-in var(--motion-base) var(--motion-ease); }
+.update-in { animation: rein-update-in 200ms var(--motion-ease), rein-ring 600ms var(--motion-ease) 200ms 2; }
+.card-in { animation: rein-card-in var(--motion-slow) var(--motion-ease); }
+.card-out { animation: rein-card-out var(--motion-fast) var(--motion-ease) forwards; }
 
 /* V1 / V7: under reduced motion nothing moves — no animation, no transition. The labels
    ("Starting rein…", "Checking…") carry the meaning; the progress line is a still line. */

@@ -129,6 +129,9 @@ test("every title-bar and status-bar control carries its action", async () => {
   // V13 (D-067): + opens the Open project dialog, not the system folder dialog.
   assert.deepEqual(calls(bar.add), ["project.pick", null]);
   assert.deepEqual([bar.version.label, ...calls(bar.version.action)], ["0.5.0", "release.update", null]);
+  // updates.md component 4 (D-065): the Update button opens the Update dialog, only while a newer one is known.
+  assert.equal(bar.update, null);
+  assert.deepEqual(calls(titleBar([], "0.5.0", true).update), ["release.update", null]);
   assert.deepEqual(calls(bar.menu), ["menu.show", null]);
   const status = statusBar("/home/me/p", { status: "ok", checks: [], reason: null, setup: null, taken_at: 0 }, "cd /home/me/p && rein start", null);
   assert.deepEqual(calls(status.project.action), ["project.pick", null]);

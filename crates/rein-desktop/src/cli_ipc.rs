@@ -109,13 +109,18 @@ pub fn with_overlay(view: &mut HealthView, failure: Option<String>) {
     }
 }
 
+/// The Update dialog's check; its answer is the update watch's too (updates.md component 2).
 #[tauri::command(async)]
 pub fn release_check(
+    app: AppHandle,
     desktop: State<'_, Desktop>,
     cli_state: State<'_, CliState>,
+    watch: State<'_, crate::updates::Watch>,
 ) -> Result<ReleaseCheck, IpcError> {
     let run = cli_state.collect(desktop.platform.as_ref(), &CliAction::UpdateCheck)?;
-    Ok(cli::release_check_from(run))
+    let check = cli::release_check_from(run);
+    watch.checked(&check, &app);
+    Ok(check)
 }
 
 /// `update` | `rollback`: the CLI's lines on `output` as they come, then its exit code;

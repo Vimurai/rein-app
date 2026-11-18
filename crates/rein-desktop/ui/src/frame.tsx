@@ -9,6 +9,7 @@ import { Spinner } from "../components/loaders.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/tooltip.tsx";
 import type { Chrome, HealthIcon, StatusBar as StatusBarData, TabControl, TitleBar as TitleBarData } from "./chrome.ts";
 import { titleInset, windowButtons } from "./chrome.ts";
+import { UpdateButton } from "./update-ui.tsx";
 import {
   Check,
   CircleCheck,
@@ -226,6 +227,7 @@ export function TitleBar({ bar, chrome, r }: { bar: TitleBarData; chrome: Chrome
         </TipButton>
       </div>
       <div className="h-full min-w-[24px] flex-1" onMouseDown={onDragRegion} aria-hidden="true" />
+      {bar.update && <UpdateButton tip={r.tip(bar.update)} onClick={() => bar.update && r.run(bar.update)} />}
       <TipButton
         tip={r.tip(bar.version.action)}
         className="flex h-[22px] shrink-0 items-center rounded-md border border-border px-[8px] text-[12px] text-muted-foreground transition-colors duration-[var(--motion-base)] hover:bg-muted hover:text-foreground"

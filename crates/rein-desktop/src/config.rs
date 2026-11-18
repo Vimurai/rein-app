@@ -40,6 +40,7 @@ pub struct Config {
     pub tmux: Tmux,
     pub project: Project,
     pub panels: Panels,
+    pub updates: Updates,
     pub wsl: Wsl,
 }
 
@@ -198,6 +199,25 @@ pub fn panels_enabled_ok(ids: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// The update watch (updates.md §Data Model, D-065).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Updates {
+    /// false: no background check at all (the Update dialog still checks when opened).
+    pub check: bool,
+    /// Minutes between checks for a newer published Rein, 10–1440.
+    pub interval_min: u32,
+}
+
+impl Default for Updates {
+    fn default() -> Self {
+        Self {
+            check: true,
+            interval_min: 30,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Wsl {
@@ -243,6 +263,10 @@ pub const DEFAULTS_FILE: &str = r##"# rein-app window configuration (desktop.md)
 # [panels]                # the side menu: read-only panels beside the terminal
 # rail = "shown"          # shown | hidden (panels still open from the menu and keys)
 # enabled = ["dashboard", "communication", "tasks", "attention"]
+
+# [updates]               # the window watches for a newer Rein by itself
+# check = true            # false: only the Update dialog checks
+# interval_min = 30       # 10 – 1440 minutes between checks for a published release
 
 # [wsl]                   # Windows only
 #   distro = "Ubuntu"     # unset: WSL's default distro
@@ -420,6 +444,13 @@ fn validate(c: &Config) -> Result<(), Refusal> {
     }
     if let Err(why) = panels_enabled_ok(&c.panels.enabled) {
         return r("panels", "enabled", why);
+    }
+    if !(10..=1440).contains(&c.updates.interval_min) {
+        return r(
+            "updates",
+            "interval_min",
+            format!("interval_min {} is outside 10–1440", c.updates.interval_min),
+        );
     }
     if let Some(d) = &c.wsl.distro
         && crate::wsl_host::check_name(d).is_err()
@@ -719,6 +750,7 @@ mod tests {
             ("[tmux]\nserver = \"mine\"\n", 2, "app or user"),
             ("[tmux]\noverlay = \"yes\"\n", 2, "expected a boolean"),
             ("[panels]\nrail = \"left\"\n", 2, "shown or hidden"),
+            ("[updates]\ninterval_min = 5\n", 2, "outside 10–1440"),
             (
                 "[panels]\nenabled = [\"tasks\", \"shell\"]\n",
                 2,

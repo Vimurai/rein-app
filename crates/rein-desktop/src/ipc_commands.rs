@@ -39,4 +39,7 @@ pub const COMMANDS: &[&str] = &[
     "team_get",
     "team_add",
     "team_mode",
+    "updates_get",
+    "updates_check",
+    "updates_later",
 ];

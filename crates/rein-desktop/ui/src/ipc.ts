@@ -141,6 +141,10 @@ export interface ProfilesRun {
 }
 export const healthGet = (refresh: boolean) => invoke<HealthView>("health_get", { refresh });
 export const releaseCheck = () => invoke<ReleaseCheck>("release_check", {});
+/** The update watch (updates.md §API, D-065): its state now, Check now, and Later. */
+export const updatesGet = () => invoke<import("./updates.ts").UpdatesState>("updates_get", {});
+export const updatesCheck = () => invoke<import("./updates.ts").UpdatesState>("updates_check", {});
+export const updatesLater = (which: "rein" | "app") => invoke<import("./updates.ts").UpdatesState>("updates_later", { which });
 /** `update` | `rollback`: the CLI's lines arrive on `output`; resolves to its exit code. */
 export const releaseApply = (kind: "update" | "rollback", output: Channel<string>) =>
   invoke<number | null>("release_apply", { kind, output });

@@ -308,6 +308,10 @@ impl Host for LocalHost {
         }
     }
 
+    fn rein_version(&self) -> Option<Vec<u8>> {
+        crate::updates::read_version_file(&self.home.as_ref()?.join(".rein/VERSION"))
+    }
+
     fn run_cli(
         &self,
         action: &CliAction,

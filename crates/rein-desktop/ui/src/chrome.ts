@@ -55,10 +55,12 @@ export interface TitleBar {
   add: ActionCall;
   /** The version chip: opens Update. */
   version: { label: string; action: ActionCall };
+  /** The Update button (updates.md component 4): while a newer Rein or window is known. */
+  update: ActionCall | null;
   menu: ActionCall;
 }
 
-export function titleBar(tabs: readonly TabView[], version: string): TitleBar {
+export function titleBar(tabs: readonly TabView[], version: string, update = false): TitleBar {
   return {
     tabs: tabs.map((t, i) => ({
       id: t.id ?? i,
@@ -72,6 +74,7 @@ export function titleBar(tabs: readonly TabView[], version: string): TitleBar {
     })),
     add: { name: "project.pick" },
     version: { label: version, action: { name: "release.update" } },
+    update: update ? { name: "release.update" } : null,
     menu: { name: "menu.show" },
   };
 }

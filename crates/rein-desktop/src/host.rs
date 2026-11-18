@@ -140,6 +140,12 @@ pub trait Host: Send + Sync {
     /// `rein doctor --scope install --json` from the installed tree, as a `HealthView` (E-39).
     fn doctor(&self) -> HealthView;
 
+    /// The first bytes of the installed Rein's `~/.rein/VERSION` (updates.md component 1):
+    /// a file read here, one constant read-only `wsl.exe` line on Windows. `None`: not read.
+    fn rein_version(&self) -> Option<Vec<u8>> {
+        None
+    }
+
     /// Run the `rein-app` CLI for `action` (constant argv, D-045), each line of its output
     /// escaped to `line`; the exit code (`None`: killed by a signal).
     fn run_cli(

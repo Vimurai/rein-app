@@ -45,6 +45,7 @@ mod team;
 mod tmux_overlay;
 mod tmux_server;
 mod ui_store;
+mod updates;
 mod window_bg;
 // The Windows host: plain Rust everywhere, so its tests run on every platform; only the
 // Windows build starts it.
@@ -236,6 +237,7 @@ fn main() -> ExitCode {
     // window can be created in the effective theme's background (V7: no white flash).
     let ui_store = ui_store::UiStore::open(dirs::state_dir(&dirs::process_env));
     let theme = ui_store.view(&config.view()).theme.value;
+    let watch = updates::Watch::new(ui_store.asked());
     let (r, g, b) = window_bg::background(
         theme.as_str().unwrap_or_default(),
         start.theme.custom.get("bg").map(String::as_str),
@@ -245,6 +247,7 @@ fn main() -> ExitCode {
         .manage(std::sync::Arc::clone(&config))
         .manage(cli_ipc::CliState::default())
         .manage(ui_store)
+        .manage(watch)
         .manage(attention::AttentionState::new(dismissed::Dismissed::open(
             dirs::state_dir(&dirs::process_env),
         )))
@@ -290,7 +293,10 @@ fn main() -> ExitCode {
             lifecycle::app_quit,
             team::team_get,
             team::team_add,
-            team::team_mode
+            team::team_mode,
+            updates::updates_get,
+            updates::updates_check,
+            updates::updates_later
         ]);
     let result = builder
         .setup(move |app| {
@@ -363,6 +369,8 @@ fn main() -> ExitCode {
                     }
                 });
             }
+            // The update watch (updates.md, D-065): for the life of the window.
+            updates::spawn(app.handle().clone());
             // Debug builds only: `REIN_DEVTOOLS=1` opens the web inspector.
             #[cfg(debug_assertions)]
             if std::env::var_os("REIN_DEVTOOLS").is_some() {
@@ -388,10 +396,13 @@ fn main() -> ExitCode {
         // Every exit: every tab is detached and every pty child reaped before the process ends
         // (desktop.md §Components 2). No server is ended and nothing asks (V12 component 8,
         // D-061): the sessions keep running and are attached to next time.
-        app.run(|app, event| {
-            if let tauri::RunEvent::Exit = event {
-                app.state::<ipc::Desktop>().detach_all();
-            }
+        app.run(|app, event| match event {
+            tauri::RunEvent::Exit => app.state::<ipc::Desktop>().detach_all(),
+            tauri::RunEvent::WindowEvent {
+                event: tauri::WindowEvent::Focused(true),
+                ..
+            } => app.state::<updates::Watch>().focused(),
+            _ => {}
         })
     });
     match result {

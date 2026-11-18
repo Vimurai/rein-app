@@ -40,6 +40,7 @@ import {
   tabClose,
   projectsForget,
   projectsList,
+  updatesLater,
   type HealthView,
 } from "./ipc.ts";
 import { HealthOverlay, ProfilesOverlay, ReleaseOverlay } from "./release.tsx";
@@ -53,7 +54,9 @@ import { StartScreen } from "./start-screen.tsx";
 import { TermTab } from "./term.ts";
 import { AgentBar, CloseConfirm, StopConfirm, useAgentPoll, type PolledTab } from "./agent-bar.tsx";
 import { closeTabText, closedNote } from "./lifecycle.ts";
-import { shouldCheck, type CheckReply } from "./project.ts";
+import type { CheckReply } from "./project.ts";
+import { UpdateCard, askOutOfDate, recheckTabs, useUpdates } from "./update-ui.tsx";
+import { recheckOrder, reinAsk, showUpdateButton, updateRows } from "./updates.ts";
 import { SetupCard, UpdateBar, UpdateSheet } from "./project-ui.tsx";
 import { TeamSheet } from "./team-sheet.tsx";
 import { AgentsGoneBar, RestoreCard, restoreAtStart, useTabsRecord } from "./restore-ui.tsx";
@@ -166,6 +169,8 @@ export function Shell(props: ShellProps) {
   /** V9: Close project with an agent still running asks first (default No). */
   const [confirmClose, setConfirmClose] = useState<{ entry: OpenTab; running: string[] } | null>(null);
   const [, rerender] = useReducer((n: number) => n + 1, 0);
+  // updates.md component 1: the installed Rein changed — every open tab is asked again, active first.
+  const updates = useUpdates(() => void recheckTabs(recheckOrder(tabs.current.length, cur.current).map((i) => tabs.current[i]!), (t) => tabs.current.includes(t as OpenTab), rerender, dontAskRef.current));
   const [recent, setRecent] = useState<RecentView[]>([]);
   const [picker, setPicker] = useState(false);
   /** The health / update / rollback / profiles overlay, if one is open (E-39). */
@@ -370,22 +375,8 @@ export function Shell(props: ShellProps) {
       tabs.current.push(entry);
       term.keyFilter = (e) => terminalKeyRef.current(e);
       term.term.onBell(() => side.bell(entry, tabs.current[cur.current] === entry));
-      term.onPhase = () => {
-        rerender(); // starting → running / exited (V7)
-        // V9 3: once the tab has started (never delaying it), rein's verdict, once per open.
-        const id = term.tab?.id;
-        const started = entry.open && !entry.exited && term.phase(performance.now()) === "running";
-        if (id === undefined || !shouldCheck({ project: entry.project, started, asked: entry.asked === true }, dontAskRef.current)) return;
-        entry.asked = true;
-        projectCheck(id).then(
-          (r) => {
-            if (!tabs.current.includes(entry) || term.tab?.id !== id || !("out_of_date" in r)) return;
-            entry.update = r.out_of_date;
-            rerender();
-          },
-          () => {},
-        );
-      };
+      // starting → running / exited (V7), then rein's verdict once per open (V9 3).
+      term.onPhase = () => (rerender(), void askOutOfDate(entry, () => tabs.current.includes(entry), rerender, dontAskRef.current));
       term.onSetup = (view) => {
         // V9 2: a folder without `.ai/` — the card in place of the terminal; rein is asked
         // what set-up will do.
@@ -875,7 +866,8 @@ export function Shell(props: ShellProps) {
   const starting = (t: OpenTab | undefined) => t !== undefined && !t.exited && t.term.phase(now) === "starting";
   const bar = titleBar(
     tabs.current.map((t, i) => ({ id: t.id, title: t.title, current: i === cur.current, exited: t.exited, starting: starting(t), marked: t.marked === true })),
-    VERSION,
+    updates?.rein.installed ?? VERSION,
+    showUpdateButton(updates),
   );
   // The `simple` style has no modes, so no mode badge (D-034).
   const status = statusBar(current ? current.project : null, health, lastCmd, keys.style === "modal" ? modeView.mode : null, {
@@ -1082,9 +1074,10 @@ export function Shell(props: ShellProps) {
       <Exit
         show={overlay === "update" || overlay === "rollback"}
         render={() => (
-          <ReleaseOverlay kind={overlay === "rollback" ? "rollback" : "update"} onClose={closeOverlay} onCommand={showCommand} />
+          <ReleaseOverlay kind={overlay === "rollback" ? "rollback" : "update"} rows={updateRows(updates)} onClose={closeOverlay} onCommand={showCommand} />
         )}
       />
+      <Exit show={reinAsk(updates) !== null && overlay !== "update"} render={() => <UpdateCard version={reinAsk(updates) ?? ""} onLater={() => void updatesLater("rein").catch(() => {})} onUpdate={() => run({ name: "release.update" })} />} />
       <Exit show={overlay === "profiles"} render={() => <ProfilesOverlay onClose={closeOverlay} onCommand={showCommand} />} />
       <Exit
         show={overlay === "team"}

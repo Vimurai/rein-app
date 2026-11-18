@@ -58,6 +58,9 @@ pub struct UiFile {
     pub panel_width: Option<u32>,
     pub panel_open: Option<String>,
     pub first_run_done: bool,
+    /// The versions answered "Later" on the update card (updates.md §Data Model): that version
+    /// does not ask again.
+    pub updates_asked: crate::updates::Asked,
 }
 
 impl Default for UiFile {
@@ -80,6 +83,7 @@ impl Default for UiFile {
             panel_width: None,
             panel_open: None,
             first_run_done: false,
+            updates_asked: Default::default(),
         }
     }
 }
@@ -128,6 +132,22 @@ impl UiStore {
 
     fn lock(&self) -> std::sync::MutexGuard<'_, UiFile> {
         self.data.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The versions answered "Later" (updates.md component 4).
+    pub fn asked(&self) -> crate::updates::Asked {
+        self.lock().updates_asked.clone()
+    }
+
+    /// Record `asked` (already checked by the caller) and save.
+    pub fn set_asked(&self, asked: crate::updates::Asked) -> Result<(), IpcError> {
+        let mut live = self.lock();
+        let mut d = live.clone();
+        d.updates_asked = asked;
+        self.save(&d)
+            .map_err(|e| err("io", format!("cannot save ui.json: {e}")))?;
+        *live = d;
+        Ok(())
     }
 
     /// Effective = config.toml if it sets the key, else ui.json, else the default.

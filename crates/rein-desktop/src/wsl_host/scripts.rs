@@ -21,6 +21,8 @@ pub const START_SCRIPT: &str = "tty; exec ~/.rein/bin/rein start";
 pub const KILL_SCRIPT: &str = "exec ~/.rein/bin/rein start --kill --yes";
 /// Health inside WSL, from the Linux home (W4, D-045 addendum 1).
 pub const DOCTOR_SCRIPT: &str = "cd; exec ~/.rein/bin/rein doctor --scope install --json";
+/// The installed Rein's version (updates.md component 1): read-only, bounded, no login shell.
+pub const VERSION_SCRIPT: &str = "exec head -c 65 ~/.rein/VERSION";
 /// `:open` completion under a parent other than `/` (W4): the `/` guard, then the listing.
 pub const LIST_SCRIPT: &str = "case $PWD in /) exit 5;; esac; ls -1Ap";
 /// The same for the parent `/` itself (the `--cd` fallback cannot mislead there).
@@ -116,6 +118,7 @@ mod tests {
             START_SCRIPT,
             KILL_SCRIPT,
             DOCTOR_SCRIPT,
+            VERSION_SCRIPT,
             LIST_SCRIPT,
             LIST_ROOT_SCRIPT,
         ] {

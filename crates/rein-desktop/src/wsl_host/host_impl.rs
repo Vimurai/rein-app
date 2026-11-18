@@ -126,6 +126,16 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
         }
     }
 
+    /// `~/.rein/VERSION` inside WSL (updates.md component 1): one constant line, 5 s, 65 bytes.
+    fn rein_version(&self) -> Option<Vec<u8>> {
+        let d = self.probe_distro().ok()?;
+        let args = ["-d", &d.name, "-e", "sh", "-c", VERSION_SCRIPT];
+        let o = self
+            .run_within(&args, crate::updates::VERSION_LIMIT, 65)
+            .ok()?;
+        (o.code == Some(0)).then_some(o.stdout)
+    }
+
     /// The `rein-app` CLI inside WSL (W4): the user's login shell runs `exec rein-app …` with
     /// the action's constant argv. Exit 127: the Linux package is not installed there.
     fn run_cli(

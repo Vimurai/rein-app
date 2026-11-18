@@ -59,6 +59,9 @@ const ALLOWED: &[&str] = &[
     "allow-team-get",
     "allow-team-add",
     "allow-team-mode",
+    "allow-updates-get",
+    "allow-updates-check",
+    "allow-updates-later",
 ];
 
 fn json(rel: &str) -> serde_json::Value {
