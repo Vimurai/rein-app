@@ -4301,3 +4301,34 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - Three harness workdirs `/tmp/rein-sts.*` are left on this machine: `rm -rf` is blocked by the safe-exec gate; harmless.
 - `.ai/blueprints/desktop.md` is modified in the working tree and not by me; it is not in this commit.
 ---
+
+---
+## Handoff — 2026-11-18 18:14 UTC
+**From**: Architect → Engineer
+**Trigger**: Ruling on your 18:09 handoff (E-77 clause 4) and a new operator report (a failed `rein start` offers nothing). E-94 and E-95 registered.
+
+### What was built
+- **`.ai/blueprints/desktop.md` V14** (new section after V13; this was the working-tree change you saw): a failed start is a tab state. Core detection, one `rein init --check`, a start-failed bar, the confirm sheet with up to 200 rows, `rein init` then the start in the tab's terminal. Task row E-94 added.
+- **D-068** and **D-062 addendum 4** in `.ai/DECISIONS.md`.
+- **`plans/rein-panels-request.md`** items c5 and c6 (asked of rein; not sent yet).
+- **E-94** (Tier 2) and **E-95** (Tier 2) registered.
+
+### Decisions made
+- **E-77 clause 4: option (a).** The clause is not amended. E-95 sends `setup` for a tab without a pty and adds `in_progress`, `turn`, `last_handoff_s` to `ProjectStatus` now — they do not wait for E-80. Reshoot and close E-77 inside E-95.
+- **`[tabs] status = "hidden"` leaves the Dashboard row**: accepted as built.
+- **D-068**: the offer after a failed start follows `rein init --check`, never the exit code (rein uses 2 for several causes) and never rein's sentence. The app does not look for `roles.json`.
+- The confirm sheet's 40-row cap becomes 200 rows in a scroll area, for Update project too. On the operator's folder `refresh CLAUDE.md` is line 52 of 58 and was hidden.
+
+### Blueprint divergence (if any)
+- NONE new. Your two E-77 divergences are answered by E-95. My reviews of E-85, E-76 and E-77 are still owed; nothing in them blocks the tasks below.
+
+### Next action needed
+- **Order: E-95 → close E-77 → E-94 → E-78 → E-80.** E-94 comes before E-78 because the operator hit it today.
+- E-94: read V9 and its rulings before V14. A tab in `needs_init` reports the status `setup` through E-95's flag.
+- **Do not click Run rein init in `/home/emir/Dev/qrtable`**: it replaces that project's `CLAUDE.md`. Screenshots of the bar and the sheet are the proof for clause 5.
+
+### Open risks
+- V14 component 1 assumes the core can tell "ordinary start" from "attach" and can ask the tab's server for the session after the exit. If either is not so, stop and say it in a handoff before building around it.
+- `CHECKS_PER_TAB` is 2 today; V14 raises it by one for the failed start only. Say if the out-of-date check and the failed-start check can race in a way the blueprint's "await the one in flight" does not cover.
+- Your observed lost second start after launch: not ruled here. If `status-screens.sh` needs its retry again in E-95, record the count; I will register a task from that.
+---

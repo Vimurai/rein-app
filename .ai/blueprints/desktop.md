@@ -1449,6 +1449,129 @@ picker to its E-38 form. Nothing is stored, so nothing is migrated back.
 
 **Task.** E-92 (Tier 2).
 
+### V14. A start that fails: rein's verdict and one offer (revision 2026-11-18, D-068)
+Operator report on the 0.5.0 window, with a screenshot: the folder `~/Dev/qrtable` has an
+`.ai/` directory written by another tool (`.ai/memory`, `.ai/rules`, `.ai/skills`; no
+`roles.json`). V9's project check sees `.ai/`, so the tab runs `rein start`. rein prints
+"no roles in .ai/roles.json — run 'rein init' or add engineer/architect." and exits 2.
+The window shows only "rein start exited with code 2 — press Enter to restart". Enter
+gives the same failure again. "Our app should detect this and ask proper actions."
+
+**Goal.** When `rein start` does not start a project, the window says so, asks rein what
+the project needs, and offers the one rein command that fixes it. Users: every operator
+who opens a folder that has an `.ai/` rein did not write, or a project left half set up.
+
+**Core concept: a failed start is a tab state, and the offer comes from rein's check,
+not from the exit code or the message.** rein uses exit 2 for many refusals (no roles, no
+tmux, a bad role value), so the code alone names no fix. The app does not read
+`roles.json` and does not parse rein's sentence (V9's rule: the verdict is rein's). It
+runs the one check rein has, `rein init --check`, after the failure, and offers
+`rein init` only when that check reports pending changes.
+
+**Components**
+1. **Failed-start detection (core).** The tab's child was the ordinary start (not the
+   set-up child, not an attach to a live session), it ended with a non-zero code, and the
+   tab's session does not exist on the tab's server afterwards (the V12 lookup the core
+   already has; one process, only after a failure). Then the tab is in the state
+   `start_failed`. A non-zero end while the session exists is not this state and stays as
+   today. Exit 0 is never this state. A tab in `start_failed` with the verdict
+   `needs_init` reports the project status `setup` (`status.md` Component 2, first row:
+   "Needs set-up."), through the flag E-95 adds; with `no_fix` it reports `ended`.
+2. **The verdict (core).** On entering `start_failed` the core runs `rein init --check`
+   once for the tab, off the UI thread, limit 30 s. This run takes the place of the
+   tab's background out-of-date check (V9 component 3): if that check has already
+   answered for this tab open, its answer is used and nothing runs again; if it is in
+   flight, its result is awaited. Exit 1 → `needs_init` with rein's rows; exit 0 →
+   `no_fix`; anything else or a timeout → `no_fix` plus the fixed health line V9 already
+   has.
+3. **The start-failed bar (web).** One bar above the terminal; the terminal stays, with
+   rein's own message in it. It replaces the out-of-date bar for this tab: never two
+   bars. Fixed text, first line always "rein start did not start this project."
+   - `needs_init`: second line "rein init --check reports changes for this folder."
+     Buttons: **Set up this project** (primary), **Try again**, **Close tab**.
+   - `no_fix`: second line "rein's message is in the terminal above." Buttons: **Try
+     again** (primary), **Close tab**.
+   - while the check runs: the first line and "Asking rein…"; **Try again** and **Close
+     tab** only.
+   "Don't ask for this project" (V9) does not hide this bar: it is a failure, not a
+   suggestion. Enter in the terminal still restarts, as today. A start that then
+   succeeds removes the bar.
+4. **The confirm sheet.** **Set up this project** opens the sheet V9's Update project
+   already has: rein's rows, the fixed line "rein init replaces the files it lists as
+   refresh. Edits you made in those files are lost — commit them first.", **Run rein
+   init** / **Cancel**, Cancel focused. One change for every use of this sheet: it shows
+   **up to 200 rows in a scroll area**, not 40. Reason, measured on the operator's
+   folder: 58 rows, and `refresh CLAUDE.md` — the operator's own file there — is line 52
+   of rein's output, behind "… and 18 more". A warning about replaced files must show the files. The bar
+   itself shows no row.
+5. **The run.** **Run rein init** uses V9 component 2's path, not the CLI runner:
+   `rein init` in the tab's own terminal, then on exit 0 the tab's ordinary start in the
+   same terminal (the existing set-up child and its constant). A failed init leaves its
+   output and the existing fixed line; the bar returns in the `no_fix` form with **Try
+   again** and **Close tab**, and makes no second offer in this tab open. No loop.
+
+**Data model.** No stored state. Per tab, in memory: `start_failed: none | checking |
+needs_init {rows} | no_fix`, cleared when the tab's child starts again or the tab
+closes. Rows are V9's escaped lines (200 characters each, control and bidi characters as
+placeholders), now up to 200 of them, then "… and N more".
+
+**Interface contracts.** The project always comes from the tab's state; the web side
+sends no path and no command text.
+- The exit event the web side already receives for a tab gains one field,
+  `start_failed: bool`.
+- `project_check(tab_id)` gains one answer: `start_failed { needs_init: [rows] } |
+  start_failed { no_fix: true }`; `unavailable` as today.
+- `project_setup(tab_id, cols, rows, output)` is accepted for a tab in `needs_init` as
+  well as for a set-up tab; for any other tab it is refused with the existing error.
+- Errors: `unknown_tab`; `not_failed` when `project_setup` is called for a started tab
+  that is not in `needs_init`.
+Final names are the Engineer's; the shape (no text from the web side, a closed set of
+answers) is fixed.
+
+**Security.** No new command: `rein init --check` and the set-up constant exist and are
+argv-safe (V8's rule). `rein init` runs only after two clicks (the bar, then the sheet);
+nothing in a project's files or in rein's output can start it. The state is decided in
+the core from the child's own exit and the app's own tmux server, not from pty bytes.
+rein's rows are untrusted text: text nodes only, capped. `rein init` overwrites files in
+the operator's project; that is why the sheet shows every row it holds and Cancel is
+focused. No secret is read or written. Tier 2, as V9's set-up was.
+
+**Execution constraints.** A start that succeeds gains no process and no delay. After a
+failure: one tmux lookup and at most one `rein init --check` per failed child, and the
+tab's limit of checks per open (`CHECKS_PER_TAB`) rises by one for this use only.
+**Try again** held down cannot start checks without bound: after the limit the bar shows
+`no_fix`. The result is dropped if the tab closed.
+
+**Not done, and why.** The project check before the start is unchanged. Looking for
+`.ai/roles.json` there was rejected: it copies a rein rule into the app, and when rein
+moves that file every good project would get a set-up card — a wrong offer. This design
+fails the other way: with no verdict it offers nothing and shows rein's message.
+
+**Asked of rein** (added to `plans/rein-panels-request.md`): a machine verdict for "this
+folder cannot start, and this is the command that fixes it" — a `rein start --check` or
+distinct exit codes — so the window can ask before it starts instead of after; and that
+`rein init` keeps a copy of a `CLAUDE.md` it did not write.
+
+**Tests.**
+- Pure (web): the bar's three forms from the three states; never two bars; "Don't ask"
+  does not hide it; the sheet holds 200 rows and says "… and N more" past them.
+- Rust: `start_failed` only for an ordinary start, a non-zero code and no session; each
+  check exit maps to its state; `project_setup` refused outside `needs_init`; the check
+  limit holds.
+- End to end (Linux, macOS; the stand-in `rein` of E-57): a folder with `.ai/` whose
+  `rein start` exits 2 and whose `init --check` exits 1 shows the bar with Set up; the
+  sheet lists a row past the 40th; Run rein init runs init and then the start in the
+  same terminal and the bar goes; with `init --check` exiting 0 the bar has no Set up;
+  a failing init leaves the `no_fix` bar.
+- Screens (D-052), both themes at 1280×800: the bar in `needs_init`, in `no_fix`, while
+  checking; the sheet scrolled to a row past the 40th. The Architect opens every one.
+
+**Rollback.** One commit. Reverting it returns the failed start to the single line in
+the terminal and the sheet to 40 rows. Nothing is stored and no file of the app's is in
+a project, so nothing is migrated back.
+
+**Task.** E-94 (Tier 2).
+
 ### Tests (v2)
 - Token function: contrast ≥ 4.5:1 for every text pair in every theme; the default theme is
   `catppuccin-mocha`.
@@ -1719,6 +1842,7 @@ release artifact carries the window until a task adds it to the dist configurati
 | E-44 | `desktop-windows.yml`: NSIS installer as a workflow artifact (`ci_gate`) | 2 | E-43 |
 | E-45 | Windows health / release / profiles through WSL (W4), `rein-app update --check`, WSL-absent start screen, folder dialog start directory, `wsl.distro` config key | 3 | E-39, E-43 |
 | E-92 | V13: the tab bar's `+` opens the one "Open project" dialog — the picker with last-opened, open / missing marks and a fixed `Choose a folder…` row | 2 | — |
+| E-94 | V14: a failed start is a tab state — core detection, one `rein init --check`, the start-failed bar, the confirm sheet with up to 200 rows, `rein init` then the start in the tab's terminal | 2 | — |
 E-43 and E-44 depend only on E-35: do them **before E-42** so the operator has an
 installable window (it opens the DIR given on the command line until E-38 lands). E-38,
 E-40 and E-41 reach projects only through the `Host` seam, so they work on Windows without

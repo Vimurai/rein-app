@@ -55,6 +55,15 @@ the agents have exited. The window runs only `rein init`, `rein sync` and
 - **c4. A project folder with a `.` in its name:** rein names the window after the
   folder and tmux reads `name.x` as window.pane. rein itself resolves by window id, so
   it works, but any `-t session:name` use breaks. Worth a note or a sanitised name.
+- **c5. A verdict before the start (rein-app D-068, `desktop.md` V14, 2026-11-18):** a
+  folder whose `.ai/` another tool wrote (no `roles.json`) passes the window's check and
+  `rein start` exits 2, the same code as "no tmux" and "bad role value". Please give a
+  machine verdict for "this folder cannot start, and this command fixes it": a
+  `rein start --check`, or one exit code per cause. Until then the window asks
+  `rein init --check` after the failure.
+- **c6. `rein init` on a folder it did not set up** replaces an existing `CLAUDE.md`
+  (seen: a one-line `@AGENTS.md`) with no copy. Please keep a copy, or say in `--check`
+  which listed files exist and were not written by rein.
 
 ## Also asked of rein — the team (rein-app D-058, `desktop.md` V10)
 The window gets a Project sheet that shows `rein team show` / `rein trunk` and runs

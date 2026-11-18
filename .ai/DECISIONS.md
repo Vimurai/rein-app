@@ -2508,3 +2508,64 @@ The hosted macOS run on 54176c3 failed at 1410 ms against the 1000 ms unoptimise
 
 ### Rollback
 Revert E-93's commit.
+
+---
+
+## D-068 — A start that fails is a tab state; the offer comes from `rein init --check`, after the failure
+
+**Date**: 2026-11-18
+**Task**: E-94
+**Decision**: When the tab's `rein start` ends non-zero and left no session, the window shows a start-failed bar, runs `rein init --check` once, and offers `rein init` (in the tab's terminal, then the start) only when that check reports changes. Blueprint: `desktop.md` V14.
+
+### Why needed
+Operator report 2026-11-18 with a screenshot: `~/Dev/qrtable` has an `.ai/` written by another tool and no `roles.json`. V9's project check passes it, `rein start` exits 2, and the window shows only "press Enter to restart", which repeats the failure. "Our app should detect this and ask proper actions."
+
+### Rulings
+1. **The exit code names no fix.** rein 0.5.0 exits 2 for no roles, no tmux and a bad role value. The offer follows `rein init --check` (exit 1 → offer; 0 or no answer → no offer), never the code or the sentence.
+2. **Detection is in the core**: ordinary start, non-zero exit, no session on the tab's server. No pty bytes are parsed.
+3. **One bar.** The start-failed bar replaces the out-of-date bar for the tab and is not hidden by "Don't ask for this project".
+4. **`rein init` runs after two clicks**, in the tab's terminal, followed by the start (V9 component 2's child). A failed init gets no second offer in that tab open.
+5. **The confirm sheet shows up to 200 rows, scrolled** — for Update project as well. Measured on the operator's folder: 58 rows, `refresh CLAUDE.md` (the operator's own file) on line 52, hidden by the 40-row cap.
+
+### Alternatives considered
+1. **Look for `.ai/roles.json` in the project check and show the set-up card** — rejected: it copies a rein rule into the app (V9: the verdict is rein's). When rein moves the file, every good project gets a set-up card.
+2. **Run a rein check before every start** — rejected: one more process and its delay on every tab open (V9's execution constraint).
+3. **Offer `rein init` on every exit 2** — rejected: wrong offer when tmux is missing or a role value is bad, and `rein init` overwrites files.
+4. **Ask rein after the failure** — chosen: no cost on a good start; with no verdict it offers nothing and rein's own message stays on screen.
+
+### Constraints driving this decision
+- Contract §3.3: the app writes no file in a project and carries no Rein logic.
+- V8's argv rule: constant commands only; V9: a click for every run.
+
+### Impact
+- Unlocks: E-94.
+- Risk if wrong: the operator sees rein's failure for a moment before the bar. A verdict before the start needs rein (asked in `plans/rein-panels-request.md`, c5 and c6).
+
+### Rollback
+Revert E-94's commit: the failed start is one line in the terminal again and the sheet shows 40 rows.
+
+---
+
+### D-062 addendum 4 (2026-11-18) — `setup` and the three card fields are built in the core now; E-77's clause stands
+
+**Task**: E-77 (Engineer handoff 2026-11-18 18:09 UTC, a557781), E-95, E-80, E-94
+**Decision**: E-77's clause 4 is not amended. A new core task, E-95, sends `setup` for a tab without a pty and adds `in_progress`, `turn` and `last_handoff_s` to `ProjectStatus`; E-77 is reshot and closed after it.
+
+### Why needed
+E-77 is ACCEPT_FAIL: no set-up tab can reach the screen, because the core builds statuses only over tabs with a pty, and E-76 left three Data Model fields out. The Engineer asked: (a) a core follow-up, or (b) accept the render test.
+
+### Rulings
+1. **(a).** A mark that only a render test can draw is not shown to the operator. `setup` is also the status of a failed start that needs `rein init` (D-068), so it is needed this week.
+2. **The three fields do not wait for E-80.** They belong to `ProjectStatus` (`status.md` §Data Model); the tab tooltip and the status-bar segment E-77 drew need them. E-80 adds only what `ProjectCard` adds.
+3. **`[tabs] status = "hidden"` leaves the Dashboard's status row** — accepted as built: the setting names the tabs.
+4. **Order**: E-95 → E-77 closed → E-94 → E-78 → E-80.
+
+### Alternatives considered
+1. **Amend clause 4 to accept the render test** — rejected: ruling 1.
+2. **Fold the fields into E-80** — rejected: E-77's drawn tooltip would stay empty until Home ships.
+
+### Impact
+- E-77 stays open until E-95. Risk if wrong: one more core task before notifications.
+
+### Rollback
+Revert E-95's commit; E-77's screens then lack the set-up tab again.
