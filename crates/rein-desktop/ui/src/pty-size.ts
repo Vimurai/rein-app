@@ -40,3 +40,27 @@ export class PtySize {
     this.#send(this.#pty, cols, rows);
   }
 }
+
+/** A size in cells. */
+export interface Cells {
+  cols: number;
+  rows: number;
+}
+
+/** How long an open waits for the terminal's first measured size (E-91) before it opens at
+ *  the size the terminal has, as before. Far under the 20 s a tab may show as starting
+ *  (phase.ts START_LIMIT_MS): the first measure takes a few frames. */
+export const MEASURE_LIMIT_MS = 2000;
+
+/** The size a pty opens at (D-061 addendum 7 ruling 2, E-91), or `null` to wait a frame.
+ *  An attach to a live session that opens at a guess (xterm's 80 × 24 before the first
+ *  measure) makes tmux resize the session twice, and the agents re-print their text wrapped
+ *  at the guess. `measured`: this tab's own fit, when its pane is shown and the renderer has
+ *  measured a cell. `stage`: the last size any tab measured — every tab's terminal fills the
+ *  same stage, so a hidden tab (restored behind the current one) or one not measured yet
+ *  opens at it. Neither within `MEASURE_LIMIT_MS`: the terminal's own size, as before. */
+export function openSize(s: { measured: Cells | null; stage: Cells | null; current: Cells; elapsedMs: number }): Cells | null {
+  if (s.measured) return s.measured;
+  if (s.stage) return s.stage;
+  return s.elapsedMs >= MEASURE_LIMIT_MS ? s.current : null;
+}

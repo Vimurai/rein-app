@@ -228,6 +228,74 @@ X key ctrl+shift+q; gone >/dev/null
 [ -n "$APP" ] && { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; }
 TA kill-server 2>/dev/null
 
+# E-91 (D-061 addendum 7 ruling 2): an attach opens the pty at the terminal's measured size,
+# so a session is resized once, to that size. The stand-in agent draws like a TUI: on every
+# size it gets it logs the size and prints a ruler as wide as the pane (an agent re-prints its
+# text at the new width; tmux's own reflow cannot undo that). A pty opened at a guessed size
+# (xterm's 80 × 24 before the first measure) would leave a short ruler and a size in the log
+# other than the final one. Both paths: a reopen with the project given, and a restore of two
+# tabs, the second hidden while it attaches.
+echo "[attach size]"
+: >"$W/rein.log"
+rm -f "$W/xdg/state/rein-app/projects.json"
+cat >"$W/ruler.sh" <<'EOF'
+#!/bin/sh
+draw() {
+  set -- $(stty size)
+  echo "$2x$1" >>"$LOG"
+  i=0 s=""
+  while [ "$i" -lt "$2" ]; do s="$s$((i % 10))"; i=$((i + 1)); done
+  printf '\nat %sx%s:\n%s' "$2" "$1" "$s" # the ruler fills its line: one line, or wrapped by a shrink
+}
+trap draw WINCH
+draw
+while :; do sleep 600 & wait $!; done
+EOF
+ra="$W/Dev/ruler-a" rb="$W/Dev/ruler-b"
+mkdir -p "$ra/.ai" "$rb/.ai"
+sized() { # sized <dir>: a tagged session left by an earlier run, at a size no terminal here has
+  local n; n=$(basename "$1")
+  : >"$W/sizes-$n"
+  TA new-session -d -s "$n" -c "$1" -x 100 -y 30 "LOG=$W/sizes-$n sh $W/ruler.sh"
+  TA set-option -t "$n" @rein_app_project "$(tag "$1")"
+}
+shrink() { # shrink <name>: the detached session back to 100 × 30, as another client had it
+  TA resize-window -t "$1" -x 100 -y 30
+  TA set-option -w -t "$1" window-size latest # resize-window set it to manual
+  sleep 1 # the pane's WINCH lands before the log is emptied
+  : >"$W/sizes-$1"
+}
+after() { # after <name> <label>: every width the pane had since the attach = the client's
+  # Widths: a width is what makes an agent re-wrap its text. A height changes by a row when
+  # the status line or the agents bar comes and goes, and wraps nothing.
+  local cw; cw=$(TA list-clients -t "$1" -F '#{client_width}' 2>/dev/null)
+  check "$2: every width the agent got is the terminal's (${cw:-no client})" "${cw:-?}" "$(cut -dx -f1 "$W/sizes-$1" | sort -u | grep -vx "$cw" | tr '\n' ' ')$cw"
+  # Every tab's terminal fills the same stage: a hidden tab's client is as wide as the shown one's.
+  [ -n "${3:-}" ] && check "  ... as wide as the shown tab's" "$(TA list-clients -t "$3" -F '#{client_width}' 2>/dev/null)" "$cw"
+}
+sized "$ra"; sized "$rb"
+: >"$W/sizes-ruler-a"; : >"$W/sizes-ruler-b"
+app catppuccin-mocha app "$ra"
+sleep 7
+check "reopen: attached, no rein start" "" "$(cat "$W/rein.log")"
+after ruler-a "reopen"
+second "$rb"; sleep 6
+after ruler-b "open in a running window" ruler-a
+shot "ruler-reopened"
+X key ctrl+Tab; sleep 1 # ruler-a in front: the record's current tab
+X key ctrl+shift+q; gone >/dev/null
+[ -n "$APP" ] && { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; }
+shrink ruler-a; shrink ruler-b
+app catppuccin-mocha app ""
+sleep 9
+check "restore: attached, no rein start" "" "$(cat "$W/rein.log")"
+after ruler-a "restore, the shown tab"
+after ruler-b "restore, the hidden tab" ruler-a
+shot "ruler-restored"
+X key ctrl+shift+q; gone >/dev/null
+[ -n "$APP" ] && { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; }
+TA kill-server 2>/dev/null
+
 # tmux.server = "user": something on the app's socket and the user's own session both stay.
 echo "[user server]"
 : >"$W/rein.log"

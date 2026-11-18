@@ -25,8 +25,22 @@ export const ATTACH_GONE = 76;
 export const ATTACH_GONE_SENTENCE = "The project's session ended before it could be attached.";
 /** The way out, as the core words it for a failed setup (tmux_server::USE_YOUR_OWN). */
 export const USE_YOUR_OWN = "Settings → tmux server → my own uses your own tmux instead.";
-import { PtySize } from "./pty-size.ts";
+import { PtySize, openSize, type Cells } from "./pty-size.ts";
 import { xtermTheme, type Theme } from "./theme.ts";
+
+/** The stage's size in cells as a shown tab last measured it: every tab's terminal fills the
+ *  same stage, so a tab that cannot measure (hidden, or not drawn yet) opens at it (E-91). */
+let stageCells: Cells | null = null;
+
+/** The next frame, or 50 ms when frames stop (a minimised window draws none). */
+const nextFrame = (): Promise<void> =>
+  new Promise((r) => {
+    const t = setTimeout(r, 50);
+    requestAnimationFrame(() => {
+      clearTimeout(t);
+      r();
+    });
+  });
 
 export interface TermOptions {
   fontFamily: string;
@@ -123,14 +137,14 @@ export class TermTab {
    *  cell size is read where FitAddon reads it, and FitAddon is only the fallback before the
    *  first render has measured a cell. What is left over, under one cell, is split on both
    *  sides and shows the terminal's background. */
-  #fitStage(): void {
+  #fitStage(): Cells | null {
     const core = (this.term as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } } } })._core;
     const cell = core?._renderService?.dimensions?.css?.cell;
     const w = this.#el.clientWidth;
     const h = this.#el.clientHeight;
     if (!cell || !cell.width || !cell.height || !w || !h) {
-      this.#fit.fit();
-      return;
+      if (w && h) this.#fit.fit(); // shown but no cell yet; a hidden pane keeps its size
+      return null;
     }
     const cols = Math.max(2, Math.floor(w / cell.width));
     const rows = Math.max(2, Math.floor(h / cell.height));
@@ -140,6 +154,23 @@ export class TermTab {
       const dx = Math.floor((w - cols * cell.width) / 2);
       const dy = Math.floor((h - rows * cell.height) / 2);
       el.style.transform = `translate(${dx}px, ${dy}px)`;
+    }
+    stageCells = { cols, rows };
+    return stageCells;
+  }
+
+  /** Wait for the size the pty opens at (pty-size.ts `openSize`, E-91), and give it to the
+   *  terminal. `false`: the tab was closed or restarted meanwhile. */
+  async #measure(gen: number): Promise<boolean> {
+    const t0 = performance.now();
+    for (;;) {
+      await nextFrame();
+      if (gen !== this.#gen) return false;
+      const size = openSize({ measured: this.#fitStage(), stage: stageCells, current: this.term, elapsedMs: performance.now() - t0 });
+      if (size) {
+        if (size.cols !== this.term.cols || size.rows !== this.term.rows) this.term.resize(size.cols, size.rows);
+        return true;
+      }
     }
   }
 
@@ -188,11 +219,10 @@ export class TermTab {
     this.#frame = 0;
     this.#queue = [];
     this.#size.reset();
-    // A pane created this frame has no measured cell yet, and the fit would leave xterm's
-    // default 80 × 24: fit after the next frame, so the pty opens at the stage's size.
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    if (gen !== this.#gen) return;
-    this.#fitStage();
+    // A pane created this frame has no measured cell yet, and opening then would give xterm's
+    // default 80 × 24 — an attach to a live session would resize it twice and the agents'
+    // text stays wrapped at the guess (E-91): open at the measured (or the stage's) size.
+    if (!(await this.#measure(gen))) return;
     const output = new Channel<ArrayBuffer>((buf) => {
       if (gen === this.#gen) this.#output(new Uint8Array(buf));
     });

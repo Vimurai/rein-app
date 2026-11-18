@@ -2,7 +2,7 @@
 // covered the size the pty is given; term.ts drops nothing while `tab_open` is pending.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PtySize } from "../src/pty-size.ts";
+import { MEASURE_LIMIT_MS, PtySize, openSize } from "../src/pty-size.ts";
 
 function recorder() {
   const sent = [];
@@ -41,4 +41,21 @@ test("after a restart nothing goes to the old pty, and the new one gets the curr
   assert.deepEqual(sent, []);
   size.opened(2, 100, 30, { cols: 120, rows: 40 });
   assert.deepEqual(sent, [[2, 120, 40]]);
+});
+
+// E-91 (D-061 addendum 7 ruling 2): the size an attach opens at. Extends this file: the size
+// the pty is given before it opens; tests/e2e/lifecycle-screens.sh "[attach size]" is the
+// window behaviour.
+test("an open waits for a measured size, takes the stage's when its pane is hidden, and never waits past the limit", () => {
+  const cur = { cols: 80, rows: 24 }; // xterm's default before any fit
+  const rows = [
+    // [label, measured, stage, elapsedMs, expected]
+    ["own measure wins", { cols: 153, rows: 33 }, { cols: 120, rows: 30 }, 0, { cols: 153, rows: 33 }],
+    ["hidden or unmeasured: the stage another tab measured", null, { cols: 153, rows: 33 }, 0, { cols: 153, rows: 33 }],
+    ["nothing measured yet: wait", null, null, 100, null],
+    ["nothing measured by the limit: the terminal's size, as before", null, null, MEASURE_LIMIT_MS, cur],
+  ];
+  for (const [label, measured, stage, elapsedMs, want] of rows) {
+    assert.deepEqual(openSize({ measured, stage, current: cur, elapsedMs }), want, label);
+  }
 });
