@@ -254,17 +254,32 @@ fn lookup_and_attach_are_constant_wsl_calls_with_the_tag_as_one_word() {
             .on(
                 &["-d", "Ubuntu", "-e", "sh", "-s", "--", &tag],
                 0,
-                b"live\n",
+                format!("motd\nsessions\ns|$3|{tag}|/home/me/p\ns|$4||/home/me/q\nend\n")
+                    .as_bytes(),
             )
             .on(
                 &["-d", "Ubuntu", "-e", "sh", "-s", "--", &other],
                 0,
-                b"none\n",
+                b"sessions\nend\n",
             ),
     );
-    use crate::tmux_server::Lookup;
-    assert_eq!(h.tmux_setup(&tag), Ok(Lookup::Live));
-    assert_eq!(h.tmux_setup(&other), Ok(Lookup::None));
+    use crate::tmux_server::SessionRow;
+    assert_eq!(
+        h.tmux_setup(&tag),
+        Ok(vec![
+            SessionRow {
+                id: "$3".into(),
+                tag: tag.clone(),
+                path: "/home/me/p".into()
+            },
+            SessionRow {
+                id: "$4".into(),
+                tag: String::new(),
+                path: "/home/me/q".into()
+            },
+        ])
+    );
+    assert_eq!(h.tmux_setup(&other), Ok(vec![]));
     let before = h.shell.calls().len();
     for bad in [
         "sweep",
@@ -273,7 +288,12 @@ fn lookup_and_attach_are_constant_wsl_calls_with_the_tag_as_one_word() {
         &format!("{};x", "a".repeat(62)),
     ] {
         assert!(h.tmux_setup(bad).is_err(), "{bad:?}");
-        assert!(h.rein_attach(Path::new("/home/me/p"), bad).is_err());
+        assert!(h.rein_attach(Path::new("/home/me/p"), bad, None).is_err());
+        assert!(
+            h.rein_attach(Path::new("/home/me/p"), &tag, Some(bad))
+                .is_err(),
+            "an id that is not $N"
+        );
     }
     assert_eq!(
         h.shell.calls().len(),
@@ -281,7 +301,20 @@ fn lookup_and_attach_are_constant_wsl_calls_with_the_tag_as_one_word() {
         "no process for a refused word"
     );
 
-    let spec = h.rein_attach(Path::new("/home/me/p"), &tag).unwrap();
+    // An adoption (V12 9): the session id is the second word after the tag.
+    let adopt = h
+        .rein_attach(Path::new("/home/me/p"), &tag, Some("$4"))
+        .unwrap();
+    let words: Vec<String> = adopt
+        .args
+        .iter()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(
+        words[8..],
+        ["sh".to_string(), tag.clone(), "$4".to_string()]
+    );
+    let spec = h.rein_attach(Path::new("/home/me/p"), &tag, None).unwrap();
     let argv: Vec<String> = spec
         .args
         .iter()

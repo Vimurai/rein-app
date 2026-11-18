@@ -6,6 +6,13 @@ import type { Agent } from "./agents.ts";
 
 export const notRunningText = (project: string) => `${project} is not running. Its session ended while the app was closed.`;
 export const missingText = (project: string) => `${project} is not there any more: its folder is gone.`;
+/** V12 9 (E-90): two sessions without the app's tag run in the folder; neither is guessed at. */
+export const twoSessionsText = (project: string) =>
+  `${project} has two sessions running and the app cannot tell which one to open. Close one of them in a terminal (tmux -L rein-app ls), then open the project again.`;
+/** The card's sentence for its kind. */
+export function cardText(kind: "not_running" | "missing" | "two_sessions", project: string): string {
+  return kind === "missing" ? missingText(project) : kind === "two_sessions" ? twoSessionsText(project) : notRunningText(project);
+}
 export const agentsGoneText = (project: string) => `The agents in ${project} are no longer running.`;
 
 /** The first status read of a restored tab: no role pane running means its agents are gone

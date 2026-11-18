@@ -1,0 +1,34 @@
+date: 2026-11-18T08:18:27Z
+wsl.exe: WSL version: 3.0.5.0; distro: Ubuntu; shell: /usr/bin/zsh; tmux: tmux 3.8
+attach script: 727 bytes, quote characters: 0
+
+== lookup: no server yet → no rows
+$ wsl.exe -d Ubuntu -e sh -s -- edf2b4e4660e… < setup script
+  | sessions
+end
+  exit 0 in 141 ms
+
+== lookup: a tagged, an untagged and two untagged of one folder → every row
+$ wsl.exe -d Ubuntu -e sh -s -- edf2b4e4660e… < setup script
+  | sessions
+s|$1||/tmp/e90i.AGG5/adopt
+s|$2||/tmp/e90i.AGG5/twice
+s|$3||/tmp/e90i.AGG5/twice
+s|$0|edf2b4e4660e62b05692478aafc341267b1735e506608a4e081768bc1c78a0ba|/tmp/e90i.AGG5/proj
+end
+  exit 0 in 134 ms
+
+== lookup: a word that is not a tag → exit 26
+$ wsl.exe -d Ubuntu -e sh -s -- sweep… < setup script
+  | 
+  exit 26 in 127 ms
+
+== attach: an adopted id that is gone since the lookup → exit 76, no rein start
+  | not a tty
+  exit 76 in 387 ms
+
+adopt attach run 1: tty line /dev/pts/12; first tmux frame (1049h) at 388 ms; adopted pane marker at 404 ms
+adopt attach run 2: tty line /dev/pts/10; first tmux frame (1049h) at 390 ms; adopted pane marker at 395 ms
+adopt attach run 3: tty line /dev/pts/10; first tmux frame (1049h) at 382 ms; adopted pane marker at 396 ms
+clients now: 0 (the probe ended each attach); sessions: old-adopt old-two-a old-two-b proj 
+rein start run: never (no rein call in the attach script)

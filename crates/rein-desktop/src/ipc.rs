@@ -40,6 +40,16 @@ pub const MAIN_WINDOW: &str = "main";
 /// `clipboard_write` (desktop.md §API): the most text one copy may carry.
 pub const MAX_CLIPBOARD: usize = 64 * 1024;
 
+/// What a tab's open does once the app's server was asked (V12 components 2, 5, 9).
+pub(crate) enum Start {
+    /// Start (or attach with) this child.
+    Spec(ChildSpec),
+    /// A restore with no live session: the "not running" card.
+    NotRunning,
+    /// Two untagged sessions started in the folder: the card, Close project only.
+    Two,
+}
+
 /// An IPC refusal: a stable `kind` for the UI and a plain-words `message`.
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct IpcError {
@@ -200,7 +210,7 @@ impl Desktop {
             Err(e) if restore && e.kind == "not_a_directory" => {
                 let gone =
                     crate::project_path::check(project).map_err(|why| err("unsafe_path", why))?;
-                return self.open_card(gone, server, true);
+                return self.open_card(gone, server, crate::restore::CardKind::Missing);
             }
             other => other?,
         };
@@ -211,8 +221,14 @@ impl Desktop {
                 return self.open_setup(project, server, Some(parent));
             }
         }
-        let Some(spec) = self.start_spec(&project, server, false, restore)? else {
-            return self.open_card(project, server, false);
+        let spec = match self.start_spec(&project, server, false, restore)? {
+            Start::Spec(s) => s,
+            Start::NotRunning => {
+                return self.open_card(project, server, crate::restore::CardKind::NotRunning);
+            }
+            Start::Two => {
+                return self.open_card(project, server, crate::restore::CardKind::TwoSessions);
+            }
         };
         self.open_spec_as(&spec, &project, size, events, server, None)
             .map(crate::project_setup::Opened::Tab)
@@ -223,41 +239,66 @@ impl Desktop {
     /// opened and the window shows the app's fixed sentence. V12 components 2–3: on the app's
     /// server the same setup process answers whether a session tagged for this project is
     /// alive — then the child attaches to it and `rein start` is never run on it.
-    /// With `restore`, `None` when no session is alive for the project: nothing starts.
+    /// With `restore`, [`Start::NotRunning`] when no session is alive for the project:
+    /// nothing starts. V12 9 (E-90): an untagged session started in the folder is adopted;
+    /// two such sessions give [`Start::Two`] — `rein start` never runs while one is alive.
     pub(crate) fn start_spec(
         &self,
         project: &Path,
         server: crate::tmux_server::Server,
         setup: bool,
         restore: bool,
-    ) -> Result<Option<ChildSpec>, IpcError> {
+    ) -> Result<Start, IpcError> {
+        use crate::tmux_server::Lookup;
         if server == crate::tmux_server::Server::App {
             let tag = self.tag_of(project);
-            let found = self
+            let rows = self
                 .platform
                 .tmux_setup(&tag)
                 .map_err(|why| err("tmux_setup", crate::tmux_server::setup_message(why)))?;
-            if found == crate::tmux_server::Lookup::Live {
-                return self.platform.rein_attach(project, &tag).map(Some);
-            }
-            if restore {
-                return Ok(None);
+            // On Linux / macOS a session's path is made canonical here; inside WSL it is
+            // compared as written (the project's own path came from `pwd -P` there).
+            let wsl = self.platform.in_wsl();
+            let canon = |p: &str| {
+                if wsl {
+                    return p.to_string();
+                }
+                std::fs::canonicalize(p)
+                    .map_or_else(|_| p.to_string(), |c| c.to_string_lossy().into_owned())
+            };
+            let here = project.to_string_lossy();
+            match crate::tmux_server::decide(&rows, &tag, &here, &canon) {
+                Lookup::Live => {
+                    return self
+                        .platform
+                        .rein_attach(project, &tag, None)
+                        .map(Start::Spec);
+                }
+                Lookup::Adopt(id) => {
+                    return self
+                        .platform
+                        .rein_attach(project, &tag, Some(&id))
+                        .map(Start::Spec);
+                }
+                Lookup::Two => return Ok(Start::Two),
+                Lookup::None if restore => return Ok(Start::NotRunning),
+                Lookup::None => {}
             }
         }
         if setup {
-            self.platform.rein_setup(project, server).map(Some)
+            self.platform.rein_setup(project, server).map(Start::Spec)
         } else {
-            self.platform.rein_start(project, server).map(Some)
+            self.platform.rein_start(project, server).map(Start::Spec)
         }
     }
 
-    /// A card tab (V12 component 5): an id and the project, counted against the tab limit,
-    /// no process. `missing`: the folder is gone (only Close project is offered).
+    /// A card tab (V12 components 5, 9): an id and the project, counted against the tab
+    /// limit, no process.
     fn open_card(
         &self,
         project: std::path::PathBuf,
         server: crate::tmux_server::Server,
-        missing: bool,
+        kind: crate::restore::CardKind,
     ) -> Result<crate::project_setup::Opened, IpcError> {
         let tabs = self.tabs();
         let waiting = self
@@ -274,14 +315,14 @@ impl Desktop {
             id,
             project: project.to_string_lossy().into_owned(),
             title: title_of(&project),
-            missing,
+            kind,
         };
         cards.insert(
             id,
             crate::restore::Card {
                 project,
                 server,
-                missing,
+                kind,
             },
         );
         Ok(crate::project_setup::Opened::Card { card: view })
@@ -343,9 +384,12 @@ impl Desktop {
                 "this folder is inside a Rein project — open that project instead",
             ));
         }
-        let spec = self
-            .start_spec(&s.project, s.server, true, false)?
-            .ok_or_else(|| err("spawn", "nothing to start"))?;
+        let Start::Spec(spec) = self.start_spec(&s.project, s.server, true, false)? else {
+            return Err(err(
+                "two_sessions",
+                "two sessions are already running for this folder — close one first",
+            ));
+        };
         // Taken out under the tabs lock in `open_spec_as`, so it counts once throughout.
         self.open_spec_as(&spec, &s.project, size, events, s.server, Some(tab))
     }
@@ -1065,10 +1109,10 @@ mod tests {
         ) -> Result<ChildSpec, IpcError> {
             unreachable!()
         }
-        fn tmux_setup(&self, _: &str) -> Result<crate::tmux_server::Lookup, &'static str> {
+        fn tmux_setup(&self, _: &str) -> Result<Vec<crate::tmux_server::SessionRow>, &'static str> {
             unreachable!()
         }
-        fn rein_attach(&self, _: &Path, _: &str) -> Result<ChildSpec, IpcError> {
+        fn rein_attach(&self, _: &Path, _: &str, _: Option<&str>) -> Result<ChildSpec, IpcError> {
             unreachable!()
         }
         fn read_project_file(

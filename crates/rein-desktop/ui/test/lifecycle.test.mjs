@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as lifecycle from "../src/lifecycle.ts";
-import { agentsGone, agentsGoneText, missingText, notRunningText, recordOf } from "../src/restore.ts";
+import { agentsGone, agentsGoneText, cardText, missingText, notRunningText, recordOf } from "../src/restore.ts";
 const { closeTabText, closedNote } = lifecycle;
 
 test("the confirm names who stops; quit has no confirm text (V12)", () => {
@@ -25,6 +25,10 @@ test("a restored tab's card and bar say what happened, in the blueprint's words"
   assert.equal(notRunningText("rein-app"), "rein-app is not running. Its session ended while the app was closed.");
   assert.equal(agentsGoneText("rein-app"), "The agents in rein-app are no longer running.");
   assert.match(missingText("p"), /folder is gone/);
+  // E-90 (V12 9): two untagged sessions for the folder — said plainly, with the way out.
+  assert.match(cardText("two_sessions", "p"), /two sessions running.*tmux -L rein-app ls/);
+  assert.equal(cardText("not_running", "p"), notRunningText("p"));
+  assert.equal(cardText("missing", "p"), missingText("p"));
 });
 
 test("on the first status read, no role running means the agents are gone", () => {

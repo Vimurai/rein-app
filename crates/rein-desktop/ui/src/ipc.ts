@@ -84,8 +84,9 @@ export interface CardView {
   id: number;
   project: string;
   title: string;
-  /** The folder is gone: only Close project. */
-  missing: boolean;
+  /** not_running: Start / Close project; missing (the folder is gone) and two_sessions (V12 9:
+   *  two untagged sessions run for the folder): Close project only. */
+  kind: "not_running" | "missing" | "two_sessions";
 }
 /** The card's Start: `rein start` in place of the card, under its id. */
 export const tabStart = (tab: number, cols: number, rows: number, output: Channel<ArrayBuffer>) =>

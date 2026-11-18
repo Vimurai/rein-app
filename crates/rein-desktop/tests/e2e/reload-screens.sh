@@ -39,7 +39,7 @@ cat >"$W/bin/tmux" <<EOF
 #!/bin/sh
 sock="$W/default.sock"
 for a in "\$@"; do [ "\$a" = rein-app ] && sock="$W/app.sock"; done
-exec "$REAL_TMUX" -S "\$sock" "\$@"
+exec "$REAL_TMUX" -S "\$sock" -f /dev/null "\$@"
 EOF
 chmod +x "$W/bin/tmux"
 cat >"$W/home/.rein/bin/rein" <<EOF
@@ -68,8 +68,8 @@ esac
 exit 2
 EOF
 chmod +x "$W/home/.rein/bin/rein"
-TA() { "$REAL_TMUX" -S "$W/app.sock" "$@"; }
-TD() { "$REAL_TMUX" -S "$W/default.sock" "$@"; }
+TA() { "$REAL_TMUX" -S "$W/app.sock" -f /dev/null "$@"; } # -f: never the operator's ~/.tmux.conf
+TD() { "$REAL_TMUX" -S "$W/default.sock" -f /dev/null "$@"; }
 X() { "$W/bin/xinput" "$@"; sleep 0.7; }
 shot() { ffmpeg -loglevel error -y -f x11grab -draw_mouse 0 -video_size "${GW}x${GH}" -i "$DISPLAY" -frames:v 1 "$OUT/$1-${GW}x${GH}.png" && echo "  $OUT/$1-${GW}x${GH}.png"; }
 fails=0

@@ -72,21 +72,20 @@ for f in "$H/bin/tmux" "$H/tmux.conf"; do
   [ -O "$f" ] || exit 23
 done
 
-# V12 (D-061, E-69): the live lookup. With a project tag as the one positional word, answer on
-# stdout whether a session of the app's own server carries that tag in its user option
-# `@rein_app_project`: `live` or `none` (no server, no tmux: `none`). Only the app's socket is
-# read; nothing is started, attached or ended. The tag is re-checked here: exactly 64 lower-case
-# hex characters, else exit 26.
+# V12 (D-061, E-69; component 9, E-90): the live lookup. With a project tag as the one positional
+# word (re-checked: exactly 64 lower-case hex characters, else exit 26), list every session of the
+# app's own server — `s|<session id>|<tag>|<session_path>`, between the lines `sessions` and
+# `end` — and the app decides (tmux_server::decide): its tag → attach; one untagged session in the
+# same folder → adopt it; two → a card; none → start. No server or no tmux: no rows. Only the
+# app's socket is read; nothing is started, attached or ended, and no path is passed in.
 if [ $# -gt 0 ]; then
   tag=$1
   [ ${#tag} -eq 64 ] || exit 26
   case $tag in *[!0-9a-f]*) exit 26 ;; esac
   unset TMUX TMUX_PANE
-  if command -v tmux >/dev/null 2>&1 &&
-    tmux -L rein-app list-sessions -F '#{@rein_app_project}' 2>/dev/null | grep -qx "$tag"; then
-    echo live
-  else
-    echo none
-  fi
+  echo sessions
+  command -v tmux >/dev/null 2>&1 &&
+    tmux -L rein-app list-sessions -F 's|#{session_id}|#{@rein_app_project}|#{session_path}' 2>/dev/null
+  echo end
 fi
 exit 0

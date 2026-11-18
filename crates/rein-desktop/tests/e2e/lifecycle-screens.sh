@@ -51,7 +51,7 @@ cat >"$W/bin/tmux" <<EOF
 #!/bin/sh
 sock="$W/default.sock"
 for a in "\$@"; do [ "\$a" = rein-app ] && sock="$W/app.sock"; done
-exec "$REAL_TMUX" -S "\$sock" "\$@"
+exec "$REAL_TMUX" -S "\$sock" -f /dev/null "\$@"
 EOF
 chmod +x "$W/bin/tmux"
 cat >"$W/home/.rein/bin/rein" <<EOF
@@ -80,8 +80,8 @@ esac
 exit 2
 EOF
 chmod +x "$W/home/.rein/bin/rein"
-TA() { "$REAL_TMUX" -S "$W/app.sock" "$@"; }
-TD() { "$REAL_TMUX" -S "$W/default.sock" "$@"; }
+TA() { "$REAL_TMUX" -S "$W/app.sock" -f /dev/null "$@"; } # -f: never the operator's ~/.tmux.conf
+TD() { "$REAL_TMUX" -S "$W/default.sock" -f /dev/null "$@"; }
 X() { "$W/bin/xinput" "$@"; sleep 0.7; }
 shot() { ffmpeg -loglevel error -y -f x11grab -draw_mouse 0 -video_size "${GW}x${GH}" -i "$DISPLAY" -frames:v 1 "$OUT/$1-${GW}x${GH}.png" && echo "  $OUT/$1-${GW}x${GH}.png"; }
 fails=0
@@ -201,6 +201,32 @@ for theme in catppuccin-mocha github-light; do
   TD kill-server 2>/dev/null
   sleep 0.5
 done
+
+# E-90 (V12 9): sessions an older build left untagged. Adopted when exactly one runs in the
+# project's folder; two give a card; a session of another folder is not adopted.
+echo "[untagged sessions]"
+: >"$W/rein.log"
+rm -f "$W/xdg/state/rein-app/projects.json"
+ad="$W/Dev/adopt" two="$W/Dev/twice" oth="$W/Dev/other-folder" nw="$W/Dev/fresh"
+mkdir -p "$ad/.ai" "$two/.ai" "$oth/.ai" "$nw/.ai"
+TA new-session -d -s old-adopt -c "$ad" -x 120 -y 30 "echo old-adopt pane; sleep 600"
+TA new-session -d -s old-two-a -c "$two" "sleep 600"
+TA new-session -d -s old-two-b -c "$two" "sleep 600"
+TA new-session -d -s old-other -c "$oth" "sleep 600"
+app catppuccin-mocha app "$ad"
+sleep 8
+check "adopt: no rein start" "" "$(cat "$W/rein.log")"
+check "adopt: the app's client is on the old session" old-adopt "$(TA list-clients -F '#{session_name}' 2>/dev/null)"
+check "adopt: the session carries the tag now" "$(tag "$ad")" "$(tag_of old-adopt)"
+second "$two"; sleep 6
+shot "two-sessions-card"
+check "two sessions: nothing started, nothing attached to them" "|0 0" "$(cat "$W/rein.log")|$(TA list-clients -t old-two-a 2>/dev/null | wc -l | tr -d ' ') $(TA list-clients -t old-two-b 2>/dev/null | wc -l | tr -d ' ')"
+second "$nw"; sleep 6
+check "a session of another folder is not adopted: the new project starts" "fresh: start" "$(cat "$W/rein.log")"
+check "  ... and the other folder's session has no client" 0 "$(TA list-clients -t old-other 2>/dev/null | wc -l | tr -d ' ')"
+X key ctrl+shift+q; gone >/dev/null
+[ -n "$APP" ] && { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; }
+TA kill-server 2>/dev/null
 
 # tmux.server = "user": something on the app's socket and the user's own session both stay.
 echo "[user server]"

@@ -156,7 +156,7 @@ impl Host for LocalHost {
 
     /// `/bin/sh -s -- <tag>` with the setup script on stdin, in `/`, the start's variables
     /// removed; its one line of output is the lookup's answer.
-    fn tmux_setup(&self, tag: &str) -> Result<crate::tmux_server::Lookup, &'static str> {
+    fn tmux_setup(&self, tag: &str) -> Result<Vec<crate::tmux_server::SessionRow>, &'static str> {
         if !crate::session_tag::is_tag(tag) {
             return Err(crate::tmux_server::setup_reason(Some(26)));
         }
@@ -176,19 +176,28 @@ impl Host for LocalHost {
         ))
     }
 
-    /// `/bin/sh -c <attach script> sh <tag>` in the project (V12 component 3).
-    fn rein_attach(&self, project: &Path, tag: &str) -> Result<ChildSpec, IpcError> {
-        if !crate::session_tag::is_tag(tag) {
+    /// `/bin/sh -c <attach script> sh <tag> [<session id>]` in the project (V12 components 3, 9).
+    fn rein_attach(
+        &self,
+        project: &Path,
+        tag: &str,
+        adopt: Option<&str>,
+    ) -> Result<ChildSpec, IpcError> {
+        if !crate::session_tag::is_tag(tag)
+            || adopt.is_some_and(|id| !crate::tmux_server::session_id_ok(id))
+        {
             return Err(err("tmux_setup", "the app's project tag was refused"));
         }
+        let mut args: Vec<std::ffi::OsString> = vec![
+            "-c".into(),
+            crate::tmux_server::attach_script().into(),
+            "sh".into(),
+            tag.into(),
+        ];
+        args.extend(adopt.map(Into::into));
         Ok(ChildSpec {
             program: PathBuf::from("/bin/sh"),
-            args: vec![
-                "-c".into(),
-                crate::tmux_server::attach_script().into(),
-                "sh".into(),
-                tag.into(),
-            ],
+            args,
             cwd: Some(project.to_path_buf()),
             env_remove: ENV_REMOVED,
             env_set: ENV_SET,

@@ -451,13 +451,14 @@ mod tests {
         ) -> Result<crate::project_file::FileBytes, crate::project_file::Unavailable> {
             unreachable!()
         }
-        fn tmux_setup(&self, _: &str) -> Result<crate::tmux_server::Lookup, &'static str> {
+        fn tmux_setup(&self, _: &str) -> Result<Vec<crate::tmux_server::SessionRow>, &'static str> {
             unreachable!()
         }
         fn rein_attach(
             &self,
             _: &std::path::Path,
             _: &str,
+            _: Option<&str>,
         ) -> Result<crate::pty::ChildSpec, IpcError> {
             unreachable!()
         }

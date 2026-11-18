@@ -48,7 +48,7 @@ for h in xresize xtitle xmap; do cc -O2 -o "$W/bin/$h" "$E2E/$h.c" -lX11 || exit
 cc -O2 -o "$W/bin/xinput" "$E2E/xinput.c" -lX11 -lXtst || exit 2
 cat >"$W/bin/tmux" <<EOF
 #!/bin/sh
-exec "$REAL_TMUX" -S "$W/tmux.sock" "\$@"
+exec "$REAL_TMUX" -S "$W/tmux.sock" -f /dev/null "\$@"
 EOF
 chmod +x "$W/bin/tmux"
 # The typing reader: one stamp (ns) per byte that reaches the pane.
@@ -119,7 +119,7 @@ PY
 MD
 }
 
-T() { "$REAL_TMUX" -S "$W/tmux.sock" "$@"; }
+T() { "$REAL_TMUX" -S "$W/tmux.sock" -f /dev/null "$@"; } # -f: never the operator's ~/.tmux.conf
 X() { "$W/bin/xinput" "$@"; sleep 0.7; }
 shot() { ffmpeg -loglevel error -y -f x11grab -draw_mouse 0 -video_size "${GW}x${GH}" -i "$DISPLAY" -frames:v 1 "$OUT/$1-${GW}x${GH}.png" && echo "  $OUT/$1-${GW}x${GH}.png"; }
 fails=0

@@ -22,19 +22,21 @@ const START: &str = include_str!("tmux_start.sh");
 /// The attach path (V12 component 3, E-69): after the start script's checks and `PATH`, the
 /// tag (`$1`) is re-checked as 64 hex, the session carrying it is looked up again on the app's
 /// server, its id checked as `$` plus digits, and `tmux attach` is exec'd on that id. A session
-/// gone since the lookup exits [`ATTACH_GONE`]; it never falls back to `rein start`. One line,
+/// gone since the lookup exits [`ATTACH_GONE`]; it never falls back to `rein start`. With a
+/// second word (an adoption, V12 9) that session id is used — checked the same way — instead
+/// of a lookup by the tag. One line,
 /// no quote character: `#` only inside a word (an interactive shell's comment starts a word).
 fn attach_tail() -> String {
     format!(
-        "echo $1 | grep -qxE [0-9a-f]{{64}} || exit {ATTACH_REFUSED}; s=; for l in $(tmux list-sessions -F x#{{session_id}}:#{{@rein_app_project}} 2>/dev/null); do case $l in *:$1) s=${{l%%:*}};; esac; done; n=${{s#x?}}; [ ${{#n}} -gt 0 ] || exit {ATTACH_GONE}; echo $n | grep -qxE [0-9]+ || exit {ATTACH_GONE}; [ ${{s%$n}} = x$ ] || exit {ATTACH_GONE}; exec tmux attach -t ${{s#x}}"
+        "echo $1 | grep -qxE [0-9a-f]{{64}} || exit {ATTACH_REFUSED}; s=; if [ $# -ge 2 ]; then s=x$2; tmux has-session -t $2 2>/dev/null || exit {ATTACH_GONE}; else for l in $(tmux list-sessions -F x#{{session_id}}:#{{@rein_app_project}} 2>/dev/null); do case $l in *:$1) s=${{l%%:*}};; esac; done; fi; n=${{s#x?}}; [ ${{#n}} -gt 0 ] || exit {ATTACH_GONE}; echo $n | grep -qxE [0-9]+ || exit {ATTACH_GONE}; [ ${{s%$n}} = x$ ] || exit {ATTACH_GONE}; exec tmux attach -t ${{s#x}}"
     )
 }
 /// The attach script's word was not a tag (the app never sends one that is not).
 pub const ATTACH_REFUSED: i32 = 75;
 /// The attach script found no session with the tag: it ended between the lookup and the attach.
 pub const ATTACH_GONE: i32 = 76;
-/// The most output the setup's lookup may print (one word).
-pub const SETUP_CAP: u64 = 4096;
+/// The most output the setup's lookup may print (a row per session of the app's server).
+pub const SETUP_CAP: u64 = 256 * 1024;
 
 /// How long the setup may run (V8 "Execution constraints").
 pub const SETUP_LIMIT: Duration = Duration::from_secs(15);
@@ -106,13 +108,56 @@ pub fn attach_script_wsl() -> String {
     )
 }
 
-/// The setup's live lookup (V12 component 2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// One session of the app's server as the setup's lookup lists it (V12 component 9).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionRow {
+    /// tmux's id: `$` and digits.
+    pub id: String,
+    /// `@rein_app_project`: 64 hex, or empty when the session was never tagged.
+    pub tag: String,
+    /// The session's start directory.
+    pub path: String,
+}
+
+/// What a tab opening on the app's server does (V12 components 2, 9).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Lookup {
-    /// A session on the app's server carries the tab's tag: attach to it.
+    /// A session carries the tab's tag: attach to it.
     Live,
-    /// None does (or no server runs): `rein start`.
+    /// No session carries the tag, but exactly one untagged session started in the tab's
+    /// folder: attach to that id (the attach step then tags it).
+    Adopt(String),
+    /// Two or more untagged sessions started in the tab's folder: neither is guessed at.
+    Two,
+    /// No session for the folder (or no server): `rein start`.
     None,
+}
+
+/// The decision, in Rust (V12 component 9): `canon` makes a session's path canonical as the
+/// tab's `project` already is (on Windows the path inside WSL is compared as written).
+pub fn decide(
+    rows: &[SessionRow],
+    tag: &str,
+    project: &str,
+    canon: &dyn Fn(&str) -> String,
+) -> Lookup {
+    if rows.iter().any(|r| r.tag == tag) {
+        return Lookup::Live;
+    }
+    let mine: Vec<&SessionRow> = rows
+        .iter()
+        .filter(|r| r.tag.is_empty() && canon(&r.path) == project)
+        .collect();
+    match mine.as_slice() {
+        [] => Lookup::None,
+        [one] => Lookup::Adopt(one.id.clone()),
+        _ => Lookup::Two,
+    }
+}
+
+/// `$` and digits: a tmux session id, the only form passed to the attach script.
+pub fn session_id_ok(id: &str) -> bool {
+    id.len() > 1 && id.starts_with('$') && id[1..].bytes().all(|b| b.is_ascii_digit())
 }
 
 /// The start script inside WSL: the same, printing the tty first (V6 "Client tty").
@@ -157,19 +202,41 @@ pub fn setup_message(why: &str) -> String {
     format!("tmux setup failed: {why}. {USE_YOUR_OWN}.")
 }
 
-/// A finished setup run as the host reports it, with its lookup's answer: the last line of
-/// its output, `live` or `none` (a login shell's start-up text may come first).
+/// A finished setup run as the host reports it, with its lookup's rows: the lines between
+/// `sessions` and `end` (a login shell's start-up text may come first). A row that is not
+/// `s|$N|<64 hex or empty>|<path>` is left out; no `end` is no answer.
 pub fn setup_outcome(
     run: std::io::Result<Option<rein_platform::process::Output>>,
-) -> Result<Lookup, &'static str> {
+) -> Result<Vec<SessionRow>, &'static str> {
     match run {
         Ok(Some((Some(0), out))) => {
             let text = String::from_utf8_lossy(&out);
-            match text.lines().map(str::trim).rfind(|l| !l.is_empty()) {
-                Some("live") => Ok(Lookup::Live),
-                Some("none") => Ok(Lookup::None),
-                _ => Err(setup_reason(Some(-1))),
+            let lines: Vec<&str> = text.lines().map(|l| l.trim_end_matches('\r')).collect();
+            let start = lines.iter().rposition(|l| *l == "sessions");
+            let end = lines.iter().rposition(|l| *l == "end");
+            let (Some(a), Some(b)) = (start, end) else {
+                return Err(setup_reason(Some(-1)));
+            };
+            if b < a {
+                return Err(setup_reason(Some(-1)));
             }
+            Ok(lines[a + 1..b]
+                .iter()
+                .filter_map(|l| {
+                    let mut p = l.splitn(4, '|');
+                    let (Some("s"), Some(id), Some(tag), Some(path)) =
+                        (p.next(), p.next(), p.next(), p.next())
+                    else {
+                        return None;
+                    };
+                    let tag_ok = tag.is_empty() || crate::session_tag::is_tag(tag);
+                    (session_id_ok(id) && tag_ok && path.starts_with('/')).then(|| SessionRow {
+                        id: id.into(),
+                        tag: tag.into(),
+                        path: path.into(),
+                    })
+                })
+                .collect())
         }
         Ok(Some((code, _))) => Err(setup_reason(code)),
         Ok(None) => Err(setup_reason(None)),
@@ -313,6 +380,55 @@ mod tests {
         assert!(attach_script_wsl().contains("PATH=$H/bin:$PATH; tty; echo $1"));
     }
 
+    /// V12 component 9 (E-90): the decision, as a table.
+    #[test]
+    fn a_tagged_session_attaches_one_untagged_in_the_folder_is_adopted_two_are_not_guessed() {
+        let t = "b".repeat(64);
+        let other = "c".repeat(64);
+        let row = |id: &str, tag: &str, path: &str| SessionRow {
+            id: id.into(),
+            tag: tag.into(),
+            path: path.into(),
+        };
+        let same = |p: &str| p.trim_end_matches('/').to_string();
+        let d = |rows: &[SessionRow]| decide(rows, &t, "/home/me/p", &same);
+        assert_eq!(d(&[]), Lookup::None);
+        assert_eq!(
+            d(&[row("$1", &t, "/elsewhere")]),
+            Lookup::Live,
+            "the tag wins wherever it started"
+        );
+        assert_eq!(
+            d(&[row("$2", "", "/home/me/p/")]),
+            Lookup::Adopt("$2".into()),
+            "made canonical"
+        );
+        assert_eq!(
+            d(&[row("$2", "", "/home/me/p"), row("$5", "", "/home/me/p")]),
+            Lookup::Two
+        );
+        assert_eq!(
+            d(&[row("$2", "", "/home/me/other")]),
+            Lookup::None,
+            "another folder is not adopted"
+        );
+        assert_eq!(
+            d(&[row("$2", &other, "/home/me/p")]),
+            Lookup::None,
+            "tagged for another project"
+        );
+        assert_eq!(
+            d(&[row("$2", &t, "/home/me/p"), row("$5", "", "/home/me/p")]),
+            Lookup::Live
+        );
+        assert!(
+            session_id_ok("$12")
+                && !session_id_ok("$")
+                && !session_id_ok("12")
+                && !session_id_ok("$1;x")
+        );
+    }
+
     #[test]
     fn every_setup_exit_has_a_fixed_sentence() {
         for code in [
@@ -328,16 +444,32 @@ mod tests {
         ] {
             assert!(!setup_reason(code).is_empty());
         }
-        assert_eq!(
-            setup_outcome(Ok(Some((Some(0), b"live\n".to_vec())))),
-            Ok(Lookup::Live)
+        let tag = "a".repeat(64);
+        let out = format!(
+            "motd from a login shell\nsessions\ns|$3|{tag}|/home/me/p\ns|$1||/home/me/q|with bar\ns|x9||/odd\ns|$4|short|/home/me/r\nnot a row\nend\n"
         );
         assert_eq!(
-            setup_outcome(Ok(Some((Some(0), b"motd\nnone\n".to_vec())))),
-            Ok(Lookup::None)
+            setup_outcome(Ok(Some((Some(0), out.into_bytes())))),
+            Ok(vec![
+                SessionRow {
+                    id: "$3".into(),
+                    tag: tag.clone(),
+                    path: "/home/me/p".into()
+                },
+                SessionRow {
+                    id: "$1".into(),
+                    tag: String::new(),
+                    path: "/home/me/q|with bar".into()
+                },
+            ]),
+            "a row of another shape is left out; a path may hold `|`"
         );
-        // No answer, or another word: not a lookup the app acts on.
-        for out in [&b""[..], b"maybe\n", b"live\nextra\n"] {
+        assert_eq!(
+            setup_outcome(Ok(Some((Some(0), b"sessions\nend\n".to_vec())))),
+            Ok(vec![])
+        );
+        // No end line (cut off), or no lookup at all: not an answer the app acts on.
+        for out in [&b""[..], b"sessions\ns|$1||/p\n", b"live\n"] {
             assert!(setup_outcome(Ok(Some((Some(0), out.to_vec())))).is_err());
         }
         assert_eq!(

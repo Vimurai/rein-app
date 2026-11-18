@@ -298,7 +298,7 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
     /// `wsl.exe -d D -e sh -s -- <tag>` with the setup script on stdin (V8 3a): the tmux home
     /// inside WSL, and the live lookup's answer on stdout (V12 component 2). Only the distro's
     /// name and the tag (64 hex) are put in argv; the script is a constant.
-    fn tmux_setup(&self, tag: &str) -> Result<crate::tmux_server::Lookup, &'static str> {
+    fn tmux_setup(&self, tag: &str) -> Result<Vec<crate::tmux_server::SessionRow>, &'static str> {
         if !crate::session_tag::is_tag(tag) {
             return Err(crate::tmux_server::setup_reason(Some(26)));
         }
@@ -320,8 +320,15 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
 
     /// The tab's own `wsl.exe` start (same distro, `--cd`, shell and flags) running the attach
     /// script, the tag its one positional word (V12 component 3); the tty line first.
-    fn rein_attach(&self, project: &Path, tag: &str) -> Result<ChildSpec, IpcError> {
-        if !crate::session_tag::is_tag(tag) {
+    fn rein_attach(
+        &self,
+        project: &Path,
+        tag: &str,
+        adopt: Option<&str>,
+    ) -> Result<ChildSpec, IpcError> {
+        if !crate::session_tag::is_tag(tag)
+            || adopt.is_some_and(|id| !crate::tmux_server::session_id_ok(id))
+        {
             return Err(err("tmux_setup", "the app's project tag was refused"));
         }
         let mut spec = self.rein_start(project, crate::tmux_server::Server::App)?;
@@ -330,6 +337,7 @@ impl<S: WslShell + Send + Sync> Host for WslHost<S> {
         }
         spec.args
             .extend([OsString::from("sh"), OsString::from(tag)]);
+        spec.args.extend(adopt.map(OsString::from));
         Ok(spec)
     }
 

@@ -18,13 +18,25 @@ use crate::ipc::{Desktop, IpcError, Tab, channel_events, err, validate_size};
 use crate::projects::{OpenTab, ProjectStore};
 use crate::tmux_server::Server;
 
-/// A restored tab with no process.
+/// Why a tab has a card and no process.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CardKind {
+    /// Restored, its session ended while the app was closed: Start / Close project.
+    NotRunning,
+    /// The folder is gone: Close project only.
+    Missing,
+    /// Two untagged sessions run for the folder (V12 9): Close project only — neither is
+    /// guessed at, and `rein start` would start a third.
+    TwoSessions,
+}
+
+/// A tab with no process.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Card {
     pub project: PathBuf,
     pub server: Server,
-    /// The folder is gone: only Close project is offered.
-    pub missing: bool,
+    pub kind: CardKind,
 }
 
 /// A card as the web side sees it.
@@ -33,7 +45,7 @@ pub struct CardView {
     pub id: u32,
     pub project: String,
     pub title: String,
-    pub missing: bool,
+    pub kind: CardKind,
 }
 
 /// The project a tab of this window stands for: a started tab, a set-up tab or a card.
@@ -85,12 +97,16 @@ pub fn start(
         .get(&tab)
         .cloned()
         .ok_or_else(|| err("unknown_tab", "the tab is not waiting to start"))?;
-    if card.missing {
-        return Err(err("missing", "the project's folder is gone"));
+    if card.kind != CardKind::NotRunning {
+        return Err(err("missing", "this card offers Close project only"));
     }
-    let spec = d
-        .start_spec(&card.project, card.server, false, false)?
-        .ok_or_else(|| err("spawn", "nothing to start"))?;
+    let crate::ipc::Start::Spec(spec) = d.start_spec(&card.project, card.server, false, false)?
+    else {
+        return Err(err(
+            "two_sessions",
+            "two sessions are already running for this folder — close one first",
+        ));
+    };
     // Taken out of the cards under the tabs lock in `open_spec_as`.
     d.open_spec_as(&spec, &card.project, size, events, card.server, Some(tab))
 }
@@ -204,15 +220,15 @@ mod tests {
             panic!("a card")
         };
         assert_eq!(
-            (card.project.as_str(), card.title.as_str(), card.missing),
-            ("/p/dead", "dead", false)
+            (card.project.as_str(), card.title.as_str(), card.kind),
+            ("/p/dead", "dead", CardKind::NotRunning)
         );
         assert_eq!(take(), ["setup none"], "looked up, nothing started");
         // The folder is gone: a missing card, not even a lookup.
         let Opened::Card { card: gone } = restore(&d, "/gone/x", Server::App) else {
             panic!("a missing card")
         };
-        assert!(gone.missing);
+        assert_eq!(gone.kind, CardKind::Missing);
         assert_eq!(take(), Vec::<String>::new());
         // Without restore a gone folder is the error it always was.
         assert!(
@@ -272,6 +288,48 @@ mod tests {
             Opened::Tab(_)
         ));
         assert_eq!(take(), ["setup live", "attach /p/live"]);
+        d.detach_all();
+    }
+
+    /// V12 component 9 (E-90): a live session without the tag is adopted, never started
+    /// again; two for the folder give a card; another folder's session is not adopted.
+    #[test]
+    fn an_untagged_session_in_the_folder_is_adopted_two_give_a_card() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let rows = vec![
+            "@/p/one".to_string(),
+            "@/p/two".to_string(),
+            "@/p/two".to_string(),
+            "@/p/else".to_string(),
+        ];
+        let d = Desktop::new(Box::new(Rec(Arc::clone(&log), rows)));
+        let take = || std::mem::take(&mut *log.lock().unwrap());
+        let open = |p: &str, restore: bool| {
+            d.open_as(p, 80, 24, Arc::new(Quiet), Server::App, restore)
+                .unwrap()
+        };
+        // One untagged session started in /p/one: attached by its id, no rein start.
+        assert!(matches!(open("/p/one", false), Opened::Tab(_)));
+        assert_eq!(take(), ["setup none", "attach /p/one $1"]);
+        // Two in /p/two: a card, Close project only — on a normal open and on a restore.
+        for restore in [false, true] {
+            let Opened::Card { card } = open("/p/two", restore) else {
+                panic!("two sessions: a card")
+            };
+            assert_eq!(card.kind, CardKind::TwoSessions);
+            assert_eq!(
+                start(&d, card.id, 80, 24, Arc::new(Quiet))
+                    .unwrap_err()
+                    .kind,
+                "missing",
+                "no Start"
+            );
+            d.detach(card.id);
+        }
+        assert_eq!(take(), ["setup none", "setup none"], "nothing started");
+        // A session of another folder is not adopted: /p/new starts as before.
+        assert!(matches!(open("/p/new", false), Opened::Tab(_)));
+        assert_eq!(take(), ["setup none", "start /p/new app"]);
         d.detach_all();
     }
 

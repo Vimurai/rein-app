@@ -116,14 +116,21 @@ pub trait Host: Send + Sync {
     /// Make or check the tmux home before a tab opens on the app's server (V8 3a): the
     /// constant setup script on stdin — `/bin/sh -s` here, `sh -s` inside WSL on Windows —
     /// with the project's `tag` (64 hex, [`crate::session_tag`]) as its one word. The same
-    /// process answers the live lookup (V12 component 2): whether a session on the app's
-    /// server carries that tag. `Err` is the app's fixed sentence for why not.
-    fn tmux_setup(&self, tag: &str) -> Result<crate::tmux_server::Lookup, &'static str>;
+    /// process answers the live lookup (V12 components 2, 9): every session of the app's
+    /// server with its tag and start directory — the core decides
+    /// ([`crate::tmux_server::decide`]). `Err` is the app's fixed sentence for why not.
+    fn tmux_setup(&self, tag: &str) -> Result<Vec<crate::tmux_server::SessionRow>, &'static str>;
 
     /// The pty child that attaches to the session tagged `tag` on the app's server (V12
-    /// component 3), in `project`: the constant attach script with the tag as its one word.
-    /// It never runs `rein start`.
-    fn rein_attach(&self, project: &Path, tag: &str) -> Result<ChildSpec, IpcError>;
+    /// component 3), in `project`: the constant attach script with the tag as its word — and,
+    /// adopting an untagged session (component 9), its id (`$` + digits) as the second. It
+    /// never runs `rein start`.
+    fn rein_attach(
+        &self,
+        project: &Path,
+        tag: &str,
+        adopt: Option<&str>,
+    ) -> Result<ChildSpec, IpcError>;
 
     /// `:open` Tab completion (E-36): directories whose path starts with `prefix`, each ending
     /// in `/`, a bounded number, sorted. Hidden ones only when the typed name

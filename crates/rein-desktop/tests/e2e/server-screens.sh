@@ -53,7 +53,7 @@ cp "$REPO/.ai/roles.json" "$W/Dev/schraubr_laravel/.ai/roles.json"
 # The `default` account (~/.claude, linked above): rein refuses an account whose directory is
 # not under HOME, and the throwaway HOME only links to the real ones.
 printf '{\n  "account": "default"\n}\n' >"$W/Dev/schraubr_laravel/.ai/start.json"
-T() { "$REAL_TMUX" -S "$W/tmux.sock" "$@"; }
+T() { "$REAL_TMUX" -S "$W/tmux.sock" -f /dev/null "$@"; } # -f: never the operator's ~/.tmux.conf
 
 started=""
 for n in $(seq 90 130); do

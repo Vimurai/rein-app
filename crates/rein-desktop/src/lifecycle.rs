@@ -113,24 +113,43 @@ pub(crate) mod tests {
         ) -> Result<crate::project_file::FileBytes, crate::project_file::Unavailable> {
             unreachable!()
         }
-        fn tmux_setup(&self, tag: &str) -> Result<crate::tmux_server::Lookup, &'static str> {
+        /// `.1`: the app server's sessions — a tag (a tagged session) or `@<path>` (an
+        /// untagged session started in that folder, E-90).
+        fn tmux_setup(
+            &self,
+            tag: &str,
+        ) -> Result<Vec<crate::tmux_server::SessionRow>, &'static str> {
             let live = self.1.iter().any(|t| t == tag);
             self.0
                 .lock()
                 .unwrap()
                 .push(format!("setup {}", if live { "live" } else { "none" }));
-            Ok(if live {
-                crate::tmux_server::Lookup::Live
-            } else {
-                crate::tmux_server::Lookup::None
-            })
+            Ok(self
+                .1
+                .iter()
+                .enumerate()
+                .map(|(i, t)| crate::tmux_server::SessionRow {
+                    id: format!("${}", i + 1),
+                    tag: if t.starts_with('@') {
+                        String::new()
+                    } else {
+                        t.clone()
+                    },
+                    path: t.strip_prefix('@').unwrap_or("/tagged").to_string(),
+                })
+                .collect())
         }
-        fn rein_attach(&self, project: &Path, tag: &str) -> Result<ChildSpec, IpcError> {
+        fn rein_attach(
+            &self,
+            project: &Path,
+            tag: &str,
+            adopt: Option<&str>,
+        ) -> Result<ChildSpec, IpcError> {
             assert_eq!(tag, crate::session_tag::tag(None, project));
-            self.0
-                .lock()
-                .unwrap()
-                .push(format!("attach {}", project.display()));
+            self.0.lock().unwrap().push(match adopt {
+                Some(id) => format!("attach {} {id}", project.display()),
+                None => format!("attach {}", project.display()),
+            });
             Ok(sleeper(project))
         }
         fn complete_dir(&self, _: &str) -> Result<Vec<String>, IpcError> {

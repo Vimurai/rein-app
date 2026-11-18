@@ -9,7 +9,7 @@ import { useEffect, useRef } from "react";
 import { Button } from "../components/button.tsx";
 import { Card } from "../components/card.tsx";
 import { Spinner } from "../components/loaders.tsx";
-import { agentsGoneText, missingText, notRunningText, recordOf, type RecordTab } from "./restore.ts";
+import { agentsGoneText, cardText, recordOf, type RecordTab } from "./restore.ts";
 import { projectClose, tabsRecord, tabsRestore, type CardView } from "./ipc.ts";
 export { agentsGone } from "./restore.ts";
 
@@ -78,15 +78,15 @@ export function RestoreCard({ t, rerender, onClose }: { t: RestoredTab; rerender
       <Card className="grid w-[min(560px,100%)] gap-4 p-5">
         <div className="grid gap-1">
           <h2 className="m-0 text-[15px] font-semibold [overflow-wrap:anywhere] text-foreground">
-            {card.missing ? missingText(t.title) : notRunningText(t.title)}
+            {cardText(card.kind, t.title)}
           </h2>
           <code className="font-mono text-[12px] [overflow-wrap:anywhere] text-muted-foreground">{t.project}</code>
         </div>
         <div className="flex justify-end gap-2">
-          <Button ref={card.missing ? first : undefined} onClick={onClose}>
+          <Button ref={card.kind !== "not_running" ? first : undefined} onClick={onClose}>
             Close project
           </Button>
-          {!card.missing && (
+          {card.kind === "not_running" && (
             <Button
               ref={first}
               variant="primary"

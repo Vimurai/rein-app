@@ -198,30 +198,33 @@ check "user: the user's run-shell ran" yes "$([ -e "$W/plugin-ran-user" ] && ech
 # (the standing "never kill the user's tmux" rule; V12 kills nothing).
 both() { # both <dir> → a session on the app's socket and one of the same name on the default
   mkdir -p "$1" && chmod 700 "$1"
-  TMUX_TMPDIR="$1" "$REAL_TMUX" -L rein-app new-session -d -s demo 2>/dev/null
-  TMUX_TMPDIR="$1" "$REAL_TMUX" new-session -d -s demo 2>/dev/null
+  TMUX_TMPDIR="$1" "$REAL_TMUX" -L rein-app -f /dev/null new-session -d -s demo 2>/dev/null
+  TMUX_TMPDIR="$1" "$REAL_TMUX" -f /dev/null new-session -d -s demo 2>/dev/null
 }
 alive() { TMUX_TMPDIR="$1" "$REAL_TMUX" ${2:+-L "$2"} has-session -t demo 2>/dev/null && echo yes || echo no; }
 TAG=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 OTHER=fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
-look() { # look <tmpdir> <word> → "<output> <exit>"
-  local out code=0
+look() { # look <tmpdir> <word> → "[<rows>] <exit>": each row s|N|T-or-empty|P (E-90: the lookup
+  # lists every session of the app's server; the app decides in Rust); NOEND: no end line.
+  local out code=0 rows
   out=$(HOME="$h" TMUX_TMPDIR="$1" TMUX=/x /bin/sh -s -- "$2" <"$SETUP" 2>/dev/null) || code=$?
-  echo "$out $code"
+  rows=$(printf '%s\n' "$out" | sed -n '/^sessions$/,/^end$/p' | grep '^s|' | sed -E "s/[$][0-9]+/N/; s/$TAG/T/; s/[|][^|]*$/|P/" | tr '\n' ';')
+  printf '%s\n' "$out" | grep -qx end || [ "$code" != 0 ] || rows=NOEND
+  echo "[$rows] $code"
 }
 h="$W/ok"
 t="$W/tmp-lc1"
 mkdir -p "$t" && chmod 700 "$t"
-check "lookup: no server → none" "none 0" "$(look "$t" "$TAG")"
+check "lookup: no server → no rows" "[] 0" "$(look "$t" "$TAG")"
 both "$t"
-check "lookup: untagged sessions → none" "none 0" "$(look "$t" "$TAG")"
+check "lookup: the app's untagged session is listed with its path" "[s|N||P;] 0" "$(look "$t" "$TAG")"
 TMUX_TMPDIR="$t" "$REAL_TMUX" set-option -t demo @rein_app_project "$TAG" # the user's server
-check "lookup: the tag on the DEFAULT server is not looked at → none" "none 0" "$(look "$t" "$TAG")"
+check "lookup: the DEFAULT server is not listed (its tag is not seen)" "[s|N||P;] 0" "$(look "$t" "$TAG")"
 TMUX_TMPDIR="$t" "$REAL_TMUX" -L rein-app set-option -t demo @rein_app_project "$TAG"
-check "lookup: the app's session with the tag → live" "live 0" "$(look "$t" "$TAG")"
-check "lookup: another project's tag → none" "none 0" "$(look "$t" "$OTHER")"
+check "lookup: the app's session with its tag" "[s|N|T|P;] 0" "$(look "$t" "$TAG")"
+check "lookup: the same rows whatever the word (the app decides)" "[s|N|T|P;] 0" "$(look "$t" "$OTHER")"
 for bad in sweep "" "${TAG%?}" "${TAG}0" "$(printf %s "$TAG" | tr a-f A-F)" "${TAG%?};"; do
-  check "lookup: a word that is not a tag ($(printf %.12s "$bad")) → exit 26" " 26" "$(look "$t" "$bad")"
+  check "lookup: a word that is not a tag ($(printf %.12s "$bad")) → exit 26" "[] 26" "$(look "$t" "$bad")"
 done
 check "lookup: setup with no word prints nothing (exit 0)" "|0" "$(out=$(HOME="$h" TMUX_TMPDIR="$t" /bin/sh -s <"$SETUP" 2>/dev/null); echo "$out|$?")"
 check "lookup: both servers' sessions survive every lookup" "yes yes" "$(alive "$t" rein-app) $(alive "$t")"
@@ -230,7 +233,7 @@ check "lookup: the sweep is gone (no kill-server in the setup)" 0 "$(grep -c kil
 # tmux is /usr/bin/tmux on Linux, so neither /bin nor /usr/bin alone would do).
 mkdir -p "$W/notmux"
 for c in mkdir find chmod rm cat cmp mv grep; do ln -sf "$(command -v "$c")" "$W/notmux/$c"; done
-check "lookup: no tmux → none" "none 0" "$(out=$(PATH="$W/notmux" HOME="$h" /bin/sh -s -- "$TAG" <"$SETUP" 2>/dev/null); echo "$out $?")"
+check "lookup: no tmux → no rows" "sessions end 0" "$(out=$(PATH="$W/notmux" HOME="$h" /bin/sh -s -- "$TAG" <"$SETUP" 2>/dev/null); echo $out $?)"
 
 # The attach script exactly as tmux_server.rs builds it (Linux / macOS form), its last command
 # replaced by an echo of the target so no terminal is needed; one real attach under `script`.
@@ -261,6 +264,13 @@ for shc in "${SHS[@]}"; do
   for bad in sweep "${TAG%?}" "${TAG%?};"; do
     HOME="$h" TMUX_TMPDIR="$t" "${sh_argv[@]}" "$DRY" sh "$bad" </dev/null >/dev/null 2>&1
     check "attach ($shc): a word that is not a tag → exit 75" 75 "$?"
+  done
+  # E-90: an adoption — the session id as the second word, used as given (checked $ + digits).
+  r=$(HOME="$h" TMUX_TMPDIR="$t" "${sh_argv[@]}" "$DRY" sh "$OTHER" "$sid" </dev/null 2>/dev/null | tail -n1)
+  check "attach ($shc): an adoption attaches to that id" "target $sid" "$r"
+  for bad in '$999' x1 '$1;x'; do
+    HOME="$h" TMUX_TMPDIR="$t" "${sh_argv[@]}" "$DRY" sh "$OTHER" "$bad" </dev/null >/dev/null 2>&1
+    check "attach ($shc): an id that is gone or not \$N → exit 76" 76 "$?"
   done
 done
 check "attach: the script names no rein" 0 "$(printf %s "$ATTACH" | grep -c 'rein start' || true)"

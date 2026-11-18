@@ -38,7 +38,7 @@ cc -O2 -o "$W/bin/xinput" "$REPO/crates/rein-desktop/tests/e2e/xinput.c" -lX11 -
 cc -O2 -o "$W/bin/xtitle" "$REPO/crates/rein-desktop/tests/e2e/xtitle.c" -lX11 || exit 2
 cat >"$W/bin/tmux" <<EOF
 #!/bin/sh
-exec "$REAL_TMUX" -S "$W/tmux.sock" "\$@"
+exec "$REAL_TMUX" -S "$W/tmux.sock" -f /dev/null "\$@"
 EOF
 chmod +x "$W/bin/tmux"
 cat >"$W/home/.rein/bin/rein" <<EOF
@@ -74,7 +74,7 @@ esac
 exit 2
 EOF
 chmod +x "$W/home/.rein/bin/rein"
-T() { "$REAL_TMUX" -S "$W/tmux.sock" "$@"; }
+T() { "$REAL_TMUX" -S "$W/tmux.sock" -f /dev/null "$@"; } # -f: never the operator's ~/.tmux.conf
 X() { "$W/bin/xinput" "$@"; sleep 0.7; }
 shot() { ffmpeg -loglevel error -y -f x11grab -draw_mouse 0 -video_size "${GW}x${GH}" -i "$DISPLAY" -frames:v 1 "$OUT/$1-${GW}x${GH}.png" && echo "  $OUT/$1-${GW}x${GH}.png"; }
 fails=0
