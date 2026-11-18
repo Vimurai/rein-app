@@ -1349,6 +1349,106 @@ Reverting the three commits restores V11 (kill at quit, sweep).
 **Tasks.** E-69 (tag, lookup, attach, quit without kill; the reads first), E-70
 (open-tabs record, restore, the cards), E-71 (the countdown). After E-60.
 
+### V13. Open project: the tab bar's + opens one dialog (revision 2026-11-18, D-067)
+
+> Operator direction 2026-11-18: "when I click + up where tabs are we should have modal
+> showing latests opened projects and option to chose folder".
+
+**Goal.** Opening another project takes one click on `+` and one click on its name. Today
+`+` runs `project.open` with no directory, which goes straight to the system folder dialog
+— the slowest way to reach a project that was open yesterday. The recent list exists only
+on the start screen (gone once a tab is open) and behind `<leader> p`.
+
+**Core concept.** There is **one "Open project" dialog**. It is the present project picker
+(E-38: `ProjectPicker` in `ui/src/overlays.tsx`) with three additions: when each project
+was last opened, a mark on the ones already open, and a fixed last row **Choose a
+folder…**. `+`, `<leader> p`, `:projects`, the start screen's `p` and the menu row all open
+it. No new state, no new IPC command, no change in the core.
+
+**Components.**
+1. **Entry points.** The tab bar's `+` (`titleBar().add` in `ui/src/chrome.ts`) runs
+   `project.pick` instead of `project.open`. `project.pick` keeps its name and its
+   bindings. Its label (menu row, the `+` tooltip, which-key) becomes **"Open project…"**;
+   the dialog's title is **"Open project"**. `project.open` with no directory is unchanged
+   and stays the direct way to the system folder dialog: `<leader> o`, the start screen's
+   `Open a project…` button and `o`, `:open`, the set-up card's "open another". Its label
+   becomes **"Choose a folder…"** so the two actions do not read alike.
+2. **Rows model** — a pure function beside `fuzzy` in `ui/src/start.ts` (tested under
+   Node), from the recent list, the paths of the open tabs, the filter text and the time:
+   - one row per recent project, in the order the core gives (newest first), all of them
+     (at most 64); the list scrolls, about ten rows high;
+   - a row shows: folder icon, name, a chip **open** when a tab has this project, a chip
+     **missing** when `exists === false`, "3 h ago" (the start screen's `ago`), and the
+     path cut from the start as today;
+   - the filter (the present `fuzzy`) applies to project rows only;
+   - **Choose a folder…** is always the last row, never filtered out, with a folder-open
+     icon. With no recent project, or no match, it is the only row and the selected one;
+     above it the text is "No recent projects yet." or "No project matches."
+3. **What a row does.**
+   - A project row: the dialog closes and the existing `open(path)` runs — which switches
+     to the tab when the project is already open, and says its own text at the tab limit.
+   - A **missing** row opens nothing: the dialog stays, and its status line says
+     "`<name>` is no longer at `<path>` — Del forgets it". `exists === null` (Windows:
+     not probed) counts as present; a failure there is `tab_open`'s own message, as today.
+   - **Choose a folder…**: the dialog closes first, then the existing no-directory
+     `project.open` path runs (the system folder dialog, its answer validated by
+     `tab_open`). Cancelling the system dialog says "no folder chosen" as today and does
+     not bring this dialog back.
+   - `Del` forgets the selected project row as today; it does nothing on the last row.
+4. **Dismissal.** `Esc`, a click outside, or the close button: nothing opens, nothing
+   changes, and focus goes back where it was — the current tab's terminal (TERMINAL mode,
+   as the picker does today), or the start screen when no tab is open.
+5. **Keys.** As today: typing filters; `↑` `↓` `C-n` `C-p`, and `j` `k` while the filter is
+   empty; `Enter` runs the row. New: `o` while the filter is empty selects and runs
+   **Choose a folder…**. The hint line reads `Enter open · o choose a folder · Del forget ·
+   Esc close`. Every row is clickable (D-034 parity).
+6. **Loading.** The dialog asks for the list each time it opens (`refreshRecent`, as
+   today) and draws what it already holds meanwhile; before the first list has arrived it
+   shows three `Skeleton` rows above **Choose a folder…** (V7).
+
+**Data model.** Nothing stored, nothing added to `ProjectsFile`. In the page only:
+```
+PickRow = { kind: "project", path, name, ago, open: bool, missing: bool }
+        | { kind: "choose" }                       (always last, exactly one)
+```
+
+**Interface contracts.** No IPC command added or changed: `projects_list`,
+`projects_forget`, `project_choose` and `tab_open` as they are. Actions: `project.pick`
+(opens the dialog; from `+` too) and `project.open` (unchanged). `titleBar().add` is
+`{ name: "project.pick" }`.
+
+**Security.** No new read, write, permission or network use; the capability file and CSP
+are untouched. A name and a path are text nodes. A folder still becomes a project only
+through `tab_open`'s validation in the core, whichever row was used; the page does not
+check a path itself and a "missing" mark is display only.
+
+**Execution constraints.**
+- The dialog opens with its exit/enter motion of V7 and runs no timer and no poll while
+  open; "ago" is computed once when it opens.
+- Sixty-four rows filter without a frame over 50 ms.
+- `ui/src/shell.tsx` is 1117 lines, over the 1000-line limit: this task adds no net line
+  to it. The picker moves out of `overlays.tsx` into its own file if it outgrows it.
+- Home (E-80, `status.md` H2) is independent: its "Recent projects" rows and
+  `Open a project…` keep `project.open`; `+` sits right of the project tabs as now.
+
+**Tests.**
+- Web (Node): the rows model — order kept, **open** and **missing** marks, the last row
+  present with an empty list, with a filter that matches nothing and with a full list;
+  `titleBar().add` is `project.pick`; pointer parity for both actions still passes with the
+  new labels.
+- Window run (Xvfb): a click on `+` shows the dialog; a click on a recent row opens its
+  tab; a click on the row of an open project switches to it and opens no second tab;
+  `Esc` leaves the tab count unchanged and the terminal takes keys again; a missing row
+  opens nothing and shows its text.
+- Screens (D-052), both themes at 1280×800: the dialog with five projects (one open, one
+  missing); with no recent project; with a filter that matches nothing. The Architect
+  opens every one.
+
+**Rollback.** One commit; reverting it returns `+` to the system folder dialog and the
+picker to its E-38 form. Nothing is stored, so nothing is migrated back.
+
+**Task.** E-92 (Tier 2).
+
 ### Tests (v2)
 - Token function: contrast ≥ 4.5:1 for every text pair in every theme; the default theme is
   `catppuccin-mocha`.
@@ -1618,6 +1718,7 @@ release artifact carries the window until a task adds it to the dist configurati
 | E-43 | Windows window core: `Host` seam (`LocalHost` unchanged), `WslHost` (state probe, distro, project validation, ConPTY child), Windows path mapping, Windows directories, lock-file single instance; `rein-desktop` builds and tests on the Windows CI job | 3 | E-35 |
 | E-44 | `desktop-windows.yml`: NSIS installer as a workflow artifact (`ci_gate`) | 2 | E-43 |
 | E-45 | Windows health / release / profiles through WSL (W4), `rein-app update --check`, WSL-absent start screen, folder dialog start directory, `wsl.distro` config key | 3 | E-39, E-43 |
+| E-92 | V13: the tab bar's `+` opens the one "Open project" dialog — the picker with last-opened, open / missing marks and a fixed `Choose a folder…` row | 2 | — |
 E-43 and E-44 depend only on E-35: do them **before E-42** so the operator has an
 installable window (it opens the DIR given on the command line until E-38 lands). E-38,
 E-40 and E-41 reach projects only through the `Host` seam, so they work on Windows without

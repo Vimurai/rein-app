@@ -2421,3 +2421,37 @@ The window is in no release; the operator copies installers by hand from workflo
 
 ### Rollback
 Review only. E-91 reverts by its commit.
+
+---
+
+## D-067 — The tab bar's + opens one "Open project" dialog: recent projects and Choose a folder
+
+**Date**: 2026-11-18
+**Task**: E-92
+**Decision**: `+` opens the existing project picker, extended with last-opened times, open / missing marks and a fixed last row "Choose a folder…"; `<leader> p`, `:projects` and the menu row open the same dialog.
+
+### Why needed
+Operator direction 2026-11-18 (typed in the rein pane, relayed by `rein · Architect`): "when I click + up where tabs are we should have modal showing latests opened projects and option to chose folder". Today `+` goes straight to the system folder dialog, and the recent list is on the start screen only, which is gone once a tab is open. Three points the operator left open are ruled here.
+
+### Rulings
+1. **Dismissed → nothing.** `Esc`, a click outside or the close button opens nothing and returns focus to where it was. Cancelling the system folder dialog does not bring the dialog back.
+2. **A missing folder is shown**, dimmed and marked "missing", in its place by recency. Choosing it opens nothing and says where it used to be and that `Del` forgets it. Hiding it would make a project vanish with no way to forget it; opening it would only produce `tab_open`'s error. On Windows (`exists: null`, not probed) a row counts as present.
+3. **`<leader> p` is the same dialog.** One dialog, one name ("Open project"). `project.open` with no directory stays the direct way to the system folder dialog (`<leader> o`, the start screen's button) and is relabelled "Choose a folder…".
+4. **A project that is already open is listed**, marked "open"; choosing it switches to its tab (what `open()` does today).
+
+### Alternatives considered
+1. **A second, new modal for `+`** beside the picker — rejected: two lists of the same projects with different keys and looks; the picker already is a dialog over `projects_list`.
+2. **A dropdown menu under `+`** (five recent + "Choose a folder…") — rejected: the operator asked for a modal; a menu has no filter and does not hold 64 projects.
+3. **`+` keeps the folder dialog; add a second button for recent** — rejected: not what was asked, and one more control in the tab bar.
+4. **Extend the picker and point `+` at it** — chosen: a composition of parts that exist; no core, IPC or state change.
+
+### Constraints driving this decision
+- D-034: every action by pointer and by key. No new permission or read scope.
+- `ui/src/shell.tsx` is over the file-size limit; the task may not grow it.
+
+### Impact
+- Unlocks: E-92. Home (E-80) is not affected.
+- Risk if wrong: an operator who used `+` for the folder dialog needs one more click (the last row, or `o`).
+
+### Rollback
+Revert E-92's commit: `+` runs `project.open` again. Nothing is stored.

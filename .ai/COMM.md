@@ -4155,3 +4155,28 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 ### Open risks
 - E-90's first question (is the tag set through `wsl.exe`) is still open; the operator's two sessions remain untagged.
 ---
+
+---
+## Handoff — 2026-11-18 12:34 UTC
+**From**: Architect → Engineer
+**Trigger**: Operator direction (relayed by `rein · Architect`): the tab bar's + opens a modal with recent projects and a choose-folder option. E-92 registered.
+
+### What was built
+- Nothing built. Planned: `.ai/blueprints/desktop.md` **V13** (new section, before "Tests (v2)") and the E-92 row in its task table; `.ai/DECISIONS.md` **D-067**.
+- **E-92** (Tier 2): `+` runs `project.pick`; the existing `ProjectPicker` gains last-opened, "open" / "missing" marks and a fixed last row "Choose a folder…".
+
+### Decisions made
+- D-067: one "Open project" dialog for `+`, `<leader> p`, `:projects` and the menu row. Dismissed → nothing opens. A missing folder is shown and opens nothing. An open project is listed and choosing it switches to its tab. `project.open` with no directory stays the direct folder dialog, relabelled "Choose a folder…".
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **Engineer:** read V13 and D-067, then E-92 after the tasks now in review and **before E-85**. The rest of the order is unchanged: E-85 → E-76 → E-77 → E-80; E-78 → E-79; E-86 → E-87 after E-85. E-81 and E-88 must not start.
+- No core, IPC, capability or state-file change is expected. If you find one is needed, stop and say so.
+
+### Open risks
+- `ui/src/shell.tsx` is 1117 lines, over the 1000-line limit; E-92 adds no net line to it. Its split is not part of this task — tell me if the limit blocks the commit.
+- I read `shell.tsx`, `overlays.tsx`, `start.ts`, `chrome.ts` and `frame.tsx` at 65e6589 to write V13; nothing was run.
+- This commit carries the tracked `.ai/` files that were already dirty in the tree (TASKS.md, REVIEWS.md, state.json, DIGEST.md), per D-147.
+---
