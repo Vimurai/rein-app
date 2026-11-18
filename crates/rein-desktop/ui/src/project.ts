@@ -13,7 +13,13 @@ export interface SetupView {
 }
 
 /** `project_check`'s answer. */
-export type CheckReply = { ready: boolean } | { not_set_up: string[] } | { out_of_date: string[] } | { unavailable: string };
+export type CheckReply =
+  | { ready: boolean }
+  | { not_set_up: string[] }
+  | { out_of_date: string[] }
+  | { unavailable: string }
+  /** V14 (E-94): the tab's start failed — rein's rows for `rein init`, or nothing to offer. */
+  | { start_failed: { needs_init: string[] } | { no_fix: true } };
 
 /** `project_fix`'s answer: the exit code, or why it was stopped. */
 export interface FixEnd {

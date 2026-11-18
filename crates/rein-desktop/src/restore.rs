@@ -100,7 +100,8 @@ pub fn start(
     if card.kind != CardKind::NotRunning {
         return Err(err("missing", "this card offers Close project only"));
     }
-    let crate::ipc::Start::Spec(spec) = d.start_spec(&card.project, card.server, false, false)?
+    let crate::ipc::Start::Spec(spec, kind) =
+        d.start_spec(&card.project, card.server, false, false)?
     else {
         return Err(err(
             "two_sessions",
@@ -108,7 +109,14 @@ pub fn start(
         ));
     };
     // Taken out of the cards under the tabs lock in `open_spec_as`.
-    d.open_spec_as(&spec, &card.project, size, events, card.server, Some(tab))
+    d.open_spec_as(
+        (&spec, kind),
+        &card.project,
+        size,
+        events,
+        card.server,
+        Some(tab),
+    )
 }
 
 /// The record as `tabs_restore` gives it.

@@ -42,12 +42,25 @@ pub const MAX_CLIPBOARD: usize = 64 * 1024;
 
 /// What a tab's open does once the app's server was asked (V12 components 2, 5, 9).
 pub(crate) enum Start {
-    /// Start (or attach with) this child.
-    Spec(ChildSpec),
+    /// Start (or attach with) this child, of this kind.
+    Spec(ChildSpec, ChildKind),
     /// A restore with no live session: the "not running" card.
     NotRunning,
     /// Two untagged sessions started in the folder: the card, Close project only.
     Two,
+}
+
+/// Which child a tab runs (V14 component 1, E-94): only an ordinary start that fails can be a
+/// failed start — an attach to a live session or the set-up child never is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChildKind {
+    /// `rein start` on a folder with no live session.
+    #[default]
+    Start,
+    /// An attach to a live or adopted session (V12).
+    Attach,
+    /// `rein init`, then the start (V9 component 2).
+    Setup,
 }
 
 /// An IPC refusal: a stable `kind` for the UI and a plain-words `message`.
@@ -108,6 +121,9 @@ pub struct Tab {
     /// the overlay talks to that one. Sent read-only (V11: the close wording and the confirm
     /// depend on it); the web side never names a server in a request.
     pub server: crate::tmux_server::Server,
+    /// Which child it runs (never sent).
+    #[serde(skip)]
+    pub kind: ChildKind,
 }
 
 /// The window core's state for the terminal stage.
@@ -246,8 +262,8 @@ impl Desktop {
                 return self.open_setup(project, server, Some(parent));
             }
         }
-        let spec = match self.start_spec(&project, server, false, restore)? {
-            Start::Spec(s) => s,
+        let (spec, kind) = match self.start_spec(&project, server, false, restore)? {
+            Start::Spec(s, k) => (s, k),
             Start::NotRunning => {
                 return self.open_card(project, server, crate::restore::CardKind::NotRunning);
             }
@@ -255,7 +271,7 @@ impl Desktop {
                 return self.open_card(project, server, crate::restore::CardKind::TwoSessions);
             }
         };
-        self.open_spec_as(&spec, &project, size, events, server, None)
+        self.open_spec_as((&spec, kind), &project, size, events, server, None)
             .map(crate::project_setup::Opened::Tab)
     }
 
@@ -276,34 +292,19 @@ impl Desktop {
     ) -> Result<Start, IpcError> {
         use crate::tmux_server::Lookup;
         if server == crate::tmux_server::Server::App {
-            let tag = self.tag_of(project);
-            let rows = self
-                .platform
-                .tmux_setup(&tag)
-                .map_err(|why| err("tmux_setup", crate::tmux_server::setup_message(why)))?;
-            // On Linux / macOS a session's path is made canonical here; inside WSL it is
-            // compared as written (the project's own path came from `pwd -P` there).
-            let wsl = self.platform.in_wsl();
-            let canon = |p: &str| {
-                if wsl {
-                    return p.to_string();
-                }
-                std::fs::canonicalize(p)
-                    .map_or_else(|_| p.to_string(), |c| c.to_string_lossy().into_owned())
-            };
-            let here = project.to_string_lossy();
-            match crate::tmux_server::decide(&rows, &tag, &here, &canon) {
+            let (tag, found) = self.lookup(project)?;
+            match found {
                 Lookup::Live => {
                     return self
                         .platform
                         .rein_attach(project, &tag, None)
-                        .map(Start::Spec);
+                        .map(|s| Start::Spec(s, ChildKind::Attach));
                 }
                 Lookup::Adopt(id) => {
                     return self
                         .platform
                         .rein_attach(project, &tag, Some(&id))
-                        .map(Start::Spec);
+                        .map(|s| Start::Spec(s, ChildKind::Attach));
                 }
                 Lookup::Two => return Ok(Start::Two),
                 Lookup::None if restore => return Ok(Start::NotRunning),
@@ -311,10 +312,58 @@ impl Desktop {
             }
         }
         if setup {
-            self.platform.rein_setup(project, server).map(Start::Spec)
+            self.platform
+                .rein_setup(project, server)
+                .map(|s| Start::Spec(s, ChildKind::Setup))
         } else {
-            self.platform.rein_start(project, server).map(Start::Spec)
+            self.platform
+                .rein_start(project, server)
+                .map(|s| Start::Spec(s, ChildKind::Start))
         }
+    }
+
+    /// The app's server asked for `project`'s session (V12 components 2–3, 9): the project's
+    /// tag and what was found. One setup process.
+    fn lookup(&self, project: &Path) -> Result<(String, crate::tmux_server::Lookup), IpcError> {
+        let tag = self.tag_of(project);
+        let rows = self
+            .platform
+            .tmux_setup(&tag)
+            .map_err(|why| err("tmux_setup", crate::tmux_server::setup_message(why)))?;
+        // On Linux / macOS a session's path is made canonical here; inside WSL it is
+        // compared as written (the project's own path came from `pwd -P` there).
+        let wsl = self.platform.in_wsl();
+        let canon = |p: &str| {
+            if wsl {
+                return p.to_string();
+            }
+            std::fs::canonicalize(p)
+                .map_or_else(|_| p.to_string(), |c| c.to_string_lossy().into_owned())
+        };
+        let here = project.to_string_lossy();
+        let found = crate::tmux_server::decide(&rows, &tag, &here, &canon);
+        Ok((tag, found))
+    }
+
+    /// The child on `pty` ended with `code` (V14 component 1, D-068): true — and the tab is
+    /// marked failed — when it was an ordinary start on the app's server, the code is not 0,
+    /// and no session for the project is alive afterwards. One lookup, only after a non-zero
+    /// end of an ordinary start; a lookup that fails is not a verdict (false). The user's own
+    /// server is never asked (V8), so a start there never counts as failed.
+    pub fn start_failed(&self, pty: PtyId, code: u32) -> bool {
+        let tab = self.tabs().values().find(|t| t.pty == pty).cloned();
+        let Some(t) = tab else { return false };
+        if !failed_start(t.kind, t.server, code) {
+            return false;
+        }
+        let gone = matches!(
+            self.lookup(Path::new(&t.project)),
+            Ok((_, crate::tmux_server::Lookup::None))
+        );
+        if gone {
+            self.projects.mark_failed(t.id);
+        }
+        gone
     }
 
     /// A card tab (V12 components 5, 9): an id and the project, counted against the tab
@@ -398,10 +447,10 @@ impl Desktop {
         events: Arc<dyn Events>,
     ) -> Result<Tab, IpcError> {
         let size = validate_size(cols, rows)?;
-        let s = self
-            .projects
-            .setup_tab(tab)
-            .ok_or_else(|| err("unknown_tab", "the tab is not waiting for set-up"))?;
+        let s = match self.projects.setup_tab(tab) {
+            Some(s) => s,
+            None => self.failed_to_setup(tab)?,
+        };
         // A folder inside a Rein project is never set up (E-63 rework 3).
         if s.inside.is_some() {
             return Err(err(
@@ -409,14 +458,42 @@ impl Desktop {
                 "this folder is inside a Rein project — open that project instead",
             ));
         }
-        let Start::Spec(spec) = self.start_spec(&s.project, s.server, true, false)? else {
+        let Start::Spec(spec, kind) = self.start_spec(&s.project, s.server, true, false)? else {
             return Err(err(
                 "two_sessions",
                 "two sessions are already running for this folder — close one first",
             ));
         };
         // Taken out under the tabs lock in `open_spec_as`, so it counts once throughout.
-        self.open_spec_as(&spec, &s.project, size, events, s.server, Some(tab))
+        self.open_spec_as((&spec, kind), &s.project, size, events, s.server, Some(tab))
+    }
+
+    /// A tab whose start failed and that rein says needs `rein init` (V14 component 5) becomes
+    /// a set-up tab under its id: its ended pty is let go. Any other started tab is refused.
+    fn failed_to_setup(&self, tab: u32) -> Result<crate::project_setup::SetupTab, IpcError> {
+        let mut tabs = self.tabs();
+        let Some(t) = tabs.get(&tab).cloned() else {
+            return Err(err("unknown_tab", "the tab is not waiting for set-up"));
+        };
+        if !self.projects.take_needs_init(tab) {
+            return Err(err(
+                "not_failed",
+                "the tab's start did not fail with a fix to offer",
+            ));
+        }
+        tabs.remove(&tab);
+        let _ = self.host.detach(t.pty);
+        let s = crate::project_setup::SetupTab {
+            project: std::path::PathBuf::from(&t.project),
+            server: t.server,
+            inside: None,
+        };
+        self.projects
+            .setup
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(tab, s.clone());
+        Ok(s)
     }
 
     /// The part of [`open`](Self::open) after validation; tests pass stub children here.
@@ -429,7 +506,7 @@ impl Desktop {
         events: Arc<dyn Events>,
     ) -> Result<Tab, IpcError> {
         self.open_spec_as(
-            spec,
+            (spec, ChildKind::Start),
             project,
             size,
             events,
@@ -442,7 +519,7 @@ impl Desktop {
     /// the set-up tab this becomes (its id kept).
     pub(crate) fn open_spec_as(
         &self,
-        spec: &ChildSpec,
+        (spec, kind): (&ChildSpec, ChildKind),
         project: &Path,
         size: Size,
         events: Arc<dyn Events>,
@@ -481,6 +558,7 @@ impl Desktop {
             pty,
             title,
             server,
+            kind,
         };
         tabs.insert(id, tab.clone());
         Ok(tab)
@@ -603,6 +681,11 @@ impl Desktop {
     }
 }
 
+/// Whether an end of this child can be a failed start, before the session is looked up.
+pub(crate) fn failed_start(kind: ChildKind, server: crate::tmux_server::Server, code: u32) -> bool {
+    kind == ChildKind::Start && server == crate::tmux_server::Server::App && code != 0
+}
+
 /// A tab's title: its directory's name.
 fn title_of(project: &Path) -> String {
     project
@@ -626,6 +709,8 @@ struct ChannelEvents {
 struct PtyExit {
     id: PtyId,
     code: u32,
+    /// V14 (E-94): the tab's ordinary start failed — the web side asks `project_check`.
+    start_failed: bool,
 }
 
 impl Events for ChannelEvents {
@@ -633,7 +718,19 @@ impl Events for ChannelEvents {
         let _ = self.output.send(InvokeResponseBody::Raw(bytes));
     }
     fn exit(&self, id: PtyId, code: u32) {
-        let _ = self.app.emit(EVENT_PTY_EXIT, PtyExit { id, code });
+        use tauri::Manager;
+        let start_failed = self
+            .app
+            .try_state::<Desktop>()
+            .is_some_and(|d| d.start_failed(id, code));
+        let _ = self.app.emit(
+            EVENT_PTY_EXIT,
+            PtyExit {
+                id,
+                code,
+                start_failed,
+            },
+        );
     }
 }
 
@@ -641,5 +738,7 @@ impl Events for ChannelEvents {
 mod handlers;
 pub use handlers::*;
 
+#[cfg(all(test, unix))]
+mod start_failed_tests;
 #[cfg(all(test, unix))]
 mod tests;

@@ -254,6 +254,22 @@ The **status bar** shows the tab's project path (your home directory as `~`; a l
 loses its start, so the project's own folder stays visible), the health badge, and the last
 command the window ran for you, with a copy button.
 
+**When `rein start` does not start a project** (it exits with an error and no session is
+left), a bar above the terminal says "rein start did not start this project." rein's own
+message stays in the terminal. The window then asks rein (`rein init --check`) what the
+folder needs:
+- rein reports changes: **Set up this project** opens a sheet with every line rein listed
+  (up to 200) and the warning that `rein init` replaces the files it lists as refresh. Cancel
+  has the focus. **Run rein init** runs `rein init` and then `rein start` in the tab's own
+  terminal. Commit any file you edited before you run it. If `rein init` fails, the bar
+  comes back without the offer.
+- rein reports nothing to change, or does not answer: the bar offers **Try again** and
+  **Close tab** only.
+
+"Don't ask for this project" does not hide this bar. Enter in the terminal still restarts,
+as before. A start on your own tmux server (`[tmux] server = "user"`) is never treated as
+failed: the window does not look up sessions there.
+
 **Settings** (menu → Settings, `Ctrl+,`, or `:settings`) sets the input style, theme, font
 size and title bar. It also has **Open config file location**, which shows the path of
 `config.toml` and copies it.

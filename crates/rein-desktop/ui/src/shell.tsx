@@ -59,6 +59,8 @@ import type { CheckReply } from "./project.ts";
 import { UpdateCard, askOutOfDate, recheckTabs, useUpdates } from "./update-ui.tsx";
 import { recheckOrder, reinAsk, showUpdateButton, updateRows } from "./updates.ts";
 import { SetupCard, UpdateBar, UpdateSheet } from "./project-ui.tsx";
+import { StartFailedBar, onTabExit, type FailedTab } from "./start-failed-ui.tsx";
+import { whichBar } from "./start-failed.ts";
 import { TeamSheet } from "./team-sheet.tsx";
 import { AgentsGoneBar, RestoreCard, restoreAtStart, useTabsRecord } from "./restore-ui.tsx";
 import { useTabStatus, type TabStatusProps } from "./tab-status.tsx";
@@ -125,7 +127,7 @@ const MAX_TABS = 16;
 
 /** One open tab: its terminal, its pane, and what the chrome shows for it. */
 /** The agents, the bar and the countdown (V9, E-71) are `PolledTab`'s fields (agent-bar.tsx). */
-interface OpenTab extends PolledTab {
+interface OpenTab extends PolledTab, FailedTab {
   /** For the tab's life (the title bar keys its pill by it). */
   id: number;
   term: TermTab;
@@ -164,7 +166,8 @@ export function Shell(props: ShellProps) {
   const closeDontAskRef = useRef(closeDontAsk);
   closeDontAskRef.current = closeDontAsk;
   /** V9 3: Update project, running in its sheet for this tab. */
-  const [updateSheet, setUpdateSheet] = useState<{ entry: OpenTab; id: number; rows: string[] } | null>(null);
+  // `run`: a failed start's sheet (V14) runs set-up in the tab's own terminal instead.
+  const [updateSheet, setUpdateSheet] = useState<{ entry: OpenTab; id: number; rows: string[]; run?: () => void } | null>(null);
   const dontAskRef = useRef(dontAskUpdate);
   dontAskRef.current = dontAskUpdate;
   /** V9: Close project with an agent still running asks first (default No). */
@@ -409,6 +412,7 @@ export function Shell(props: ShellProps) {
       term.onOpen = (opened) => {
         entry.open = true;
         entry.exited = entry.refused = false;
+        entry.failed = undefined; // a child started again: no failed-start bar (V14)
         entry.project = opened.project;
         entry.title = opened.title;
         // A restored tab opening behind the current one does not take the front (V12 4).
@@ -838,12 +842,15 @@ export function Shell(props: ShellProps) {
   useEffect(() => {
     void listen<HealthView>("health_changed", setHealth);
     void checkHealth(false);
-    void listen<{ id: number; code: number }>("pty_exit", ({ id, code }) => {
+    void listen<{ id: number; code: number; start_failed?: boolean }>("pty_exit", ({ id, code, start_failed }) => {
       const t = tabs.current.find((x) => x.term.tab?.pty === id);
       if (!t) return;
       t.term.exited(code);
       t.exited = true;
       rerender();
+      // V14 (E-94): a failed start asks rein what can be offered; a failed set-up from the bar
+      // brings the bar back with nothing to offer.
+      onTabExit(t, code, start_failed === true, () => tabs.current.includes(t), rerender);
     });
     void listen<string>("open_dir", (dir) => openRef.current(dir));
     // V12 (E-70): the recorded tabs first, then the command-line project; with no record,
@@ -884,7 +891,26 @@ export function Shell(props: ShellProps) {
     <>
       <div id="frame" role="application" aria-label="rein-app" className="flex h-full flex-col">
         <TitleBar bar={bar} chrome={CHROME} r={runner} />
-        {current && current.update && !current.updateHidden && !current.exited && !current.setup && (
+        {current?.failed && (
+          <StartFailedBar
+            state={current.failed}
+            onAction={(a) => {
+              const id = current.term.tab?.id;
+              if (a === "close") return detach(cur.current);
+              if (a === "retry") return void ((current.failed = undefined), rerender(), current.term.restart());
+              if (id === undefined || current.failed?.at !== "needs_init") return;
+              const run = () => {
+                setUpdateSheet(null);
+                current.failed = undefined;
+                current.setUpOnce = true; // V14 5: no second offer in this tab open
+                rerender();
+                void current.term.start(id);
+              };
+              setUpdateSheet({ entry: current, id, rows: current.failed.rows, run });
+            }}
+          />
+        )}
+        {current && whichBar(current) === "update" && (
           <UpdateBar
             onUpdate={() => {
               const id = current.term.tab?.id;
@@ -1032,6 +1058,8 @@ export function Shell(props: ShellProps) {
             <UpdateSheet
               tab={updateSheet.id}
               rows={updateSheet.rows}
+              title={updateSheet.run ? "Set up this project" : "Update project"}
+              onRun={updateSheet.run}
               onCommand={showCommand}
               onDone={(outcome) => {
                 if (!outcome.keepBar) updateSheet.entry.update = undefined;

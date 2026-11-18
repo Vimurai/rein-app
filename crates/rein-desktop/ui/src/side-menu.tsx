@@ -39,6 +39,8 @@ export interface SideTab {
   update?: string[] | undefined;
   updateHidden?: boolean | undefined;
   setup?: unknown;
+  /** A failed start (V14): in `needs_init` the core's status is `setup` (E-95's flag). */
+  failed?: { at: string } | undefined;
 }
 
 /** What the shell knows at render time that the side menu shows. */
@@ -133,6 +135,7 @@ export function useSideMenu(
               tab: t.term.tab?.id ?? null,
               refused: t.refused === true,
               update: (t.update?.length ?? 0) > 0 && t.updateHidden !== true,
+              setup: t.failed?.at === "needs_init",
             },
           ],
     );

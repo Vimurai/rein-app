@@ -151,12 +151,18 @@ export function UpdateSheet({
   onCommand,
   onDone,
   onClose,
+  title = "Update project",
+  onRun,
 }: {
   tab: number;
   rows: readonly string[];
   onCommand: (cmd: string) => void;
   onDone: (outcome: FixOutcome) => void;
   onClose: () => void;
+  /** The sheet's title; a failed start's sheet says "Set up this project" (V14). */
+  title?: string;
+  /** V14 component 5: Run rein init hands over to the tab's own terminal instead. */
+  onRun?: (() => void) | undefined;
 }) {
   const [phase, setPhase] = useState<SheetPhase>({ at: "confirm" });
   const [cancelling, setCancelling] = useState(false);
@@ -165,6 +171,7 @@ export function UpdateSheet({
   const run = () => {
     if (started.current) return;
     started.current = true;
+    if (onRun) return onRun();
     setPhase({ at: "running", lines: [] });
     onCommand("rein init");
     const out = new Channel<string>((l) => {
@@ -190,7 +197,7 @@ export function UpdateSheet({
   const running = phase.at === "running";
   return (
     <Panel
-      title="Update project"
+      title={title}
       onClose={() => !running && onClose()}
       footer={
         phase.at === "confirm" ? (
@@ -230,6 +237,7 @@ export function UpdateSheet({
       {rows.length > 0 && (
         <div className="grid gap-1">
           <span className="text-[12px] text-muted-foreground">rein init --check reported</span>
+          {/* Up to 200 rows (V14 component 4), in the panel's own scroll area. */}
           <Output lines={rows} />
         </div>
       )}

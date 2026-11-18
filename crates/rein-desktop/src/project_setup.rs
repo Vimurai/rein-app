@@ -10,7 +10,7 @@ use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, mpsc};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -28,14 +28,19 @@ const USER_START: &str = "exec ~/.rein/bin/rein start";
 pub const CHECK_LIMIT: Duration = Duration::from_secs(30);
 /// One `rein init` from the bar (the ruling: a cold `npm ci` can take minutes).
 pub const FIX_LIMIT: Duration = Duration::from_secs(600);
-/// The ruling's caps on rein's rows.
-pub const MAX_ROWS: usize = 40;
+/// The ruling's caps on rein's rows: 200 in a scroll area (V14 component 4 — on the
+/// operator's folder `refresh CLAUDE.md` was row 52 of 58).
+pub const MAX_ROWS: usize = 200;
 pub const MAX_ROW_CHARS: usize = 200;
 /// At most this many `--check` runs per tab and stage: a started tab's one after it started
 /// and the one after Update project (the ruling, 4); a set-up tab's card (and one spare).
 /// Counted apart, so a tab set up later keeps its own budget — and the web side cannot start
 /// `rein init --check` without bound.
 pub const CHECKS_PER_TAB: u32 = 2;
+/// At most this many `--check` runs after a failed start, per project, while the window
+/// runs (V14 execution constraints): each Try again opens a new tab, so a per-tab count alone
+/// would not bound a held-down Try again. Past it the verdict is `no_fix`.
+pub const FAILED_CHECKS_PER_PROJECT: u32 = 3;
 
 /// The app's fixed sentences.
 pub const NOT_ANSWERED: &str = "rein init --check did not give an answer";
@@ -213,11 +218,30 @@ pub struct SetupTab {
     pub inside: Option<PathBuf>,
 }
 
+/// A tab whose ordinary start failed (V14 components 1–2, D-068): the verdict once known.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Failed {
+    /// Failed; rein not asked yet.
+    Pending,
+    /// `rein init --check` exited 1: rein's rows.
+    NeedsInit(Vec<String>),
+    /// No fix to offer: `--check` exited 0, gave no answer, or the budget is spent.
+    NoFix,
+}
+
 /// What the window keeps for set-up and the out-of-date check.
 #[derive(Default)]
 pub struct ProjectState {
     pub setup: Mutex<HashMap<u32, SetupTab>>,
     checks: Mutex<HashMap<(u32, bool), u32>>,
+    /// Tabs whose start failed (E-94), until the tab closes or is set up.
+    failed: Mutex<HashMap<u32, Failed>>,
+    /// The last `--check` answer of a tab this open: its exit code (0 or 1) and rows.
+    answered: Mutex<HashMap<u32, (i32, Vec<String>)>>,
+    /// One `--check` at a time per tab: a failed start's verdict waits for one in flight.
+    locks: Mutex<HashMap<u32, Arc<Mutex<()>>>>,
+    /// `--check` runs after a failed start, per project ([`FAILED_CHECKS_PER_PROJECT`]).
+    failed_checks: Mutex<HashMap<PathBuf, u32>>,
     /// The one `rein init` run's Cancel (one run at a time, through the CLI runner's lock).
     cancel: AtomicBool,
     /// The last check that gave no answer, as one health line (the ruling, 1).
@@ -225,7 +249,51 @@ pub struct ProjectState {
 }
 
 impl ProjectState {
+    /// The tab's start failed: rein is asked on the web side's next `project_check`.
+    pub fn mark_failed(&self, tab: u32) {
+        lock(&self.failed).insert(tab, Failed::Pending);
+    }
+
+    pub fn failed(&self, tab: u32) -> Option<Failed> {
+        lock(&self.failed).get(&tab).cloned()
+    }
+
+    /// The verdict, kept only while the tab is still failed (a closed tab drops it).
+    fn set_failed(&self, tab: u32, f: Failed) {
+        if let Some(v) = lock(&self.failed).get_mut(&tab) {
+            *v = f;
+        }
+    }
+
+    /// A tab in `needs_init` becomes a set-up tab: its failed state is cleared.
+    pub(crate) fn take_needs_init(&self, tab: u32) -> bool {
+        let mut f = lock(&self.failed);
+        if matches!(f.get(&tab), Some(Failed::NeedsInit(_))) {
+            f.remove(&tab);
+            lock(&self.answered).remove(&tab);
+            return true;
+        }
+        false
+    }
+
+    fn tab_lock(&self, tab: u32) -> Arc<Mutex<()>> {
+        lock(&self.locks).entry(tab).or_default().clone()
+    }
+
+    fn take_failed_check(&self, project: &std::path::Path) -> bool {
+        let mut c = lock(&self.failed_checks);
+        let n = c.entry(project.to_path_buf()).or_default();
+        if *n >= FAILED_CHECKS_PER_PROJECT {
+            return false;
+        }
+        *n += 1;
+        true
+    }
+
     pub fn forget(&self, tab: u32) {
+        lock(&self.failed).remove(&tab);
+        lock(&self.answered).remove(&tab);
+        lock(&self.locks).remove(&tab);
         self.setup
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -264,6 +332,10 @@ impl ProjectState {
     }
 }
 
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /// A tab opened on a folder without `.ai/` (V9 component 2).
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SetupView {
@@ -292,15 +364,103 @@ pub enum Opened {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Check {
-    Ready { ready: bool },
-    NotSetUp { not_set_up: Vec<String> },
-    OutOfDate { out_of_date: Vec<String> },
-    Unavailable { unavailable: &'static str },
+    Ready {
+        ready: bool,
+    },
+    NotSetUp {
+        not_set_up: Vec<String>,
+    },
+    OutOfDate {
+        out_of_date: Vec<String>,
+    },
+    Unavailable {
+        unavailable: &'static str,
+    },
+    /// The tab's start failed (V14): `{needs_init: rows}` or `{no_fix: true}`.
+    StartFailed {
+        start_failed: FailedAnswer,
+    },
+}
+
+/// A failed start's verdict as `project_check` answers it.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum FailedAnswer {
+    NeedsInit { needs_init: Vec<String> },
+    NoFix { no_fix: bool },
+}
+
+impl From<&Failed> for FailedAnswer {
+    fn from(f: &Failed) -> Self {
+        match f {
+            Failed::NeedsInit(rows) => Self::NeedsInit {
+                needs_init: rows.clone(),
+            },
+            _ => Self::NoFix { no_fix: true },
+        }
+    }
+}
+
+/// What rein's `--check` exit code means after a failed start (V14 component 2): 1 →
+/// `needs_init` with its rows; 0, any other end or a timeout → `no_fix`.
+pub fn failed_verdict(code: Option<i32>, rows: Vec<String>) -> Failed {
+    match code {
+        Some(1) => Failed::NeedsInit(rows),
+        _ => Failed::NoFix,
+    }
+}
+
+/// The verdict for a tab whose start failed: kept once known; an answer this tab open
+/// already had is used; one in flight is waited for; else one `--check`, within the
+/// project's budget.
+fn failed_check(d: &Desktop, tab: u32, project: &std::path::Path) -> Result<Check, IpcError> {
+    let answer = |f: &Failed| Check::StartFailed {
+        start_failed: f.into(),
+    };
+    let gate = d.projects.tab_lock(tab);
+    let _one = lock(&gate);
+    match d.projects.failed(tab) {
+        None => return Err(err("unknown_tab", "the tab is not open")),
+        Some(Failed::Pending) => {}
+        Some(f) => return Ok(answer(&f)),
+    }
+    let had = lock(&d.projects.answered).get(&tab).cloned();
+    let verdict = match had {
+        Some((code, rows)) => failed_verdict(Some(code), rows),
+        None if !d.projects.take_failed_check(project) => Failed::NoFix,
+        None => {
+            let cmd = d.platform.rein_command(project, ReinRun::InitCheck)?;
+            let mut lines = Vec::new();
+            let never = AtomicBool::new(false);
+            match run_lines(cmd, CHECK_LIMIT, &never, &mut |l| lines.push(l)) {
+                Ok((code @ Some(0 | 1), _)) => {
+                    d.projects.note(None);
+                    failed_verdict(code, rows(&lines))
+                }
+                Ok((None, Some(Stopped::TimedOut))) => {
+                    d.projects.note(Some(CHECK_TIMED_OUT));
+                    Failed::NoFix
+                }
+                _ => {
+                    d.projects.note(Some(NOT_ANSWERED));
+                    Failed::NoFix
+                }
+            }
+        }
+    };
+    d.projects.set_failed(tab, verdict.clone());
+    Ok(answer(&verdict))
 }
 
 /// `rein init --check` for `tab`: the card's rows (a set-up tab), or the out-of-date verdict
 /// (a started tab, at most [`CHECKS_PER_TAB`] times).
 pub fn check(d: &Desktop, tab: u32) -> Result<Check, IpcError> {
+    if d.projects.failed(tab).is_some() {
+        let project = d
+            .tab_project(tab)
+            .ok_or_else(|| err("unknown_tab", "the tab is not open"))?;
+        return failed_check(d, tab, &project);
+    }
     let setup = d.projects.setup_tab(tab);
     if setup.as_ref().is_some_and(|s| s.inside.is_some()) {
         return Err(err(
@@ -322,7 +482,13 @@ pub fn check(d: &Desktop, tab: u32) -> Result<Check, IpcError> {
     let cmd = d.platform.rein_command(&project, ReinRun::InitCheck)?;
     let mut lines = Vec::new();
     let never = AtomicBool::new(false);
+    // A failed start's verdict waits for this run and uses its answer (V14 component 2).
+    let gate = d.projects.tab_lock(tab);
+    let _one = lock(&gate);
     let run = run_lines(cmd, CHECK_LIMIT, &never, &mut |l| lines.push(l));
+    if let Ok((Some(code @ (0 | 1)), _)) = run {
+        lock(&d.projects.answered).insert(tab, (code, rows(&lines)));
+    }
     let verdict = match (run, setup.is_some()) {
         (Ok((Some(0), _)), _) => Check::Ready { ready: true },
         (Ok((Some(1), _)), true) => Check::NotSetUp {
@@ -482,11 +648,18 @@ mod tests {
 
     #[test]
     fn rows_are_capped_made_visible_and_counted() {
-        let many: Vec<String> = (0..45).map(|i| format!("  refresh  f{i}")).collect();
+        let many: Vec<String> = (0..205).map(|i| format!("  refresh  f{i}")).collect();
         let r = rows(&many);
+        assert_eq!(MAX_ROWS, 200, "V14 component 4: 200 rows, not 40");
         assert_eq!(r.len(), MAX_ROWS + 1);
         assert_eq!(r[0], "  refresh  f0");
         assert_eq!(r[MAX_ROWS], "… and 5 more");
+        // The operator's folder (V14): 58 rows, `refresh CLAUDE.md` the 52nd — all shown.
+        let mut theirs: Vec<String> = (1..=58).map(|i| format!("  add  f{i}")).collect();
+        theirs[51] = "  refresh  CLAUDE.md".into();
+        let r = rows(&theirs);
+        assert_eq!(r.len(), 58);
+        assert_eq!(r[51], "  refresh  CLAUDE.md");
         let hostile = vec![
             format!("x{}", "y".repeat(500)),
             "a\u{1b}[31mred\u{202e}b".into(),
