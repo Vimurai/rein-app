@@ -4180,3 +4180,64 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - I read `shell.tsx`, `overlays.tsx`, `start.ts`, `chrome.ts` and `frame.tsx` at 65e6589 to write V13; nothing was run.
 - This commit carries the tracked `.ai/` files that were already dirty in the tree (TASKS.md, REVIEWS.md, state.json, DIGEST.md), per D-147.
 ---
+
+## Handoff — 2026-11-18 15:47 UTC
+**From**: Engineer → Architect
+**Trigger**: E-85 DONE; E-76's three reads (status.md component 1 "The Engineer reads first"). All three pass, so I am going on with the E-76 build. This entry is the report the task asks for, not a stop.
+
+### What was built
+- **E-85 DONE** (54176c3 + b83e561). Hosted ci 44323522681 and desktop-windows 44323522601 are green, and local CI PASS on b83e561. The figures and divergences are in the run_handover delta.
+  - Measured: api.github.com allows 60 requests/h unauthenticated; one check through wsl.exe takes ~185 ms; the Windows read of the installed version takes 99–129 ms.
+  - Divergences:
+    - The version chip shows the installed Rein; it was a hard-coded 0.5.0.
+    - No Settings UI for `[updates]`.
+    - The hidden-window notification waits for E-78.
+  - **Flaky test:** the macOS hosted run on 54176c3 failed `panel_sources::tests::parsing_is_fast_enough` at 1410 ms against a 1000 ms debug bound. It is E-59's test and passed on b83e561. It is an absolute timing bound on a shared runner. Its bound is yours to decide: relax it, or measure it in release mode only.
+- **E-76 reads (nothing written yet):**
+  - **(a) `window_activity`: passes on tmux 3.2a (ubuntu:22.04 container), 3.6 and 3.8.**
+    - Setup: a private `-S` server with `tmux_app.conf`, a real client per session through `script`, the status line both off and on (status-interval 1, a clock in status-right). Each case was sampled 1.2 s before and 1.5 s after.
+    - Moves on: pane output in the client's current window.
+    - Stays still on:
+      - a status-line redraw;
+      - `resize-window`;
+      - a real client pty resize (stty + SIGWINCH);
+      - a key typed into a pane that prints nothing (echo off);
+      - output in another window of the same session, which moves only that window's own `window_activity`.
+    - The value is whole seconds.
+    - **Caveat:** a full-screen program redraws on SIGWINCH, and that redraw is output. Claude Code does redraw, so a window resize reads as activity for that second. That is harmless at a 15 s line.
+  - **(b) A real Claude Code agent (v2.1.327, Opus 5.5) in a private tmux with the app's conf and an attached client. "No output for 15 s" is a sound line between working and not.**
+    - Method: window_activity and the pane's byte count were sampled every second for 10 min.
+    - **Working:**
+      - Thinking/streaming, and the 7 s and 3 min turns, printed something every second; the spinner and its timer redraw.
+      - A 3-minute foreground tool run (`python3 -c 'time.sleep(180)'`) printed ~660 B/s throughout, with a maximum gap of 1 s.
+    - **Idle at its prompt:** silent. 0 bytes over 45 s and 40 s; the only output was from my own mode-switch keys.
+    - **At a permission prompt:** silent. 0 bytes for 65 s.
+    - **Agent at its prompt with a background shell still running** (the harness moved a foreground `sleep 200` to the background): silent for 199 s, until the agent woke to reply. The table then says `quiet` for a turn that is really still open; I think that is acceptable.
+    - **Two limits you should know:**
+      1. A hung API call keeps the spinner animating, so it reads `working`. The `stuck` rule (quiet ≥ stuck_after_min) never catches it.
+      2. Idle and the permission prompt cannot be told apart, as status.md already says.
+  - **(c) Bell of a background tab: it does reach the app today.**
+    - tmux side: on 3.2a, 3.6 and 3.8, a BEL in another session's pane, or in a non-current window of the same session, reaches that session's own client pty (bell-action any, visual-bell off, monitor-bell on). The app keeps every tab's pty and xterm, and `term.onBell` → `side.bell` marks it.
+    - App side: proven end to end by E-75's `panel-screens.sh` ("The terminal rang its bell." on the background tab, `.ai/screens/E-75/panel-attention-*`).
+    - **However, Claude Code rings no bell at a permission prompt here.** The pane's 5 `\x07` bytes were all OSC terminators: the hyperlink, OSC 0 title and OSC 7501. tmux does not pass those on as a bell. So `attention.ts`'s sentence "a bell from the tab is the only hint" is not true for a Claude agent with default settings.
+  - **Who knows the bell and the current tab (API "the Engineer checks and says"):** the core has neither.
+    - The core passes pty bytes through without parsing them. Finding a BEL there would need a VT parser, because of the OSC-terminator trap above.
+    - The current tab is the web side's choice.
+    - So E-76 adds the closed commands `tab_current(tab)` and a bell report, as the API section allows.
+
+### Decisions made
+- None (Engineer).
+
+### Blueprint divergence (if any)
+- NONE so far.
+
+### Next action needed
+- **Architect, no reply needed to proceed.**
+  1. Decide whether `attention.ts`'s "a bell from the tab is the only hint" sentence and E-78's reliance on the bell change, given (c).
+  2. Decide the macOS timing test's bound.
+- **Engineer:** continue E-76 → E-77 → E-80 as ordered.
+
+### Open risks
+- (b) is one agent version on one machine. A future Claude Code that stops animating during a long tool run would read `quiet`.
+- The probes ran in the session scratchpad, which is not kept. The figures above are the record.
+---
