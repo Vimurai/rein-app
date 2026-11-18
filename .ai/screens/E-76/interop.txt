@@ -1,0 +1,47 @@
+date: 2026-11-18T17:41:11Z
+wsl.exe: WSL version: 3.0.5.0; distro: Ubuntu; tmux: tmux 3.8
+script: 6d1eab6c7398 (crates/rein-desktop/src/tmux_agents.sh at 2d01dad)
+
+pairs (9: eight attached tabs and one tty with no client):
+  /dev/pts/10 app /dev/pts/11 app /dev/pts/14 app /dev/pts/17 app /dev/pts/20 app /dev/pts/23 app /dev/pts/26 app /dev/pts/29 app /dev/pts/999 app
+
+$ wsl.exe -d Ubuntu -e sh -ls -- <the 18 words above> < tmux_agents.sh
+--- output of run 1 (exit 0) ---
+  | clock 1795023671
+  | tab 0 0
+  | activity 1795023671
+  | pane engineer|sleep|0
+  | pane architect|sleep|0
+  | tab 1 0
+  | activity 1795023671
+  | pane engineer|sleep|0
+  | pane architect|sleep|0
+  | tab 2 0
+  | activity 1795023671
+  | pane engineer|sleep|0
+  | pane architect|sleep|0
+  | tab 3 0
+  | activity 1795023671
+  | pane engineer|sleep|0
+  | pane architect|sleep|0
+  | tab 4 0
+  | activity 1795023671
+  | pane engineer|sleep|0
+  | pane architect|sleep|0
+  | tab 5 0
+  | activity 1795023671
+  | pane engineer|sleep|0
+  | pane architect|sleep|0
+  | tab 6 0
+  | activity 1795023671
+  | pane engineer|sleep|0
+  | pane architect|sleep|0
+  | tab 7 0
+  | activity 1795023671
+  | pane engineer|sleep|0
+  | pane architect|sleep|0
+  | tab 8 5
+---
+
+runs: 10; ms each: 164 160 166 184 161 161 152 152 158 153
+min 152 ms, median 160 ms, max 184 ms (target under 250 ms for eight tabs)
