@@ -23,6 +23,7 @@ import { panelData } from "./ipc.ts";
 import type { Lists } from "./attention.ts";
 import { Reader, type ReaderItem } from "./panel-reader.tsx";
 import { AttentionView, ListView, SummaryView, TimelineView, type OnRead } from "./panel-views.tsx";
+import type { StatusMark } from "./status.ts";
 import {
   PANEL_MIN,
   POLL_MS,
@@ -82,6 +83,14 @@ function Unavailable({ text }: { text: string }) {
   );
 }
 
+/** What the app itself holds for a panel: the health words, the tmux server, and the current
+ *  tab's status (the Dashboard's first row, E-77). */
+export interface AppFacts {
+  health: string;
+  server: string;
+  status?: StatusMark | null;
+}
+
 /** "Needs you" is not read by the host: the side menu reads every open tab's facts for the
  *  badge and hands the panel the items, the time of the last read, and "go to tab". */
 export interface AttentionFeed {
@@ -107,7 +116,7 @@ export function PanelBody({
 }: {
   d: Descriptor;
   reply: Reply<unknown> | null;
-  app: { health: string; server: string };
+  app: AppFacts;
   nowMs: number;
   attention?: AttentionFeed | undefined;
   /** Opens the reader (E-74); absent in the render test. */
@@ -130,7 +139,7 @@ export function PanelBody({
   switch (d.view) {
     case "summary": {
       const m = summaryModel(reply.ok as Summary, app, nowMs);
-      return <SummaryView rows={m.rows} chips={m.chips} />;
+      return <SummaryView rows={m.rows} chips={m.chips} status={app.status ?? null} />;
     }
     case "list": {
       const t = reply.ok as Tasks;
@@ -175,7 +184,7 @@ export function PanelHost({
   /** Bumped by `panel.refresh` / `panel.focus`. */
   refreshSeq: number;
   focusSeq: number;
-  app: { health: string; server: string };
+  app: AppFacts;
   /** The "Needs you" items, for that panel only. */
   attention?: AttentionFeed | undefined;
   onClose: () => void;

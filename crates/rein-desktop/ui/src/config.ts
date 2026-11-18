@@ -14,6 +14,7 @@ export interface ConfigFile {
   tmux: { overlay: boolean; status: "hidden" | "app" | "keep"; server: "app" | "user" };
   project: { close_when_agents_exit: boolean };
   panels: { rail: "shown" | "hidden"; enabled: string[] };
+  tabs: { status: "shown" | "hidden" };
   updates: { check: boolean; interval_min: number };
   notifications: { stuck_after_min: number };
   wsl: { distro: string | null };
@@ -33,6 +34,7 @@ export const DEFAULT_CONFIG: ConfigFile = {
   tmux: { overlay: true, status: "hidden", server: "app" },
   project: { close_when_agents_exit: true },
   panels: { rail: "shown", enabled: ["dashboard", "communication", "tasks", "attention"] },
+  tabs: { status: "shown" },
   updates: { check: true, interval_min: 30 },
   notifications: { stuck_after_min: 10 },
   wsl: { distro: null },

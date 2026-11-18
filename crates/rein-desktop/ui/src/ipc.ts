@@ -175,6 +175,8 @@ export interface UiView {
   panels_enabled: Effective<string[]>;
   panel_width: number;
   panel_open: string | null;
+  /** status.md §3 (E-77): each tab's status mark and the status bar's segment. */
+  tabs_status: Effective<"shown" | "hidden">;
   first_run_done: boolean;
 }
 /** The system folder dialog; `null` when cancelled; the path is validated like `tab_open`. */

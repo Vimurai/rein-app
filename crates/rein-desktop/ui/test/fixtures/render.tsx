@@ -75,3 +75,35 @@ export function tab(busy: boolean): string {
     </TooltipProvider>,
   );
 }
+
+// E-77 (status.md §3): one tab in each state the core sends, and the status bar of a quiet tab.
+import { statusMark, type ProjectStatus, type StatusState } from "../../src/status.ts";
+
+const STATES: StatusState[] = ["setup", "ended", "starting", "needs_you", "working", "quiet", "unknown"];
+const item = { key: "b", kind: "bell", index: 0, tab: 0, text: "t", quote: null, list: [], dismissable: true };
+export function status(state: StatusState, over: Partial<ProjectStatus> = {}): ProjectStatus {
+  const now = state === "needs_you" ? [item, { ...item, key: "c" }] : [];
+  return { tab: 1, state, quiet_s: state === "quiet" ? 190 : 3, worked_s: 40, waiting: null, now, info: [], ...over };
+}
+
+export function statusTabs(): string {
+  const bar = titleBar(
+    STATES.map((s, i) => ({
+      id: i,
+      title: `p-${s}`,
+      current: i === 0,
+      exited: s === "ended",
+      starting: s === "starting",
+      status: statusMark(`p-${s}`, status(s), true),
+    })),
+    "0.5.0",
+  );
+  const quiet = statusMark("p", status("quiet", { in_progress: { id: "E-77", title: "Show each project's status." }, turn: "Engineer" }), true);
+  const sb = statusBar("/home/me/Dev/p", ok, null, null, { status: quiet });
+  return renderToString(
+    <TooltipProvider>
+      <TitleBar bar={bar} chrome="linux" r={runner} />
+      <StatusBar bar={sb} r={runner} />
+    </TooltipProvider>,
+  );
+}

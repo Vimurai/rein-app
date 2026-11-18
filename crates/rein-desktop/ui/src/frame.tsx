@@ -9,6 +9,7 @@ import { Spinner } from "../components/loaders.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/tooltip.tsx";
 import type { Chrome, HealthIcon, StatusBar as StatusBarData, TabControl, TitleBar as TitleBarData } from "./chrome.ts";
 import { titleInset, windowButtons } from "./chrome.ts";
+import { StatusGlyph, StatusLines } from "./tab-status.tsx";
 import { UpdateButton } from "./update-ui.tsx";
 import {
   Check,
@@ -175,7 +176,7 @@ export function TitleBar({ bar, chrome, r }: { bar: TitleBarData; chrome: Chrome
               <div
                 role="tab"
                 aria-selected={t.current}
-                aria-label={`${t.label} — ${r.tip(t.select)}`}
+                aria-label={`${t.status ? t.status.name : t.label} — ${r.tip(t.select)}`}
                 aria-busy={t.starting || undefined}
                 className={
                   "tab-in group relative flex h-[28px] min-w-0 max-w-[220px] cursor-pointer items-center gap-[6px] overflow-hidden rounded-md pr-[4px] pl-[10px] transition-colors duration-[var(--motion-base)] " +
@@ -189,7 +190,9 @@ export function TitleBar({ bar, chrome, r }: { bar: TitleBarData; chrome: Chrome
                   if (e.button === 1) r.run(t.close);
                 }}
               >
-                {t.exited && <span aria-label="exited" className="size-[6px] shrink-0 rounded-full bg-destructive" />}
+                {/* The status mark (E-77) left of the title; a starting tab keeps its one spinner. */}
+                {t.status && !(t.status.mark === "spinner" && t.starting) && <StatusGlyph s={t.status} />}
+                {t.exited && !t.status && <span aria-label="exited" className="size-[6px] shrink-0 rounded-full bg-destructive" />}
                 {t.marked && !t.exited && <Hourglass size={12} aria-label="an agent exited" className="shrink-0 text-primary" />}
                 <span className="truncate">{t.label}</span>
                 {/* Starting (V7): a spinner in place of the close icon, which hover still shows. */}
@@ -219,7 +222,7 @@ export function TitleBar({ bar, chrome, r }: { bar: TitleBarData; chrome: Chrome
                 )}
               </div>
             </TooltipTrigger>
-            <TooltipContent>{r.tip(t.select)}</TooltipContent>
+            <TooltipContent>{t.status ? <StatusLines s={t.status} /> : r.tip(t.select)}</TooltipContent>
           </Tooltip>
         ))}
         <TipButton tip={r.tip(bar.add)} className={ICON_BUTTON} onClick={() => r.run(bar.add)}>
@@ -311,6 +314,13 @@ export function StatusBar({ bar, r }: { bar: StatusBarData; r: Runner }) {
         <TipButton tip={r.tip(bar.project.action)} className="min-w-0 rounded-md px-[4px] font-mono hover:bg-muted hover:text-foreground" onClick={() => r.run(bar.project!.action)}>
           <TruncStart text={bar.project.text} />
         </TipButton>
+      )}
+      {/* The current tab's status (E-77): cut from the right when the bar is narrow. */}
+      {bar.status && (
+        <span data-status-segment className="flex min-w-0 items-center gap-[6px] text-foreground">
+          <StatusGlyph s={bar.status} />
+          <span className="truncate">{bar.status.segment}</span>
+        </span>
       )}
       <TipButton
         tip={r.tip(bar.health.action)}

@@ -41,6 +41,7 @@ import {
   projectsForget,
   projectsList,
   updatesLater,
+  type CardView,
   type HealthView,
 } from "./ipc.ts";
 import { HealthOverlay, ProfilesOverlay, ReleaseOverlay } from "./release.tsx";
@@ -60,7 +61,7 @@ import { recheckOrder, reinAsk, showUpdateButton, updateRows } from "./updates.t
 import { SetupCard, UpdateBar, UpdateSheet } from "./project-ui.tsx";
 import { TeamSheet } from "./team-sheet.tsx";
 import { AgentsGoneBar, RestoreCard, restoreAtStart, useTabsRecord } from "./restore-ui.tsx";
-import type { CardView } from "./ipc.ts";
+import { useTabStatus, type TabStatusProps } from "./tab-status.tsx";
 import { SideRow, panelOwnsKey, useSideMenu, useStageFit, type SideMenuProps } from "./side-menu.tsx";
 import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
 
@@ -72,7 +73,7 @@ export interface Ui {
 
 export type Handlers = Partial<Record<ActionName, (call: ActionCall, ui: Ui) => void>>;
 
-export interface ShellProps extends SideMenuProps {
+export interface ShellProps extends SideMenuProps, TabStatusProps {
   theme: Theme;
   keys: KeyTable;
   fontFamily: string;
@@ -234,6 +235,7 @@ export function Shell(props: ShellProps) {
     [],
   );
   const side = useSideMenu(props, say, () => tab.current, () => ({ tabs: tabs.current, current: cur.current }));
+  const statuses = useTabStatus(props.tabsStatus === "shown", rerender);
   useEffect(() => {
     if (!message) return;
     if (message.leaving) {
@@ -865,19 +867,17 @@ export function Shell(props: ShellProps) {
   const now = performance.now();
   const starting = (t: OpenTab | undefined) => t !== undefined && !t.exited && t.term.phase(now) === "starting";
   const bar = titleBar(
-    tabs.current.map((t, i) => ({ id: t.id, title: t.title, current: i === cur.current, exited: t.exited, starting: starting(t), marked: t.marked === true })),
+    tabs.current.map((t, i) => ({ id: t.id, title: t.title, current: i === cur.current, exited: t.exited, starting: starting(t), marked: t.marked === true, status: statuses.mark(t) })),
     updates?.rein.installed ?? VERSION,
     showUpdateButton(updates),
   );
   // The `simple` style has no modes, so no mode badge (D-034).
   const status = statusBar(current ? current.project : null, health, lastCmd, keys.style === "modal" ? modeView.mode : null, {
-    starting: starting(current),
-    health: healthRuns > 0,
-    copied: copied > 0,
+    starting: starting(current), health: healthRuns > 0, copied: copied > 0, status: statuses.mark(current),
   });
 
   // The side menu (E-60): the rail, the open panel beside or over the stage; the stage's fit.
-  const sideView = side.view({ termOpen, current, health, runner, modal: keys.style === "modal" });
+  const sideView = side.view({ termOpen, current, health, runner, modal: keys.style === "modal", status: statuses.always(current) });
   useStageFit(termsEl, () => tab.current, side);
 
   return (

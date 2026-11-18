@@ -40,6 +40,7 @@ pub struct Config {
     pub tmux: Tmux,
     pub project: Project,
     pub panels: Panels,
+    pub tabs: Tabs,
     pub updates: Updates,
     pub notifications: Notifications,
     pub wsl: Wsl,
@@ -187,6 +188,25 @@ impl Default for Panels {
     }
 }
 
+/// `[tabs] status`.
+pub const TAB_STATUS_WORDS: &[&str] = &["shown", "hidden"];
+
+/// The tab bar (status.md §Components 3, D-062).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Tabs {
+    /// `shown` | `hidden`: each tab's status mark and the status bar's status segment.
+    pub status: String,
+}
+
+impl Default for Tabs {
+    fn default() -> Self {
+        Self {
+            status: "shown".into(),
+        }
+    }
+}
+
 /// A `[panels] enabled` list: known ids, no repeats.
 pub fn panels_enabled_ok(ids: &[String]) -> Result<(), String> {
     for (i, id) in ids.iter().enumerate() {
@@ -281,6 +301,9 @@ pub const DEFAULTS_FILE: &str = r##"# rein-app window configuration (desktop.md)
 # [panels]                # the side menu: read-only panels beside the terminal
 # rail = "shown"          # shown | hidden (panels still open from the menu and keys)
 # enabled = ["dashboard", "communication", "tasks", "attention"]
+
+# [tabs]
+# status = "shown"        # shown | hidden: the status mark on each tab and in the status bar
 
 # [updates]               # the window watches for a newer Rein by itself
 # check = true            # false: only the Update dialog checks
@@ -466,6 +489,13 @@ fn validate(c: &Config) -> Result<(), Refusal> {
     if let Err(why) = panels_enabled_ok(&c.panels.enabled) {
         return r("panels", "enabled", why);
     }
+    if !TAB_STATUS_WORDS.contains(&c.tabs.status.as_str()) {
+        return r(
+            "tabs",
+            "status",
+            format!("status {:?} — shown or hidden", c.tabs.status),
+        );
+    }
     if !(10..=1440).contains(&c.updates.interval_min) {
         return r(
             "updates",
@@ -584,6 +614,7 @@ pub fn settings_keys_set(text: &str) -> Vec<String> {
         ("project", "close_when_agents_exit"),
         ("panels", "rail"),
         ("panels", "enabled"),
+        ("tabs", "status"),
     ]
     .iter()
     .filter(|(table, key)| t.get(*table).and_then(|v| v.get(*key)).is_some())
@@ -781,6 +812,7 @@ mod tests {
             ("[tmux]\nserver = \"mine\"\n", 2, "app or user"),
             ("[tmux]\noverlay = \"yes\"\n", 2, "expected a boolean"),
             ("[panels]\nrail = \"left\"\n", 2, "shown or hidden"),
+            ("[tabs]\nstatus = \"left\"\n", 2, "shown or hidden"),
             ("[updates]\ninterval_min = 5\n", 2, "outside 10–1440"),
             ("[notifications]\nstuck_after_min = 2\n", 2, "outside 3–120"),
             (
@@ -826,7 +858,7 @@ mod tests {
 
     #[test]
     fn a_valid_file_parses() {
-        let text = "[font]\nfamily = \"Iosevka Term, monospace\"\nsize = 16\n[theme]\nname = \"nord\"\n[theme.custom]\nbg = \"#101010\"\ncolor4 = \"#5e81ac\"\n[window]\ndecorations = false\nopacity = 0.9\nstart = \"last\"\n[keys]\nleader = \",\"\n[keys.normal]\n\"<leader> 1\" = \"tab.goto 1\"\n\"g s\" = \"input.style simple\"\n\"g p\" = \"panel.toggle tasks\"\n[panels]\nrail = \"hidden\"\nenabled = [\"tasks\"]\n[wsl]\ndistro = \"Ubuntu-24.04\"\n";
+        let text = "[font]\nfamily = \"Iosevka Term, monospace\"\nsize = 16\n[theme]\nname = \"nord\"\n[theme.custom]\nbg = \"#101010\"\ncolor4 = \"#5e81ac\"\n[window]\ndecorations = false\nopacity = 0.9\nstart = \"last\"\n[keys]\nleader = \",\"\n[keys.normal]\n\"<leader> 1\" = \"tab.goto 1\"\n\"g s\" = \"input.style simple\"\n\"g p\" = \"panel.toggle tasks\"\n[panels]\nrail = \"hidden\"\nenabled = [\"tasks\"]\n[tabs]\nstatus = \"hidden\"\n[wsl]\ndistro = \"Ubuntu-24.04\"\n";
         let c = parse(FILE_NAME, text).unwrap();
         assert_eq!(c.font.size, 16);
         assert_eq!(
@@ -838,6 +870,7 @@ mod tests {
         assert_eq!(c.wsl.distro.as_deref(), Some("Ubuntu-24.04"));
         assert_eq!(c.panels.rail, "hidden");
         assert_eq!(c.panels.enabled, ["tasks"]);
+        assert_eq!(c.tabs.status, "hidden");
         assert_eq!(
             settings_keys_set(text),
             [
@@ -845,12 +878,18 @@ mod tests {
                 "font.size",
                 "window.decorations",
                 "panels.rail",
-                "panels.enabled"
+                "panels.enabled",
+                "tabs.status"
             ]
         );
         // E-60: the default offers every panel with the rail shown.
         assert_eq!(Config::default().panels.enabled, PANEL_IDS);
         assert_eq!(Config::default().panels.rail, "shown");
+        assert_eq!(
+            Config::default().tabs.status,
+            "shown",
+            "E-77: the marks are shown"
+        );
     }
 
     #[test]

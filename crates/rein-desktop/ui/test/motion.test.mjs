@@ -98,6 +98,22 @@ test("an idle start screen and an idle project tab run no animation", () => {
   assert.match(rendered.tab(true), /Checking…/);
 });
 
+// Extends the idle check above (status.md §Components 2, D-054; E-77): a tab bar with one tab in
+// each status state runs one animation — the starting tab's spinner — and every mark is a shape.
+test("status marks do not animate: only the starting tab's spinner turns", () => {
+  const html = rendered.statusTabs();
+  assert.deepEqual(classesOf(html).filter((c) => endless.includes(c)), ["spinner"]);
+  const marks = [...html.matchAll(/data-status="([a-z_]+)"/g)].map((m) => m[1]);
+  // Starting draws no second spinner left of the title; unknown draws nothing.
+  assert.deepEqual(marks, ["setup", "ended", "needs_you", "working", "quiet", "quiet"]);
+  for (const name of ["p-setup: Needs set-up.", "p-ended: Ended.", "p-needs_you: Needs you.", "p-working: Working.", "p-quiet: Quiet for 3 min."]) {
+    assert.ok(html.includes(`aria-label="${name} — tab.goto"`), name);
+  }
+  assert.ok(html.includes('aria-label="p-unknown — tab.goto"'), "unknown keeps the plain name");
+  assert.doesNotMatch(html, /aria-label="exited"/, "the ended tab's square replaces the exited dot");
+  assert.match(html, /data-status-segment[^>]*>.*Quiet for 3 min\. · E-77 · Engineer&#x27;s turn/);
+});
+
 test("the script's motion values are the stylesheet's tokens", async () => {
   const { MOTION } = await import("../src/motion.ts");
   assert.deepEqual(

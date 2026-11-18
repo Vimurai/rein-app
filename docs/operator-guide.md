@@ -354,6 +354,26 @@ agent were still alive after the window closed. **What WSL does with its default
 not measured**; do not rely on it. The cost of keeping the distro running: the WSL virtual
 machine keeps its memory in use until you run `wsl --shutdown` or restart Windows.
 
+### Project status on the tabs
+
+Each tab shows its project's state left of its name. The shape tells the state, not only
+the colour:
+
+| Mark | State | Meaning |
+|---|---|---|
+| wrench | Needs set-up. | the folder is not set up, or the tmux setup was refused |
+| square | Ended. | `rein start` ended, or every agent seen running has exited |
+| spinner | Starting… | the tab is opening |
+| bell with a dot (and a count over one) | Needs you. | the tab has something in **Needs you**'s first group |
+| circle with a dot | Working. | an agent runs and the tab printed in the last 15 seconds |
+| empty circle | Quiet for … | an agent runs and the tab has printed nothing for 15 seconds or more |
+
+A tab with none of these shows no mark. Hold the pointer on a tab for its sentence. The
+status bar shows the current tab's sentence between the path and the health badge, and the
+Dashboard panel's first row is the same. Settings → **Project status on tabs**, or
+`[tabs] status = "hidden"` in `config.toml`, removes the marks and the status-bar sentence;
+the Dashboard row stays.
+
 ### Needs you
 
 The side menu's **Needs you** panel (the bell icon on the rail, `Ctrl+Shift+4`, modal

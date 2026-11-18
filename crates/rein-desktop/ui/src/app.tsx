@@ -158,6 +158,7 @@ export function App({
       closeDontAsk={ui?.close_dont_ask ?? false}
       onCloseDontAsk={() => void setField("close_dont_ask", true)}
       panelsRail={ui?.panels_rail.value ?? cfg.panels.rail}
+      tabsStatus={ui?.tabs_status.value ?? cfg.tabs.status}
       panelsEnabled={ui?.panels_enabled.value ?? cfg.panels.enabled}
       panelInit={ui ? { open: ui.panel_open, width: ui.panel_width } : null}
       onPanelState={(field, value) => void setField(field, value)}

@@ -4,11 +4,14 @@
 export {
   ArrowUp,
   Bell,
+  BellDot,
   Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Circle,
   CircleCheck,
+  CircleDot,
   CircleHelp,
   CircleX,
   Copy,
@@ -31,5 +34,6 @@ export {
   Square,
   TriangleAlert,
   Users,
+  Wrench,
   X,
 } from "lucide-react";

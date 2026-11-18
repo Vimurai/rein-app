@@ -14,11 +14,20 @@ import { Chips, taskChips, type ReaderItem } from "./panel-reader.tsx";
 import { filterTasks, firstLines, taskTitle } from "./panel-text.ts";
 import { taskGroups, type Entry, type Group, type ListOptions, type Row, type Task, type Tasks } from "./panels.ts";
 import { InlineText, StructuredText } from "./structured-text.tsx";
+import type { StatusMark } from "./status.ts";
+import { StatusGlyph } from "./tab-status.tsx";
 
-/** Dashboard: key facts as rows, counts by status as chips. */
-export function SummaryView({ rows, chips }: { rows: Row[]; chips: { label: string; n: number }[] }) {
+/** Dashboard: the tab's status first (E-77), then key facts as rows, counts by status as
+ *  chips. */
+export function SummaryView({ rows, chips, status = null }: { rows: Row[]; chips: { label: string; n: number }[]; status?: StatusMark | null }) {
   return (
     <div className="grid gap-4">
+      {status && (
+        <div data-status-row className="flex items-center gap-2 text-[13px] font-medium text-foreground">
+          <StatusGlyph s={status} />
+          <span className="[overflow-wrap:anywhere]">{status.segment || status.lines[0]}</span>
+        </div>
+      )}
       {chips.length > 0 && (
         <ul aria-label="Tasks by status" className="m-0 flex list-none flex-wrap gap-2 p-0">
           {chips.map((c) => (

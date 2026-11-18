@@ -11,6 +11,7 @@ import type { Runner } from "./frame.tsx";
 import { attentionDismiss, attentionItems, tabBell, tabCurrent, type HealthView } from "./ipc.ts";
 import type { ActionCall } from "./keymap.ts";
 import { PanelHost, useVisible, type AttentionFeed } from "./panel-host.tsx";
+import type { StatusMark } from "./status.ts";
 import { PANEL_DEFAULT, POLL_MS, clampWidth, descriptor, enabledPanels, maxWidth, overlays as panelOverlays } from "./panels.ts";
 import { Rail } from "./rail.tsx";
 import type { TermTab } from "./term.ts";
@@ -48,6 +49,8 @@ export interface SideMenuView {
   runner: Runner;
   /** The modal input style (the reader then also takes k / j). */
   modal: boolean;
+  /** The current tab's status for the Dashboard's first row (status.md §3, E-77). */
+  status: StatusMark | null;
 }
 
 export interface SideMenu {
@@ -240,7 +243,7 @@ export function useSideMenu(
 
   // The rail while a project is open, and the open panel for the current tab — beside the
   // terminal, or over it in a narrow window.
-  const view = ({ termOpen, current, health, runner, modal }: SideMenuView) => {
+  const view = ({ termOpen, current, health, runner, modal, status }: SideMenuView) => {
     const offered = enabledPanels(panelsEnabled);
     const coreTab = current?.term.tab;
     const openPanel = panel !== null && panelsEnabled.includes(panel) ? descriptor(panel) : null;
@@ -280,6 +283,7 @@ export function useSideMenu(
           app={{
             health: HEALTH_WORDS[health?.status ?? "unknown"],
             server: coreTab.server === "app" ? "rein-app's own" : "your own",
+            status,
           }}
           onClose={() => runner.run({ name: "panel.close" })}
           onEscape={() => terminalRef.current()?.focus()}

@@ -41,7 +41,7 @@ export function SettingsOverlay({
   ui: UiView;
   /** One ui.json field; `null` clears it (the default applies again). */
   onSet: (
-    field: "input_style" | "theme" | "font_size" | "decorations" | "tmux_server" | "close_when_agents_exit" | "panels_rail" | "panels_enabled",
+    field: "input_style" | "theme" | "font_size" | "decorations" | "tmux_server" | "close_when_agents_exit" | "panels_rail" | "panels_enabled" | "tabs_status",
     value: unknown,
   ) => void;
   onOpenConfig: () => void;
@@ -123,6 +123,15 @@ export function SettingsOverlay({
               checked={ui.close_when_agents_exit.value}
               disabled={ro("close_when_agents_exit")}
               onCheckedChange={(on) => onSet("close_when_agents_exit", on)}
+            />
+          </Row>
+          {/* status.md §3 (E-77): the status mark on each tab and in the status bar. */}
+          <Row label="Project status on tabs" fromConfig={ro("tabs_status")}>
+            <Switch
+              aria-label="Project status on tabs"
+              checked={ui.tabs_status.value === "shown"}
+              disabled={ro("tabs_status")}
+              onCheckedChange={(on) => onSet("tabs_status", on ? "shown" : "hidden")}
             />
           </Row>
           {/* panels.md §Data Model (E-60): the rail, and one switch per panel. */}

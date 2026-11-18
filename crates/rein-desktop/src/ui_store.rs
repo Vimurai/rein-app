@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::config::{ConfigView, PANEL_IDS, RAIL_WORDS, THEMES};
+use crate::config::{ConfigView, PANEL_IDS, RAIL_WORDS, TAB_STATUS_WORDS, THEMES};
 use crate::ipc::{IpcError, err};
 
 pub const FILE_NAME: &str = "ui.json";
@@ -57,6 +57,9 @@ pub struct UiFile {
     /// The panel's width once dragged, and the panel that was open last (or none).
     pub panel_width: Option<u32>,
     pub panel_open: Option<String>,
+    /// The status mark on each tab and in the status bar (status.md §3, E-77): `shown` |
+    /// `hidden`. `[tabs] status` in config.toml wins.
+    pub tabs_status: Option<String>,
     pub first_run_done: bool,
     /// The versions answered "Later" on the update card (updates.md §Data Model): that version
     /// does not ask again.
@@ -82,6 +85,7 @@ impl Default for UiFile {
             panels_enabled: None,
             panel_width: None,
             panel_open: None,
+            tabs_status: None,
             first_run_done: false,
             updates_asked: Default::default(),
         }
@@ -112,6 +116,7 @@ pub struct UiView {
     pub panels_enabled: Effective,
     pub panel_width: u32,
     pub panel_open: Option<String>,
+    pub tabs_status: Effective,
     pub first_run_done: bool,
 }
 
@@ -246,6 +251,12 @@ impl UiStore {
                 }),
                 Value::from(c.panels.enabled.clone()),
             ),
+            tabs_status: pick(
+                "tabs.status",
+                Value::from(c.tabs.status.clone()),
+                d.tabs_status.clone().map(Value::from),
+                Value::from(c.tabs.status.clone()),
+            ),
             // A hand-edited ui.json out of range falls back rather than reaching the page.
             panel_width: d
                 .panel_width
@@ -367,6 +378,16 @@ impl UiStore {
                     Value::Null => None,
                     v => match v.as_str() {
                         Some(w) if RAIL_WORDS.contains(&w) => Some(w.into()),
+                        _ => return Err(bad()),
+                    },
+                };
+            }
+            "tabs_status" => {
+                refuse_config("tabs.status")?;
+                d.tabs_status = match value {
+                    Value::Null => None,
+                    v => match v.as_str() {
+                        Some(w) if TAB_STATUS_WORDS.contains(&w) => Some(w.into()),
                         _ => return Err(bad()),
                     },
                 };
@@ -819,6 +840,38 @@ mod tests {
             s.view(&c).panels_enabled.value,
             serde_json::json!(PANEL_IDS)
         );
+    }
+
+    /// E-77 (status.md §3): the tab status switch — kept, closed, and config.toml wins.
+    #[test]
+    fn the_tab_status_switch_is_kept_closed_and_config_wins() {
+        let t = tempfile::tempdir().unwrap();
+        let s = UiStore::open(Some(t.path().to_path_buf()));
+        let c = cfg(&[]);
+        assert_eq!(s.view(&c).tabs_status.value, Value::from("shown"));
+        s.set(&c, "tabs_status", &Value::from("hidden")).unwrap();
+        let again = UiStore::open(Some(t.path().to_path_buf())).view(&c);
+        assert_eq!(
+            (again.tabs_status.value, again.tabs_status.source),
+            (Value::from("hidden"), "ui")
+        );
+        for value in [Value::from("off"), Value::from(false), Value::from(1)] {
+            assert_eq!(
+                s.set(&c, "tabs_status", &value).unwrap_err().kind,
+                "bad_value",
+                "{value}"
+            );
+        }
+        let from_cfg = cfg(&["tabs.status"]);
+        assert_eq!(
+            s.set(&from_cfg, "tabs_status", &Value::from("shown"))
+                .unwrap_err()
+                .kind,
+            "set_in_config"
+        );
+        assert_eq!(s.view(&from_cfg).tabs_status.source, "config");
+        s.set(&c, "tabs_status", &Value::Null).unwrap();
+        assert_eq!(s.view(&c).tabs_status.source, "default");
     }
 
     /// E-60 (panels.md §Data Model): the side menu's choices and the panel's own state.

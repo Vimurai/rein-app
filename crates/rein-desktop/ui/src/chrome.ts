@@ -5,6 +5,7 @@
 
 import type { ActionCall } from "./keymap.ts";
 import type { HealthView } from "./ipc.ts";
+import type { StatusMark } from "./status.ts";
 
 /** Which frame the core asked for (`globalThis.__REIN_CHROME__`, set before any script). */
 export type Chrome = "windows" | "macos" | "linux";
@@ -34,6 +35,8 @@ export interface TabView {
   starting?: boolean;
   /** V12 7 (E-71): an agent exited while the tab was not in front — a marker on the tab. */
   marked?: boolean;
+  /** The project's status mark (status.md §3, E-77); null or absent draws none. */
+  status?: StatusMark | null;
 }
 
 export interface TabControl {
@@ -44,6 +47,7 @@ export interface TabControl {
   starting: boolean;
   /** An agent exited out of sight (V12 7): an hourglass on the tab. */
   marked: boolean;
+  status: StatusMark | null;
   /** Click: show the tab. */
   select: ActionCall;
   /** The close icon (on hover), and a middle click on the tab. */
@@ -69,6 +73,7 @@ export function titleBar(tabs: readonly TabView[], version: string, update = fal
       exited: t.exited,
       starting: t.starting === true,
       marked: t.marked === true,
+      status: t.status ?? null,
       select: { name: "tab.goto", arg: String(i + 1) },
       close: { name: "tab.detach", arg: String(i + 1) },
     })),
@@ -100,6 +105,8 @@ export function healthBadge(h: HealthView | null, busy = false): { icon: HealthI
 }
 
 export interface StatusBar {
+  /** The current tab's status (status.md §3, E-77), between the path and health. */
+  status: StatusMark | null;
   /** The current tab's project path (dim); a click opens the project picker. */
   project: { text: string; action: ActionCall } | null;
   health: { icon: HealthIcon; text: string; action: ActionCall };
@@ -125,9 +132,11 @@ export function statusBar(
   health: HealthView | null,
   lastCommand: string | null,
   mode: string | null,
-  busy: { starting?: boolean; health?: boolean; copied?: boolean } = {},
+  busy: { starting?: boolean; health?: boolean; copied?: boolean; status?: StatusMark | null } = {},
 ): StatusBar {
   return {
+    // While the bar says "Starting rein…" the status would say it twice.
+    status: busy.starting === true ? null : (busy.status ?? null),
     project: project === null ? null : { text: tildePath(project), action: { name: "project.pick" } },
     health: { ...healthBadge(health, busy.health === true), action: { name: "health.show" } },
     command: lastCommand === null ? null : { text: lastCommand, copy: { name: "cmd.yank" }, copied: busy.copied === true },
