@@ -42,4 +42,7 @@ pub const COMMANDS: &[&str] = &[
     "updates_get",
     "updates_check",
     "updates_later",
+    "project_status_all",
+    "tab_current",
+    "tab_bell",
 ];

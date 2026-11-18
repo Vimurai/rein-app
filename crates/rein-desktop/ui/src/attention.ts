@@ -1,7 +1,8 @@
 // "Needs you" (panels.md §Components 6, D-056; E-61), triaged by status.md §Components 4–5
 // (D-063; E-75). The rules live in the core now (attention.rs): this side sends what only it
-// knows about each open tab — closed booleans and a bell count, by tab-bar index — and draws
-// the two lists it gets back, putting its own tab titles on them. No DOM here; tested under
+// knows about each open tab — closed booleans, by tab-bar index; the bells and the current tab
+// go by `tab_bell` / `tab_current` (E-76) — and draws the two lists it gets back, putting its
+// own tab titles on them. No DOM here; tested under
 // Node. Every string from a project's files stays a string and is put on the page as text.
 
 import type { ActionCall } from "./keymap.ts";
@@ -10,14 +11,11 @@ import type { ActionCall } from "./keymap.ts";
 export interface TabState {
   index: number;
   tab: number | null;
-  exited: boolean;
   refused: boolean;
-  /** Bells rung while the tab was out of sight and not yet looked at; 0 when none. */
-  bell: number;
   update: boolean;
 }
 
-export type Kind = "ended" | "refused" | "bell" | "quiet" | "mention" | "health_fail" | "blocked" | "update" | "health_warn";
+export type Kind = "ended" | "refused" | "bell" | "stuck" | "mention" | "health_fail" | "blocked" | "update" | "health_warn";
 
 export interface Item {
   key: string;

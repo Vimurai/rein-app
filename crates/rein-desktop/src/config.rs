@@ -41,6 +41,7 @@ pub struct Config {
     pub project: Project,
     pub panels: Panels,
     pub updates: Updates,
+    pub notifications: Notifications,
     pub wsl: Wsl,
 }
 
@@ -218,6 +219,23 @@ impl Default for Updates {
     }
 }
 
+/// Notifications (status.md §Data Model, D-062). E-76 reads `stuck_after_min` for the
+/// `stuck` item; the rest of the section comes with the notifications task (E-78).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Notifications {
+    /// An agent running, a task in progress and no output for this many minutes: `stuck`.
+    pub stuck_after_min: u32,
+}
+
+impl Default for Notifications {
+    fn default() -> Self {
+        Self {
+            stuck_after_min: 10,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Wsl {
@@ -267,6 +285,9 @@ pub const DEFAULTS_FILE: &str = r##"# rein-app window configuration (desktop.md)
 # [updates]               # the window watches for a newer Rein by itself
 # check = true            # false: only the Update dialog checks
 # interval_min = 30       # 10 – 1440 minutes between checks for a published release
+
+# [notifications]
+# stuck_after_min = 10    # 3 – 120: an agent runs, a task is in progress, no output this long
 
 # [wsl]                   # Windows only
 #   distro = "Ubuntu"     # unset: WSL's default distro
@@ -450,6 +471,16 @@ fn validate(c: &Config) -> Result<(), Refusal> {
             "updates",
             "interval_min",
             format!("interval_min {} is outside 10–1440", c.updates.interval_min),
+        );
+    }
+    if !(3..=120).contains(&c.notifications.stuck_after_min) {
+        return r(
+            "notifications",
+            "stuck_after_min",
+            format!(
+                "stuck_after_min {} is outside 3–120",
+                c.notifications.stuck_after_min
+            ),
         );
     }
     if let Some(d) = &c.wsl.distro
@@ -751,6 +782,12 @@ mod tests {
             ("[tmux]\noverlay = \"yes\"\n", 2, "expected a boolean"),
             ("[panels]\nrail = \"left\"\n", 2, "shown or hidden"),
             ("[updates]\ninterval_min = 5\n", 2, "outside 10–1440"),
+            ("[notifications]\nstuck_after_min = 2\n", 2, "outside 3–120"),
+            (
+                "[notifications]\nstuck_after_min = 121\n",
+                2,
+                "outside 3–120",
+            ),
             (
                 "[panels]\nenabled = [\"tasks\", \"shell\"]\n",
                 2,

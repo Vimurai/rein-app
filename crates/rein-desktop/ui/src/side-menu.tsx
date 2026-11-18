@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from "react";
 import { NO_ITEMS, bellClears, bellMarks, goToTab, type Lists, type TabState } from "./attention.ts";
 import type { Runner } from "./frame.tsx";
-import { attentionDismiss, attentionItems, type HealthView } from "./ipc.ts";
+import { attentionDismiss, attentionItems, tabBell, tabCurrent, type HealthView } from "./ipc.ts";
 import type { ActionCall } from "./keymap.ts";
 import { PanelHost, useVisible, type AttentionFeed } from "./panel-host.tsx";
 import { PANEL_DEFAULT, POLL_MS, clampWidth, descriptor, enabledPanels, maxWidth, overlays as panelOverlays } from "./panels.ts";
@@ -128,9 +128,7 @@ export function useSideMenu(
             {
               index,
               tab: t.term.tab?.id ?? null,
-              exited: t.exited && !t.refused,
               refused: t.refused === true,
-              bell: t.bell ? (t.bellCount ?? 1) : 0,
               update: (t.update?.length ?? 0) > 0 && t.updateHidden !== true,
             },
           ],
@@ -174,7 +172,18 @@ export function useSideMenu(
     window.addEventListener("focus", on);
     return () => window.removeEventListener("focus", on);
   }, []);
+  // The core keeps the bells and the current tab for the status (E-76); the mark drawn here
+  // is the side menu's own.
+  const currentId = (() => {
+    const { tabs, current } = tabsRef.current();
+    return tabs[current]?.term.tab?.id ?? null;
+  })();
+  useEffect(() => {
+    void tabCurrent(currentId).catch(() => {});
+  }, [currentId]);
   const bell = useCallback((t: SideTab, isCurrent: boolean) => {
+    const id = t.term.tab?.id;
+    if (id !== undefined) void tabBell(id).catch(() => {});
     if (!bellMarks(isCurrent, document.hasFocus())) return;
     t.bell = true;
     t.bellCount = (t.bellCount ?? 0) + 1;

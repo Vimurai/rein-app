@@ -226,5 +226,12 @@ export const panelData = <T>(tab: number, source: import("./panels.ts").Source) 
  *  rules; this side sends only booleans, a bell count and the health word. */
 export const attentionItems = (tabs: import("./attention.ts").TabState[], health: "ok" | "warn" | "fail" | "unknown") =>
   invoke<import("./attention.ts").Lists>("attention_items", { tabs, health });
-/** Dismiss a bell or mention row the core sent for `tab` (anything else is refused). */
+/** The tab in front of the user (none: no terminal tab) — the core marks bells by it (E-76). */
+export const tabCurrent = (tab: number | null) => invoke<void>("tab_current", { tab });
+/** The tab's terminal rang its bell (the core does not parse output for it, E-76). */
+export const tabBell = (tab: number) => invoke<void>("tab_bell", { tab });
+/** Every open tab's status, for a web view that has just loaded; then the `project_status`
+ *  event per change (status.md §API, E-76). */
+export const projectStatusAll = () => invoke<import("./status.ts").ProjectStatus[]>("project_status_all", {});
+/** Dismiss a bell, stuck or mention row the core sent for `tab` (anything else is refused). */
 export const attentionDismiss = (tab: number, key: string) => invoke<void>("attention_dismiss", { tab, key });

@@ -17,7 +17,9 @@
 #   panel-attention-info-only    — E-75: only For information (two blocked tasks, one row).
 # Checked from the core's debug trace (REIN_DESKTOP_TRACE_PANELS, debug builds only):
 #   - the open Tasks panel reads state.json again within 6 s of a change;
-#   - with the window unmapped (hidden) nothing is read for 12 s, and reads resume once it is
+#   - with the window unmapped (hidden) no panel reads for 12 s — only the core's status poll
+#     stats the two attention files, at most once each per 15 s (status.md §Execution
+#     Constraints, E-76) — and reads resume once it is
 #     mapped again;
 #   - typing latency: 20 keys with the panel closed, 20 with it open, timed from the key sent
 #     to the byte reaching a reader in the tab; the open median stays within 1.5 x closed + 5 ms.
@@ -211,12 +213,15 @@ PY
     done
     ok "state.json read again ${waited:-never} ms after the change (limit 6000)" "$([ -n "$waited" ] && [ "$waited" -le 6000 ] && echo 0 || echo 1)"
     sleep 1; shot "panel-tasks-updated-$theme"
-    # Hidden: nothing is read; shown again: reads resume.
+    # Hidden: the panels read nothing; the status poll's attention stat goes on every 15 s
+    # (status.md, E-76): at most one stat of each file in 12 s, no read. Shown again: reads
+    # resume.
     "$W/bin/xmap" rein unmap >/dev/null
     sleep 1
     t1=$(now_ms)
     sleep 12
-    check "no panel read for 12 s while the window is hidden" 0 "$(traces_since "$t1")"
+    hidden_lines="$(grep "^panel-trace" "$W/app.log" | awk -v t="$t1" '$2 >= t')"
+    check "hidden 12 s: only the status poll's stat, at most one per file" yes "$( [ "$(printf '%s' "$hidden_lines" | grep -c .)" -le 2 ] && ! printf '%s' "$hidden_lines" | grep -q ' read$' && [ "$(printf '%s\n' "$hidden_lines" | awk 'NF {print $4}' | sort | uniq -d)" = "" ] && echo yes || echo "no: $(printf '%s' "$hidden_lines" | tr '\n' ';')")"
     t2=$(now_ms)
     "$W/bin/xmap" rein map >/dev/null
     "$W/bin/xresize" rein "$GW" "$GH" >/dev/null

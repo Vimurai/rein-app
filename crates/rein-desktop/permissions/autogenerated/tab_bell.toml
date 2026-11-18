@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tab-bell"
+description = "Enables the tab_bell command without any pre-configured scope."
+commands.allow = ["tab_bell"]
+
+[[permission]]
+identifier = "deny-tab-bell"
+description = "Denies the tab_bell command without any pre-configured scope."
+commands.deny = ["tab_bell"]

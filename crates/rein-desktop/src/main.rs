@@ -9,6 +9,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod actions;
+mod activity;
 mod agents;
 mod attention;
 mod cli;
@@ -33,6 +34,7 @@ mod project_setup;
 mod projects;
 mod pty;
 mod pty_sys;
+mod reported;
 mod restore;
 mod security;
 mod session_tag;
@@ -41,6 +43,8 @@ mod single_instance;
 #[cfg(windows)]
 #[path = "single_instance_windows.rs"]
 mod single_instance;
+mod status;
+mod status_watch;
 mod team;
 mod tmux_overlay;
 mod tmux_server;
@@ -248,6 +252,7 @@ fn main() -> ExitCode {
         .manage(cli_ipc::CliState::default())
         .manage(ui_store)
         .manage(watch)
+        .manage(status_watch::StatusWatch::default())
         .manage(attention::AttentionState::new(dismissed::Dismissed::open(
             dirs::state_dir(&dirs::process_env),
         )))
@@ -296,7 +301,10 @@ fn main() -> ExitCode {
             team::team_mode,
             updates::updates_get,
             updates::updates_check,
-            updates::updates_later
+            updates::updates_later,
+            status_watch::project_status_all,
+            reported::tab_current,
+            reported::tab_bell
         ]);
     let result = builder
         .setup(move |app| {
@@ -371,6 +379,7 @@ fn main() -> ExitCode {
             }
             // The update watch (updates.md, D-065): for the life of the window.
             updates::spawn(app.handle().clone());
+            status_watch::spawn(app.handle().clone());
             // Debug builds only: `REIN_DEVTOOLS=1` opens the web inspector.
             #[cfg(debug_assertions)]
             if std::env::var_os("REIN_DEVTOOLS").is_some() {
@@ -399,9 +408,17 @@ fn main() -> ExitCode {
         app.run(|app, event| match event {
             tauri::RunEvent::Exit => app.state::<ipc::Desktop>().detach_all(),
             tauri::RunEvent::WindowEvent {
-                event: tauri::WindowEvent::Focused(true),
+                event: tauri::WindowEvent::Focused(focused),
                 ..
-            } => app.state::<updates::Watch>().focused(),
+            } => {
+                if focused {
+                    app.state::<updates::Watch>().focused();
+                }
+                app.state::<attention::AttentionState>()
+                    .reported
+                    .focused(focused);
+                app.state::<status_watch::StatusWatch>().kick();
+            }
             _ => {}
         })
     });

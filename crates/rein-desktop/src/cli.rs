@@ -417,7 +417,9 @@ pub fn release_check_from(run: CliRun) -> ReleaseCheck {
             .filter(|v| v.len() <= 64 && v.bytes().all(|b| b.is_ascii_graphic()))
     };
     ReleaseCheck {
-        installed: value("installed: "),
+        // `rein-app update --check` says `installed: none` when no Rein is installed: no
+        // version (the window's chip showed "none" before E-76 noticed).
+        installed: value("installed: ").filter(|v| v != "none"),
         newest: value("newest: "),
         lines: run.lines.clone(),
         code: run.code,
@@ -592,6 +594,12 @@ mod tests {
             code: Some(11),
         });
         assert_eq!((none.installed, none.newest), (None, None));
+        let missing = release_check_from(CliRun {
+            lines: vec!["installed: none".into(), "newest: 0.5.1".into()],
+            code: Some(0),
+        });
+        assert_eq!(missing.installed, None, "rein-app's word for not installed");
+        assert_eq!(missing.newest.as_deref(), Some("0.5.1"));
     }
 
     #[test]

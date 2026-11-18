@@ -54,7 +54,8 @@ START="$(cat "$SRC/tmux_start.sh")"
 KILL="$START --kill --yes"
 ENV=(env -i HOME="$H" PATH="$(dirname "$REAL_TMUX"):/usr/bin:/bin" TMUX_TMPDIR="$W/t" SHELL=/bin/sh)
 tm() { "${ENV[@]}" "$REAL_TMUX" "$@" 2>/dev/null; }
-status() { (cd / && "${ENV[@]}" /bin/sh -s -- "$1" "$2" <"$SRC/tmux_agents.sh" 2>/dev/null); }
+status() { (cd / && "${ENV[@]}" /bin/sh -s -- "$@" <"$SRC/tmux_agents.sh" 2>/dev/null); }
+pane_lines() { status "$@" | sed -n 's/^pane //p'; } # the pane lines only (E-76 adds clock / tab / activity lines)
 code() { status "$@" >/dev/null; echo $?; }
 wait_for() { for _ in $(seq 1 100); do "$@" && return 0; sleep 0.1; done; return 1; }
 
@@ -75,25 +76,44 @@ wait_for attached || { echo "the client did not attach" >&2; exit 1; }
 tty="$(tm -L host display-message -p -t c '#{pane_tty}')"
 echo "tab client: $tty"
 
-running() { [ "$(status "$tty" app | grep -c '|sleep|0$')" = "$1" ]; }
+running() { [ "$(pane_lines "$tty" app | grep -c '|sleep|0$')" = "$1" ]; }
 wait_for running 2
-check "both agents run: one line per pane, role|command|dead" "architect|sleep|0 engineer|sleep|0" "$(status "$tty" app | sort | tr '\n' ' ' | sed 's/ $//')"
-check "only the window the client shows (not the session's other window)" 2 "$(status "$tty" app | wc -l | tr -d ' ')"
+check "both agents run: one line per pane, role|command|dead" "architect|sleep|0 engineer|sleep|0" "$(pane_lines "$tty" app | sort | tr '\n' ' ' | sed 's/ $//')"
+check "only the window the client shows (not the session's other window)" 2 "$(pane_lines "$tty" app | wc -l | tr -d ' ')"
+# E-76: the machine's clock first, then per pair its header and its window's last output.
+out="$(status "$tty" app)"
+check "the clock line is this machine's clock" yes "$(c=$(echo "$out" | sed -n 's/^clock //p'); [ -n "$c" ] && [ $(( $(date +%s) - c )) -le 2 ] && echo yes || echo no)"
+check "the pair's header and activity line" "tab 0 0 activity" "$(echo "$out" | sed -n '2p;3p' | cut -d' ' -f1-3 | sed 's/^activity .*/activity/' | tr '\n' ' ' | sed 's/ $//')"
+act() { status "$tty" app | sed -n 's/^activity //p'; }
+a1="$(act)"; sleep 2
+check "activity stays without output" "$a1" "$(act)"
+tm -L rein-app send-keys -t "${panes[0]}" C-c; sleep 0.3; tm -L rein-app send-keys -t "${panes[0]}" 'echo out; sleep 600' Enter; sleep 1.5
+check "activity moves on pane output" yes "$([ "$(act)" -gt "$a1" ] && echo yes || echo no)"
+wait_for running 2
+check "two pairs in one run: one block each, the missing client marked 5" "tab 0 0|tab 1 5|tab 2 0" "$(status "$tty" app /dev/pts/999 app "$tty" app | grep '^tab ' | tr '\n' '|' | sed 's/|$//')"
 
+# A role with a newline and a header in it prints no header (the rest of the line is dropped).
+tm -L rein-app set-option -p -t "${panes[1]}" @rein_role "$(printf 'engineer\ntab 1 0\nactivity 1')"
+check "a role cannot print a header" "tab 0 0|tab 1 5" "$(status "$tty" app /dev/pts/999 app | grep '^tab ' | tr '\n' '|' | sed 's/|$//')"
+check "a role cut to 33 characters (the core takes 32)" 33 "$(tm -L rein-app set-option -p -t "${panes[1]}" @rein_role "$(printf 'a%.0s' $(seq 1 80))"; pane_lines "$tty" app | awk -F'|' '/^aaaa/ {print length($1)}' | head -1)"
+tm -L rein-app set-option -p -t "${panes[1]}" @rein_role engineer
 before="$(tm -L rein-app show-options -g; tm -L rein-app show-options -p -t "${panes[1]}"; tm -L rein-app list-sessions)"
 tm -L rein-app send-keys -t "${panes[1]}" C-c
 # A shell as agents.rs's SHELLS lists them (a login shell may carry a leading `-`).
-ended() { status "$tty" app | grep -Eq '^engineer\|-?(sh|bash|zsh|fish|dash|ksh|mksh|tcsh|csh|ash|nu)\|0$'; }
+ended() { pane_lines "$tty" app | grep -Eq '^engineer\|-?(sh|bash|zsh|fish|dash|ksh|mksh|tcsh|csh|ash|nu)\|0$'; }
 wait_for ended
-check "the Engineer exited: its pane shows its shell [$(status "$tty" app | grep '^engineer|')]" yes "$(ended && echo yes || echo no)"
-check "the Architect still runs" 1 "$(status "$tty" app | grep -c '^architect|sleep|0$')"
+check "the Engineer exited: its pane shows its shell [$(pane_lines "$tty" app | grep '^engineer|')]" yes "$(ended && echo yes || echo no)"
+check "the Architect still runs" 1 "$(pane_lines "$tty" app | grep -c '^architect|sleep|0$')"
 after="$(tm -L rein-app show-options -g; tm -L rein-app show-options -p -t "${panes[1]}"; tm -L rein-app list-sessions)"
 check "the status run changed nothing in tmux" yes "$([ "$before" = "$after" ] && echo yes || echo no)"
 
 check "a tty tmux would not name exits 2" 2 "$(code /dev/pts/x app)"
 check "a server word not in the list exits 2" 2 "$(code "$tty" other)"
-check "no client on that tty exits 5 (no wait)" 5 "$(code /dev/pts/999 app)"
-check "the user's server has no such client: exit 5" 5 "$(code "$tty" user)"
+check "an odd number of words exits 2" 2 "$(code "$tty" app "$tty")"
+check "more than 16 pairs exits 2" 2 "$(code $(for _ in $(seq 17); do printf '%s app ' "$tty"; done))"
+check "one bad pair among good ones exits 2, nothing listed" "2 " "$(code "$tty" app /dev/pts/x app) $(status "$tty" app /dev/pts/x app)"
+check "no client on that tty: answered, marked 5 (no wait)" "tab 0 5" "$(status /dev/pts/999 app | grep '^tab ')"
+check "the user's server has no such client: marked 5" "tab 0 5" "$(status "$tty" user | grep '^tab ')"
 check "no tmux exits 3" 3 "$( (cd / && env -i HOME="$H" PATH=/nonexistent /bin/sh -s -- "$tty" app <"$SRC/tmux_agents.sh" >/dev/null 2>&1); echo $?)"
 
 # An ordinary tab close detaches its client: the session keeps running (D-034).

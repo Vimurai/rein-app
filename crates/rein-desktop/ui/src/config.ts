@@ -15,6 +15,7 @@ export interface ConfigFile {
   project: { close_when_agents_exit: boolean };
   panels: { rail: "shown" | "hidden"; enabled: string[] };
   updates: { check: boolean; interval_min: number };
+  notifications: { stuck_after_min: number };
   wsl: { distro: string | null };
 }
 
@@ -33,6 +34,7 @@ export const DEFAULT_CONFIG: ConfigFile = {
   project: { close_when_agents_exit: true },
   panels: { rail: "shown", enabled: ["dashboard", "communication", "tasks", "attention"] },
   updates: { check: true, interval_min: 30 },
+  notifications: { stuck_after_min: 10 },
   wsl: { distro: null },
 };
 

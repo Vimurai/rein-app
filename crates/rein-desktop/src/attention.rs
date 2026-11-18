@@ -1,13 +1,13 @@
 //! "Needs you", triaged (status.md §Components 4, D-063; E-75): the rules, in the core. Two
 //! lists — **Now** (counted in the rail badge) and **For information** (listed collapsed, not
-//! counted). The web side sends only what it alone knows about each open tab (closed booleans
-//! and a bell count, by tab-bar index); the core adds each tab's `.ai/` facts
-//! (`panel_attention.rs`), whether its agents are running, and the dismissals. The answer
-//! names tabs by index, never by title or path: the web side puts its own tab titles on it.
+//! counted). The web side sends only what it alone knows about each open tab (closed booleans,
+//! by tab-bar index); the core adds each tab's `.ai/` facts (`panel_attention.rs`), whether
+//! its process ended, its bells (reported by `tab_bell`, E-76), its agents and their window's
+//! activity, and the dismissals. The answer names tabs by index, never by title or path: the
+//! web side puts its own tab titles on it.
 //!
-//! Not built here: `stuck` and `waiting` (the status task). Until then the old "no handoff for
-//! 30 minutes while a task is in progress" stays, but only for a tab whose agents are seen
-//! running.
+//! `stuck` (E-76) replaced the old "no handoff for 30 minutes while a task is in progress".
+//! Not built here: `waiting` (rein's signal, E-81).
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -23,8 +23,6 @@ use crate::panel_attention::{Attention, Blocked};
 pub const MAX_ITEMS: usize = 200;
 /// The most open tabs one request may describe (16 tabs plus set-up tabs, with room).
 pub const MAX_TABS_IN: usize = 64;
-/// The old quiet rule: no handoff for this long while a task is in progress.
-pub const QUIET_S: u64 = 30 * 60;
 /// The fixed sentence for a dismiss of a key the core did not send.
 pub const NOT_IN_LIST: &str = "that item is not in the list";
 
@@ -44,11 +42,7 @@ pub struct TabIn {
     pub index: u32,
     /// The tab's core id, when it has a terminal.
     pub tab: Option<u32>,
-    pub exited: bool,
     pub refused: bool,
-    /// How many bells have rung while the tab was out of sight (0: none marked now). A new
-    /// bell changes the number, so a dismissed bell comes back.
-    pub bell: u32,
     pub update: bool,
 }
 
@@ -59,6 +53,15 @@ pub struct TabCore {
     pub project: Option<String>,
     pub facts: Option<Attention>,
     pub agents_running: bool,
+    /// The tab's process (`rein start`) has ended.
+    pub ended: bool,
+    /// How many bells have rung while the tab was out of sight (0: none marked now). A new
+    /// bell changes the number, so a dismissed bell comes back.
+    pub bell: u32,
+    /// The tab's window: seconds since its last output, and that output's time.
+    pub quiet: Option<(u32, u64)>,
+    /// `stuck` from this many seconds quiet ([notifications] stuck_after_min).
+    pub stuck_after_s: u32,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -67,7 +70,7 @@ pub enum Kind {
     Ended,
     Refused,
     Bell,
-    Quiet,
+    Stuck,
     Mention,
     HealthFail,
     Blocked,
@@ -99,7 +102,9 @@ pub struct Lists {
     pub info: Vec<Item>,
 }
 
-/// "2026-11-13 12:20 UTC" in seconds since the epoch; anything else is not guessed at.
+/// "2026-11-13 12:20 UTC" in seconds since the epoch; anything else is not guessed at. The
+/// old quiet rule's reader, kept for the Home card's last-handoff age (status.md §Home, E-80).
+#[allow(dead_code)]
 pub fn handoff_seconds(ts: &str) -> Option<u64> {
     let b = ts.trim().as_bytes();
     if b.len() != 20
@@ -150,14 +155,15 @@ pub fn span(s: u64) -> String {
     }
 }
 
-/// The hash a dismissal keeps for `item` (with the bell count, so a new bell is new).
-fn item_hash(item: &Item, bell: u32) -> String {
-    dismissed::text_hash(&[
-        &item.key,
-        &item.text,
-        item.quote.as_deref().unwrap_or(""),
-        &bell.to_string(),
-    ])
+/// The hash a dismissal keeps for `item`: with the bell count, so a new bell is new; for
+/// `stuck` the time of the last output instead of the text (which counts the minutes up), so
+/// only quiet again after new work brings it back.
+fn item_hash(item: &Item, core: &TabCore) -> String {
+    let (text, salt) = match item.kind {
+        Kind::Stuck => ("", core.quiet.map_or(0, |q| q.1).to_string()),
+        _ => (item.text.as_str(), core.bell.to_string()),
+    };
+    dismissed::text_hash(&[&item.key, text, item.quote.as_deref().unwrap_or(""), &salt])
 }
 
 /// A dismissable item the core sent: (core tab, key, hash).
@@ -168,7 +174,6 @@ pub type Sent = (u32, String, String);
 pub fn lists(
     tabs: &[(TabIn, TabCore)],
     health: Health,
-    now: u64,
     dismissed: &dyn Fn(&str, &str, &str) -> bool,
 ) -> (Lists, Vec<Sent>) {
     let mut out = Lists::default();
@@ -219,7 +224,7 @@ pub fn lists(
                 None,
                 false,
             ));
-        } else if t.exited {
+        } else if core.ended {
             now_items.push(item(
                 Kind::Ended,
                 "ended".into(),
@@ -228,7 +233,7 @@ pub fn lists(
                 false,
             ));
         }
-        if t.bell > 0 {
+        if core.bell > 0 {
             now_items.push(item(
                 Kind::Bell,
                 "bell".into(),
@@ -238,20 +243,20 @@ pub fn lists(
             ));
         }
         if let Some(f) = &core.facts {
-            // The old quiet rule, kept only while the tab's agents are seen running.
-            let at = f.last_handoff.as_deref().and_then(handoff_seconds);
-            if let Some(at) = at.filter(|&at| {
-                f.in_progress && core.agents_running && now.saturating_sub(at) > QUIET_S
-            }) {
+            // stuck: an agent runs, a task is in progress, and its window has been quiet.
+            if let Some((q, _)) = core
+                .quiet
+                .filter(|&(q, _)| f.in_progress && core.agents_running && q >= core.stuck_after_s)
+            {
                 now_items.push(item(
-                    Kind::Quiet,
-                    "quiet".into(),
+                    Kind::Stuck,
+                    "stuck".into(),
                     format!(
-                        "A task is in progress and there has been no handoff for {}.",
-                        span(now - at)
+                        "An agent is running and a task is in progress, but there has been no output for {}.",
+                        span(u64::from(q))
                     ),
                     None,
-                    false,
+                    true,
                 ));
             }
             for (i, m) in f.mentions.iter().enumerate() {
@@ -269,7 +274,7 @@ pub fn lists(
                 let (Some(tab), Some(project)) = (t.tab, core.project.as_deref()) else {
                     continue;
                 };
-                let hash = item_hash(&it, t.bell);
+                let hash = item_hash(&it, core);
                 if dismissed(project, &it.key, &hash) {
                     continue;
                 }
@@ -310,10 +315,13 @@ pub fn lists(
     (out, sent)
 }
 
-/// The dismissals, and the dismissable keys last sent per core tab (a dismiss must name one).
+/// The dismissals, the dismissable keys last sent per core tab (a dismiss must name one), and
+/// what only the web side can tell the core (status.md §API, E-76).
 pub struct AttentionState {
     pub dismissed: Dismissed,
     sent: Mutex<HashMap<u32, HashMap<String, String>>>,
+    /// What the web side reported (E-76).
+    pub reported: crate::reported::Reported,
 }
 
 impl AttentionState {
@@ -321,6 +329,7 @@ impl AttentionState {
         Self {
             dismissed,
             sent: Mutex::new(HashMap::new()),
+            reported: crate::reported::Reported::default(),
         }
     }
 
@@ -351,12 +360,12 @@ fn now_s() -> u64 {
 }
 
 /// The core's half of each tab: its project, its facts (read through the panel cache, as the
-/// panels are) and whether its agents were last seen running.
-fn core_of(d: &Desktop, t: &TabIn) -> TabCore {
+/// panels are), whether its process ended, its bells, and its agents and their activity.
+fn core_of(d: &Desktop, a: &AttentionState, t: &TabIn, stuck_after_s: u32) -> TabCore {
     let Some(tab) = t.tab else {
         return TabCore::default();
     };
-    let Some(project) = d.tab_project(tab) else {
+    let Some((pty, _, project)) = d.tab_target(tab) else {
         return TabCore::default();
     };
     let facts =
@@ -367,20 +376,72 @@ fn core_of(d: &Desktop, t: &TabIn) -> TabCore {
             },
             crate::panel_ipc::Reply::Unavailable { .. } => None,
         };
+    let seen = d.agents.seen(tab);
     TabCore {
         project: Some(project.to_string_lossy().into_owned()),
         facts,
-        agents_running: d.agents.running(tab),
+        agents_running: seen
+            .agents
+            .iter()
+            .any(|x| x.state == crate::agents::AgentState::Running),
+        ended: !d.host.alive(pty),
+        bell: a.reported.bells(tab),
+        quiet: seen.activity.quiet_s.zip(seen.activity.last_output),
+        stuck_after_s,
     }
 }
 
 /// `attention_items(tabs, health)` → `{now, info}`, the core's answer for every open tab.
-pub fn answer(d: &Desktop, a: &AttentionState, mut tabs: Vec<TabIn>, health: Health) -> Lists {
+/// The input is kept: the status poll uses it for the tabs' closed booleans.
+pub fn answer(
+    d: &Desktop,
+    a: &AttentionState,
+    mut tabs: Vec<TabIn>,
+    health: Health,
+    stuck_after_s: u32,
+) -> Lists {
     tabs.truncate(MAX_TABS_IN);
+    a.reported.input(tabs.clone(), health);
+    let (lists, sent) = lists_of(d, a, tabs, health, stuck_after_s);
+    // Only what the web side was shown can be dismissed (the status poll's lists are not).
+    a.remember(sent);
+    lists
+}
+
+/// The same lists for every tab with a process, as the status poll needs them: each tab's
+/// closed booleans as the web side last sent them (none sent: all false).
+pub fn answer_all(d: &Desktop, a: &AttentionState, stuck_after_s: u32) -> Lists {
+    let (sent, health) = a.reported.last_input();
+    let tabs = d
+        .running_tabs()
+        .into_iter()
+        .enumerate()
+        .map(|(i, (tab, _, _))| {
+            sent.iter()
+                .find(|t| t.tab == Some(tab))
+                .cloned()
+                .unwrap_or(TabIn {
+                    index: u32::try_from(i).unwrap_or(u32::MAX),
+                    tab: Some(tab),
+                    refused: false,
+                    update: false,
+                })
+        })
+        .collect();
+    lists_of(d, a, tabs, health, stuck_after_s).0
+}
+
+fn lists_of(
+    d: &Desktop,
+    a: &AttentionState,
+    tabs: Vec<TabIn>,
+    health: Health,
+    stuck_after_s: u32,
+) -> (Lists, Vec<Sent>) {
     let with: Vec<(TabIn, TabCore)> = tabs
         .into_iter()
         .map(|t| {
-            let core = core_of(d, &t);
+            let core = core_of(d, a, &t, stuck_after_s);
             // A core id the core does not know is no core id.
             let t = TabIn {
                 tab: t.tab.filter(|_| core.project.is_some()),
@@ -389,9 +450,7 @@ pub fn answer(d: &Desktop, a: &AttentionState, mut tabs: Vec<TabIn>, health: Hea
             (t, core)
         })
         .collect();
-    let (lists, sent) = lists(&with, health, now_s(), &|p, k, h| a.dismissed.has(p, k, h));
-    a.remember(sent);
-    lists
+    lists(&with, health, &|p, k, h| a.dismissed.has(p, k, h))
 }
 
 /// `attention_dismiss(tab, key)`: only a dismissable key the core last sent for that tab.
@@ -417,10 +476,12 @@ pub fn dismiss(d: &Desktop, a: &AttentionState, tab: u32, key: &str) -> Result<(
 pub fn attention_items(
     state: State<'_, Desktop>,
     attention: State<'_, AttentionState>,
+    config: State<'_, std::sync::Arc<crate::config::ConfigService>>,
     tabs: Vec<TabIn>,
     health: Health,
 ) -> Lists {
-    answer(&state, &attention, tabs, health)
+    let stuck = crate::status_watch::stuck_after_s(&config);
+    answer(&state, &attention, tabs, health, stuck)
 }
 
 #[tauri::command(async)]
@@ -443,9 +504,7 @@ mod tests {
         TabIn {
             index,
             tab: Some(index + 10),
-            exited: false,
             refused: false,
-            bell: 0,
             update: false,
         }
     }
@@ -463,10 +522,20 @@ mod tests {
             project: Some("/p".into()),
             facts: Some(f),
             agents_running: false,
+            ended: false,
+            bell: 0,
+            quiet: None,
+            stuck_after_s: 600,
         }
     }
+    fn ended(c: TabCore) -> TabCore {
+        TabCore { ended: true, ..c }
+    }
+    fn bell(n: u32, c: TabCore) -> TabCore {
+        TabCore { bell: n, ..c }
+    }
     fn run(tabs: &[(TabIn, TabCore)], health: Health) -> Lists {
-        lists(tabs, health, NOW, &|_, _, _| false).0
+        lists(tabs, health, &|_, _, _| false).0
     }
     fn kinds(v: &[Item]) -> Vec<Kind> {
         v.iter().map(|i| i.kind).collect()
@@ -498,20 +567,16 @@ mod tests {
             mentions: vec!["the operator signs".into()],
             ..facts()
         };
-        let old = Attention {
+        let busy = Attention {
             in_progress: true,
-            last_handoff: Some("2025-11-17 10:00 UTC".into()),
             ..facts()
         };
         /// The input, the health, and the kinds expected in Now and in For information.
         type Row = (TabIn, TabCore, Health, Vec<Kind>, Vec<Kind>);
         let rows: Vec<Row> = vec![
             (
-                TabIn {
-                    exited: true,
-                    ..tab(0)
-                },
-                core(facts()),
+                tab(0),
+                ended(core(facts())),
                 Health::Ok,
                 vec![Ended],
                 vec![],
@@ -519,17 +584,16 @@ mod tests {
             (
                 TabIn {
                     refused: true,
-                    exited: true,
                     ..tab(0)
                 },
-                core(facts()),
+                ended(core(facts())),
                 Health::Ok,
                 vec![Refused],
                 vec![],
             ),
             (
-                TabIn { bell: 1, ..tab(0) },
-                core(facts()),
+                tab(0),
+                bell(1, core(facts())),
                 Health::Ok,
                 vec![Bell],
                 vec![],
@@ -561,16 +625,26 @@ mod tests {
                 vec![Update],
             ),
             (tab(0), core(blocked), Health::Ok, vec![], vec![Blocked]),
-            // The old quiet rule: only with the agents running.
-            (tab(0), core(old.clone()), Health::Ok, vec![], vec![]),
+            // stuck: only with an agent running, a task in progress and the window quiet.
+            (
+                tab(0),
+                TabCore {
+                    quiet: Some((600, 1)),
+                    ..core(busy.clone())
+                },
+                Health::Ok,
+                vec![],
+                vec![],
+            ),
             (
                 tab(0),
                 TabCore {
                     agents_running: true,
-                    ..core(old)
+                    quiet: Some((600, 1)),
+                    ..core(busy)
                 },
                 Health::Ok,
-                vec![Quiet],
+                vec![Stuck],
                 vec![],
             ),
         ];
@@ -584,70 +658,57 @@ mod tests {
         }
     }
 
-    /// Moved from the web side's suite (E-61's "each attention rule on and off"): the edges
-    /// of the quiet rule, facts not read, unique keys.
+    /// The edges of the stuck rule (replacing the old "no handoff for 30 minutes" rule and
+    /// its edges, moved from the web side's suite in E-75), facts not read, unique keys.
     #[test]
-    fn the_quiet_rule_edges_and_missing_facts() {
-        let at = |min: u64| {
-            let s = NOW - min * 60;
-            let days = s / 86_400;
-            let (h, m) = ((s % 86_400) / 3600, (s % 3600) / 60);
-            // NOW is 2025-11-17 12:00 UTC; the minutes used here stay on that day.
-            assert_eq!(days, NOW / 86_400);
-            format!("2025-11-17 {h:02}:{m:02} UTC")
-        };
-        let quiet = |ts: Option<String>, in_progress: bool| {
+    fn the_stuck_rule_edges_and_missing_facts() {
+        let stuck = |quiet: Option<(u32, u64)>, in_progress: bool, running: bool| {
             let c = TabCore {
-                agents_running: true,
+                agents_running: running,
+                quiet,
                 ..core(Attention {
                     in_progress,
-                    last_handoff: ts,
+                    // The last handoff's age no longer counts.
+                    last_handoff: Some("2020-01-01 00:00 UTC".into()),
                     ..facts()
                 })
             };
-            kinds(&run(&[(tab(0), c)], Health::Ok).now)
+            run(&[(tab(0), c)], Health::Ok).now
         };
-        assert_eq!(quiet(Some(at(31)), true), [Kind::Quiet]);
+        let at = stuck(Some((600, 5)), true, true);
+        assert_eq!(kinds(&at), [Kind::Stuck]);
         assert!(
-            run(
-                &[(
-                    tab(0),
-                    TabCore {
-                        agents_running: true,
-                        ..core(Attention {
-                            in_progress: true,
-                            last_handoff: Some(at(31)),
-                            ..facts()
-                        })
-                    }
-                )],
-                Health::Ok
-            )
-            .now[0]
-                .text
-                .contains("31 min")
+            at[0].text.ends_with("no output for 10 min."),
+            "{}",
+            at[0].text
         );
-        assert!(quiet(Some(at(29)), true).is_empty(), "29 min is not yet");
-        assert!(quiet(Some(at(31)), false).is_empty(), "nothing in progress");
+        assert!(at[0].dismissable);
         assert!(
-            quiet(Some("yesterday".into()), true).is_empty(),
-            "not guessed at"
+            stuck(Some((599, 5)), true, true).is_empty(),
+            "under stuck_after_min"
         );
         assert!(
-            quiet(None, true).is_empty(),
-            "no handoff: no time to measure"
+            stuck(Some((3600, 5)), false, true).is_empty(),
+            "nothing in progress"
         );
+        assert!(
+            stuck(Some((3600, 5)), true, false).is_empty(),
+            "no agent running"
+        );
+        assert!(stuck(None, true, true).is_empty(), "activity not read");
+        // The threshold is the setting.
+        let c = TabCore {
+            agents_running: true,
+            quiet: Some((180, 5)),
+            stuck_after_s: 180,
+            ..core(Attention {
+                in_progress: true,
+                ..facts()
+            })
+        };
+        assert_eq!(kinds(&run(&[(tab(0), c)], Health::Ok).now), [Kind::Stuck]);
         // Facts not read: only the app's own rules.
-        let l = run(
-            &[(
-                TabIn {
-                    exited: true,
-                    ..tab(0)
-                },
-                TabCore::default(),
-            )],
-            Health::Ok,
-        );
+        let l = run(&[(tab(0), ended(TabCore::default()))], Health::Ok);
         assert_eq!(kinds(&l.now), [Kind::Ended]);
         // Keys are unique within a tab.
         let busy = core(Attention {
@@ -661,12 +722,10 @@ mod tests {
         let l = run(
             &[(
                 TabIn {
-                    bell: 1,
-                    exited: true,
                     update: true,
                     ..tab(0)
                 },
-                busy,
+                bell(1, ended(busy)),
             )],
             Health::Ok,
         );
@@ -698,12 +757,10 @@ mod tests {
             &[
                 (
                     TabIn {
-                        bell: 2,
-                        exited: true,
                         update: true,
                         ..tab(0)
                     },
-                    core(b(12)),
+                    bell(2, ended(core(b(12)))),
                 ),
                 (tab(1), core(b(1))),
             ],
@@ -732,11 +789,10 @@ mod tests {
         let no_core = run(
             &[(
                 TabIn {
-                    bell: 1,
                     tab: None,
                     ..tab(0)
                 },
-                TabCore::default(),
+                bell(1, TabCore::default()),
             )],
             Health::Ok,
         );
@@ -745,60 +801,52 @@ mod tests {
 
     #[test]
     fn a_dismissed_item_returns_when_its_text_changes() {
-        let m = |line: &str| {
-            core(Attention {
+        let m = |line: &str, bells: u32, quiet: (u32, u64)| TabCore {
+            agents_running: true,
+            quiet: Some(quiet),
+            bell: bells,
+            ..core(Attention {
                 mentions: vec![line.into()],
+                in_progress: true,
                 ..facts()
             })
         };
-        let t = TabIn { bell: 1, ..tab(0) };
         let (_, sent) = lists(
-            &[(t.clone(), m("operator: sign it"))],
+            &[(tab(0), m("operator: sign it", 1, (600, 100)))],
             Health::Ok,
-            NOW,
             &|_, _, _| false,
         );
         assert_eq!(
             sent.iter().map(|s| s.1.as_str()).collect::<Vec<_>>(),
-            ["bell", "mention:0"]
+            ["bell", "stuck", "mention:0"]
         );
         let gone: Vec<(String, String)> = sent.iter().map(|s| (s.1.clone(), s.2.clone())).collect();
         let hidden = |_: &str, k: &str, h: &str| gone.iter().any(|(gk, gh)| gk == k && gh == h);
-        // The same words: hidden. A new bell (count 2) and a new line: back.
-        assert!(
-            lists(
-                &[(t.clone(), m("operator: sign it"))],
-                Health::Ok,
-                NOW,
-                &hidden
-            )
-            .0
-            .now
-            .is_empty()
-        );
-        let back = lists(
-            &[(TabIn { bell: 2, ..t }, m("operator: now the tag"))],
+        // The same words, and stuck counting up from the same last output: hidden.
+        let same = lists(
+            &[(tab(0), m("operator: sign it", 1, (1500, 100)))],
             Health::Ok,
-            NOW,
+            &hidden,
+        );
+        assert!(same.0.now.is_empty(), "{:?}", same.0.now);
+        // A new bell (count 2), quiet again after new output, and a new line: back.
+        let back = lists(
+            &[(tab(0), m("operator: now the tag", 2, (600, 900)))],
+            Health::Ok,
             &hidden,
         )
         .0;
-        assert_eq!(kinds(&back.now), [Kind::Bell, Kind::Mention]);
+        assert_eq!(kinds(&back.now), [Kind::Bell, Kind::Stuck, Kind::Mention]);
     }
 
     #[test]
     fn only_a_dismissable_key_the_core_sent_can_be_dismissed() {
         let a = AttentionState::new(Dismissed::open(None));
-        let t = TabIn {
-            bell: 1,
-            exited: true,
-            ..tab(0)
-        };
         let c = core(Attention {
             mentions: vec!["operator".into()],
             ..facts()
         });
-        let (_, sent) = lists(&[(t, c)], Health::Ok, NOW, &|_, _, _| false);
+        let (_, sent) = lists(&[(tab(0), bell(1, ended(c)))], Health::Ok, &|_, _, _| false);
         a.remember(sent);
         assert!(a.take_sent(10, "bell").is_ok());
         let refused = |r: Result<String, IpcError>| r.unwrap_err().message;

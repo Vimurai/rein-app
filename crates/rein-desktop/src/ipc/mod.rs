@@ -175,6 +175,31 @@ impl Desktop {
             .map(|t| std::path::PathBuf::from(&t.project))
     }
 
+    /// Every tab with a process, in the order they opened: (core id, pty, server).
+    pub fn running_tabs(&self) -> Vec<(u32, PtyId, crate::tmux_server::Server)> {
+        let mut v: Vec<_> = self
+            .tabs()
+            .values()
+            .map(|t| (t.id, t.pty, t.server))
+            .collect();
+        v.sort_by_key(|t| t.0);
+        v
+    }
+
+    /// The set-up tabs (no process: the folder is not set up), by core id.
+    pub fn setup_tabs(&self) -> Vec<u32> {
+        let mut v: Vec<u32> = self
+            .projects
+            .setup
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .keys()
+            .copied()
+            .collect();
+        v.sort_unstable();
+        v
+    }
+
     fn tabs(&self) -> std::sync::MutexGuard<'_, HashMap<u32, Tab>> {
         self.tabs.lock().unwrap_or_else(|e| e.into_inner())
     }
