@@ -5,7 +5,8 @@
 use serde::Serialize;
 
 use crate::activity::WORK_GAP_S;
-use crate::attention::Item;
+use crate::attention::{Item, handoff_seconds};
+use crate::panel_attention::{Attention, InProgress};
 
 /// The closed list of states, in the order the table tries them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -60,9 +61,7 @@ pub fn state(f: &Facts) -> State {
     }
 }
 
-/// `ProjectStatus` as the `project_status` event and `project_status_all()` send it. The
-/// fields of the Home card (the task in progress, whose turn, the last handoff) come with the
-/// Home task (E-80), from the summary source.
+/// `ProjectStatus` as the `project_status` event and `project_status_all()` send it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProjectStatus {
     /// The tab's core id.
@@ -74,6 +73,31 @@ pub struct ProjectStatus {
     pub waiting: Option<bool>,
     pub now: Vec<Item>,
     pub info: Vec<Item>,
+    /// The first task in progress (D-062 addendum 4, E-95); null without one or without a
+    /// readable `state.json`.
+    pub in_progress: Option<InProgress>,
+    /// Whose turn it is: the last handoff's "to"; null without a readable `COMM.md`.
+    pub turn: Option<String>,
+    /// Seconds since the last handoff's time; null when its time is not in the written shape
+    /// or lies ahead of the clock.
+    pub last_handoff_s: Option<u32>,
+}
+
+/// The three fields from one tab's facts, at `now` (seconds since the epoch).
+pub fn card_fields(
+    f: Option<&Attention>,
+    now: u64,
+) -> (Option<InProgress>, Option<String>, Option<u32>) {
+    let Some(f) = f else {
+        return (None, None, None);
+    };
+    let age = f
+        .last_handoff
+        .as_deref()
+        .and_then(handoff_seconds)
+        .and_then(|t| now.checked_sub(t))
+        .map(|s| u32::try_from(s).unwrap_or(u32::MAX));
+    (f.in_progress_task.clone(), f.turn.clone(), age)
 }
 
 impl ProjectStatus {
@@ -87,6 +111,9 @@ impl ProjectStatus {
             || self.worked_s / 60 != next.worked_s / 60
             || self.now != next.now
             || self.info != next.info
+            || self.in_progress != next.in_progress
+            || self.turn != next.turn
+            || self.last_handoff_s.map(|s| s / 60) != next.last_handoff_s.map(|s| s / 60)
     }
 }
 
@@ -165,6 +192,9 @@ mod tests {
             waiting: None,
             now: vec![],
             info: vec![],
+            in_progress: None,
+            turn: None,
+            last_handoff_s: None,
         };
         assert!(!s(State::Quiet, Some(20)).differs(&s(State::Quiet, Some(25))));
         assert!(
@@ -177,11 +207,72 @@ mod tests {
             "a new minute"
         );
         assert!(s(State::Working, Some(1)).differs(&s(State::Quiet, Some(1))));
+        // E-95: the card fields — the task and the turn on any change, the handoff's age by
+        // the minute.
+        let with = |f: &dyn Fn(&mut ProjectStatus)| {
+            let mut x = s(State::Quiet, Some(20));
+            f(&mut x);
+            x
+        };
+        let base = s(State::Quiet, Some(20));
+        assert!(base.differs(&with(&|x| x.turn = Some("Architect".into()))));
+        assert!(base.differs(&with(&|x| {
+            x.in_progress = Some(InProgress {
+                id: "E-1".into(),
+                title: "t".into(),
+            })
+        })));
+        assert!(
+            !with(&|x| x.last_handoff_s = Some(61))
+                .differs(&with(&|x| x.last_handoff_s = Some(119)))
+        );
+        assert!(
+            with(&|x| x.last_handoff_s = Some(119))
+                .differs(&with(&|x| x.last_handoff_s = Some(120)))
+        );
         let shape = serde_json::to_value(s(State::NeedsYou, None)).unwrap();
         assert_eq!(
             shape,
             serde_json::json!({"tab": 1, "state": "needs_you", "quiet_s": null, "worked_s": 30,
-                               "waiting": null, "now": [], "info": []})
+                               "waiting": null, "now": [], "info": [], "in_progress": null,
+                               "turn": null, "last_handoff_s": null})
         );
+    }
+
+    /// E-95: the card fields from one tab's facts, with the clock passed in.
+    #[test]
+    fn the_card_fields_come_from_the_facts_and_are_not_guessed() {
+        const NOW: u64 = 1_763_380_800; // 2025-11-17 12:00 UTC
+        let facts = Attention {
+            tasks_read: true,
+            blocked: vec![],
+            in_progress: true,
+            last_handoff: Some("2025-11-17 10:00 UTC".into()),
+            mentions: vec![],
+            in_progress_task: Some(InProgress {
+                id: "E-77".into(),
+                title: "Show each project's status.".into(),
+            }),
+            turn: Some("Engineer".into()),
+        };
+        assert_eq!(
+            card_fields(Some(&facts), NOW),
+            (
+                facts.in_progress_task.clone(),
+                Some("Engineer".into()),
+                Some(7200)
+            )
+        );
+        assert_eq!(card_fields(None, NOW), (None, None, None), "no facts");
+        let at = |ts: &str| {
+            let f = Attention {
+                last_handoff: Some(ts.into()),
+                ..facts.clone()
+            };
+            card_fields(Some(&f), NOW).2
+        };
+        assert_eq!(at("2025-11-17 13:00 UTC"), None, "ahead of the clock");
+        assert_eq!(at("yesterday"), None, "not in the written shape");
+        assert_eq!(at("2025-11-17 12:00 UTC"), Some(0));
     }
 }

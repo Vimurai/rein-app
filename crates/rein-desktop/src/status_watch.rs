@@ -15,10 +15,11 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::agents::AgentState;
-use crate::attention::{AttentionState, Lists};
+use crate::attention::{AttentionState, Lists, TabIn};
 use crate::config::ConfigService;
 use crate::ipc::Desktop;
-use crate::status::{Facts, ProjectStatus, State as Status, state};
+use crate::panel_attention::Attention;
+use crate::status::{Facts, ProjectStatus, State as Status, card_fields, state};
 
 /// The poll while the window can be seen (V9: one short process per 5 s).
 pub const VISIBLE_EVERY: Duration = Duration::from_secs(5);
@@ -100,15 +101,48 @@ fn items_of(lists: &Lists, tab: u32) -> (Vec<crate::attention::Item>, Vec<crate:
     (of(&lists.now), of(&lists.info))
 }
 
-/// Every open tab's status from what the core holds now (no status run).
+/// A `setup` status: no activity, no items; the card fields when the core has them.
+fn setup_status(tab: u32, facts: Option<&Attention>, now_s: u64) -> ProjectStatus {
+    let (in_progress, turn, last_handoff_s) = card_fields(facts, now_s);
+    ProjectStatus {
+        tab,
+        state: Status::Setup,
+        quiet_s: None,
+        worked_s: 0,
+        waiting: None,
+        now: vec![],
+        info: vec![],
+        in_progress,
+        turn,
+        last_handoff_s,
+    }
+}
+
+/// The tabs the web side reported as needing set-up (or refused) that have no status yet:
+/// not running, not a set-up tab, and known to the core (D-062 addendum 4, E-95).
+pub fn reported_setup(sent: &[TabIn], open: &[u32], known: &dyn Fn(u32) -> bool) -> Vec<u32> {
+    let mut v: Vec<u32> = sent
+        .iter()
+        .filter(|t| t.setup || t.refused)
+        .filter_map(|t| t.tab)
+        .filter(|tab| !open.contains(tab) && known(*tab))
+        .collect();
+    v.sort_unstable();
+    v.dedup();
+    v
+}
+
+/// Every open tab's status from what the core holds now (no status run). `now_s`: the wall
+/// clock in seconds, for the last handoff's age.
 pub fn statuses(
     d: &Desktop,
     a: &AttentionState,
     w: &StatusWatch,
     stuck_after_s: u32,
     now: Instant,
+    now_s: u64,
 ) -> Vec<ProjectStatus> {
-    let lists = crate::attention::answer_all(d, a, stuck_after_s);
+    let (lists, facts) = crate::attention::answer_all(d, a, stuck_after_s);
     let running = d.running_tabs();
     let mut open: Vec<u32> = running.iter().map(|t| t.0).collect();
     let mut out: Vec<ProjectStatus> = running
@@ -118,8 +152,8 @@ pub fn statuses(
             let alive = d.host.alive(pty);
             let running = seen.agents.iter().any(|x| x.state == AgentState::Running);
             let (now_items, info) = items_of(&lists, tab);
-            let facts = Facts {
-                setup: a.reported.refused(tab),
+            let f = Facts {
+                setup: a.reported.refused(tab) || a.reported.setup(tab),
                 start_ended: !alive,
                 agents_ended: !running && seen.agents.iter().any(|x| x.state == AgentState::Ended),
                 starting: alive && !seen.client_ever && w.age(tab, now) < START_LIMIT,
@@ -127,34 +161,43 @@ pub fn statuses(
                 agent_running: running,
                 quiet_s: seen.activity.quiet_s,
             };
+            let (in_progress, turn, last_handoff_s) = card_fields(facts.get(&tab), now_s);
             ProjectStatus {
                 tab,
-                state: state(&facts),
+                state: state(&f),
                 quiet_s: seen.activity.quiet_s,
                 worked_s: seen.activity.worked_s,
                 waiting: None,
                 now: now_items,
                 info,
+                in_progress,
+                turn,
+                last_handoff_s,
             }
         })
         .collect();
     // Set-up tabs have no process: the folder is not set up.
     for tab in d.setup_tabs() {
         open.push(tab);
-        out.push(ProjectStatus {
-            tab,
-            state: Status::Setup,
-            quiet_s: None,
-            worked_s: 0,
-            waiting: None,
-            now: vec![],
-            info: vec![],
-        });
+        out.push(setup_status(tab, None, now_s));
+    }
+    // Tabs the web side says need set-up and the core has no status for.
+    let (sent, _) = a.reported.last_input();
+    for tab in reported_setup(&sent, &open, &|t| d.tab_project(t).is_some()) {
+        open.push(tab);
+        out.push(setup_status(tab, facts.get(&tab), now_s));
     }
     w.forget_gone(&open);
     a.reported.retain(&open);
     out.sort_by_key(|s| s.tab);
     out
+}
+
+/// Seconds since the epoch.
+fn wall_s() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 fn hidden(app: &AppHandle) -> bool {
@@ -195,6 +238,7 @@ pub fn spawn(app: AppHandle) {
                 &w,
                 stuck,
                 Instant::now(),
+                wall_s(),
             );
             for s in w.changed(all) {
                 let _ = app.emit("project_status", s);
@@ -224,6 +268,7 @@ pub fn project_status_all(
         &watch,
         stuck_after_s(&config),
         Instant::now(),
+        wall_s(),
     )
 }
 
@@ -240,6 +285,9 @@ mod tests {
             waiting: None,
             now: vec![],
             info: vec![],
+            in_progress: None,
+            turn: None,
+            last_handoff_s: None,
         }
     }
 
@@ -273,5 +321,130 @@ mod tests {
             .len(),
             1
         );
+    }
+
+    fn tab_in(tab: Option<u32>, refused: bool, setup: bool) -> TabIn {
+        TabIn {
+            index: 0,
+            tab,
+            refused,
+            update: false,
+            setup,
+        }
+    }
+
+    /// E-95 (D-062 addendum 4): a reported tab without a pty and with the setup flag (or
+    /// refused) gets `setup`, once, if the core knows it; a running tab is not counted twice.
+    #[test]
+    fn a_reported_tab_without_a_pty_that_needs_set_up_is_setup() {
+        let sent = [
+            tab_in(Some(7), false, true),
+            tab_in(Some(8), true, false),
+            tab_in(Some(9), false, false),
+            tab_in(Some(3), false, true),
+            tab_in(Some(11), false, true),
+            tab_in(None, false, true),
+            tab_in(Some(7), false, true),
+        ];
+        let known = |t: u32| t != 11;
+        assert_eq!(reported_setup(&sent, &[3], &known), [7, 8]);
+        let s = setup_status(7, None, 0);
+        assert_eq!((s.state, s.quiet_s, s.now.len()), (Status::Setup, None, 0));
+    }
+
+    #[cfg(unix)]
+    mod desktop {
+        use super::*;
+        use crate::attention::Health;
+        use crate::dismissed::Dismissed;
+        use crate::local_host::LocalHost;
+        use crate::pty::{ChildSpec, Events, PtyId, Size};
+        use std::sync::Arc;
+
+        struct Quiet;
+        impl Events for Quiet {
+            fn output(&self, _: PtyId, _: Vec<u8>) {}
+            fn exit(&self, _: PtyId, _: u32) {}
+        }
+
+        fn tab_on(d: &Desktop, project: &std::path::Path) -> u32 {
+            let spec = ChildSpec {
+                program: "/bin/sh".into(),
+                args: vec!["-c".into(), "sleep 5".into()],
+                cwd: Some(project.into()),
+                env_remove: crate::local_host::ENV_REMOVED,
+                env_set: crate::local_host::ENV_SET,
+                tty_line: false,
+            };
+            d.open_spec(&spec, project, Size { cols: 80, rows: 24 }, Arc::new(Quiet))
+                .unwrap()
+                .id
+        }
+
+        const STATE: &str = r#"{"tasks":[{"id":"E-76","status":"DONE"},
+            {"id":"E-77","status":"IN_PROGRESS","description":"Show each project's status."}]}"#;
+        const COMM: &str = "## Handoff \u{2014} 2025-11-17 10:00 UTC\n**From**: Architect \u{2192} Engineer\n**Trigger**: t\n---\n";
+        const NOW: u64 = 1_763_380_800; // 2025-11-17 12:00 UTC
+
+        fn project(state: Option<&[u8]>, comm: bool) -> tempfile::TempDir {
+            let p = tempfile::tempdir().unwrap();
+            std::fs::create_dir(p.path().join(".ai")).unwrap();
+            if let Some(s) = state {
+                std::fs::write(p.path().join(".ai/state.json"), s).unwrap();
+            }
+            if comm {
+                std::fs::write(p.path().join(".ai/COMM.md"), COMM).unwrap();
+            }
+            p
+        }
+
+        /// E-95: the three fields from the project's own files through the panel sources;
+        /// null when a file is missing or over its limit; the setup flag on a running tab.
+        #[test]
+        fn the_card_fields_are_filled_from_the_files_or_null() {
+            let d = Desktop::new(Box::new(LocalHost::new(None)));
+            let a = AttentionState::new(Dismissed::open(None));
+            let w = StatusWatch::default();
+            let full = project(Some(STATE.as_bytes()), true);
+            let none = project(None, false);
+            let big = vec![b' '; usize::try_from(crate::project_file::STATE_MAX).unwrap() + 1];
+            let over = project(Some(&big), true);
+            let (t_full, t_none, t_over) = (
+                tab_on(&d, full.path()),
+                tab_on(&d, none.path()),
+                tab_on(&d, over.path()),
+            );
+            let all = statuses(&d, &a, &w, 600, Instant::now(), NOW);
+            let of = |t: u32| all.iter().find(|s| s.tab == t).unwrap().clone();
+            let f = of(t_full);
+            assert_eq!(
+                f.in_progress,
+                Some(crate::panel_attention::InProgress {
+                    id: "E-77".into(),
+                    title: "Show each project's status.".into()
+                })
+            );
+            assert_eq!(f.turn.as_deref(), Some("Engineer"));
+            assert_eq!(f.last_handoff_s, Some(7200));
+            let n = of(t_none);
+            assert_eq!(
+                (n.in_progress, n.turn, n.last_handoff_s),
+                (None, None, None)
+            );
+            let o = of(t_over);
+            assert_eq!(o.in_progress, None, "state.json over its limit");
+            assert_eq!(o.turn.as_deref(), Some("Engineer"), "COMM.md still read");
+            // The setup flag (a failed start that needs rein init, D-068) makes it `setup`.
+            assert_ne!(f.state, Status::Setup);
+            a.reported
+                .input(vec![tab_in(Some(t_full), false, true)], Health::Unknown);
+            let again = statuses(&d, &a, &w, 600, Instant::now(), NOW);
+            let f = again.iter().find(|s| s.tab == t_full).unwrap();
+            assert_eq!(f.state, Status::Setup);
+            assert_eq!(f.turn.as_deref(), Some("Engineer"), "the fields stay");
+            for t in [t_full, t_none, t_over] {
+                d.detach(t);
+            }
+        }
     }
 }

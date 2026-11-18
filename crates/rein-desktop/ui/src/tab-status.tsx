@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
 import { Spinner } from "../components/loaders.tsx";
 import { BellDot, Circle, CircleDot, Square, Wrench } from "./icons.ts";
 import { listen, projectStatusAll } from "./ipc.ts";
-import { statusMark, type ProjectStatus, type StatusMark } from "./status.ts";
+import { coreId, statusMark, type ProjectStatus, type StatusMark } from "./status.ts";
 
 /** `[tabs] status` (config.toml, ui.json, Settings — E-77). */
 export interface TabStatusProps {
@@ -18,6 +18,8 @@ export interface TabStatusProps {
 export interface StatusTab {
   title: string;
   term: { tab: { id: number } | null };
+  /** A set-up tab has no terminal; its core id is here (V9 component 1). */
+  setup?: { id: number } | undefined;
 }
 
 export interface TabStatus {
@@ -52,7 +54,10 @@ export function useTabStatus(shown: boolean, rerender: () => void): TabStatus {
     // The listener lives as long as the window.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const of = (t: StatusTab | undefined) => (t?.term.tab ? byTab.current.get(t.term.tab.id) : undefined);
+  const of = (t: StatusTab | undefined) => {
+    const id = coreId(t);
+    return id === undefined ? undefined : byTab.current.get(id);
+  };
   return {
     mark: (t) => statusMark(t?.title ?? "", of(t), shown),
     always: (t) => statusMark(t?.title ?? "", of(t), true),

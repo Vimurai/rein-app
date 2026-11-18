@@ -21,11 +21,12 @@ export interface ProjectStatus {
   waiting: boolean | null;
   now: Item[];
   info: Item[];
-  /** The task in progress, whose turn and the last handoff's age (§Data Model). The core
-   *  does not send them yet (status.rs); drawn here when present. */
-  in_progress?: { id: string; title: string } | null;
-  turn?: string | null;
-  last_handoff_s?: number | null;
+  /** The first task in progress, from the project's state.json (E-95); null without one. */
+  in_progress: { id: string; title: string } | null;
+  /** Whose turn it is: the last handoff's "to"; null without a readable COMM.md. */
+  turn: string | null;
+  /** Seconds since the last handoff; null when its time is unreadable or ahead. */
+  last_handoff_s: number | null;
 }
 
 /** The mark of a state (lucide names, 12 px). `spinner` is the tab's existing V7 spinner;
@@ -126,4 +127,10 @@ export function statusMark(project: string, s: ProjectStatus | undefined, shown:
   const mark = MARKS[s.state];
   if (mark === null) return null;
   return { state: s.state, mark, count: markCount(s), name: accessibleName(project, s), lines: tooltipLines(s), segment: statusSegment(s) ?? "" };
+}
+
+/** The core id a tab's status is sent under: its terminal's, or a set-up tab's own (a set-up
+ *  tab has no terminal, V9 component 1). */
+export function coreId(t: { term: { tab: { id: number } | null }; setup?: { id: number } | undefined } | undefined): number | undefined {
+  return t?.term.tab?.id ?? t?.setup?.id;
 }

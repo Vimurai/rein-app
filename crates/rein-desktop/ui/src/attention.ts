@@ -13,6 +13,9 @@ export interface TabState {
   tab: number | null;
   refused: boolean;
   update: boolean;
+  /** The tab needs set-up though it has a terminal (a failed start that needs rein init,
+   *  D-068): the core's status is then `setup` (E-95). Absent: false. */
+  setup?: boolean;
 }
 
 export type Kind = "ended" | "refused" | "bell" | "stuck" | "mention" | "health_fail" | "blocked" | "update" | "health_warn";

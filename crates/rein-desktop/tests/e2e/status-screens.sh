@@ -8,15 +8,17 @@
 #   ended     — runs for 14 s, then returns to the shell (seen running, then gone);
 #   needs-you — runs quietly; a bell is rung in its other pane while the tab is in the background;
 #   unknown   — no agent pane at all;
+#   setup     — a folder with no .ai/: the window opens it as a set-up tab (no process);
 #   starting  — `rein start` never attaches (the core says starting for 20 s), opened last.
 # Screens:
 #   status-tabs      — the tab bar with one tab in each of those states (starting is current);
-#   status-tooltip   — the pointer on the quiet tab: its tooltip;
+#   status-tooltip   — the pointer on the quiet tab: its tooltip, with the task in progress and
+#                      whose turn (E-95: from the project's state.json and COMM.md);
 #   status-dashboard — the quiet tab current: the status-bar segment and the Dashboard's first row;
 #   status-hidden    — the same with `[tabs] status = "hidden"` set in Settings' file (ui.json):
 #                      no marks, no segment; the Dashboard row stays.
-# `setup` is not on screen: the core sends no status for a tab without a pty (a refused set-up
-# opens none), so the window cannot show it — the render test draws that mark.
+# Each lost second start is counted and printed ("second starts retried"): the first one after
+# the window starts is sometimes lost (E-77 handoff); the Architect registers a task from it.
 # Checked: the marks the window drew (data-status) are read from the screen's accessibility
 # names by eye; the core's trace is not needed. The `rein` is a stand-in in a throwaway HOME;
 # tmux runs on a private -S socket. A local tool only: it refuses to run when CI is set. Needs:
@@ -130,10 +132,14 @@ desktop() { # desktop <dir>: the window, or (a second start) a handoff to the ru
 second() { # second <dir>: a second start; once more if no session came of it (one can be lost
   # while the window is still busy with the tab before)
   local n
+  if [ ! -d "$1/.ai" ]; then # a set-up tab: no session to wait for
+    timeout 20 bash -c "$(declare -f desktop); W='$W' REPO='$REPO' desktop '$1'"; sleep 3; return
+  fi
   for n in 1 2; do
     timeout 20 bash -c "$(declare -f desktop); W='$W' REPO='$REPO' desktop '$1'"
     for _ in $(seq 1 24); do T has-session -t "$(basename "$1")" 2>/dev/null && { sleep 2; return; }; sleep 0.25; done
     echo "  no session for $(basename "$1") after start $n" >&2
+    retried=$((retried + 1))
   done
 }
 quit() { kill "$APP" 2>/dev/null; wait "$APP" 2>/dev/null; APP=""; T kill-server 2>/dev/null; sleep 0.5; }
@@ -144,11 +150,12 @@ run() { # run <theme> <tabs-status>
   printf '{"schema":1,"input_style":"simple","first_run_done":true,"theme":"%s","tabs_status":"%s"}' "$theme" "$shown" >"$st/ui.json"
   rm -f "$st/projects.json" "$st/dismissed.json" # no restore, no dismissed rows from a run before
   for p in working quiet ended needs-you unknown starting; do project "$d/$p"; done
+  mkdir -p "$d/setup" # no .ai/: not set up
   desktop "$d/working" &
   APP=$!
   for _ in $(seq 1 300); do "$W/bin/xresize" rein "$GW" "$GH" >/dev/null 2>&1 && break; sleep 0.05; done
   sleep 8 # the first tab is up and the window takes a second start's folder
-  for p in quiet ended needs-you unknown; do second "$d/$p"; done
+  for p in quiet ended needs-you unknown setup; do second "$d/$p"; done
   "$W/bin/xresize" rein "$GW" "$GH" >/dev/null
   sleep 16 # quiet has been quiet for 15 s; ended's agent was seen and has exited
   T send-keys -t "needs-you:needs-you.1" "printf '\\a'" Enter # a bell in a background tab
@@ -168,10 +175,12 @@ run() { # run <theme> <tabs-status>
   quit
 }
 
+retried=0
 for theme in catppuccin-mocha github-light; do
   echo "[$theme ${GW}x${GH}]"
   run "$theme" shown
 done
 echo "[catppuccin-mocha, [tabs] status = hidden]"
 run catppuccin-mocha hidden
+echo "second starts retried: $retried (of 15)"
 echo "done: screens in $OUT"

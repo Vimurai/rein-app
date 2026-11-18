@@ -4,7 +4,7 @@
 // motion.test.mjs ("status marks do not animate").
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MARKS, accessibleName, quietSpan, sentence, statusMark, statusSegment, tooltipLines } from "../src/status.ts";
+import { MARKS, accessibleName, coreId, quietSpan, sentence, statusMark, statusSegment, tooltipLines } from "../src/status.ts";
 import { DEFAULT_CONFIG } from "../src/config.ts";
 import { statusBar } from "../src/chrome.ts";
 
@@ -91,4 +91,11 @@ test("[tabs] status: shown by default; hidden or not yet known draws no mark", (
   assert.equal(statusMark("p", st("working"), false), null, "hidden");
   assert.equal(statusMark("p", undefined, true), null, "no status from the core yet");
   assert.equal(statusMark("p", st("unknown"), true), null, "unknown has no mark");
+});
+
+test("a set-up tab's status is found under its own core id (it has no terminal)", () => {
+  assert.equal(coreId({ term: { tab: { id: 4 } } }), 4);
+  assert.equal(coreId({ term: { tab: null }, setup: { id: 9 } }), 9);
+  assert.equal(coreId({ term: { tab: null } }), undefined);
+  assert.equal(coreId(undefined), undefined);
 });

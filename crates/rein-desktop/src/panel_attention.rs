@@ -19,6 +19,17 @@ pub const LINE: usize = 300;
 /// The section whose lines are looked at for the word "operator".
 pub const NEXT_ACTION: &str = "next action needed";
 
+/// Characters kept of a task id or a role name here (display only; the web side shows a task
+/// id only in the `[A-Z]-[0-9]{1,6}` shape).
+pub const WORD: usize = 40;
+
+/// The first task in progress: its id and description (the web side cuts the title).
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct InProgress {
+    pub id: String,
+    pub title: String,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Blocked {
     pub id: String,
@@ -35,6 +46,10 @@ pub struct Attention {
     pub last_handoff: Option<String>,
     /// Lines of the last handoff's "Next action needed" holding the word operator.
     pub mentions: Vec<String>,
+    /// The first task `IN_PROGRESS` (status.md §Data Model `in_progress`, E-95).
+    pub in_progress_task: Option<InProgress>,
+    /// The last handoff's "to": whose turn it is, as the file says (`turn`, E-95).
+    pub turn: Option<String>,
 }
 
 /// True when `line` holds the word "operator" (or "operators"), in any case, as a word.
@@ -70,12 +85,24 @@ pub fn attention(tasks: Option<&Tasks>, handoffs: Option<&Handoffs>) -> Attentio
         .take(MAX_MENTIONS)
         .map(|l| shown(l, LINE, false))
         .collect();
+    let in_progress_task = tasks
+        .and_then(|t| t.tasks.iter().find(|x| x.status == "IN_PROGRESS"))
+        .map(|x| InProgress {
+            id: shown(&x.id, WORD, false),
+            title: shown(&x.description, LINE, false),
+        });
+    let turn = last
+        .map(|h| h.to.trim())
+        .filter(|t| !t.is_empty())
+        .map(|t| shown(t, WORD, false));
     Attention {
         tasks_read: tasks.is_some(),
         blocked,
         in_progress,
         last_handoff: last.map(|h| h.timestamp.clone()),
         mentions,
+        in_progress_task,
+        turn,
     }
 }
 
@@ -126,6 +153,15 @@ mod tests {
         assert_eq!(a.blocked[1].description, "<script>alert(1)</script>");
         assert!(a.in_progress);
         assert_eq!(a.last_handoff.as_deref(), Some("2026-11-17 14:40 UTC"));
+        // E-95: the first task in progress and whose turn it is (the last handoff's "to").
+        assert_eq!(
+            a.in_progress_task,
+            Some(InProgress {
+                id: "E-3".into(),
+                title: String::new()
+            })
+        );
+        assert_eq!(a.turn.as_deref(), Some("Engineer"));
         // Only the last handoff, only its "Next action needed", only the word as a word.
         assert_eq!(
             a.mentions,
@@ -147,6 +183,8 @@ mod tests {
                 in_progress: false,
                 last_handoff: None,
                 mentions: vec![],
+                in_progress_task: None,
+                turn: None,
             }
         );
         let h = parse_handoffs(COMM, true);

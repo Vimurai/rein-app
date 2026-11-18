@@ -44,6 +44,10 @@ pub struct TabIn {
     pub tab: Option<u32>,
     pub refused: bool,
     pub update: bool,
+    /// The tab needs set-up though it has a terminal (D-062 addendum 4, E-95; a failed start
+    /// that needs `rein init`, D-068): its status is `setup`. Absent: false.
+    #[serde(default)]
+    pub setup: bool,
 }
 
 /// What the core knows about the same tab.
@@ -402,7 +406,7 @@ pub fn answer(
 ) -> Lists {
     tabs.truncate(MAX_TABS_IN);
     a.reported.input(tabs.clone(), health);
-    let (lists, sent) = lists_of(d, a, tabs, health, stuck_after_s);
+    let (lists, sent, _) = lists_of(d, a, tabs, health, stuck_after_s);
     // Only what the web side was shown can be dismissed (the status poll's lists are not).
     a.remember(sent);
     lists
@@ -410,7 +414,13 @@ pub fn answer(
 
 /// The same lists for every tab with a process, as the status poll needs them: each tab's
 /// closed booleans as the web side last sent them (none sent: all false).
-pub fn answer_all(d: &Desktop, a: &AttentionState, stuck_after_s: u32) -> Lists {
+/// The lists for every running tab, and each tab's facts by core id (the status's task and
+/// turn, E-95) — one read of the two files per tab for both.
+pub fn answer_all(
+    d: &Desktop,
+    a: &AttentionState,
+    stuck_after_s: u32,
+) -> (Lists, HashMap<u32, Attention>) {
     let (sent, health) = a.reported.last_input();
     let tabs = d
         .running_tabs()
@@ -425,10 +435,12 @@ pub fn answer_all(d: &Desktop, a: &AttentionState, stuck_after_s: u32) -> Lists 
                     tab: Some(tab),
                     refused: false,
                     update: false,
+                    setup: false,
                 })
         })
         .collect();
-    lists_of(d, a, tabs, health, stuck_after_s).0
+    let (lists, _, facts) = lists_of(d, a, tabs, health, stuck_after_s);
+    (lists, facts)
 }
 
 fn lists_of(
@@ -437,7 +449,7 @@ fn lists_of(
     tabs: Vec<TabIn>,
     health: Health,
     stuck_after_s: u32,
-) -> (Lists, Vec<Sent>) {
+) -> (Lists, Vec<Sent>, HashMap<u32, Attention>) {
     let with: Vec<(TabIn, TabCore)> = tabs
         .into_iter()
         .map(|t| {
@@ -450,7 +462,12 @@ fn lists_of(
             (t, core)
         })
         .collect();
-    lists(&with, health, &|p, k, h| a.dismissed.has(p, k, h))
+    let facts = with
+        .iter()
+        .filter_map(|(t, c)| Some((t.tab?, c.facts.clone()?)))
+        .collect();
+    let (lists, sent) = lists(&with, health, &|p, k, h| a.dismissed.has(p, k, h));
+    (lists, sent, facts)
 }
 
 /// `attention_dismiss(tab, key)`: only a dismissable key the core last sent for that tab.
@@ -506,6 +523,7 @@ mod tests {
             tab: Some(index + 10),
             refused: false,
             update: false,
+            setup: false,
         }
     }
     fn facts() -> Attention {
@@ -515,6 +533,8 @@ mod tests {
             in_progress: false,
             last_handoff: None,
             mentions: vec![],
+            in_progress_task: None,
+            turn: None,
         }
     }
     fn core(f: Attention) -> TabCore {
@@ -617,6 +637,7 @@ mod tests {
             (
                 TabIn {
                     update: true,
+                    setup: false,
                     ..tab(0)
                 },
                 core(facts()),
@@ -723,6 +744,7 @@ mod tests {
             &[(
                 TabIn {
                     update: true,
+                    setup: false,
                     ..tab(0)
                 },
                 bell(1, ended(busy)),
@@ -758,6 +780,7 @@ mod tests {
                 (
                     TabIn {
                         update: true,
+                        setup: false,
                         ..tab(0)
                     },
                     bell(2, ended(core(b(12)))),

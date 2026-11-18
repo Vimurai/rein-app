@@ -85,6 +85,14 @@ impl Reported {
         self.lock().bells.retain(|t, _| open.contains(t));
     }
 
+    /// The web side said the tab needs set-up (its last `attention_items`, E-95).
+    pub fn setup(&self, tab: u32) -> bool {
+        self.lock()
+            .tabs_in
+            .iter()
+            .any(|t| t.tab == Some(tab) && t.setup)
+    }
+
     /// The web side said the tab's tmux setup was refused (its last `attention_items`).
     pub fn refused(&self, tab: u32) -> bool {
         self.lock()
@@ -159,6 +167,7 @@ mod tests {
             tab: Some(tab),
             refused,
             update: false,
+            setup: false,
         };
         a.input(vec![t(3, true), t(4, false)], Health::Warn);
         assert!(a.refused(3) && !a.refused(4));
