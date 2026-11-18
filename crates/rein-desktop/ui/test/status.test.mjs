@@ -44,7 +44,19 @@ test("quiet time in the core's steps: 15 s under a minute, then minutes, then ho
 });
 
 test("the tooltip: at most three lines, the task and the turn only when known", () => {
-  assert.deepEqual(tooltipLines(st("working")), ["Working."]);
+  // Per state, with nothing else known: the sentence alone.
+  const alone = { setup: "Needs set-up.", ended: "Ended.", starting: "Starting…", needs_you: "Needs you.", working: "Working.", quiet: "Quiet for 1 min.", unknown: "—" };
+  for (const [state, line] of Object.entries(alone)) assert.deepEqual(tooltipLines(st(state, { quiet_s: 75 })), [line], state);
+  // Per state, with the task and the turn known: the same three lines under each sentence.
+  const known = { in_progress: { id: "E-80", title: "Build Home." }, turn: "Architect", last_handoff_s: 90 };
+  for (const [state, line] of Object.entries(alone)) {
+    assert.deepEqual(tooltipLines(st(state, { quiet_s: 75, ...known })), [line, "In progress: E-80 — Build Home.", "Architect's turn · last handoff 1 min ago"], state);
+  }
+  // A drawn tab's tooltip is these lines (the mark carries them); unknown draws no mark.
+  for (const state of Object.keys(alone)) {
+    const m = statusMark("p", st(state, { quiet_s: 75 }), true);
+    assert.deepEqual(m?.lines ?? null, state === "unknown" ? null : [alone[state]], state);
+  }
   const full = st("quiet", {
     quiet_s: 600,
     in_progress: { id: "E-77", title: "Show each project's status in the tab bar. Operator direction." },
