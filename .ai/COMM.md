@@ -4273,3 +4273,31 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - `stopped` at 15 s may be noisy for short turns in background tabs. It is one constant; say so in E-78's handoff if the window run shows it.
 - The hung-API-call limit has no fix in the app before E-81.
 ---
+
+## Handoff — 2026-11-18 18:09 UTC
+**From**: Engineer → Architect
+**Trigger**: E-76 and E-93 DONE; E-77 built, ACCEPT_FAIL on one clause that needs your ruling
+
+### What was built
+- **E-76 DONE.** Its one failed clause (Windows interop) is recorded at 04c1c52: `.ai/screens/E-76/interop.{sh,txt}` — one `wsl.exe` for eight attached tabs and a tty with no client, the argv `WslHost::tmux_agents` builds, 10 runs all exit 0, **152–184 ms (median 160)**, target 250. The first attempt measured 4–11 s: the harness fed its tmux clients from `/dev/zero`, which streams NUL keys into tmux; the clients now read an idle pipe. ACCEPT_PASS 5/5; hosted ci and desktop-windows green at 2d01dad.
+- **E-93 DONE** (ba050c4): the D-062 addendum 3 sentence in `attention.ts` and `docs/operator-guide.md`; `parsing_is_fast_enough` asserts a flat 10 000 ms unoptimised, 100 / 500 ms optimised unchanged. One `--release` run: **25 ms**.
+- **E-77** (aec78a9, test fix ed9d9dc): `ui/src/status.ts` (pure: mark, sentence, accessible name, ≤3 tooltip lines, segment, task id only as `[A-Z]-[0-9]{1,6}`), `ui/src/tab-status.tsx` (keeps the core's last status per tab; glyph; tooltip lines), drawn in `frame.tsx` (mark left of the title; the square replaces the old exited dot; the segment between path and health, cut from the right, left out while the bar says "Starting rein…"), Dashboard first row (`panel-views.tsx`). `[tabs] status` in `config.rs`, `ui_store.rs` (`tabs_status`), Settings ("Project status on tabs"). `shell.tsx` stays 1108 lines. Operator guide: a "Project status on the tabs" section. Screens: `tests/e2e/status-screens.sh` → `.ai/screens/E-77/` (7 PNGs, all opened: tabs, tooltip, Dashboard in both themes; hidden in mocha).
+
+### Decisions made
+- With `[tabs] status = "hidden"` the Dashboard's status row stays (only the tab marks and the status-bar segment go). Say if you want it hidden too.
+
+### Blueprint divergence (if any)
+- **`setup` never reaches the window.** `status_watch::statuses` builds statuses only over `running_tabs()` (tabs with a pty). A refused or not-set-up tab has no pty, and the web leaves set-up tabs out of `attention_items` (`side-menu.tsx` `tabStates`). So component 2's first row cannot occur today. This is why E-77 is ACCEPT_FAIL on clause 4 (no setup tab on the screens); the wrench mark is drawn only in the render test.
+- **`ProjectStatus` has no `in_progress`, `turn`, `last_handoff_s`** (the Data Model has them; E-76's `status.rs` left them out). Tooltip lines 2–3 and the segment's task id / turn are drawn when present and tested, but never appear in the running window.
+
+### Next action needed
+- **Ruling on E-77 clause 4:** (a) a core follow-up that sends `setup` for a tab without a pty — it needs a `setup` flag in the closed `TabIn` of `attention_items` and `statuses()` over the reported tabs as well as the running ones — after which I reshoot; or (b) amend clause 4 to accept the render test for the wrench mark.
+- **Confirm** the three card fields come with E-80 (or name the task that adds them to the core).
+- E-77 stays open until then; E-78 is unblocked and next in my queue unless you say otherwise.
+
+### Open risks
+- Observed, not investigated: the first second start after the window launches is sometimes lost (no tab opens); `status-screens.sh` retries once and the retry always worked. Could be an `open_dir` arriving during start-up restore.
+- The window's working mark (`circle-dot`, `text-primary`) reads close to the muted grey in catppuccin-mocha at 12 px; the shape still tells it apart.
+- Three harness workdirs `/tmp/rein-sts.*` are left on this machine: `rm -rf` is blocked by the safe-exec gate; harmless.
+- `.ai/blueprints/desktop.md` is modified in the working tree and not by me; it is not in this commit.
+---

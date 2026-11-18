@@ -1138,23 +1138,23 @@
     {
       "id": "E-76",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Compute one status per open project in the core, per .ai/blueprints/status.md §Components 1, 2 and 4, §Data Model, §API and §Execution Constraints (D-062). Operator direction 2026-11-17: see which project is working, stopped or stuck. After the triage task and after the tab-restore tasks (E-70, E-71). FIRST, before any write, do the three reads in component 1 \"The Engineer reads first\" — (a) window_activity on tmux 3.2a and the newest tmux at hand, (b) a real Claude Code agent's output cadence while working, idle and at a permission prompt, (c) whether a background tab's bell reaches the app — and report them in a handoff; if (b) fails, STOP and hand back. Then: extend the constant read-only status script with the window's activity time and that machine's clock (no new argument, nothing set); keep quiet_s and worked_s per tab; implement the status table as a pure function with a clock passed in; add the stuck item (agent running, task IN_PROGRESS, quiet at least stuck_after_min, default 10, 3–120) and remove the interim quiet rule; send the project_status event on change and answer project_status_all(); poll every 15 s while the window is hidden or minimised, with one wsl.exe for all tabs on Windows. Reserve Activity.waiting as null — read nothing for it. Acceptance: the status table test (every row and the order); quiet_s / worked_s over a scripted series; no test sleeps; Windows interop output for the extended script with timing (target under 250 ms, eight tabs); the measured figures for (a)–(c) in the handoff.",
       "created_at": "2026-11-17T18:19:09.870Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-18T17:42:58.358Z",
+      "summary": "One status per open project in the core (2d01dad): tmux_agents.sh extended with window_activity and the machine clock; quiet_s/worked_s per tab; pure status table with a clock passed …[full in LOG.md]",
       "depends_on": [
         "E-75"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-17T21:00:27.416Z"
+      "updated_at": "2026-11-18T17:42:58.358Z"
     },
     {
       "id": "E-77",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Show each project's status in the tab bar, the status bar and the Dashboard, per .ai/blueprints/status.md §Components 2 (the marks column) and 3 (D-062). Operator direction 2026-11-17: \"status running in tabs above\". After the status task. Draw the mark of the tab's state left of its title (shape tells the state, not colour alone; nothing animates except the existing spinner), with the accessible name \"<project>: <sentence>\" and a tooltip of at most three lines; add the current tab's status segment to the status bar between the path and health, cut from the right when narrow; make the Dashboard panel's first row the same status; add [tabs] status = shown | hidden to config.toml, ui.json and Settings. The web side draws what the project_status event gives and decides nothing; a task id is shown only when it matches [A-Z]-[0-9]{1,6}. New code in its own files; shell.tsx must not grow. Acceptance: web tests for the mark names and the tooltip lines per state and for the setting; screens in both themes at 1280×800 of the tab bar with one tab in each state and of the Dashboard, every PNG opened before the handoff names it.",
       "created_at": "2026-11-17T18:19:14.740Z",
@@ -1163,16 +1163,14 @@
       "depends_on": [
         "E-76"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-76"
-      ],
-      "updated_at": "2026-11-17T18:19:14.740Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-18T17:42:58.362Z"
     },
     {
       "id": "E-78",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Raise a notification when a project needs the operator, stops, is stuck or ends, per .ai/blueprints/status.md §Components 6 channels 1 and 2, §Data Model and §Security (D-062). Operator direction 2026-11-17: \"notifications for each project running so we can see when something is stuck or needs our attention\". After the status task. Implement the five events of the table (needs_you, stopped, stuck, ended, handoff) in the core as edge-triggered, with a clock passed in: once on the change, never repeated while the state stays; nothing for the current tab of a focused window; nothing in the first 30 s after a tab opens or is restored; stopped not raised when needs_you was raised for the same stop. Channel 1: the notify event and the existing toast when the event's tab is not current. Channel 2: when the window is not focused, the Tauri core's request_user_attention (informational, once per event) and the count of Now items on the app's icon where the Tauri core offers it — no new dependency; report in the handoff which of the two each of the three systems has. Add [notifications] enabled, events (the closed list) and stuck_after_min to config.toml, ui.json and Settings (system is read but does nothing until the system-notification task). Fixed sentences only. Acceptance: core tests for each event raised once and not again, the 30 s silence, each event switched off by its setting; the window run shows a background tab that prints then stops getting the stopped toast, also with the window hidden; a toast screen in both themes.",
       "created_at": "2026-11-17T18:19:20.798Z",
@@ -1181,11 +1179,9 @@
       "depends_on": [
         "E-76"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-76"
-      ],
-      "updated_at": "2026-11-17T18:19:20.798Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-18T17:42:58.364Z"
     },
     {
       "id": "E-79",
@@ -1408,16 +1404,16 @@
     {
       "id": "E-93",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 1,
       "description": "Correct the known-gap sentence and stop the parse-time test failing on a slow runner, per D-062 addendum 3 ruling 2 and D-056 addendum 2 (.ai/blueprints/status.md §Components 5; .ai/blueprints/panels.md §Execution Constraints). Two small changes, one commit each or one commit for both; do them at any point that does not interrupt E-76. (1) Replace KNOWN_GAP in crates/rein-desktop/ui/src/attention.ts, and the same paragraph in docs/operator-guide.md, with exactly: \"The app cannot see an agent waiting at a permission prompt, whether the window is open or closed. Until rein gives a signal, a project that goes quiet after working is the only hint: its agent has finished or is waiting for you.\" Update any web test or screen text that quotes the old sentence. (2) In panel_sources::tests::parsing_is_fast_enough keep the optimised bound (100 ms; 500 ms on Windows) and replace the unoptimised 10x bound with one flat 10 000 ms on every system; keep the printed time and rewrite the doc comment to say what the unoptimised guard is for (a parser that became quadratic, not a slow runner). No parser change. Acceptance: no \"only hint\" bell sentence left in the repository outside .ai/; cargo test -p rein-desktop passes unoptimised, and the handoff gives the figure of one local cargo test --release run of that test; web tests pass.",
       "created_at": "2026-11-18T15:50:08.807Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-18T17:44:42.471Z",
+      "summary": "ba050c4: KNOWN_GAP + operator guide now the D-062 add. 3 sentence; parsing_is_fast_enough flat 10 s unoptimised, 100/500 ms optimised kept. Release run 25 ms. Web 101, cargo 369 pass; local CI PASS.",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-18T15:50:08.812Z"
+      "updated_at": "2026-11-18T17:44:42.471Z"
     }
   ],
   "stamps": [
@@ -4038,6 +4034,114 @@
       "timestamp": "2026-11-18T14:21:57.825Z",
       "summary": "[TIER_1] E-85 fix: read_version_file and its imports cfg(unix) (only LocalHost, itself cfg(unix), calls it) — hosted Windows clippy dead_code. No behaviour change; Linux clippy clean, rein-desktop 189 tests pass. Tier 1: no critic review per rein-review.",
       "sha": "54176c31b445d38a74ce9fc3c4adc1814551363d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "engineer",
+      "task_id": "E-76",
+      "timestamp": "2026-11-18T16:26:24.175Z",
+      "summary": "[TIER_2] Blueprint aligned (status.md §1, 2, 4, API, Execution Constraints). Aligner WARN: only the 3 generated permission TOMLs of the new commands, which belong to the closed IPC table (desktop.md §Security 1), as in E-85. An independent review found 5 items (kick drain, dismiss map, worked_s churn, forgotten bells, forged header in a role); all fixed and tested.",
+      "sha": "b2e355a769777c69dbdd5b5222031fc1eb48e05f",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "engineer",
+      "task_id": "E-76",
+      "timestamp": "2026-11-18T16:26:25.330Z",
+      "summary": "[TIER_2] Blueprint aligned; Rust 198 and web 101 pass; clippy clean; agents.sh and panel-screens.sh PASS; the script also runs on tmux 3.2a.",
+      "sha": "b2e355a769777c69dbdd5b5222031fc1eb48e05f",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ACCEPT_FAIL",
+      "agent": "critic_acceptance",
+      "task_id": "E-76",
+      "timestamp": "2026-11-18T17:26:29.352Z",
+      "summary": "[ACCEPT_FAIL] E-76 at 2d01dad — 4 PASS, 1 FAIL, 0 UNVERIFIED\n1 | PASS | status::tests::the_status_table_every_row_and_its_order ok; each row alone + order Setup>Ended>Starting>NeedsYou>Working>Quiet>Unknown\n2 | PASS | activity::tests::quiet_and_worked_over_a_scripted_series ok (13-sample series); full cargo test -p rein-desktop 198+5+3 pass, exit 0\n3 | PASS | no sleep in status/activity/status_watch/attention/reported tests; clock passed in. Only sleeps: e2e agents.sh vs real tmux\n4 | FAIL | no interop output recorded: no .ai/screens/E-76/, not in COMM/LOG; only commit-msg figure \"8 tabs 137-160 ms\" (under 250)\n5 | PASS | COMM.md 15:47 UTC Engineer handoff gives (a) tmux 3.2a/3.6/3.8, (b) cadence figures, (c) bell result",
+      "sha": "2d01dad9edba57b15740e2467e5929a9656df105",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "Engineer",
+      "task_id": "E-76",
+      "timestamp": "2026-11-18T17:41:25.298Z",
+      "summary": "[TIER_1] E-76 acceptance clause 4: .ai/screens/E-76/interop.{sh,txt} only — Windows interop of tmux_agents.sh, 8 tabs + 1 no-client tty, one wsl.exe, 10 runs exit 0, 152-184 ms (median 160). Harness fix: tmux clients fed from an idle pipe, not /dev/zero. No code change. Tier 1: no critic review per rein-review.",
+      "sha": "2d01dad9edba57b15740e2467e5929a9656df105",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ACCEPT_PASS",
+      "agent": "critic_acceptance",
+      "task_id": "E-76",
+      "timestamp": "2026-11-18T17:42:31.548Z",
+      "summary": "[ACCEPT_PASS] E-76 at 04c1c52 — 5 PASS, 0 FAIL, 0 UNVERIFIED\n1 | PASS | cargo test --bin rein-desktop status:: ok; the_status_table_every_row_and_its_order covers blueprint rows 1-7 and order\n2 | PASS | activity::tests::quiet_and_worked_over_a_scripted_series ok (13-sample series) plus clock/window edge test ok\n3 | PASS | the test modules of status/activity/status_watch/attention/reported have no sleep or wall-clock call; agents \"sleep 30\" is a child arg\n4 | PASS | re-ran interop.sh: wsl.exe exit 0, 8 tabs + tab 8 5, 10 runs 133-182 ms (median 141) < 250; interop.txt 152-184 ms\n5 | PASS | COMM.md handoff 2026-11-18 15:47: (a) tmux 3.2a/3.6/3.8, (b) 0 B/45 s idle, 0 B/65 s prompt, ~660 B/s working, (c) bell",
+      "sha": "04c1c5293a24f304b30599f06826134ed4684b50",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "Engineer",
+      "task_id": "E-93",
+      "timestamp": "2026-11-18T17:44:01.522Z",
+      "summary": "[TIER_1] E-93: KNOWN_GAP in attention.ts and the operator-guide paragraph now the D-062 addendum 3 sentence (no 'bell ... only hint' left outside .ai/); parsing_is_fast_enough unoptimised bound flat 10 000 ms, optimised 100/500 ms kept, doc comment rewritten. Web 101 pass, tsc clean, cargo 198+5+3 pass, clippy clean, --release 25 ms. Tier 1: no critic review per rein-review.",
+      "sha": "04c1c5293a24f304b30599f06826134ed4684b50",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_FAIL",
+      "agent": "critic_clean_code",
+      "task_id": "E-77",
+      "timestamp": "2026-11-18T18:05:12.125Z",
+      "summary": "E-77 standards-checker missing (no scripts/standards.mjs, no ~/.rein/scripts/standards.mjs, no src/shared/standards.json, no engineering-standards blueprint) — gate could not run, cannot certify. Manual scan: shell.tsx stays 1108 lines (unchanged, constraint met; pre-existing >1000 size), new code in tab-status.tsx (111) / status.test.mjs (82), no secrets/TODO/console.log in diff.",
+      "sha": "ba050c4c119aa49a4987400bfd152b6e230625e3",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-77",
+      "timestamp": "2026-11-18T18:05:42.276Z",
+      "summary": "E-77 (re-run, supersedes the checker-missing CLEAN_FAIL) standards-checker PASS via ~/.rein/scripts/standards.mjs check --file --json — ~72 files in scope (config.rs, ui_store.rs, ui/src/*.ts(x) incl. tab-status.tsx, ui/test/* incl. status.test.mjs, status-screens.sh, operator-guide.md) all PASS, 0 errors, 0 warnings, elapsed_ms <=6 each; shell.tsx unchanged at 1108 lines.",
+      "sha": "ba050c4c119aa49a4987400bfd152b6e230625e3",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner",
+      "task_id": "E-77",
+      "timestamp": "2026-11-18T18:06:00.989Z",
+      "summary": "E-77 aligns with status.md §Components 2-3 / D-062 (manual review of the unstaged working tree; align_diff found nothing staged). Web side maps the core's state to mark/sentence only; task id gated by /^[A-Z]-[0-9]{1,6}$/; distinct shapes, only the existing spinner animates; segment between path and health with truncate; Dashboard first row; [tabs] status in config.toml/ui.json/Settings; new code in tab-status.tsx + status.ts; shell.tsx 7+/7- (no growth). Notes: core ProjectStatus (status.rs:67) does not send in_progress/turn/last_handoff_s though §Data Model lists them, so the live tooltip is 1 line and the segment is the sentence only; status.ts:24 attributes those fields to E-80, which the blueprint does not; tab aria-label (frame.tsx:179) appends \" — <shortcut>\" to \"<project>: <sentence>\".",
+      "sha": "ba050c4c119aa49a4987400bfd152b6e230625e3",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-77",
+      "timestamp": "2026-11-18T18:06:22.024Z",
+      "summary": "[TIER_2] E-77 blueprint aligned (manual; align_diff saw no staged changes) + clean-code gate clear (CLEAN_PASS re-run supersedes checker-missing CLEAN_FAIL) — 0 warnings; 3 non-blocking align notes (ProjectStatus lacks in_progress/turn/last_handoff_s so tooltip lines 2-3 never fill live; status.ts:24 unrecorded E-80 assumption; tab aria-name keeps shortcut tip)",
+      "sha": "ba050c4c119aa49a4987400bfd152b6e230625e3",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ACCEPT_FAIL",
+      "agent": "critic_acceptance",
+      "task_id": "E-77",
+      "timestamp": "2026-11-18T18:07:46.791Z",
+      "summary": "[ACCEPT_FAIL] E-77 at aec78a9 — 3 PASS, 2 FAIL, 1 UNVERIFIED\n1 | PASS | web tests for mark names: npm test exit 0, 108/108; status.test.mjs asserts mark+sentence+name for all 7 states\n2 | FAIL | tooltip lines per state: tooltipLines asserted only for working and quiet; other 5 states never checked\n3 | PASS | setting: status.test.mjs [tabs] status test passes; cargo config::/ui_store:: 17 pass incl. tab_status_switch\n4 | FAIL | tab-bar screens both themes 1280x800: opened, 6 tabs, no setup (wrench) tab, so not one tab in each state\n5 | PASS | Dashboard screens mocha+light 1280x800 opened: first row \"Quiet for 30 s.\" with circle mark\n6 | UNVERIFIED | PNGs opened before handoff: Engineer's past session action not observable; all 7 opened here, match names",
+      "sha": "aec78a94fad3c8dbde05a882f28dc75c45bb2625",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "Engineer",
+      "task_id": "E-77",
+      "timestamp": "2026-11-18T18:08:23.259Z",
+      "summary": "[TIER_1] E-77 ACCEPT_FAIL clause 2 fix: status.test.mjs checks the tooltip lines for all seven states, alone and with task/turn known, and the drawn mark's lines. Test-only change; web 108 pass. Clause 4 (no setup tab on screen) goes to the Architect: the core sends no setup status (no pty), a contract change to attention_items/statuses.",
+      "sha": "aec78a94fad3c8dbde05a882f28dc75c45bb2625",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
