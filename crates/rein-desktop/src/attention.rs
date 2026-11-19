@@ -494,10 +494,11 @@ pub fn attention_items(
     state: State<'_, Desktop>,
     attention: State<'_, AttentionState>,
     config: State<'_, std::sync::Arc<crate::config::ConfigService>>,
+    ui: State<'_, crate::ui_store::UiStore>,
     tabs: Vec<TabIn>,
     health: Health,
 ) -> Lists {
-    let stuck = crate::status_watch::stuck_after_s(&config);
+    let stuck = crate::status_watch::notify_settings(&config, &ui).1;
     answer(&state, &attention, tabs, health, stuck)
 }
 

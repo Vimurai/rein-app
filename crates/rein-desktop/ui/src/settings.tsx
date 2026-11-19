@@ -10,11 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Switch } from "../components/switch.tsx";
 import { FolderOpen, Minus, Plus, RotateCcw } from "./icons.ts";
 import type { UiView } from "./ipc.ts";
+import { EVENTS, EVENT_LABELS, withEvent } from "./notify.ts";
 import { DESCRIPTORS } from "./panels.ts";
 import { THEME_NAMES } from "./theme.ts";
 
 export const FONT_MIN = 6;
 export const FONT_MAX = 72;
+/** `[notifications] stuck_after_min` (status.md §Data Model). */
+export const STUCK_MIN = 3;
+export const STUCK_MAX = 120;
 
 /** One setting: its name (and, when config.toml sets it, a line saying so) at the left, the
  *  control at the right. */
@@ -41,7 +45,20 @@ export function SettingsOverlay({
   ui: UiView;
   /** One ui.json field; `null` clears it (the default applies again). */
   onSet: (
-    field: "input_style" | "theme" | "font_size" | "decorations" | "tmux_server" | "close_when_agents_exit" | "panels_rail" | "panels_enabled" | "tabs_status",
+    field:
+      | "input_style"
+      | "theme"
+      | "font_size"
+      | "decorations"
+      | "tmux_server"
+      | "close_when_agents_exit"
+      | "panels_rail"
+      | "panels_enabled"
+      | "tabs_status"
+      | "notifications_enabled"
+      | "notifications_system"
+      | "notifications_events"
+      | "notifications_stuck_after_min",
     value: unknown,
   ) => void;
   onOpenConfig: () => void;
@@ -55,10 +72,11 @@ export function SettingsOverlay({
     ui[k].source === "config";
   const enabled = ui.panels_enabled.value;
   const size = ui.font_size.value;
+  const stuck = ui.notifications_stuck_after_min.value;
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent title="Settings" aria-describedby={undefined}>
-        <div className="-my-2">
+        <div className="-my-2 min-h-0 overflow-y-auto pr-3">
           <Row label="Input style" fromConfig={false}>
             <Select value={ui.input_style.value} onValueChange={(v) => onSet("input_style", v)}>
               <SelectTrigger aria-label="Input style">
@@ -132,6 +150,53 @@ export function SettingsOverlay({
               checked={ui.tabs_status.value === "shown"}
               disabled={ro("tabs_status")}
               onCheckedChange={(on) => onSet("tabs_status", on ? "shown" : "hidden")}
+            />
+          </Row>
+          {/* status.md §6 and §Data Model (E-78): notifications, one switch per event, and when
+              a project counts as stuck. `system` does nothing until the system-notification task. */}
+          <Row label="Notifications" fromConfig={ro("notifications_enabled")}>
+            <Switch
+              aria-label="Notifications"
+              checked={ui.notifications_enabled.value}
+              disabled={ro("notifications_enabled")}
+              onCheckedChange={(on) => onSet("notifications_enabled", on)}
+            />
+          </Row>
+          {EVENTS.map((e) => (
+            <Row key={e} label={`Notify: ${EVENT_LABELS[e]}`} fromConfig={ro("notifications_events")}>
+              <Switch
+                aria-label={`Notify: ${EVENT_LABELS[e]}`}
+                checked={ui.notifications_events.value.includes(e)}
+                disabled={ro("notifications_events") || !ui.notifications_enabled.value}
+                onCheckedChange={(on) => onSet("notifications_events", withEvent(ui.notifications_events.value, e, on))}
+              />
+            </Row>
+          ))}
+          <Row label="Stuck after (minutes)" fromConfig={ro("notifications_stuck_after_min")}>
+            <Button
+              size="icon"
+              aria-label="Stuck sooner"
+              disabled={ro("notifications_stuck_after_min") || stuck <= STUCK_MIN}
+              onClick={() => onSet("notifications_stuck_after_min", stuck - 1)}
+            >
+              <Minus size={14} aria-hidden="true" />
+            </Button>
+            <span className="w-8 text-center tabular-nums">{stuck}</span>
+            <Button
+              size="icon"
+              aria-label="Stuck later"
+              disabled={ro("notifications_stuck_after_min") || stuck >= STUCK_MAX}
+              onClick={() => onSet("notifications_stuck_after_min", stuck + 1)}
+            >
+              <Plus size={14} aria-hidden="true" />
+            </Button>
+          </Row>
+          <Row label="System notifications" fromConfig={ro("notifications_system")}>
+            <Switch
+              aria-label="System notifications"
+              checked={ui.notifications_system.value}
+              disabled={ro("notifications_system")}
+              onCheckedChange={(on) => onSet("notifications_system", on)}
             />
           </Row>
           {/* panels.md §Data Model (E-60): the rail, and one switch per panel. */}

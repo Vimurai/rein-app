@@ -63,6 +63,13 @@ impl Reported {
         seen(&mut r);
     }
 
+    /// The tab in front of the user: the current tab of a focused window (E-78: it raises
+    /// no notification).
+    pub fn front(&self) -> Option<u32> {
+        let r = self.lock();
+        r.current.filter(|_| r.focused)
+    }
+
     /// Bells rung in `tab` while it was out of sight and not yet looked at.
     pub fn bells(&self, tab: u32) -> u32 {
         self.lock().bells.get(&tab).copied().unwrap_or(0)

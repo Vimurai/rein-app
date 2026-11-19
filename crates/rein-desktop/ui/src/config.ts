@@ -16,7 +16,7 @@ export interface ConfigFile {
   panels: { rail: "shown" | "hidden"; enabled: string[] };
   tabs: { status: "shown" | "hidden" };
   updates: { check: boolean; interval_min: number };
-  notifications: { stuck_after_min: number };
+  notifications: { enabled: boolean; system: boolean; events: string[]; stuck_after_min: number };
   wsl: { distro: string | null };
 }
 
@@ -36,7 +36,7 @@ export const DEFAULT_CONFIG: ConfigFile = {
   panels: { rail: "shown", enabled: ["dashboard", "communication", "tasks", "attention"] },
   tabs: { status: "shown" },
   updates: { check: true, interval_min: 30 },
-  notifications: { stuck_after_min: 10 },
+  notifications: { enabled: true, system: true, events: ["needs_you", "stopped", "stuck", "ended", "handoff"], stuck_after_min: 10 },
   wsl: { distro: null },
 };
 

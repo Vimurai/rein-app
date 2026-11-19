@@ -64,6 +64,7 @@ import { whichBar } from "./start-failed.ts";
 import { TeamSheet } from "./team-sheet.tsx";
 import { AgentsGoneBar, RestoreCard, restoreAtStart, useTabsRecord } from "./restore-ui.tsx";
 import { useTabStatus, type TabStatusProps } from "./tab-status.tsx";
+import { useNotifyToast } from "./notify-ui.ts";
 import { SideRow, panelOwnsKey, useSideMenu, useStageFit, type SideMenuProps } from "./side-menu.tsx";
 import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
 
@@ -239,6 +240,7 @@ export function Shell(props: ShellProps) {
   );
   const side = useSideMenu(props, say, () => tab.current, () => ({ tabs: tabs.current, current: cur.current }));
   const statuses = useTabStatus(props.tabsStatus === "shown", rerender);
+  useNotifyToast(say, () => tabs.current[cur.current]);
   useEffect(() => {
     if (!message) return;
     if (message.leaving) {

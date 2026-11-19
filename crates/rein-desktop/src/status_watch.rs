@@ -18,8 +18,10 @@ use crate::agents::AgentState;
 use crate::attention::{AttentionState, Lists, TabIn};
 use crate::config::ConfigService;
 use crate::ipc::Desktop;
+use crate::notify::{Notifier, Seen, Settings};
 use crate::panel_attention::Attention;
 use crate::status::{Facts, ProjectStatus, State as Status, card_fields, state};
+use crate::ui_store::UiStore;
 
 /// The poll while the window can be seen (V9: one short process per 5 s).
 pub const VISIBLE_EVERY: Duration = Duration::from_secs(5);
@@ -28,14 +30,10 @@ pub const HIDDEN_EVERY: Duration = Duration::from_secs(15);
 /// The longest a tab whose tmux client has not been seen reads as `starting` (V7: 20 s).
 pub const START_LIMIT: Duration = Duration::from_secs(20);
 
-/// `[notifications] stuck_after_min` in seconds.
-pub fn stuck_after_s(config: &ConfigService) -> u32 {
-    config
-        .view()
-        .config
-        .notifications
-        .stuck_after_min
-        .saturating_mul(60)
+/// The notification settings in effect and `stuck_after_min` in seconds (config.toml, then
+/// ui.json, then the defaults).
+pub fn notify_settings(config: &ConfigService, ui: &UiStore) -> (Settings, u32) {
+    crate::ui_store::notify_settings(&ui.view(&config.view()))
 }
 
 /// The statuses last sent, when each tab was first seen, and the wake-up line of the poll.
@@ -44,6 +42,9 @@ pub struct StatusWatch {
     first_seen: Mutex<HashMap<u32, Instant>>,
     kick: Mutex<Sender<()>>,
     woken: Mutex<Option<Receiver<()>>>,
+    /// The notifications (E-78): what each tab last raised, and the icon's count last set.
+    notifier: Mutex<Notifier>,
+    badge: Mutex<Option<Option<i64>>>,
 }
 
 impl Default for StatusWatch {
@@ -54,6 +55,8 @@ impl Default for StatusWatch {
             first_seen: Mutex::new(HashMap::new()),
             kick: Mutex::new(tx),
             woken: Mutex::new(Some(rx)),
+            notifier: Mutex::new(Notifier::default()),
+            badge: Mutex::new(None),
         }
     }
 }
@@ -84,6 +87,30 @@ impl StatusWatch {
     fn age(&self, tab: u32, now: Instant) -> Duration {
         let mut f = self.first_seen.lock().unwrap_or_else(|e| e.into_inner());
         now.duration_since(*f.entry(tab).or_insert(now))
+    }
+
+    /// The notifications of one poll (component 6): `front` is the current tab of a focused
+    /// window.
+    pub fn notifications(
+        &self,
+        seen: &[Seen],
+        now: Instant,
+        front: Option<u32>,
+        settings: &Settings,
+    ) -> Vec<crate::notify::Notification> {
+        self.notifier
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .step(seen, now, front, settings)
+    }
+
+    /// The icon's count when it differs from the one last set.
+    fn badge_changed(&self, count: Option<i64>) -> Option<Option<i64>> {
+        let mut b = self.badge.lock().unwrap_or_else(|e| e.into_inner());
+        (*b != Some(count)).then(|| {
+            *b = Some(count);
+            count
+        })
     }
 
     fn forget_gone(&self, open: &[u32]) {
@@ -193,6 +220,79 @@ pub fn statuses(
     out
 }
 
+/// What the notifier reads of each status (E-78): the kinds of its Now items, its activity,
+/// the last handoff's time and the project's folder name. Set-up tabs raise nothing.
+pub fn seen_of(d: &Desktop, all: &[ProjectStatus], now_s: u64) -> Vec<Seen> {
+    all.iter()
+        .filter(|s| s.state != Status::Setup)
+        .filter_map(|s| {
+            let project = d.tab_project(s.tab)?;
+            Some(Seen {
+                tab: s.tab,
+                project: crate::notify::folder_name(&project),
+                now: s.now.iter().map(|i| i.kind).collect(),
+                worked_s: s.worked_s,
+                quiet_s: s.quiet_s,
+                last_output: d.agents.seen(s.tab).activity.last_output,
+                handoff_at: s
+                    .last_handoff_s
+                    .and_then(|a| now_s.checked_sub(u64::from(a))),
+            })
+        })
+        .collect()
+}
+
+/// Channels 1 and 2 (component 6): the `notify` event for the toast; when the window is not
+/// focused, one informational attention request per event; the count of Now items on the
+/// app's icon where the system has one (macOS, and Linux docks that read the launcher
+/// entry; Windows has none — `set_badge_count` is unsupported there).
+fn raise(
+    app: &AppHandle,
+    w: &StatusWatch,
+    all: &[ProjectStatus],
+    notes: Vec<crate::notify::Notification>,
+) {
+    let window = app.get_webview_window(crate::ipc::MAIN_WINDOW);
+    let focused = window
+        .as_ref()
+        .is_some_and(|w| w.is_focused().unwrap_or(false) && w.is_visible().unwrap_or(true));
+    for n in notes {
+        let _ = app.emit("notify", &n);
+        let attention = !focused
+            && window.as_ref().is_some_and(|win| {
+                win.request_user_attention(Some(tauri::UserAttentionType::Informational))
+                    .is_ok()
+            });
+        let folder = app
+            .state::<Desktop>()
+            .tab_project(n.tab)
+            .map(|p| crate::notify::folder_name(&p))
+            .unwrap_or_default();
+        trace(&format!(
+            "event={} tab={} project={folder} attention={attention}",
+            n.event.name(),
+            n.tab
+        ));
+    }
+    let count = crate::notify::badge(all.iter().map(|s| s.now.len()).sum());
+    if let (Some(c), Some(win)) = (w.badge_changed(count), &window) {
+        let ok = win.set_badge_count(c).is_ok();
+        trace(&format!("badge={} ok={ok}", c.unwrap_or(0)));
+    }
+}
+
+/// Debug builds only: with `REIN_DESKTOP_TRACE_NOTIFY` set, one stderr line per notification
+/// raised and per change of the icon's count — the event, the tab, its folder name and whether
+/// the system took the request; never the sentence. A window run reads it (tests/e2e/notify-screens.sh).
+fn trace(what: &str) {
+    #[cfg(debug_assertions)]
+    if crate::dirs::process_env("REIN_DESKTOP_TRACE_NOTIFY").is_some() {
+        eprintln!("notify-trace {} {what}", wall_s());
+    }
+    #[cfg(not(debug_assertions))]
+    let _ = what;
+}
+
 /// Seconds since the epoch.
 fn wall_s() -> u64 {
     std::time::SystemTime::now()
@@ -230,16 +330,21 @@ pub fn spawn(app: AppHandle) {
                 // A failed run leaves the last answers; the next period asks again.
                 let _ = crate::agents::poll_all(&d);
             }
-            let stuck = stuck_after_s(&app.state::<std::sync::Arc<ConfigService>>());
-            let w = app.state::<StatusWatch>();
-            let all = statuses(
-                &d,
-                &app.state::<AttentionState>(),
-                &w,
-                stuck,
-                Instant::now(),
-                wall_s(),
+            let (settings, stuck) = notify_settings(
+                &app.state::<std::sync::Arc<ConfigService>>(),
+                &app.state::<UiStore>(),
             );
+            let w = app.state::<StatusWatch>();
+            let a = app.state::<AttentionState>();
+            let (now, now_s) = (Instant::now(), wall_s());
+            let all = statuses(&d, &a, &w, stuck, now, now_s);
+            let notes = w.notifications(
+                &seen_of(&d, &all, now_s),
+                now,
+                a.reported.front(),
+                &settings,
+            );
+            raise(&app, &w, &all, notes);
             for s in w.changed(all) {
                 let _ = app.emit("project_status", s);
             }
@@ -261,12 +366,13 @@ pub fn project_status_all(
     attention: State<'_, AttentionState>,
     watch: State<'_, StatusWatch>,
     config: State<'_, std::sync::Arc<ConfigService>>,
+    ui: State<'_, UiStore>,
 ) -> Vec<ProjectStatus> {
     statuses(
         &state,
         &attention,
         &watch,
-        stuck_after_s(&config),
+        notify_settings(&config, &ui).1,
         Instant::now(),
         wall_s(),
     )

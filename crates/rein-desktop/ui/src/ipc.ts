@@ -177,6 +177,11 @@ export interface UiView {
   panel_open: string | null;
   /** status.md §3 (E-77): each tab's status mark and the status bar's segment. */
   tabs_status: Effective<"shown" | "hidden">;
+  /** status.md §Data Model (E-78): `[notifications]`; `system` does nothing until E-79. */
+  notifications_enabled: Effective<boolean>;
+  notifications_system: Effective<boolean>;
+  notifications_events: Effective<string[]>;
+  notifications_stuck_after_min: Effective<number>;
   first_run_done: boolean;
 }
 /** The system folder dialog; `null` when cancelled; the path is validated like `tab_open`. */

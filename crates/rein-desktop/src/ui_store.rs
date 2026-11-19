@@ -23,6 +23,35 @@ pub const MAX_DONT_ASK: usize = 500;
 /// by status.md §Components 7, E-74 — the window also keeps it under half its own width).
 pub const PANEL_WIDTH: std::ops::RangeInclusive<u32> = 320..=720;
 pub const PANEL_WIDTH_DEFAULT: u32 = 400;
+/// `[notifications] stuck_after_min`'s range (status.md §Data Model).
+pub const STUCK_AFTER_MIN: std::ops::RangeInclusive<u32> = 3..=120;
+
+/// The notification settings in effect (config.toml, then ui.json, then the defaults), as
+/// the notifier and the `stuck` rule read them (E-78).
+pub fn notify_settings(v: &UiView) -> (crate::notify::Settings, u32) {
+    let enabled = v.notifications_enabled.value.as_bool().unwrap_or(true);
+    let events = v
+        .notifications_events
+        .value
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().and_then(crate::notify::Event::from_name))
+                .collect()
+        })
+        .unwrap_or_else(|| crate::notify::Event::ALL.to_vec());
+    let stuck_min = v
+        .notifications_stuck_after_min
+        .value
+        .as_u64()
+        .and_then(|n| u32::try_from(n).ok())
+        .filter(|m| STUCK_AFTER_MIN.contains(m))
+        .unwrap_or(10);
+    (
+        crate::notify::Settings { enabled, events },
+        stuck_min.saturating_mul(60),
+    )
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -60,6 +89,11 @@ pub struct UiFile {
     /// The status mark on each tab and in the status bar (status.md §3, E-77): `shown` |
     /// `hidden`. `[tabs] status` in config.toml wins.
     pub tabs_status: Option<String>,
+    /// `[notifications]` (status.md §Data Model, E-78): config.toml wins on each.
+    pub notifications_enabled: Option<bool>,
+    pub notifications_system: Option<bool>,
+    pub notifications_events: Option<Vec<String>>,
+    pub notifications_stuck_after_min: Option<u32>,
     pub first_run_done: bool,
     /// The versions answered "Later" on the update card (updates.md §Data Model): that version
     /// does not ask again.
@@ -86,6 +120,10 @@ impl Default for UiFile {
             panel_width: None,
             panel_open: None,
             tabs_status: None,
+            notifications_enabled: None,
+            notifications_system: None,
+            notifications_events: None,
+            notifications_stuck_after_min: None,
             first_run_done: false,
             updates_asked: Default::default(),
         }
@@ -117,6 +155,10 @@ pub struct UiView {
     pub panel_width: u32,
     pub panel_open: Option<String>,
     pub tabs_status: Effective,
+    pub notifications_enabled: Effective,
+    pub notifications_system: Effective,
+    pub notifications_events: Effective,
+    pub notifications_stuck_after_min: Effective,
     pub first_run_done: bool,
 }
 
@@ -257,6 +299,35 @@ impl UiStore {
                 d.tabs_status.clone().map(Value::from),
                 Value::from(c.tabs.status.clone()),
             ),
+            notifications_enabled: pick(
+                "notifications.enabled",
+                Value::from(c.notifications.enabled),
+                d.notifications_enabled.map(Value::from),
+                Value::from(c.notifications.enabled),
+            ),
+            notifications_system: pick(
+                "notifications.system",
+                Value::from(c.notifications.system),
+                d.notifications_system.map(Value::from),
+                Value::from(c.notifications.system),
+            ),
+            notifications_events: pick(
+                "notifications.events",
+                Value::from(c.notifications.events.clone()),
+                d.notifications_events
+                    .clone()
+                    .filter(|e| crate::config::events_ok(e).is_ok())
+                    .map(Value::from),
+                Value::from(c.notifications.events.clone()),
+            ),
+            notifications_stuck_after_min: pick(
+                "notifications.stuck_after_min",
+                Value::from(c.notifications.stuck_after_min),
+                d.notifications_stuck_after_min
+                    .filter(|m| STUCK_AFTER_MIN.contains(m))
+                    .map(Value::from),
+                Value::from(c.notifications.stuck_after_min),
+            ),
             // A hand-edited ui.json out of range falls back rather than reaching the page.
             panel_width: d
                 .panel_width
@@ -392,6 +463,47 @@ impl UiStore {
                     },
                 };
             }
+            "notifications_enabled" => {
+                refuse_config("notifications.enabled")?;
+                d.notifications_enabled = match value {
+                    Value::Null => None,
+                    v => Some(v.as_bool().ok_or_else(bad)?),
+                };
+            }
+            "notifications_system" => {
+                refuse_config("notifications.system")?;
+                d.notifications_system = match value {
+                    Value::Null => None,
+                    v => Some(v.as_bool().ok_or_else(bad)?),
+                };
+            }
+            "notifications_events" => {
+                refuse_config("notifications.events")?;
+                d.notifications_events = match value {
+                    Value::Null => None,
+                    v => {
+                        let names = v
+                            .as_array()
+                            .ok_or_else(bad)?
+                            .iter()
+                            .map(|x| x.as_str().map(String::from))
+                            .collect::<Option<Vec<String>>>()
+                            .ok_or_else(bad)?;
+                        crate::config::events_ok(&names).map_err(|_| bad())?;
+                        Some(names)
+                    }
+                };
+            }
+            "notifications_stuck_after_min" => {
+                refuse_config("notifications.stuck_after_min")?;
+                d.notifications_stuck_after_min = match value {
+                    Value::Null => None,
+                    v => match v.as_u64().and_then(|n| u32::try_from(n).ok()) {
+                        Some(n) if STUCK_AFTER_MIN.contains(&n) => Some(n),
+                        _ => return Err(bad()),
+                    },
+                };
+            }
             // Settings sends the panels that are on (its switches are unchanged); the file
             // keeps the ones that are off.
             "panels_enabled" => {
@@ -505,432 +617,5 @@ fn load(file: &Path) -> UiFile {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::Config;
-
-    fn cfg(set: &[&str]) -> ConfigView {
-        ConfigView {
-            config: Config::default(),
-            path: None,
-            error: None,
-            set: set.iter().map(|s| s.to_string()).collect(),
-        }
-    }
-
-    #[test]
-    fn defaults_then_ui_choices_persist() {
-        let t = tempfile::tempdir().unwrap();
-        let s = UiStore::open(Some(t.path().to_path_buf()));
-        let v = s.view(&cfg(&[]));
-        assert_eq!(v.input_style.value, "simple");
-        assert_eq!(v.theme.source, "default");
-        assert!(!v.first_run_done);
-        s.set(&cfg(&[]), "input_style", &Value::from("modal"))
-            .unwrap();
-        s.set(&cfg(&[]), "theme", &Value::from("nord")).unwrap();
-        s.set(&cfg(&[]), "first_run_done", &Value::from(true))
-            .unwrap();
-        let again = UiStore::open(Some(t.path().to_path_buf())).view(&cfg(&[]));
-        assert_eq!(again.input_style.value, "modal");
-        assert_eq!(
-            again.theme,
-            Effective {
-                value: Value::from("nord"),
-                source: "ui"
-            }
-        );
-        assert!(again.first_run_done);
-    }
-
-    #[test]
-    fn config_toml_wins_and_its_fields_are_refused() {
-        let t = tempfile::tempdir().unwrap();
-        let s = UiStore::open(Some(t.path().to_path_buf()));
-        let c = cfg(&["theme.name", "font.size"]);
-        assert_eq!(
-            s.set(&c, "theme", &Value::from("nord")).unwrap_err().kind,
-            "set_in_config"
-        );
-        assert_eq!(
-            s.set(&c, "font_size", &Value::from(18)).unwrap_err().kind,
-            "set_in_config"
-        );
-        assert_eq!(s.view(&c).theme.source, "config");
-        s.set(&c, "decorations", &Value::from(false)).unwrap();
-        s.set(&cfg(&[]), "font_size", &Value::from(20)).unwrap();
-        assert_eq!(s.view(&cfg(&[])).font_size.value, 20);
-        s.set(&cfg(&[]), "font_size", &Value::Null).unwrap();
-        assert_eq!(
-            s.view(&cfg(&[])).font_size.source,
-            "default",
-            "null clears the choice"
-        );
-        assert_eq!(
-            s.view(&c).decorations,
-            Effective {
-                value: Value::from(false),
-                source: "ui"
-            }
-        );
-        // The tmux overlay settings (V6): defaults, a choice, config.toml winning.
-        assert_eq!(
-            s.view(&c).tmux_status,
-            Effective {
-                value: Value::from("hidden"),
-                source: "default"
-            }
-        );
-        s.set(&c, "tmux_status", &Value::from("app")).unwrap();
-        s.set(&c, "tmux_overlay", &Value::from(false)).unwrap();
-        assert_eq!(s.view(&c).tmux_status.value, "app");
-        assert_eq!(s.view(&c).tmux_overlay.value, false);
-        let t = cfg(&["tmux.status"]);
-        assert_eq!(
-            s.set(&t, "tmux_status", &Value::from("keep"))
-                .unwrap_err()
-                .kind,
-            "set_in_config"
-        );
-        assert_eq!(s.view(&t).tmux_status.source, "config");
-        // E-57 (V8): the tmux server — rein-app's own by default, the user's by choice, and
-        // config.toml winning.
-        assert_eq!(
-            s.view(&c).tmux_server,
-            Effective {
-                value: Value::from("app"),
-                source: "default"
-            }
-        );
-        s.set(&c, "tmux_server", &Value::from("user")).unwrap();
-        assert_eq!(
-            s.view(&c).tmux_server,
-            Effective {
-                value: Value::from("user"),
-                source: "ui"
-            }
-        );
-        let t = cfg(&["tmux.server"]);
-        assert_eq!(
-            s.set(&t, "tmux_server", &Value::from("app"))
-                .unwrap_err()
-                .kind,
-            "set_in_config"
-        ); // E-62 (V9 component 5): close when the agents exit — on by default, off by choice,
-        // config.toml winning; only a boolean.
-        assert_eq!(
-            s.view(&c).close_when_agents_exit,
-            Effective {
-                value: Value::from(true),
-                source: "default"
-            }
-        );
-        s.set(&c, "close_when_agents_exit", &Value::from(false))
-            .unwrap();
-        assert_eq!(s.view(&c).close_when_agents_exit.value, false);
-        assert_eq!(
-            s.set(&c, "close_when_agents_exit", &Value::from("no"))
-                .unwrap_err()
-                .kind,
-            "bad_value"
-        );
-        let t = cfg(&["project.close_when_agents_exit"]);
-        assert_eq!(
-            s.set(&t, "close_when_agents_exit", &Value::from(true))
-                .unwrap_err()
-                .kind,
-            "set_in_config"
-        );
-    }
-
-    #[test]
-    fn only_listed_fields_with_valid_values() {
-        let t = tempfile::tempdir().unwrap();
-        let s = UiStore::open(Some(t.path().to_path_buf()));
-        let c = cfg(&[]);
-        for (f, v) in [
-            ("input_style", Value::from("vim")),
-            ("theme", Value::from("solarized-light")),
-            ("font_size", Value::from(200)),
-            ("decorations", Value::from("no")),
-            ("tmux_overlay", Value::from("on")),
-            ("tmux_status", Value::from("off")),
-            ("tmux_server", Value::from("mine")),
-            ("first_run_done", Value::from(1)),
-            // E-63: the don't-ask list holds project paths only.
-            ("update_dont_ask", Value::from("/home/me/p")),
-            ("update_dont_ask", serde_json::json!(["relative/p"])),
-            ("update_dont_ask", serde_json::json!(["/a\u{202e}b"])),
-            ("update_dont_ask", serde_json::json!([7])),
-        ] {
-            assert_eq!(s.set(&c, f, &v).unwrap_err().kind, "bad_value", "{f}");
-        }
-        let many: Vec<String> = (0..=MAX_DONT_ASK).map(|i| format!("/p/{i}")).collect();
-        assert_eq!(
-            s.set(&c, "update_dont_ask", &serde_json::json!(many))
-                .unwrap_err()
-                .kind,
-            "bad_value"
-        );
-        s.set(
-            &c,
-            "update_dont_ask",
-            &serde_json::json!(["/home/me/p", "/home/me/p", "/home/me/q"]),
-        )
-        .unwrap();
-        assert_eq!(s.view(&c).update_dont_ask, ["/home/me/p", "/home/me/q"]);
-        assert_eq!(
-            s.set(&c, "keys", &Value::from("x")).unwrap_err().kind,
-            "bad_field"
-        );
-    }
-
-    #[test]
-    fn a_failed_save_changes_nothing() {
-        let t = tempfile::tempdir().unwrap();
-        let blocker = t.path().join("file");
-        std::fs::write(&blocker, "").unwrap();
-        let s = UiStore::open(Some(blocker.join("rein-app")));
-        assert_eq!(
-            s.set(&cfg(&[]), "input_style", &Value::from("modal"))
-                .unwrap_err()
-                .kind,
-            "io"
-        );
-        assert_eq!(
-            s.view(&cfg(&[])).input_style.value,
-            "simple",
-            "the live state is unchanged"
-        );
-    }
-
-    #[test]
-    fn an_unreadable_file_gives_the_defaults() {
-        let t = tempfile::tempdir().unwrap();
-        std::fs::write(t.path().join(FILE_NAME), "not json").unwrap();
-        assert_eq!(
-            UiStore::open(Some(t.path().to_path_buf()))
-                .view(&cfg(&[]))
-                .input_style
-                .value,
-            "simple"
-        );
-        std::fs::write(
-            t.path().join(FILE_NAME),
-            r#"{"schema":1,"input_style":"vim"}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            UiStore::open(Some(t.path().to_path_buf()))
-                .view(&cfg(&[]))
-                .input_style
-                .value,
-            "simple"
-        );
-    }
-
-    /// D-056 addendum 2 ruling 4 (E-73): the file keeps the panels switched off, so a panel
-    /// added later is on. Extends `the_panel_choices_are_closed_and_config_wins`.
-    #[test]
-    fn the_file_keeps_the_panels_switched_off() {
-        let t = tempfile::tempdir().unwrap();
-        let c = cfg(&[]);
-        let s = UiStore::open(Some(t.path().to_path_buf()));
-        s.set(
-            &c,
-            "panels_enabled",
-            &serde_json::json!(["tasks", "attention"]),
-        )
-        .unwrap();
-        let text = std::fs::read_to_string(t.path().join(FILE_NAME)).unwrap();
-        let file: Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(
-            file["panels_disabled"],
-            serde_json::json!(["dashboard", "communication"])
-        );
-        assert!(file.get("panels_enabled").is_none());
-        // Round trip.
-        let again = UiStore::open(Some(t.path().to_path_buf())).view(&c);
-        assert_eq!(
-            again.panels_enabled.value,
-            serde_json::json!(["tasks", "attention"])
-        );
-        assert_eq!(again.panels_enabled.source, "ui");
-        // An id this version does not know is dropped, not a refusal of the file.
-        std::fs::write(
-            t.path().join(FILE_NAME),
-            r#"{"schema":1,"input_style":"modal","panels_disabled":["tasks","weather"]}"#,
-        )
-        .unwrap();
-        let v = UiStore::open(Some(t.path().to_path_buf())).view(&c);
-        assert_eq!(v.input_style.value, "modal");
-        assert_eq!(
-            v.panels_enabled.value,
-            serde_json::json!(["dashboard", "communication", "attention"])
-        );
-        // A repeated id or a value that is not a list refuses the file (the defaults apply).
-        for bad in [
-            r#"{"schema":1,"input_style":"modal","panels_disabled":["tasks","tasks"]}"#,
-            r#"{"schema":1,"input_style":"modal","panels_disabled":"tasks"}"#,
-        ] {
-            std::fs::write(t.path().join(FILE_NAME), bad).unwrap();
-            let v = UiStore::open(Some(t.path().to_path_buf())).view(&c);
-            assert_eq!(v.input_style.value, "simple", "{bad}");
-            assert_eq!(
-                v.panels_enabled.value,
-                serde_json::json!(PANEL_IDS),
-                "{bad}"
-            );
-        }
-        // config.toml still wins.
-        let mut from_cfg = cfg(&["panels.enabled"]);
-        from_cfg.config.panels.enabled = vec!["dashboard".into()];
-        std::fs::write(
-            t.path().join(FILE_NAME),
-            r#"{"schema":1,"panels_disabled":["dashboard"]}"#,
-        )
-        .unwrap();
-        let s = UiStore::open(Some(t.path().to_path_buf()));
-        let v = s.view(&from_cfg);
-        assert_eq!(
-            (v.panels_enabled.value, v.panels_enabled.source),
-            (serde_json::json!(["dashboard"]), "config")
-        );
-        assert_eq!(
-            s.set(&from_cfg, "panels_enabled", &serde_json::json!(["tasks"]))
-                .unwrap_err()
-                .kind,
-            "set_in_config"
-        );
-    }
-
-    /// A ui.json written before E-73 holds the panels switched on: read once, then gone.
-    #[test]
-    fn a_stored_panels_enabled_is_read_once() {
-        let t = tempfile::tempdir().unwrap();
-        let c = cfg(&[]);
-        let file = t.path().join(FILE_NAME);
-        let open = |text: &str| {
-            std::fs::write(&file, text).unwrap();
-            UiStore::open(Some(t.path().to_path_buf()))
-        };
-        // All three that existed then: all four on.
-        let s = open(r#"{"schema":1,"panels_enabled":["dashboard","communication","tasks"]}"#);
-        assert_eq!(
-            s.view(&c).panels_enabled.value,
-            serde_json::json!(PANEL_IDS)
-        );
-        // Only tasks: dashboard and communication off, attention on.
-        let s = open(r#"{"schema":1,"panels_enabled":["tasks"]}"#);
-        assert_eq!(
-            s.view(&c).panels_enabled.value,
-            serde_json::json!(["tasks", "attention"])
-        );
-        // The old key is gone after the next save, whatever is saved.
-        s.set(&c, "panel_width", &Value::from(400)).unwrap();
-        let saved: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
-        assert!(saved.get("panels_enabled").is_none());
-        assert_eq!(
-            saved["panels_disabled"],
-            serde_json::json!(["dashboard", "communication"])
-        );
-        // Both keys: the new one is the answer.
-        let s = open(r#"{"schema":1,"panels_enabled":["tasks"],"panels_disabled":[]}"#);
-        assert_eq!(
-            s.view(&c).panels_enabled.value,
-            serde_json::json!(PANEL_IDS)
-        );
-    }
-
-    /// E-77 (status.md §3): the tab status switch — kept, closed, and config.toml wins.
-    #[test]
-    fn the_tab_status_switch_is_kept_closed_and_config_wins() {
-        let t = tempfile::tempdir().unwrap();
-        let s = UiStore::open(Some(t.path().to_path_buf()));
-        let c = cfg(&[]);
-        assert_eq!(s.view(&c).tabs_status.value, Value::from("shown"));
-        s.set(&c, "tabs_status", &Value::from("hidden")).unwrap();
-        let again = UiStore::open(Some(t.path().to_path_buf())).view(&c);
-        assert_eq!(
-            (again.tabs_status.value, again.tabs_status.source),
-            (Value::from("hidden"), "ui")
-        );
-        for value in [Value::from("off"), Value::from(false), Value::from(1)] {
-            assert_eq!(
-                s.set(&c, "tabs_status", &value).unwrap_err().kind,
-                "bad_value",
-                "{value}"
-            );
-        }
-        let from_cfg = cfg(&["tabs.status"]);
-        assert_eq!(
-            s.set(&from_cfg, "tabs_status", &Value::from("shown"))
-                .unwrap_err()
-                .kind,
-            "set_in_config"
-        );
-        assert_eq!(s.view(&from_cfg).tabs_status.source, "config");
-        s.set(&c, "tabs_status", &Value::Null).unwrap();
-        assert_eq!(s.view(&c).tabs_status.source, "default");
-    }
-
-    /// E-60 (panels.md §Data Model): the side menu's choices and the panel's own state.
-    #[test]
-    fn the_panel_choices_are_closed_and_config_wins() {
-        let t = tempfile::tempdir().unwrap();
-        let s = UiStore::open(Some(t.path().to_path_buf()));
-        let c = cfg(&[]);
-        let v = s.view(&c);
-        assert_eq!(v.panels_rail.value, Value::from("shown"));
-        assert_eq!(v.panels_enabled.value, serde_json::json!(PANEL_IDS));
-        assert_eq!((v.panel_width, v.panel_open), (PANEL_WIDTH_DEFAULT, None));
-        s.set(&c, "panels_rail", &Value::from("hidden")).unwrap();
-        s.set(&c, "panels_enabled", &serde_json::json!(["tasks"]))
-            .unwrap();
-        s.set(&c, "panel_width", &Value::from(480)).unwrap();
-        s.set(&c, "panel_open", &Value::from("communication"))
-            .unwrap();
-        let again = UiStore::open(Some(t.path().to_path_buf())).view(&c);
-        assert_eq!(again.panels_rail.value, Value::from("hidden"));
-        assert_eq!(again.panels_enabled.value, serde_json::json!(["tasks"]));
-        assert_eq!(again.panel_width, 480);
-        assert_eq!(again.panel_open.as_deref(), Some("communication"));
-        s.set(&c, "panel_open", &Value::Null).unwrap();
-        assert_eq!(s.view(&c).panel_open, None);
-        for (field, value) in [
-            ("panels_rail", Value::from("left")),
-            ("panels_enabled", serde_json::json!(["shell"])),
-            ("panels_enabled", serde_json::json!(["tasks", "tasks"])),
-            ("panels_enabled", Value::from("tasks")),
-            ("panel_width", Value::from(319)),
-            ("panel_width", Value::from(721)),
-            ("panel_width", Value::from(4_294_967_656_u64)),
-            ("panel_open", Value::from("shell")),
-        ] {
-            assert_eq!(
-                s.set(&c, field, &value).unwrap_err().kind,
-                "bad_value",
-                "{field} {value}"
-            );
-        }
-        let t2 = cfg(&["panels.rail", "panels.enabled"]);
-        assert_eq!(
-            s.set(&t2, "panels_rail", &Value::from("shown"))
-                .unwrap_err()
-                .kind,
-            "set_in_config"
-        );
-        assert_eq!(s.view(&t2).panels_enabled.source, "config");
-        // A hand-edited ui.json out of range never reaches the page.
-        std::fs::write(
-            t.path().join(FILE_NAME),
-            r#"{"schema":1,"panel_width":9000,"panel_open":"shell"}"#,
-        )
-        .unwrap();
-        let odd = UiStore::open(Some(t.path().to_path_buf())).view(&c);
-        assert_eq!(
-            (odd.panel_width, odd.panel_open),
-            (PANEL_WIDTH_DEFAULT, None)
-        );
-    }
-}
+#[path = "ui_store_tests.rs"]
+mod tests;

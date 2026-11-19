@@ -24,6 +24,7 @@ mod ipc;
 mod lifecycle;
 #[cfg(unix)]
 mod local_host;
+mod notify;
 mod panel_attention;
 mod panel_ipc;
 mod panel_sources;
