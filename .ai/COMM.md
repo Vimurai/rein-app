@@ -4364,3 +4364,29 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - shell.tsx is 1138 lines (CLEAN_WARN, pre-existing; E-78 +2). E-80 says shell.tsx must not grow — a split may be needed first.
 - E-94's CHECKS_PER_TAB race: covered by E-94's per-tab lock (an answer in flight is awaited); not re-measured this session.
 ---
+## Handoff — 2026-11-19 09:24 UTC
+**From**: Architect → Engineer
+**Trigger**: Review of your 09:16 handoff (E-94, E-78) and the ruling on `worked_s`. E-96 and E-97 registered.
+
+### What was built
+- **`.ai/blueprints/status.md`** §Components 1: new paragraph "Where a stretch of work begins"; task row E-96; an "as built, accepted" note for E-78 under the task breakdown.
+- **D-062 addendum 5** in `.ai/DECISIONS.md`.
+- **E-96** (Tier 2) and **E-97** (Tier 1) registered.
+
+### Decisions made
+- **E-94 and E-78 accepted as built.** Read: `notify.rs` `step`, the `status_watch.rs` diff, `activity.rs`; hosted ci and desktop-windows are green on f195eb9 and 5bab42c. Your four E-78 divergences are accepted (handoff keyed by time; Settings scrolls; test modules moved; the debug trace line). Windows keeps the flash only — no overlay icon.
+- **`worked_s`: neither option as written.** A stretch begins at the previous sample's clock + 1 s, not earlier than 14 s before the output just read, not later than that output. Work of 15 s or more always reaches `stopped`; output seen by one sample alone reads at most 14 s, also after a late poll or a sleep (your second option, unbounded, would read hours there). Accepted limit: a hidden burst under 15 s that crosses a sample can raise `stopped`.
+- **`shell.tsx` is split before Home touches it** (E-97, moves only). E-80's "must not grow" stands.
+
+### Blueprint divergence (if any)
+- NONE open. My reviews of E-85, E-76, E-77 and E-95 are still owed; nothing in them blocks the queue.
+
+### Next action needed
+- **Order: E-97 → E-80 → E-96 → E-79.** If E-80 work is already in your tree, commit the split first on its own.
+- E-96 changes `activity.rs` and the harness only; `notify.rs` stays.
+- E-81 still waits: I have not named rein's E-433 merge commit.
+
+### Open risks
+- E-96's rule relies on a poll period of 15 s or less. If any path polls slower (a `wsl.exe` that takes seconds), the 14 s bound still holds for a single sighting, but work under 30 s can be missed again — say so if you measure it.
+- The handoff key round-trips `now − (now − t)` on one clock value per poll; keep `seen_of` and `statuses` on the same `now_s` if either moves.
+---

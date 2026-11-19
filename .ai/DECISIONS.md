@@ -2569,3 +2569,33 @@ E-77 is ACCEPT_FAIL: no set-up tab can reach the screen, because the core builds
 
 ### Rollback
 Revert E-95's commit; E-77's screens then lack the set-up tab again.
+
+### D-062 addendum 5 (2026-11-19) — E-94 and E-78 accepted; a stretch of work begins at the previous sample
+
+**Task**: E-78 (5bab42c), E-94 (f195eb9), Engineer handoff 2026-11-19 09:16 UTC (d47d78f); E-96, E-97
+**Decision**: E-94 and E-78 are accepted as built. `worked_s` is changed to start a stretch at the previous sample's clock + 1 s, held to at most 14 s before the first output read (E-96).
+
+### Why needed
+The Engineer found that the activity tracker (E-76) starts a stretch at the first sample that sees output, so `worked_s` reads short by up to one poll period. With the window hidden (15 s period) a 20 s burst raised no `stopped`. `stopped` is the only notification a permission prompt gets before rein's waiting signal (addendum 3), and a hidden window is where it matters most.
+
+### Rulings
+1. **Start the stretch at the previous sample's clock + 1 s**, not earlier than 14 s before the output just read, not later than that output. Work of 15 s or more then always reaches the `stopped` line; output seen by one sample alone reads at most 14 s, also after a late poll or a sleep.
+2. **Known limit, accepted**: in a hidden window a burst under 15 s that crosses a sample can raise `stopped`. Sampling cannot tell the two cases apart; the error is put on the side of one notification too many.
+3. **E-78 as built, accepted**: `handoff` keyed by the handoff's time (no readable time, no notification); Windows has the taskbar flash and no icon count; Settings' body scrolls; the test modules of `config.rs` and `ui_store.rs` moved to their own files; the debug-only `REIN_DESKTOP_TRACE_NOTIFY` line (never the sentence).
+4. **`shell.tsx` (1138 lines) is split before Home touches it** — E-97, moves only, like E-83. E-80's "shell.tsx must not grow" stands.
+5. **Order**: E-97 → E-80 → E-96 → E-79. E-81 still waits for rein's E-433 merge commit.
+
+### Alternatives considered
+1. **Accept the short reading** — rejected: work of 15–29 s in a hidden window is missed, the case addendum 3 lowered the line for.
+2. **Start at the previous sample's clock, unbounded** (the Engineer's second option) — rejected as written: a single line printed after a long gap between samples (a machine that slept) would read as hours of work. The 14 s bound keeps the option and removes that.
+3. **Poll every 5 s while hidden** — rejected: three times the hidden cost on Windows (one `wsl.exe` per poll) to narrow an error that ruling 1 already puts on the cheap side.
+4. **Lower the `stopped` line while hidden** — rejected: two lines for one event, and the same wrong notifications as ruling 1 without the correct `worked_s`.
+
+### Constraints driving this decision
+- The poll period is never over 15 s (`status.md` Execution Constraints); ruling 1 relies on it.
+
+### Impact
+- Unlocks: E-96. E-79 builds on the corrected reading. Risk if wrong: more `stopped` notifications for short bursts in a hidden window.
+
+### Rollback
+Revert E-96's commit; `worked_s` reads short again and the window run goes back to a 40 s burst.

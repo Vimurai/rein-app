@@ -66,6 +66,26 @@ none at a permission prompt. Known limits, accepted:
 - The cadence is one agent version on one machine. If a later one stops printing during
   a long tool run, `quiet` and `stopped` come early; the line is then measured again.
 
+**Where a stretch of work begins (D-062 addendum 5, E-96).** The core sees output only at
+its samples, so the first output of a stretch lies somewhere after the previous sample.
+E-76 started the stretch at the first sample that saw output; `worked_s` then read short
+by up to one poll period (5 s shown, 15 s hidden) and a 20 s burst in a hidden window
+raised no `stopped`. The rule from E-96 on: when a sample sees new output and the window
+had been quiet for 15 s or more by the previous sample, the stretch begins at **the
+previous sample's clock + 1 s**, and not earlier than **14 s before the output just
+read**, and not later than that output. So:
+- `worked_s` reads long by up to one period less a second, never short by more than 1 s.
+  Work of 15 s or more always reaches the `stopped` line, at either period.
+- Output seen by one sample alone reads at most 14 s, whatever the time between the two
+  samples (a late poll, a machine that slept). A one-line print or a resize redraw
+  still raises nothing.
+- Known limit, accepted: in a hidden window a burst shorter than 15 s that crosses a
+  sample can read as 15 s and raise `stopped` (2 s of output: about 1 time in 7). A
+  wrong "has stopped" is cheaper than a missed permission prompt.
+- The first sample of a tab, and a client that now shows another window, start at the
+  output read, as before: how long it had worked is not known.
+- The poll period is never over 15 s (Execution Constraints); this rule relies on it.
+
 ### 2. Status (core, a pure function with a table test)
 First match wins:
 
@@ -319,6 +339,14 @@ task drawer (replaced by the reader), Execution Constraints (polling while hidde
 4. **E-77 (Tier 2)** — tab marks, status-bar segment, Dashboard row: component 3.
 5. **E-78 (Tier 2)** — notifications, channels 1 and 2, limits and settings: component 6.
 6. **E-79 (Tier 2, `dependency_gate`)** — system notifications: channel 3.
+7. **E-96 (Tier 2)** — where a stretch of work begins: component 1, D-062 addendum 5.
+   Before E-79.
+
+**As built, accepted (E-78, D-062 addendum 5).** The `handoff` event is keyed by the
+handoff's time; a handoff whose time is not in the written shape raises none (its
+mention row still shows). Channel 2 per system: Linux — urgency hint, and the launcher
+count on docks that read it; macOS — dock bounce and badge count; Windows — taskbar
+flash only (no count: an overlay icon needs a drawn image per number and is not built).
 
 ## Home — every project at a glance (revision 2026-11-17, D-064)
 
