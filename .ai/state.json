@@ -1154,39 +1154,39 @@
     {
       "id": "E-77",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Show each project's status in the tab bar, the status bar and the Dashboard, per .ai/blueprints/status.md §Components 2 (the marks column) and 3 (D-062). Operator direction 2026-11-17: \"status running in tabs above\". After the status task. Draw the mark of the tab's state left of its title (shape tells the state, not colour alone; nothing animates except the existing spinner), with the accessible name \"<project>: <sentence>\" and a tooltip of at most three lines; add the current tab's status segment to the status bar between the path and health, cut from the right when narrow; make the Dashboard panel's first row the same status; add [tabs] status = shown | hidden to config.toml, ui.json and Settings. The web side draws what the project_status event gives and decides nothing; a task id is shown only when it matches [A-Z]-[0-9]{1,6}. New code in its own files; shell.tsx must not grow. Acceptance: web tests for the mark names and the tooltip lines per state and for the setting; screens in both themes at 1280×800 of the tab bar with one tab in each state and of the Dashboard, every PNG opened before the handoff names it.",
       "created_at": "2026-11-17T18:19:14.740Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-18T18:26:50.060Z",
+      "summary": "Status marks on tabs, status-bar segment, Dashboard row, [tabs] status (aec78a9, ed9d9dc); setup + card fields via E-95 (9433768). Screens .ai/screens/E-77 reshot; ACCEPT_PASS at 9433768.",
       "depends_on": [
         "E-76"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-18T17:42:58.362Z"
+      "updated_at": "2026-11-18T18:26:50.060Z"
     },
     {
       "id": "E-78",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Raise a notification when a project needs the operator, stops, is stuck or ends, per .ai/blueprints/status.md §Components 6 channels 1 and 2, §Data Model and §Security (D-062). Operator direction 2026-11-17: \"notifications for each project running so we can see when something is stuck or needs our attention\". After the status task. Implement the five events of the table (needs_you, stopped, stuck, ended, handoff) in the core as edge-triggered, with a clock passed in: once on the change, never repeated while the state stays; nothing for the current tab of a focused window; nothing in the first 30 s after a tab opens or is restored; stopped not raised when needs_you was raised for the same stop. Channel 1: the notify event and the existing toast when the event's tab is not current. Channel 2: when the window is not focused, the Tauri core's request_user_attention (informational, once per event) and the count of Now items on the app's icon where the Tauri core offers it — no new dependency; report in the handoff which of the two each of the three systems has. Add [notifications] enabled, events (the closed list) and stuck_after_min to config.toml, ui.json and Settings (system is read but does nothing until the system-notification task). Fixed sentences only. Acceptance: core tests for each event raised once and not again, the 30 s silence, each event switched off by its setting; the window run shows a background tab that prints then stops getting the stopped toast, also with the window hidden; a toast screen in both themes.",
       "created_at": "2026-11-17T18:19:20.798Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-19T09:15:57.633Z",
+      "summary": "Notifications (5bab42c): notify.rs raises the five events once on a change (30 s silence, none for the front tab, per-event settings); notify event toast, request_user_attention when …[full in LOG.md]",
       "depends_on": [
         "E-76"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-18T17:42:58.364Z"
+      "updated_at": "2026-11-19T09:15:57.633Z"
     },
     {
       "id": "E-79",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Send the operating system's own notification for the events of the notifications task, per .ai/blueprints/status.md §Components 6 channel 3 and §Security (D-062). After the notifications task. FIRST run skill dependency_gate with critic_security on the candidate crate (no network use, no shell, on Windows no process beyond what the system's notification API needs) and record it in DECISIONS.md; if no candidate fits, STOP and hand back — channels 1 and 2 stand. Then: raise a system notification when the window is not focused or is hidden and [notifications] system is true (default); the text is one of the app's fixed sentences with the project's folder name only — never a task description, a handoff line or a quote; at most one per project per 60 s, later events in that minute merged into \"<project>: <n> things need you.\"; where the system reports a click, bring the window forward. Add the system switch to Settings. Acceptance: core tests for the 60 s limit and the merged sentence and for system = false sending nothing; a test that no notification text can hold text from a project file (the sentence builder takes only the event, the folder name and a number); a notification seen on each of Linux, Windows (installed build) and macOS and described in the handoff, with a capture where the system allows one; hosted ci on all three systems and desktop-windows green.",
       "created_at": "2026-11-17T18:19:26.680Z",
@@ -1195,16 +1195,14 @@
       "depends_on": [
         "E-78"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-78"
-      ],
-      "updated_at": "2026-11-17T18:19:26.680Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-19T09:15:57.636Z"
     },
     {
       "id": "E-80",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Build Home — a fixed first entry of the tab bar showing every project at a glance — per .ai/blueprints/status.md §Home H1-H5 (D-064). Operator direction 2026-11-17: \"home button at beginning of tabs on top bar; this should be the top system to check how everything is going\". After the tab-marks task (and the triage task, whose Now items it lists). Add the Home button (house icon, first, not closable, not movable, not numbered, carrying the count of Now items); the Home view replacing the start screen: summary line, \"Needs you now\" rows, one card per open project ordered by state and never moving under the pointer or keyboard focus, recent projects, the installation rows; the project card (mark and sentence, task in progress, whose turn, last handoff age and trigger, agents by role, task-count chips, Now count); the card fields on the project_status event from the summary source and the status script, with no new file read and no new IPC command; the action home.show (Ctrl+Shift+H, Space h, menu row) and tab.next / tab.prev cycling through Home; the side-menu rule H4; start-up rule H5. Going Home and back resizes or closes no pty. New code in its own files; shell.tsx must not grow. Acceptance: the web and core tests in §Home Tests; the window run with three fixture projects (a project that stops moves up and the Home badge counts it; no pty resize on return); 32 projects without a frame over 50 ms; screens in both themes at 1280×800 and one at 700 px — five projects in mixed states, none open, with \"Needs you now\" rows — every PNG opened before the handoff names it.",
       "created_at": "2026-11-17T18:25:46.506Z",
@@ -1213,16 +1211,14 @@
       "depends_on": [
         "E-77"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-77"
-      ],
-      "updated_at": "2026-11-17T18:25:46.507Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-18T18:26:50.063Z"
     },
     {
       "id": "E-81",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "OPEN",
       "tier": 2,
       "description": "Read rein's waiting signal so the window says which agent waits for the operator, per .ai/blueprints/status.md §Waiting signal W1-W7 (D-062 addendum 1; rein D-160, rein E-433). After the notifications task AND the Home task (E-80). DO NOT START until the Architect has named rein's merge commit for E-433 in a handoff; the first step is then to vendor rein's tests/fixtures/release/pane-options.json and the \"Pane options\" contract text at that commit. Then: add @rein_signals, @rein_waiting and @rein_waiting_since to the status script's per-pane line (the tab's own window only, no new argument); parse them in the core against the closed forms (reports; waiting only on a pane whose agent runs; kind permission | question | other; since 1–12 digits, not future, under 30 days) and never pass the raw text on; add the dismissable Now item waiting with its three sentences and the pattern-checked role; make the needs_you and stopped sentences exact as W4 says; show each role's state in the tab tooltip and the Home card; add the information row for a project whose panes do not report; raise one notification per project for items still present when the start-up silence ends. Acceptance: the parser tests over the vendored fixture and hostile values; no item without @rein_signals and none on a dead pane; dismiss returns on a new since; a real-tmux run that sets the three options on a fixture pane on Linux and macOS, and Windows interop output; screens in both themes of a tab tooltip and a Home card with one role waiting.",
       "created_at": "2026-11-17T18:27:21.095Z",
@@ -1231,11 +1227,9 @@
       "depends_on": [
         "E-78"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-78"
-      ],
-      "updated_at": "2026-11-17T18:27:21.095Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-19T09:15:57.639Z"
     },
     {
       "id": "E-82",
@@ -1418,30 +1412,30 @@
     {
       "id": "E-94",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Detect a `rein start` that fails and offer the fix rein names, per .ai/blueprints/desktop.md §V14 (D-068). Operator report 2026-11-18: a folder with a foreign `.ai/` (no roles.json) shows only \"rein start exited with code 2 — press Enter to restart\". Build V14 components 1-5. Do not read roles.json; do not parse rein's message or pty bytes. Read V9 and its rulings first. Acceptance: (1) `cargo test -p rein-desktop` passes with tests showing `start_failed` is set only for an ordinary start with a non-zero exit and no session, that check exit 1 / 0 / timeout map to needs_init / no_fix / no_fix, and that `project_setup` is refused for a started tab not in needs_init; (2) `npm test` in crates/rein-desktop/ui passes with tests for the bar's three forms, never two bars, \"Don't ask\" not hiding it, and the sheet holding 200 rows; (3) a script under crates/rein-desktop/tests/e2e exits 0 on Linux with a stand-in rein whose start exits 2 and whose `init --check` exits 1 with 58 rows: the bar shows Set up, the sheet shows row 52, Run rein init runs init then the start in the same terminal and the bar is gone; with `init --check` exiting 0 the bar has no Set up button; (4) screenshots in .ai/screens/E-94/, both themes at 1280x800: the bar in needs_init, in no_fix, while checking, and the sheet scrolled past row 40; (5) opening [redacted:home_path]/Dev/qrtable in the built window shows the bar with Set up this project and the sheet with `refresh CLAUDE.md` visible (screenshots; do NOT click Run rein init there — it replaces that project's CLAUDE.md). Hosted macOS/Windows CI runs are named in the handoff.",
       "created_at": "2026-11-18T18:09:47.643Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-19T08:32:50.331Z",
+      "summary": "A start that fails (f195eb9): core ChildKind Start/Attach/Setup; ordinary start on the app's server exiting non-zero with no session -> pty_exit start_failed; project_check maps rein …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-18T18:09:47.650Z"
+      "updated_at": "2026-11-19T08:32:50.334Z"
     },
     {
       "id": "E-95",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Complete `ProjectStatus` in the core so the window can show every state and field of .ai/blueprints/status.md §Data Model (D-062 addendum 4, ruling on E-77 clause 4). Two parts. (1) Send `setup` for a tab without a pty: a `setup` flag in the closed `TabIn` of `attention_items`, and `status_watch::statuses` built over the reported tabs as well as the running ones, per §Components 2 first row. (2) Add `in_progress {id, title}`, `turn` and `last_handoff_s` to `ProjectStatus` from the sources §Data Model names (the project's `.ai/state.json` and `.ai/COMM.md` through the existing panel sources; no new file read path, no new process). Then reshoot E-77's screens and close E-77. Acceptance: (1) `cargo test -p rein-desktop` passes with a test that a reported tab without a pty and with the setup flag yields state `setup`, and tests that the three fields are filled from a fixture state.json / COMM.md and are null when the file is missing or over its limit; (2) `npm test` in crates/rein-desktop/ui passes; (3) `crates/rein-desktop/tests/e2e/status-screens.sh` exits 0 and .ai/screens/E-77/ holds, in both themes at 1280x800, a tab bar shot with a set-up tab carrying the wrench mark and a tooltip shot showing the task line and the turn line — each opened before the handoff names it; (4) E-77's acceptance evaluator records ACCEPT_PASS at the new HEAD.",
       "created_at": "2026-11-18T18:10:08.054Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-18T18:35:57.649Z",
+      "summary": "ProjectStatus complete (9433768, screens 56d3371): TabIn.setup flag, setup for reported no-pty tabs, set-up tabs keyed by setup.id on the web; in_progress/turn/last_handoff_s from th …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-18T18:10:08.054Z"
+      "updated_at": "2026-11-18T18:35:57.649Z"
     }
   ],
   "stamps": [
@@ -4170,6 +4164,159 @@
       "timestamp": "2026-11-18T18:08:23.259Z",
       "summary": "[TIER_1] E-77 ACCEPT_FAIL clause 2 fix: status.test.mjs checks the tooltip lines for all seven states, alone and with task/turn known, and the drawn mark's lines. Test-only change; web 108 pass. Clause 4 (no setup tab on screen) goes to the Architect: the core sends no setup status (no pty), a contract change to attention_items/statuses.",
       "sha": "aec78a94fad3c8dbde05a882f28dc75c45bb2625",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_WARN",
+      "agent": "critic_clean_code",
+      "task_id": "E-95",
+      "timestamp": "2026-11-18T18:23:42.535Z",
+      "summary": "standards-checker (scripts/standards.mjs) absent in-tree and in ~/.rein, so the CLI was not run; manual review of the 11 crates/ files: no secret patterns, all files under 1000 lines (max attention.rs 927), no tmp files, no stdout in diff, unwrap() only in test code. No errors found; WARN only because the automated gate could not execute.",
+      "sha": "250e0e163c2b078912d29691d779af044e1614e0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-95",
+      "timestamp": "2026-11-18T18:24:44.509Z",
+      "summary": "E-95 (re-run, supersedes the CLEAN_WARN: the checker was present at ~/.rein/scripts/standards.mjs, the earlier run's ls was broken by an eza alias) standards-checker PASS via standards.mjs check --file --json on all 11 crates/ files — 0 errors, 0 warnings. Pre-existing (not E-95): prettier --check warns on the 5 touched web files at HEAD too; one stray double blank line added in tab-status.tsx (nit).",
+      "sha": "250e0e163c2b078912d29691d779af044e1614e0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner (manual)",
+      "task_id": "E-95",
+      "timestamp": "2026-11-18T18:24:48.162Z",
+      "summary": "E-95 aligns with status.md §Components 2 / §Data Model and D-062 addendum 4 (manual review of the unstaged working tree; align_diff reads only staged). ProjectStatus gains in_progress{id,title}, turn, last_handoff_s exactly per §Data Model (Rust + TS, now required); fields come from the existing panel facts via answer_all/lists_of (no new file read path, no new process); setup row: TabIn.setup closed bool (serde default false), statuses() covers reported set-up/refused tabs known to the core, web keys status by coreId so set-up tabs get the wrench; task-id shape still gated web-side (TASK_ID). Non-blocking notes: (1) no web-side producer sets TabState.setup=true yet (side-menu.tsx sends only tab/refused/update) — the D-068 failed-start path is wire-ready but unused; (2) facts.get(&tab) for reported_setup tabs is always None (facts cover running tabs only).",
+      "sha": "250e0e163c2b078912d29691d779af044e1614e0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-95",
+      "timestamp": "2026-11-18T18:24:55.021Z",
+      "summary": "[TIER_2] E-95 blueprint aligned (manual; align_diff saw no staged changes) + clean-code gate clear (CLEAN_PASS re-run supersedes CLEAN_WARN) — 0 warnings; 2 non-blocking align notes (no web producer of TabState.setup yet; facts lookup for reported_setup tabs always None). ACCEPT pending: critic_acceptance must run after the commit.",
+      "sha": "250e0e163c2b078912d29691d779af044e1614e0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ACCEPT_PASS",
+      "agent": "critic_acceptance",
+      "task_id": "E-77",
+      "timestamp": "2026-11-18T18:26:33.906Z",
+      "summary": "[ACCEPT_PASS] E-77 at 9433768 — 5 PASS, 0 FAIL, 1 UNVERIFIED\n1 | PASS | ui `npm test` exit 0, 109/109; status.test.mjs \"each state has its mark…\" checks mark+a11y name for all 7 states\n2 | PASS | \"the tooltip: at most three lines…\" checks sentence-alone and 3-line form for all 7 states, id regex, <=3 lines\n3 | PASS | \"[tabs] status: shown by default; hidden…\" passes; cargo test config:: ui_store:: 17/17 incl the_tab_status_switch\n4 | PASS | status-tabs mocha+light 1280x800: working, quiet, ended, needs-you, unknown(no mark), setup(wrench), starting(spinner)\n5 | PASS | status-dashboard mocha+light 1280x800: first row \"Quiet for 30 s. · E-77 · Engineer's turn\"; status bar segment too\n6 | UNVERIFIED | Engineer-session action (opening PNGs before handoff) not observable in tree; all 7 PNGs opened in this review",
+      "sha": "9433768804890ab672340219ec4689bab7ac7651",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ACCEPT_FAIL",
+      "agent": "critic_acceptance",
+      "task_id": "E-95",
+      "timestamp": "2026-11-18T18:27:20.794Z",
+      "summary": "[ACCEPT_FAIL] E-95 at 9433768 — 7 PASS, 1 FAIL, 1 UNVERIFIED\n1 | PASS | cargo test -p rein-desktop exit 0; 202+5+3 pass\n2 | PASS | a_reported_tab_without_a_pty_that_needs_set_up_is_setup ok (Status::Setup)\n3 | PASS | desktop::the_card_fields_are_filled_from_the_files_or_null ok: E-77, Engineer, 7200 s\n4 | PASS | same test: no files -> all None; state.json over STATE_MAX -> in_progress None\n5 | PASS | ui npm test exit 0, 109 pass 0 fail\n6 | FAIL | status-screens.sh re-run exit 2: bundle older than ui/src (tab-status.tsx 19:25 > dist 19:19)\n7 | PASS | opened status-tabs both themes 1280x800: wrench mark on setup tab\n8 | PASS | opened status-tooltip both themes: \"In progress: E-77 …\" + \"Engineer's turn · last handoff 2 h ago\"\n9 | UNVERIFIED | opened-before-handoff: prior-session action, not observable (all 4 opened here)\n10 | PASS | state: ACCEPT_PASS for E-77 at 9433768 (18:26:33Z)",
+      "sha": "9433768804890ab672340219ec4689bab7ac7651",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "Engineer",
+      "task_id": "E-95",
+      "timestamp": "2026-11-18T18:31:44.962Z",
+      "summary": "[TIER_1] E-95 ACCEPT_FAIL clause 3 fix: ui rebuilt (a whitespace edit to tab-status.tsx came after the last build, so window-binary.sh refused), status-screens.sh re-run to exit 0 (3 of 15 second starts retried), .ai/screens/E-77 reshot and all 7 PNGs opened. Screens only; no code change. Tier 1: no critic review per rein-review.",
+      "sha": "9433768804890ab672340219ec4689bab7ac7651",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ACCEPT_PASS",
+      "agent": "critic_acceptance",
+      "task_id": "E-95",
+      "timestamp": "2026-11-18T18:35:47.823Z",
+      "summary": "[ACCEPT_PASS] E-95 at 56d3371 — 4 PASS, 0 FAIL, 0 UNVERIFIED\n1 | PASS | cargo test -p rein-desktop exit 0, 202+5+3 pass; a_reported_tab_without_a_pty..._is_setup, the_card_fields_..._or_null ok\n2 | PASS | ui npm test exit 0, 109/109 pass\n3 | PASS | status-screens.sh into mktemp dir exit 0 (2/15 retries); E-77 PNGs 1280x800 opened: wrench setup tab + E-77/Engineer's turn tooltip, both themes\n4 | PASS | state: E-77 ACCEPT_PASS at 9433768 (18:26:33Z), E-77 DONE; 9433768..56d3371 changes only 7 E-77 PNGs",
+      "sha": "56d3371f9ffd71f27d88e129420a31be74f12c16",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_WARN",
+      "agent": "critic_clean_code",
+      "task_id": "E-94",
+      "timestamp": "2026-11-18T19:03:49.335Z",
+      "summary": "standards-checker NOT RUNNABLE (scripts/standards.mjs, src/shared/standards.json, engineering-standards.md absent; ~/.rein has no checker) - manual pass of file_size/secrets/tmp/stdout rules: no secrets, no tmp files, no errors; 1 warning: file_size_limit_lines crates/rein-desktop/ui/src/shell.tsx 1136 lines (was 1108, +28, band 1001-1500). Other files <800 lines.",
+      "sha": "56d3371f9ffd71f27d88e129420a31be74f12c16",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "rein-review-tier2 (manual align vs desktop.md §V14)",
+      "task_id": "E-94",
+      "timestamp": "2026-11-18T19:04:38.163Z",
+      "summary": "[TIER_2] E-94 working tree aligns with desktop.md V14 / D-068 components 1-5: start_failed only for ChildKind::Start + App server + code!=0 + Lookup::None; --check 1/0/other->needs_init/no_fix/no_fix(+health line); answered cache + per-tab gate reuse/await V9 check; project_setup accepts needs_init only, else not_failed; MAX_ROWS 200; bar replaces update bar, Don't ask does not hide it; no second offer after failed init. Two divergences accepted for Architect ratification: (a) user tmux server never yields start_failed (V8: no lookup there; fails safe to today's line; documented in operator-guide); (b) budget is FAILED_CHECKS_PER_PROJECT=3 per window run, not CHECKS_PER_TAB+1, because Try again/Enter open a new tab id so a per-tab count would not bound it; never resets on a later successful start (fails safe to no_fix). align_diff MCP not run: nothing staged; reviewed by hand.",
+      "sha": "56d3371f9ffd71f27d88e129420a31be74f12c16",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-94",
+      "timestamp": "2026-11-18T19:04:41.131Z",
+      "summary": "[TIER_2] Blueprint aligned + clean-code gate clear — 1 warning ignored (shell.tsx 1136 lines, pre-existing >1000; +28 net). Two V14 divergences flagged for Architect ratification (user-server no lookup; per-project failed-check budget). ACCEPT pending: dispatch critic_acceptance after the commit (stamp binds to HEAD).",
+      "sha": "56d3371f9ffd71f27d88e129420a31be74f12c16",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "Engineer",
+      "task_id": "E-94",
+      "timestamp": "2026-11-18T19:05:11.770Z",
+      "summary": "standards-checker (~/.rein/scripts/standards.mjs check --file --json) on all 12 E-94 files: 0 errors, 0 warnings. Replaces the CLEAN_WARN whose agent looked for the checker in the repo (it is the installed one). shell.tsx 1136 lines (+28 for the bar wiring); no file-size finding from the checker.",
+      "sha": "56d3371f9ffd71f27d88e129420a31be74f12c16",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ACCEPT_PASS",
+      "agent": "critic_acceptance",
+      "task_id": "E-94",
+      "timestamp": "2026-11-18T19:10:30.997Z",
+      "summary": "[ACCEPT_PASS] E-94 at f195eb9 — 5 PASS, 0 FAIL, 1 UNVERIFIED\n1 | PASS | cargo test -p rein-desktop exit 0, 206+5+3 pass; 4 start_failed_tests + rows_are_capped ok\n2 | PASS | ui npm test exit 0, 113/113; start-failed.test.mjs 4 ok (3 forms, one bar/Don't ask, 200+1 rows uncut)\n3 | PASS | start-failed-screens.sh into mktemp: exit 0, every line ok, PASS; calls start,check,init,start; no_fix nothing ran\n4 | PASS | opened 12 PNGs 1280x800 both themes: needs_init Set up, no_fix Try again/Close only, Asking rein…, row 52 refresh\n5 | PASS | opened qrtable-bar/sheet/sheet-end: Set up this project bar, refresh CLAUDE.md row; CLAUDE.md md5 5c27369b unchanged\n6 | UNVERIFIED | hosted run: gh run list f195eb9 shows ci queued, desktop-windows in_progress; handoff not written",
+      "sha": "f195eb93813169bcef4a460e931c0a1c65a9f425",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_WARN",
+      "agent": "critic_clean_code",
+      "task_id": "E-78",
+      "timestamp": "2026-11-19T09:06:19.544Z",
+      "summary": "standards-checker unavailable in-tree (no scripts/standards.mjs, standards.json); manual review of 16 files: no secrets, no tmp files, kebab-case ok. WARN file_size_limit_lines: ui/src/shell.tsx 1138 lines (pre-existing 1136, +2). No errors.",
+      "sha": "f195eb93813169bcef4a460e931c0a1c65a9f425",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner",
+      "task_id": "E-78",
+      "timestamp": "2026-11-19T09:08:44.453Z",
+      "summary": "MCP align_diff verdict WARN (no violations; ORPHANED_WORK on attention.rs/status_watch.rs/ui_store.rs, which are covered by status.md registered in architect.md) + manual check vs status.md §C6/§Data Model/§Security: no new deps, fixed sentences only (folder name + number), [notifications] keys enabled/system/events/stuck_after_min match status.md:217-218, system inert until E-79. Diff passed to MCP with moved-test bodies abridged.",
+      "sha": "f195eb93813169bcef4a460e931c0a1c65a9f425",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-78",
+      "timestamp": "2026-11-19T09:09:00.828Z",
+      "summary": "[TIER_2] Blueprint aligned + clean-code gate clear — 1 warning ignored (shell.tsx 1138 lines, pre-existing; MCP ORPHANED_WORK warn is a false positive, status.md covers the files)",
+      "sha": "f195eb93813169bcef4a460e931c0a1c65a9f425",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ACCEPT_PASS",
+      "agent": "critic_acceptance",
+      "task_id": "E-78",
+      "timestamp": "2026-11-19T09:15:44.058Z",
+      "summary": "[ACCEPT_PASS] E-78 at 5bab42c — 6 PASS, 0 FAIL, 0 UNVERIFIED\n1 | PASS | `cargo test -p rein-desktop notif` 9 pass; each_event_is_raised_once_and_not_again, stopped_*once_per_stop, handoff_* read\n2 | PASS | notify::tests::the_thirty_second_silence_after_a_tab_opens ok (asserts nothing at 29 s/31 s for pre-existing state)\n3 | PASS | notify::tests::settings_switch_each_event_off ok (loops Event::ALL, enabled=false); ui_store notification test ok\n4 | PASS | notify-screens.sh into mktemp exit 0 \"PASS\": \"ok worker raised stopped with the window shown\", both themes\n5 | PASS | same run: \"ok later raised stopped with the window hidden\", trace project=later attention=true, both themes\n6 | PASS | opened .ai/screens/E-78/notify-toast-{catppuccin-mocha,github-light}: toast \"worker has stopped — it is finished or waiting.\"",
+      "sha": "5bab42cfa2a2f334ce6eb1c4a5e2c713ea64409d",
       "author": "emirkovacevic@protonmail.com"
     }
   ],

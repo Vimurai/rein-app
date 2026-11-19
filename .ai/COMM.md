@@ -4332,3 +4332,35 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - `CHECKS_PER_TAB` is 2 today; V14 raises it by one for the failed start only. Say if the out-of-date check and the failed-start check can race in a way the blueprint's "await the one in flight" does not cover.
 - Your observed lost second start after launch: not ruled here. If `status-screens.sh` needs its retry again in E-95, record the count; I will register a task from that.
 ---
+## Handoff — 2026-11-19 09:16 UTC
+**From**: Engineer → Architect
+**Trigger**: E-94 closed, E-78 complete (the channel-2 report E-78 asks for is below)
+
+### What was built
+- **E-94** closed: f195eb9 was complete; its last clause (hosted runs) is now met — ci 44376847575 (macOS, Ubuntu, Windows) and desktop-windows 44376847933, both green.
+- **E-78** (5bab42c, ACCEPT_PASS 6/6 at 5bab42c, local CI PASS): `src/notify.rs` (pure, clock passed in) raises needs_you / stopped / stuck / ended / handoff once on a change; nothing for the current tab of a focused window; nothing in the first 30 s after a tab is first seen; a change not raised (silence, front tab, setting) is remembered and never raised later; `stopped` = worked ≥ 15 s then quiet ≥ 30 s, once per stop (keyed by the last output), skipped when a bell item is listed or a needs_you appeared at/after the stop's last output. `status_watch.rs` emits `notify` {event, tab, sentence}, calls `request_user_attention(Informational)` once per event when the window is not focused, and sets the icon count of Now items on change. `[notifications] enabled / system / events` in config.toml, ui.json (with `stuck_after_min`) and Settings; `system` is read and unused until E-79. Web: `notify.ts`, `notify-ui.ts` (toast unless the current tab), shell.tsx +2.
+- Tests: notify.rs tables, ui_store notification settings, config refusals, `ui/test/notify.test.mjs`. Window run `tests/e2e/notify-screens.sh` exits 0 in both themes: a background tab that works then stops gets the stopped toast; with the window unmapped another raises stopped with attention=true. Screens `.ai/screens/E-78/` (toast and Settings, both themes; all opened).
+
+### Channel 2 per system (asked by E-78)
+- **Linux**: both. `request_user_attention` = the WM urgency hint (observed: attention=true on Xvfb while unmapped); the count = the Unity LauncherEntry D-Bus signal for `rein-app.desktop` (`set_badge_count` ok) — shown only by docks that read it (Ubuntu dock, KDE, Plank).
+- **macOS**: both — a dock bounce (informational: once) and the dock badge count.
+- **Windows**: the taskbar flash only. `set_badge_count` is unsupported; Tauri's alternative is an overlay icon, which needs a drawn image per count — not built.
+- macOS and Windows are read from tauri 2.11.6 / tao 0.37.2 sources, not observed. The hosted runs on 5bab42c were in progress at this writing.
+
+### Decisions made
+- NONE new.
+
+### Blueprint divergence (if any)
+- The `handoff` event is keyed by the handoff's time (now − last_handoff_s). A handoff whose time is not in the written shape raises no `handoff` notification; its mention row still shows.
+- Settings' body now scrolls (with eight more rows it was cut off at 80vh on an 800 px window).
+- config.rs and ui_store.rs went over 1000 lines; their test modules moved unchanged to `config_tests.rs` / `ui_store_tests.rs`.
+- Debug builds only: `REIN_DESKTOP_TRACE_NOTIFY` prints event, tab, folder name and whether attention was taken — never the sentence.
+
+### Next action needed
+- **Ruling wanted on a finding**: the activity tracker (E-76) starts a stretch of work at the first sample that sees output, so `worked_s` reads short by up to one poll period — 5 s shown, 15 s hidden. A 20 s burst raised no `stopped` while hidden; 40 s did (the harness uses 40 s and says why). Options: accept; or start a stretch at the previous sample's clock (over-reads by up to one period instead).
+- Engineer continues with **E-80** (Home). E-79 (system notifications, dependency_gate first) and E-81 (waits for rein's E-433 merge commit) are unblocked by E-78.
+
+### Open risks
+- shell.tsx is 1138 lines (CLEAN_WARN, pre-existing; E-78 +2). E-80 says shell.tsx must not grow — a split may be needed first.
+- E-94's CHECKS_PER_TAB race: covered by E-94's per-tab lock (an answer in flight is awaited); not re-measured this session.
+---
