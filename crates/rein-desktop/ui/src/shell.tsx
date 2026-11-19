@@ -17,15 +17,13 @@ import {
   ContextMenuTrigger,
 } from "../components/context-menu.tsx";
 import { DEFAULT_MODAL, DEFAULT_SIMPLE } from "./keymap.ts";
-import { describe as describeAction, menuEntries } from "./menu.ts";
+import { describe as describeAction } from "./menu.ts";
 import { pasteNeedsQuestion } from "./paste.ts";
 import type { ActionName } from "./actions.ts";
 import { commonPrefix, complete, parse } from "./commands.ts";
 import { COPIED_MS, TOAST_MS, chromeOf, overlayNotice, statusBar, titleBar } from "./chrome.ts";
-import { ProgressLine } from "../components/loaders.tsx";
-import { Exit } from "../components/dialog.tsx";
 import { MOTION } from "./motion.ts";
-import { CommandPalette, StatusBar, TitleBar, Toast } from "./frame.tsx";
+import { StatusBar, TitleBar } from "./frame.tsx";
 import {
   clipboardRead,
   clipboardWrite,
@@ -38,33 +36,27 @@ import {
   projectCheck,
   projectClose,
   tabClose,
-  projectsForget,
   projectsList,
-  updatesLater,
-  type CardView,
   type HealthView,
 } from "./ipc.ts";
-import { HealthOverlay, ProfilesOverlay, ReleaseOverlay } from "./release.tsx";
 import { keyBytes, keyName } from "./keys.ts";
 import type { ActionCall, KeyTable } from "./keymap.ts";
-import { WHICH_KEY_DELAY_MS, continuations, step, type ModeState } from "./modes.ts";
-import { MenuOverlay, PasteConfirm, WhichKey, label } from "./overlays.tsx";
-import { ProjectPicker } from "./project-picker.tsx";
-import { startScreen, withStartKeys, type RecentView } from "./start.ts";
-import { StartScreen } from "./start-screen.tsx";
+import { WHICH_KEY_DELAY_MS, step, type ModeState } from "./modes.ts";
+import { label } from "./overlays.tsx";
+import { withStartKeys, type RecentView } from "./start.ts";
 import { TermTab } from "./term.ts";
-import { AgentBar, CloseConfirm, StopConfirm, useAgentPoll, type PolledTab } from "./agent-bar.tsx";
-import { closeTabText, closedNote } from "./lifecycle.ts";
-import type { CheckReply } from "./project.ts";
-import { UpdateCard, askOutOfDate, recheckTabs, useUpdates } from "./update-ui.tsx";
-import { recheckOrder, reinAsk, showUpdateButton, updateRows } from "./updates.ts";
-import { SetupCard, UpdateBar, UpdateSheet } from "./project-ui.tsx";
-import { StartFailedBar, onTabExit, type FailedTab } from "./start-failed-ui.tsx";
-import { whichBar } from "./start-failed.ts";
-import { TeamSheet } from "./team-sheet.tsx";
-import { AgentsGoneBar, RestoreCard, restoreAtStart, useTabsRecord } from "./restore-ui.tsx";
+import { useAgentPoll } from "./agent-bar.tsx";
+import { closedNote } from "./lifecycle.ts";
+import { askOutOfDate, recheckTabs, useUpdates } from "./update-ui.tsx";
+import { recheckOrder, showUpdateButton } from "./updates.ts";
+import { onTabExit } from "./start-failed-ui.tsx";
+import { restoreAtStart, useTabsRecord } from "./restore-ui.tsx";
 import { useTabStatus, type TabStatusProps } from "./tab-status.tsx";
 import { useNotifyToast } from "./notify-ui.ts";
+import type { OpenTab, UpdateSheetState } from "./open-tab.ts";
+import { ShellOverlays } from "./shell-overlays.tsx";
+import { StageCards } from "./stage-cards.tsx";
+import { TabBars } from "./tab-bars.tsx";
 import { SideRow, panelOwnsKey, useSideMenu, useStageFit, type SideMenuProps } from "./side-menu.tsx";
 import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
 
@@ -126,39 +118,6 @@ function shellWord(s: string): string {
 /** At most 16 tabs (desktop.md §Execution Constraints); the core enforces it too. */
 const MAX_TABS = 16;
 
-/** One open tab: its terminal, its pane, and what the chrome shows for it. */
-/** The agents, the bar and the countdown (V9, E-71) are `PolledTab`'s fields (agent-bar.tsx). */
-interface OpenTab extends PolledTab, FailedTab {
-  /** For the tab's life (the title bar keys its pill by it). */
-  id: number;
-  term: TermTab;
-  el: HTMLDivElement;
-  /** As asked for (`:open`, a handoff), and canonical once open. */
-  requested: string;
-  project: string;
-  title: string;
-  open: boolean;
-  /** `rein start` exited (Enter restarts it): a dot on the tab. */
-  exited: boolean;
-  /** E-61: `exited` because the tmux setup was refused; a bell rang while out of sight. */
-  refused?: boolean;
-  bell?: boolean;
-  /** A failed tmux overlay was told in a toast already (V6: once per tab). */
-  overlayTold?: boolean;
-  /** V9 (E-63): a folder without `.ai/` — the set-up card, no terminal yet. */
-  setup?: { id: number; reply: CheckReply | null; inside: string | null } | undefined;
-  /** V12 (E-70): a restored tab — its card (no session / no folder), the first status read
-   *  opened without taking the front (its status read and "gone" are PolledTab's). */
-  card?: CardView | undefined;
-  quiet?: boolean;
-  /** The out-of-date check ran for this tab (once per open). */
-  asked?: boolean;
-  /** rein's rows when it reported the project out of date; the bar shows while set. */
-  update?: string[] | undefined;
-  /** Not now / Don't ask: the bar is hidden for this tab. */
-  updateHidden?: boolean;
-}
-
 export function Shell(props: ShellProps) {
   const { theme, keys: projectKeys, fontFamily, fontSize, lineHeight, opacity, tmuxKey, handlers, notice, startDir, startLast, closeWhenAgentsExit, dontAskUpdate, onDontAskUpdate, closeDontAsk, onCloseDontAsk } =
     props;
@@ -168,7 +127,7 @@ export function Shell(props: ShellProps) {
   closeDontAskRef.current = closeDontAsk;
   /** V9 3: Update project, running in its sheet for this tab. */
   // `run`: a failed start's sheet (V14) runs set-up in the tab's own terminal instead.
-  const [updateSheet, setUpdateSheet] = useState<{ entry: OpenTab; id: number; rows: string[]; run?: () => void } | null>(null);
+  const [updateSheet, setUpdateSheet] = useState<UpdateSheetState>(null);
   const dontAskRef = useRef(dontAskUpdate);
   dontAskRef.current = dontAskUpdate;
   /** V9: Close project with an agent still running asks first (default No). */
@@ -893,93 +852,11 @@ export function Shell(props: ShellProps) {
     <>
       <div id="frame" role="application" aria-label="rein-app" className="flex h-full flex-col">
         <TitleBar bar={bar} chrome={CHROME} r={runner} />
-        {current?.failed && (
-          <StartFailedBar
-            state={current.failed}
-            onAction={(a) => {
-              const id = current.term.tab?.id;
-              if (a === "close") return detach(cur.current);
-              if (a === "retry") return void ((current.failed = undefined), rerender(), current.term.restart());
-              if (id === undefined || current.failed?.at !== "needs_init") return;
-              const run = () => {
-                setUpdateSheet(null);
-                current.failed = undefined;
-                current.setUpOnce = true; // V14 5: no second offer in this tab open
-                rerender();
-                void current.term.start(id);
-              };
-              setUpdateSheet({ entry: current, id, rows: current.failed.rows, run });
-            }}
-          />
-        )}
-        {current && whichBar(current) === "update" && (
-          <UpdateBar
-            onUpdate={() => {
-              const id = current.term.tab?.id;
-              if (id !== undefined && current.update) setUpdateSheet({ entry: current, id, rows: current.update });
-            }}
-            onNotNow={() => {
-              current.updateHidden = true;
-              rerender();
-            }}
-            onDontAsk={() => {
-              current.updateHidden = true;
-              onDontAskUpdate(current.project);
-              rerender();
-            }}
-          />
-        )}
-        {current?.gone && !current.exited && <AgentsGoneBar t={current} rerender={rerender} say={say} onClose={() => closeProject(current, true)} />}
-        {current && (agentView.kind === "bar" || agentView.kind === "countdown") && (
-          <AgentBar
-            text={agentView.text}
-            closing={current.closing === true}
-            countdown={agentView.kind === "countdown"}
-            onClose={() => closeProject(current, agentView.kind === "countdown")}
-            onKeep={() => {
-              current.kept = agentView.key;
-              rerender();
-            }}
-          />
-        )}
+        <TabBars {...{ current, agentView, cur, detach, closeProject, onDontAskUpdate, rerender, say, setUpdateSheet }} />
         <SideRow v={sideView}>
         <div id="stage" className="relative min-h-0 min-w-0 flex-1" aria-busy={status.starting || undefined}>
           {sideView.over && sideView.panel}
-          {/* V7: the tab is starting — a 2 px line in the stage's own top padding, never over
-              the terminal. */}
-          {status.starting && !current?.setup && !current?.card && <ProgressLine className="absolute inset-x-0 top-0 z-10" />}
-          {current?.card && <RestoreCard t={current} rerender={rerender} onClose={() => detach(cur.current, `${current.title} closed`)} />}
-          {current?.setup && (
-            <SetupCard
-              project={current.project}
-              reply={current.setup.reply}
-              inside={current.setup.inside}
-              onOpenInside={(parent) => {
-                detach(cur.current, `${current.title} closed — opening the project it is inside`);
-                open(parent);
-              }}
-              onSetUp={() => {
-                const s = current.setup;
-                if (!s) return;
-                current.setup = undefined;
-                rerender();
-                void current.term.start(s.id);
-              }}
-              onOpenOther={() => run({ name: "project.open" })}
-              onClose={() => detach(cur.current)}
-            />
-          )}
-          {!termOpen && (
-            <StartScreen
-              model={startScreen(
-                recent,
-                health?.setup ? { reason: health.reason ?? "WSL is not ready", command: health.setup } : null,
-                Math.floor(Date.now() / 1000),
-                { loading: !recentLoaded, checking: healthRuns > 0 },
-              )}
-              r={runner}
-            />
-          )}
+          <StageCards {...{ status, current, cur, detach, open, run, rerender, termOpen, recent, recentLoaded, health, healthRuns, runner }} />
           <ContextMenu>
             <ContextMenuTrigger asChild>
               <div id="term" ref={termsEl} className={termOpen ? undefined : "hidden"} />
@@ -999,139 +876,10 @@ export function Shell(props: ShellProps) {
         </SideRow>
         <StatusBar bar={status} r={runner} />
       </div>
-      <Toast message={message} />
-      {/* Each overlay leaves with its exit animation (V7): `Exit` keeps it for --motion-fast. */}
-      <Exit
-        show={modeView.mode === "COMMAND"}
-        render={() => <CommandPalette text={cmdText} items={completion.current?.items ?? []} pending={completing} />}
-      />
-      <Exit
-        show={overlay === "menu"}
-        render={() => (
-          <MenuOverlay
-            entries={menuEntries(keys, otherTable, { tabs: tabs.current.length, panels: props.panelsEnabled })}
-            initialQuery={menuQuery}
-            onRun={(c) => {
-              closeOverlay();
-              run(c);
-            }}
-            onClose={closeOverlay}
-          />
-        )}
-      />
-      <Exit
-        show={pasteText !== null}
-        render={() => (
-          <PasteConfirm
-            text={pasteText ?? ""}
-            onPaste={() => {
-              if (pasteText !== null) tab.current?.paste(pasteText);
-              setPasteText(null);
-              tab.current?.focus();
-            }}
-            onClose={() => {
-              setPasteText(null);
-              tab.current?.focus();
-            }}
-          />
-        )}
-      />
-      <Exit
-        show={confirmClose !== null}
-        render={() => (
-          <CloseConfirm
-            running={confirmClose?.running ?? []}
-            onYes={() => {
-              const c = confirmClose;
-              setConfirmClose(null);
-              if (c) closeProject(c.entry, true);
-            }}
-            onNo={() => {
-              setConfirmClose(null);
-              tab.current?.focus();
-            }}
-          />
-        )}
-      />
-      <Exit
-        show={updateSheet !== null}
-        render={() =>
-          updateSheet && (
-            <UpdateSheet
-              tab={updateSheet.id}
-              rows={updateSheet.rows}
-              title={updateSheet.run ? "Set up this project" : "Update project"}
-              onRun={updateSheet.run}
-              onCommand={showCommand}
-              onDone={(outcome) => {
-                if (!outcome.keepBar) updateSheet.entry.update = undefined;
-                rerender();
-              }}
-              onClose={() => {
-                setUpdateSheet(null);
-                restoreChip();
-                tab.current?.focus();
-              }}
-            />
-          )
-        }
-      />
-      <Exit
-        show={stop !== null}
-        render={() =>
-          stop && (
-            <StopConfirm
-              title="Close project?"
-              text={closeTabText(stop.roles, stop.entry.title)}
-              yes="Close"
-              onYes={(dontAsk) => {
-                const s = stop;
-                setStop(null);
-                if (dontAsk) onCloseDontAsk();
-                const i = tabs.current.indexOf(s.entry);
-                if (i >= 0) closeTab(i, true);
-              }}
-              onNo={() => {
-                setStop(null);
-                tab.current?.focus();
-              }}
-            />
-          )
-        }
-      />
-      {whichKey && <WhichKey leader={keys.leader} next={continuations(keys, modeView.pending)} />}
-      <Exit show={overlay === "health"} render={() => <HealthOverlay health={health} onClose={closeOverlay} />} />
-      <Exit
-        show={overlay === "update" || overlay === "rollback"}
-        render={() => (
-          <ReleaseOverlay kind={overlay === "rollback" ? "rollback" : "update"} rows={updateRows(updates)} onClose={closeOverlay} onCommand={showCommand} />
-        )}
-      />
-      <Exit show={reinAsk(updates) !== null && overlay !== "update"} render={() => <UpdateCard version={reinAsk(updates) ?? ""} onLater={() => void updatesLater("rein").catch(() => {})} onUpdate={() => run({ name: "release.update" })} />} />
-      <Exit show={overlay === "profiles"} render={() => <ProfilesOverlay onClose={closeOverlay} onCommand={showCommand} />} />
-      <Exit
-        show={overlay === "team"}
-        render={() => {
-          const t = tabs.current[cur.current];
-          const id = t?.term.tab?.id;
-          return id === undefined || !t ? null : <TeamSheet tab={id} project={t.project} onCommand={showCommand} onClose={closeOverlay} />;
-        }}
-      />
-      <Exit
-        show={picker}
-        render={() => (
-          <ProjectPicker
-            recent={recent}
-            loading={!recentLoaded}
-            openPaths={tabs.current.map((t) => t.project)}
-            onPick={(path) => { setPicker(false); open(path); }}
-            onChoose={() => { setPicker(false); run({ name: "project.open" }); }}
-            onForget={(path) => {
-              projectsForget(path).then(setRecent, () => say(`E: cannot forget ${path}`, true));
-            }}
-            onClose={() => { setPicker(false); if (tabs.current.length) setMode({ mode: "TERMINAL", pending: [] }); }}
-          />
-        )}
+      <ShellOverlays
+        {...{ props, message, modeView, setMode, cmdText, completing, completion, overlay, closeOverlay, menuQuery, keys, otherTable, whichKey }}
+        {...{ tabs, cur, tab, run, open, say, rerender, pasteText, setPasteText, confirmClose, setConfirmClose, closeProject, stop, setStop }}
+        {...{ closeTab, onCloseDontAsk, updateSheet, setUpdateSheet, showCommand, restoreChip, health, updates, picker, setPicker, recent, setRecent, recentLoaded }}
       />
     </>
   );
