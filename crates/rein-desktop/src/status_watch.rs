@@ -20,7 +20,9 @@ use crate::config::ConfigService;
 use crate::ipc::Desktop;
 use crate::notify::{Notifier, Seen, Settings};
 use crate::panel_attention::Attention;
-use crate::status::{Facts, ProjectStatus, State as Status, card_fields, state};
+use crate::status::{
+    Facts, ProjectStatus, State as Status, card_agents, card_fields, home_fields, state,
+};
 use crate::ui_store::UiStore;
 
 /// The poll while the window can be seen (V9: one short process per 5 s).
@@ -131,6 +133,7 @@ fn items_of(lists: &Lists, tab: u32) -> (Vec<crate::attention::Item>, Vec<crate:
 /// A `setup` status: no activity, no items; the card fields when the core has them.
 fn setup_status(tab: u32, facts: Option<&Attention>, now_s: u64) -> ProjectStatus {
     let (in_progress, turn, last_handoff_s) = card_fields(facts, now_s);
+    let (counts, trigger) = home_fields(facts);
     ProjectStatus {
         tab,
         state: Status::Setup,
@@ -142,6 +145,9 @@ fn setup_status(tab: u32, facts: Option<&Attention>, now_s: u64) -> ProjectStatu
         in_progress,
         turn,
         last_handoff_s,
+        counts,
+        trigger,
+        agents: vec![],
     }
 }
 
@@ -189,6 +195,7 @@ pub fn statuses(
                 quiet_s: seen.activity.quiet_s,
             };
             let (in_progress, turn, last_handoff_s) = card_fields(facts.get(&tab), now_s);
+            let (counts, trigger) = home_fields(facts.get(&tab));
             ProjectStatus {
                 tab,
                 state: state(&f),
@@ -200,6 +207,14 @@ pub fn statuses(
                 in_progress,
                 turn,
                 last_handoff_s,
+                counts,
+                trigger,
+                // A tab whose process is gone has no agent it can vouch for (E-80).
+                agents: if alive {
+                    card_agents(&seen.agents)
+                } else {
+                    vec![]
+                },
             }
         })
         .collect();
@@ -394,6 +409,9 @@ mod tests {
             in_progress: None,
             turn: None,
             last_handoff_s: None,
+            counts: None,
+            trigger: None,
+            agents: vec![],
         }
     }
 
@@ -532,13 +550,29 @@ mod tests {
             );
             assert_eq!(f.turn.as_deref(), Some("Engineer"));
             assert_eq!(f.last_handoff_s, Some(7200));
+            // E-80: Home's card fields from the same read.
+            assert_eq!(
+                f.counts,
+                Some(crate::panel_attention::TaskCounts {
+                    open: 0,
+                    in_progress: 1,
+                    blocked: 0
+                })
+            );
+            assert_eq!(f.trigger.as_deref(), Some("t"));
             let n = of(t_none);
             assert_eq!(
                 (n.in_progress, n.turn, n.last_handoff_s),
                 (None, None, None)
             );
+            assert_eq!(
+                (n.counts, n.trigger.as_deref()),
+                (None, None),
+                "E-80: not guessed"
+            );
             let o = of(t_over);
             assert_eq!(o.in_progress, None, "state.json over its limit");
+            assert_eq!(o.counts, None, "E-80: tasks not available");
             assert_eq!(o.turn.as_deref(), Some("Engineer"), "COMM.md still read");
             // The setup flag (a failed start that needs rein init, D-068) makes it `setup`.
             assert_ne!(f.state, Status::Setup);

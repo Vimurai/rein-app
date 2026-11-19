@@ -84,6 +84,7 @@ test("the leader waits, and which-key lists what can follow it", () => {
       ["R", "config.reload"],
       ["t", "theme.set"],
       [",", "settings.show"],
+      ["H", "home.show"], // E-80: Space h is health.show, so Home is Space H
       ["i", "input.style"],
       ["Space", "menu.show"],
     ]),

@@ -3,10 +3,12 @@
 // sheet, which-key, health / release / profiles, the update card, the team sheet and the
 // project picker.
 
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { Exit } from "../components/dialog.tsx";
 import { CloseConfirm, StopConfirm } from "./agent-bar.tsx";
+import { TOAST_MS } from "./chrome.ts";
 import { CommandPalette, Toast } from "./frame.tsx";
+import { MOTION } from "./motion.ts";
 import { projectsForget, updatesLater, type HealthView } from "./ipc.ts";
 import type { ActionCall, KeyTable } from "./keymap.ts";
 import { closeTabText } from "./lifecycle.ts";
@@ -23,6 +25,23 @@ import { TeamSheet } from "./team-sheet.tsx";
 import type { TermTab } from "./term.ts";
 import { UpdateCard } from "./update-ui.tsx";
 import { reinAsk, updateRows, type UpdatesState } from "./updates.ts";
+
+type Message = { text: string; error: boolean; seq: number; leaving?: boolean } | null;
+
+/** The toast (V2) goes after TOAST_MS, fading out over the last --motion-base (V7). Moved
+ *  here from shell.tsx with the toast by E-80, unchanged. */
+export function useToastFade(message: Message, setMessage: Dispatch<SetStateAction<Message>>) {
+  useEffect(() => {
+    if (!message) return;
+    if (message.leaving) {
+      const t = setTimeout(() => setMessage((m) => (m?.seq === message.seq ? null : m)), MOTION.base);
+      return () => clearTimeout(t);
+    }
+    // Fades out over the last --motion-base (V7).
+    const t = setTimeout(() => setMessage((m) => (m?.seq === message.seq ? { ...m, leaving: true } : m)), TOAST_MS - MOTION.base);
+    return () => clearTimeout(t);
+  }, [message]);
+}
 
 export type OverlayKind = "health" | "update" | "rollback" | "profiles" | "menu" | "team" | null;
 

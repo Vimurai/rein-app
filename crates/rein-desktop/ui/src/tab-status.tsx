@@ -27,6 +27,8 @@ export interface TabStatus {
   mark: (t: StatusTab | undefined) => StatusMark | null;
   /** The same, whatever the `[tabs] status` setting (the Dashboard's first row). */
   always: (t: StatusTab | undefined) => StatusMark | null;
+  /** The status the core last sent for the tab (Home's card, E-80). */
+  of: (t: StatusTab | undefined) => ProjectStatus | undefined;
 }
 
 /** The last status the core sent for every tab, by core id. `shown`: `[tabs] status`. */
@@ -61,6 +63,7 @@ export function useTabStatus(shown: boolean, rerender: () => void): TabStatus {
   return {
     mark: (t) => statusMark(t?.title ?? "", of(t), shown),
     always: (t) => statusMark(t?.title ?? "", of(t), true),
+    of,
   };
 }
 

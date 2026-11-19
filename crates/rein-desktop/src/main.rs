@@ -15,6 +15,7 @@ mod attention;
 mod cli;
 mod cli_ipc;
 mod config;
+mod debug_trace;
 mod dirs;
 mod dismissed;
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -362,6 +363,7 @@ fn main() -> ExitCode {
                     let _ = w.eval("location.reload()");
                 });
             }
+            debug_trace::frames(&window);
             // A save of config.toml reaches the web side as `config_changed`.
             {
                 let handle = app.handle().clone();

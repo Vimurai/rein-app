@@ -30,6 +30,8 @@ export const SIMPLE_SHORTCUTS: ReadonlyMap<string, ActionCall> = new Map<string,
   ["C-S-p", { name: "menu.show" }],
   ["C-S-o", { name: "project.open" }],
   ["C-S-t", { name: "project.pick" }],
+  // Home (status.md §Home, E-80): every project at a glance.
+  ["C-S-h", { name: "home.show" }],
   ["C-Tab", { name: "tab.next" }],
   ["C-S-Tab", { name: "tab.prev" }],
   ...["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((n): [string, ActionCall] => [`M-${n}`, { name: "tab.goto", arg: n }]),
@@ -64,6 +66,8 @@ export const DEFAULT_MODAL: KeyTable = {
     [":", a("mode.command")],
     ["<leader> p", a("project.pick")],
     ["<leader> o", a("project.open")],
+    // `<leader> h` is health.show already: Home takes the nearest free key (E-80).
+    ["<leader> H", a("home.show")],
     ["g t", a("tab.next")],
     ["g T", a("tab.prev")],
     ...["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((n): [string, ActionCall] => [n, a("tab.goto", n)]),

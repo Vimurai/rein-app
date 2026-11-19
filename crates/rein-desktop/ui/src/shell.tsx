@@ -21,8 +21,7 @@ import { describe as describeAction } from "./menu.ts";
 import { pasteNeedsQuestion } from "./paste.ts";
 import type { ActionName } from "./actions.ts";
 import { commonPrefix, complete, parse } from "./commands.ts";
-import { COPIED_MS, TOAST_MS, chromeOf, overlayNotice, statusBar, titleBar } from "./chrome.ts";
-import { MOTION } from "./motion.ts";
+import { COPIED_MS, chromeOf, overlayNotice, statusBar, titleBar } from "./chrome.ts";
 import { StatusBar, TitleBar } from "./frame.tsx";
 import {
   clipboardRead,
@@ -54,9 +53,11 @@ import { restoreAtStart, useTabsRecord } from "./restore-ui.tsx";
 import { useTabStatus, type TabStatusProps } from "./tab-status.tsx";
 import { useNotifyToast } from "./notify-ui.ts";
 import type { OpenTab, UpdateSheetState } from "./open-tab.ts";
-import { ShellOverlays } from "./shell-overlays.tsx";
+import { ShellOverlays, useToastFade } from "./shell-overlays.tsx";
 import { StageCards } from "./stage-cards.tsx";
 import { TabBars } from "./tab-bars.tsx";
+import { cycle, homeAtStart } from "./home.ts";
+import { useHome } from "./home.tsx";
 import { SideRow, panelOwnsKey, useSideMenu, useStageFit, type SideMenuProps } from "./side-menu.tsx";
 import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
 
@@ -104,8 +105,7 @@ const VERSION = "0.5.0";
 const CHROME = chromeOf((globalThis as { __REIN_CHROME__?: unknown }).__REIN_CHROME__);
 
 /** Actions whose backend arrives with a later task: they say so in one line (E-36). */
-const LATER: Partial<Record<ActionName, string>> = {
-};
+const LATER: Partial<Record<ActionName, string>> = {};
 
 /** The CLI command an action stands for (rule 4: the UI teaches the CLI). */
 const CLI: Partial<Record<ActionName, string>> = {};
@@ -169,7 +169,8 @@ export function Shell(props: ShellProps) {
   const tabs = useRef<OpenTab[]>([]);
   const cur = useRef(0);
   /** The current tab's terminal, read like a ref. */
-  const tab = { get current(): TermTab | null { return tabs.current[cur.current]?.term ?? null; } };
+  const home = useHome(rerender, () => tabs.current[cur.current]?.term); // status.md §Home (E-80)
+  const tab = { get current(): TermTab | null { return home.shown.current ? null : (tabs.current[cur.current]?.term ?? null); } };
   const pickerRef = useRef(false);
   // The set-up card (V9) takes the keyboard like an overlay: Tab and Enter work its buttons.
   pickerRef.current =
@@ -179,7 +180,7 @@ export function Shell(props: ShellProps) {
     pasteText !== null ||
     confirmClose !== null ||
     updateSheet !== null ||
-    tabs.current[cur.current]?.setup !== undefined;
+    (!home.shown.current && tabs.current[cur.current]?.setup !== undefined);
   // No tab open: the start screen's keys (p o h u q, digits) join the keymap.
   const keys = tabs.current.length ? projectKeys : withStartKeys(projectKeys);
   /** The other input style's table: the menu and tooltips name its key when this one has none. */
@@ -197,19 +198,10 @@ export function Shell(props: ShellProps) {
     (text: string, error = false) => setMessage((m) => ({ text, error, seq: (m?.seq ?? 0) + 1 })),
     [],
   );
-  const side = useSideMenu(props, say, () => tab.current, () => ({ tabs: tabs.current, current: cur.current }));
+  const side = useSideMenu(props, say, () => tab.current, () => ({ tabs: tabs.current, current: home.shown.current ? -1 : cur.current }));
   const statuses = useTabStatus(props.tabsStatus === "shown", rerender);
-  useNotifyToast(say, () => tabs.current[cur.current]);
-  useEffect(() => {
-    if (!message) return;
-    if (message.leaving) {
-      const t = setTimeout(() => setMessage((m) => (m?.seq === message.seq ? null : m)), MOTION.base);
-      return () => clearTimeout(t);
-    }
-    // Fades out over the last --motion-base (V7).
-    const t = setTimeout(() => setMessage((m) => (m?.seq === message.seq ? { ...m, leaving: true } : m)), TOAST_MS - MOTION.base);
-    return () => clearTimeout(t);
-  }, [message]);
+  useNotifyToast(say, () => (home.shown.current ? undefined : tabs.current[cur.current]));
+  useToastFade(message, setMessage);
   useEffect(() => {
     if (!copied) return;
     const t = setTimeout(() => setCopied(0), COPIED_MS);
@@ -307,15 +299,18 @@ export function Shell(props: ShellProps) {
 
   /** Show tab `i` (its pane only) and keep the chrome in step. */
   const showTab = useCallback((i: number) => {
+    home.shown.current = false;
     cur.current = Math.max(0, Math.min(i, tabs.current.length - 1));
     tabs.current.forEach((t, k) => t.el.classList.toggle("hidden", k !== cur.current));
     const t = tabs.current[cur.current];
     if (t) {
-      requestAnimationFrame(() => t.term.shown());
+      requestAnimationFrame(() => (t.term.shown(), modeRef.current.mode === "TERMINAL" && t.term.focus())); // #term is shown by then (Home)
       if (modeRef.current.mode === "TERMINAL") t.term.focus();
     }
     rerender();
   }, []);
+
+  const showOrStay = (i: number) => (home.shown.current ? void (cur.current = Math.max(0, Math.min(i, tabs.current.length - 1))) : showTab(i)); // Home stays (E-80)
 
   /** Open `project` in a new tab: `rein start` in a pty, drawn by xterm.js (at most 16). */
   const open = useCallback(
@@ -340,7 +335,7 @@ export function Shell(props: ShellProps) {
       term.onCard = (v) => Object.assign(entry, { card: v, project: v.project, title: v.title, restored: false }) && rerender();
       tabs.current.push(entry);
       term.keyFilter = (e) => terminalKeyRef.current(e);
-      term.term.onBell(() => side.bell(entry, tabs.current[cur.current] === entry));
+      term.term.onBell(() => side.bell(entry, !home.shown.current && tabs.current[cur.current] === entry));
       // starting → running / exited (V7), then rein's verdict once per open (V9 3).
       term.onPhase = () => (rerender(), void askOutOfDate(entry, () => tabs.current.includes(entry), rerender, dontAskRef.current));
       term.onSetup = (view) => {
@@ -349,7 +344,8 @@ export function Shell(props: ShellProps) {
         entry.setup = { id: view.id, reply: null, inside: view.inside };
         entry.project = view.project;
         entry.title = view.title;
-        showTab(tabs.current.indexOf(entry));
+        if (entry.quiet) showOrStay(tabs.current.indexOf(entry));
+        else showTab(tabs.current.indexOf(entry));
         setMode({ mode: "NORMAL", pending: [] });
         // Inside a Rein project: nothing to ask rein — the card offers that project.
         if (view.inside !== null) return;
@@ -377,7 +373,7 @@ export function Shell(props: ShellProps) {
         entry.project = opened.project;
         entry.title = opened.title;
         // A restored tab opening behind the current one does not take the front (V12 4).
-        const front = !entry.quiet || tabs.current[cur.current] === entry;
+        const front = !entry.quiet || (!home.shown.current && tabs.current[cur.current] === entry);
         entry.quiet = false;
         if (front) showTab(tabs.current.indexOf(entry));
         if (front) showCommand(`cd ${shellWord(opened.project)} && rein start`);
@@ -392,7 +388,7 @@ export function Shell(props: ShellProps) {
         void term.detach();
         el.remove();
         tabs.current = tabs.current.filter((t) => t !== entry);
-        showTab(cur.current);
+        showOrStay(cur.current);
         say(`E: cannot open ${project}: ${msg}`, true);
       };
       if (restore) return () => term.start();
@@ -432,7 +428,7 @@ export function Shell(props: ShellProps) {
       void t.term.detach();
       t.el.remove();
       tabs.current = tabs.current.filter((x) => x !== t);
-      showTab(Math.min(i, tabs.current.length - 1));
+      showOrStay(Math.min(i, tabs.current.length - 1));
       if (!tabs.current.length) {
         setMode({ mode: "NORMAL", pending: [] });
         // No tab: the chip's command belonged to a project that is no longer shown (E-63).
@@ -553,7 +549,7 @@ export function Shell(props: ShellProps) {
           return;
         case "tab.detach":
           // `×` names its tab; the key form closes the current one (V11: its project too).
-          closeTab(call.arg ? Number(call.arg) - 1 : cur.current);
+          if (call.arg || !home.shown.current) closeTab(call.arg ? Number(call.arg) - 1 : cur.current);
           return;
         case "project.team": {
           // V10 (E-64): the Project sheet for the active tab's project — a started tab only.
@@ -604,11 +600,11 @@ export function Shell(props: ShellProps) {
             (e: { message?: string }) => say(`E: cannot paste: ${e.message ?? String(e)}`, true),
           );
           return;
+        case "home.show": return home.show();
         case "tab.next":
         case "tab.prev": {
-          const n = tabs.current.length;
-          if (n) showTab((cur.current + (call.name === "tab.next" ? 1 : n - 1)) % n);
-          return;
+          const to = cycle(home.shown.current ? -1 : cur.current, tabs.current.length, call.name === "tab.next"); // Home is -1
+          return void (to < 0 ? home.show() : showTab(to));
         }
         case "tab.goto": {
           const n = Number(call.arg ?? "1");
@@ -743,6 +739,8 @@ export function Shell(props: ShellProps) {
       const k = keyName(e);
       if (!k) return;
       if (panelOwnsKey(e, keys.shortcuts.get(k), run)) return;
+      // Home (E-80): no terminal takes the keys; the shortcuts still act.
+      if (home.shown.current && modeRef.current.mode === "TERMINAL") return void (keys.shortcuts.has(k) && (e.preventDefault(), run(keys.shortcuts.get(k)!)));
       if (modeRef.current.mode === "TERMINAL") {
         // A TERMINAL key that missed the terminal (focus was on the page): give the terminal
         // focus and pass the key through the same chord logic, so none is lost.
@@ -814,13 +812,13 @@ export function Shell(props: ShellProps) {
       onTabExit(t, code, start_failed === true, () => tabs.current.includes(t), rerender);
     });
     void listen<string>("open_dir", (dir) => openRef.current(dir));
-    // V12 (E-70): the recorded tabs first, then the command-line project; with no record,
-    // `window.start = "last"` opens the newest recent project as before.
+    // V12 (E-70): the recorded tabs first, then the command-line project; then Home unless
+    // `window.start = "last"` restored a tab (status.md §Home H5, E-80).
     void projectsList()
       .then((list) => (setRecent(list), list), () => [] as RecentView[])
       .then((list) =>
         restoreAtStart((p, r) => openRef.current(p, r), (i) => showTab(i), typeof startDir === "string" ? startDir : null).then((n) => {
-          if (n === 0 && typeof startDir !== "string" && startLast && list[0]) openRef.current(list[0].path);
+          if (homeAtStart(typeof startDir === "string", startLast, n)) home.show();
         }),
       )
       .finally(() => (setRecentLoaded(true), setRestored(true)));
@@ -829,23 +827,25 @@ export function Shell(props: ShellProps) {
   }, []);
 
   const termOpen = tabs.current.length > 0;
-  const current = tabs.current[cur.current];
+  const onHome = home.shown.current || !termOpen;
+  const current = onHome ? undefined : tabs.current[cur.current];
   const agentView = (current && !current.exited && current.barView) || ({ kind: "none" } as const);
   const runner = { run, tip: (c: ActionCall) => describeAction(c, keys, otherTable) };
   const now = performance.now();
   const starting = (t: OpenTab | undefined) => t !== undefined && !t.exited && t.term.phase(now) === "starting";
+  // The side menu (E-60): the rail, the open panel beside or over the stage; the stage's fit.
+  const sideView = side.view({ termOpen, current, health, runner, modal: keys.style === "modal", status: statuses.always(current), home: onHome });
   const bar = titleBar(
-    tabs.current.map((t, i) => ({ id: t.id, title: t.title, current: i === cur.current, exited: t.exited, starting: starting(t), marked: t.marked === true, status: statuses.mark(t) })),
+    tabs.current.map((t, i) => ({ id: t.id, title: t.title, current: !onHome && i === cur.current, exited: t.exited, starting: starting(t), marked: t.marked === true, status: statuses.mark(t) })),
     updates?.rein.installed ?? VERSION,
     showUpdateButton(updates),
+    { current: onHome, count: sideView.feed.lists.now.length },
   );
   // The `simple` style has no modes, so no mode badge (D-034).
   const status = statusBar(current ? current.project : null, health, lastCmd, keys.style === "modal" ? modeView.mode : null, {
     starting: starting(current), health: healthRuns > 0, copied: copied > 0, status: statuses.mark(current),
   });
 
-  // The side menu (E-60): the rail, the open panel beside or over the stage; the stage's fit.
-  const sideView = side.view({ termOpen, current, health, runner, modal: keys.style === "modal", status: statuses.always(current) });
   useStageFit(termsEl, () => tab.current, side);
 
   return (
@@ -856,10 +856,10 @@ export function Shell(props: ShellProps) {
         <SideRow v={sideView}>
         <div id="stage" className="relative min-h-0 min-w-0 flex-1" aria-busy={status.starting || undefined}>
           {sideView.over && sideView.panel}
-          <StageCards {...{ status, current, cur, detach, open, run, rerender, termOpen, recent, recentLoaded, health, healthRuns, runner }} />
+          <StageCards {...{ status, current, cur, detach, open, run, rerender, recent, recentLoaded, health, healthRuns, runner, onHome, tabs, statuses, feed: sideView.feed }} />
           <ContextMenu>
             <ContextMenuTrigger asChild>
-              <div id="term" ref={termsEl} className={termOpen ? undefined : "hidden"} />
+              <div id="term" ref={termsEl} className={onHome ? "hidden" : undefined} />
             </ContextMenuTrigger>
             <ContextMenuContent>
               <ContextMenuItem onSelect={() => run({ name: "term.copy" })}>

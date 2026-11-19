@@ -27,6 +27,11 @@ export interface ProjectStatus {
   turn: string | null;
   /** Seconds since the last handoff; null when its time is unreadable or ahead. */
   last_handoff_s: number | null;
+  /** Home's card fields (status.md §Home H3, E-80): task counts (null: tasks not available),
+   *  the last handoff's trigger, the agents by role. Absent from an older core. */
+  counts?: { open: number; in_progress: number; blocked: number } | null;
+  trigger?: string | null;
+  agents?: { role: string; state: "running" | "ended" | "unknown" }[];
 }
 
 /** The mark of a state (lucide names, 12 px). `spinner` is the tab's existing V7 spinner;

@@ -18,6 +18,7 @@ import {
   CircleX,
   Copy,
   Hourglass,
+  House,
   Menu,
   Minus,
   Plus,
@@ -158,7 +159,7 @@ function LeavingTab({ label }: { label: string }) {
 export function TitleBar({ bar, chrome, r }: { bar: TitleBarData; chrome: Chrome; r: Runner }) {
   const inset = titleInset(chrome);
   const row = useRef<HTMLDivElement>(null);
-  useUnderlineSlide(row, bar.tabs.findIndex((t) => t.current));
+  useUnderlineSlide(row, bar.home.current ? -1 : bar.tabs.findIndex((t) => t.current));
   const leaving = useLeavingTabs(bar.tabs);
   return (
     <div
@@ -167,6 +168,7 @@ export function TitleBar({ bar, chrome, r }: { bar: TitleBarData; chrome: Chrome
       style={inset ? { paddingLeft: `${inset}px` } : undefined}
     >
       <div ref={row} role="tablist" aria-label="Projects" className="flex min-w-0 items-center gap-[4px]">
+        <HomeTab home={bar.home} r={r} />
         {withLeaving(bar.tabs, leaving).map(({ tab: t, gone }) =>
           gone ? (
             <LeavingTab key={`gone-${t.id}`} label={t.label} />
@@ -244,6 +246,41 @@ export function TitleBar({ bar, chrome, r }: { bar: TitleBarData; chrome: Chrome
       <WindowButtons chrome={chrome} onClose={() => r.run({ name: "app.quit" })} />
       {windowButtons(chrome).length === 0 && <div className="w-[4px]" />}
     </div>
+  );
+}
+
+/** Home (status.md §Home H1, E-80): the first entry of the tab bar — a house, the count of Now
+ *  items across every project, the accent underline while it is shown. No close icon, not
+ *  draggable, no number. */
+function HomeTab({ home, r }: { home: TitleBarData["home"]; r: Runner }) {
+  const tip = r.tip(home.select);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          role="tab"
+          aria-selected={home.current}
+          aria-label={`Home${home.count ? `: ${home.count} ${home.count === 1 ? "item needs" : "items need"} you` : ""} — ${tip}`}
+          data-home
+          className={
+            "relative flex h-[28px] shrink-0 cursor-pointer items-center gap-[6px] rounded-md px-[8px] transition-colors duration-[var(--motion-base)] " +
+            (home.current ? "bg-card text-card-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground")
+          }
+          onClick={() => r.run(home.select)}
+        >
+          <House size={15} aria-hidden="true" />
+          {home.count > 0 && (
+            <span aria-hidden="true" className="min-w-[16px] rounded-full bg-primary px-[4px] text-center text-[11px] leading-[16px] font-medium text-primary-foreground tabular-nums">
+              {home.count}
+            </span>
+          )}
+          {home.current && (
+            <span data-underline aria-hidden="true" className="absolute right-[6px] bottom-0 left-[6px] h-[2px] origin-left rounded-full bg-primary" />
+          )}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
   );
 }
 

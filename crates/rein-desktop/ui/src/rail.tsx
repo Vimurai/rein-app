@@ -23,16 +23,31 @@ export const ICON: Record<PanelIcon, ComponentType<{ size?: number; "aria-hidden
 const BUTTON =
   "flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-[var(--motion-fast)] hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none aria-pressed:bg-muted aria-pressed:text-foreground";
 
-export function Rail({ panels, open, r, badge }: { panels: readonly Descriptor[]; open: string | null; r: Runner; badge: number }) {
-  const button = (call: ActionCall, tip: string, icon: ReactNode, pressed?: boolean, count = 0) => (
+/** `home` (status.md §Home H4, E-80): Home is shown — only the panels it names have something
+ *  to show; the rest, and Project: team, are disabled with `home.tip`. */
+export function Rail({
+  panels,
+  open,
+  r,
+  badge,
+  home = null,
+}: {
+  panels: readonly Descriptor[];
+  open: string | null;
+  r: Runner;
+  badge: number;
+  home?: { panels: readonly string[]; tip: string } | null;
+}) {
+  const button = (call: ActionCall, tip: string, icon: ReactNode, pressed?: boolean, count = 0, off = false) => (
     <Tooltip key={`${call.name} ${call.arg ?? ""}`}>
       <TooltipTrigger asChild>
         <button
           type="button"
           aria-label={count > 0 ? `${tip} — ${count} waiting` : tip}
           aria-pressed={pressed}
-          className={`relative ${BUTTON}`}
-          onClick={() => r.run(call)}
+          aria-disabled={off || undefined}
+          className={`relative ${BUTTON} ${off ? "cursor-default opacity-40 hover:bg-transparent hover:text-muted-foreground" : ""}`}
+          onClick={() => !off && r.run(call)}
         >
           {icon}
           {count > 0 && (
@@ -54,10 +69,11 @@ export function Rail({ panels, open, r, badge }: { panels: readonly Descriptor[]
       {panels.map((d) => {
         const call: ActionCall = { name: "panel.toggle", arg: d.id };
         const Icon = ICON[d.icon];
-        return button(call, r.tip(call), <Icon size={16} aria-hidden="true" />, open === d.id, d.source === "attention" ? badge : 0);
+        const off = home !== null && !home.panels.includes(d.id);
+        return button(call, off ? home.tip : r.tip(call), <Icon size={16} aria-hidden="true" />, open === d.id && !off, d.source === "attention" ? badge : 0, off);
       })}
       <div className="flex-1" />
-      {button({ name: "project.team" }, r.tip({ name: "project.team" }), <Users size={16} aria-hidden="true" />)}
+      {button({ name: "project.team" }, home ? home.tip : r.tip({ name: "project.team" }), <Users size={16} aria-hidden="true" />, undefined, 0, home !== null)}
     </nav>
   );
 }

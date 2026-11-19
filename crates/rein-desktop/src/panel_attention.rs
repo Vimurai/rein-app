@@ -23,6 +23,17 @@ pub const NEXT_ACTION: &str = "next action needed";
 /// id only in the `[A-Z]-[0-9]{1,6}` shape).
 pub const WORD: usize = 40;
 
+/// Characters kept of the last handoff's trigger (status.md §Home H3, E-80).
+pub const TRIGGER: usize = 120;
+
+/// The task counts a Home card shows (status.md §Home H3, E-80).
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+pub struct TaskCounts {
+    pub open: usize,
+    pub in_progress: usize,
+    pub blocked: usize,
+}
+
 /// The first task in progress: its id and description (the web side cuts the title).
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct InProgress {
@@ -50,6 +61,10 @@ pub struct Attention {
     pub in_progress_task: Option<InProgress>,
     /// The last handoff's "to": whose turn it is, as the file says (`turn`, E-95).
     pub turn: Option<String>,
+    /// Open / in progress / blocked task counts; null when `state.json` was not read (E-80).
+    pub counts: Option<TaskCounts>,
+    /// The last handoff's trigger, one line, at most [`TRIGGER`] characters (E-80).
+    pub trigger: Option<String>,
 }
 
 /// True when `line` holds the word "operator" (or "operators"), in any case, as a word.
@@ -95,7 +110,21 @@ pub fn attention(tasks: Option<&Tasks>, handoffs: Option<&Handoffs>) -> Attentio
         .map(|h| h.to.trim())
         .filter(|t| !t.is_empty())
         .map(|t| shown(t, WORD, false));
+    let counts = tasks.map(|t| {
+        let n = |st: &str| t.tasks.iter().filter(|x| x.status == st).count();
+        TaskCounts {
+            open: n("OPEN"),
+            in_progress: n("IN_PROGRESS"),
+            blocked: n("BLOCKED"),
+        }
+    });
+    let trigger = last
+        // `shown` adds "…" after the characters it keeps: one fewer keeps the whole ≤ TRIGGER.
+        .map(|h| shown(&h.trigger, TRIGGER - 1, false))
+        .filter(|t| !t.trim().is_empty());
     Attention {
+        counts,
+        trigger,
         tasks_read: tasks.is_some(),
         blocked,
         in_progress,
@@ -172,6 +201,44 @@ mod tests {
         );
     }
 
+    /// E-80 (status.md §Home H3): the task counts and the last handoff's trigger for a
+    /// readable project; none for a team-mode `state.json` (no `tasks` list) — never a guess.
+    #[test]
+    fn the_home_card_counts_and_trigger_are_read_or_null() {
+        let t = parse_tasks(STATE).unwrap();
+        let h = parse_handoffs(COMM, true);
+        let a = attention(Some(&t), Some(&h));
+        assert_eq!(
+            a.counts,
+            Some(TaskCounts {
+                open: 0,
+                in_progress: 1,
+                blocked: 2
+            })
+        );
+        let trigger = a.trigger.clone().expect("the last handoff's trigger");
+        assert!(trigger.chars().count() <= TRIGGER && !trigger.contains('\n'));
+        let long = format!(
+            "## Handoff \u{2014} 2026-11-16 09:00 UTC\n**From**: A \u{2192} E\n**Trigger**: {}\n---\n",
+            "x".repeat(400)
+        );
+        let h2 = parse_handoffs(long.as_bytes(), true);
+        assert_eq!(
+            attention(Some(&t), Some(&h2))
+                .trigger
+                .map(|s| s.chars().count()),
+            Some(TRIGGER),
+            "cut at 120"
+        );
+        assert!(
+            parse_tasks(br#"{"project":{"team":true}}"#).is_err(),
+            "team mode"
+        );
+        let team = attention(None, Some(&h));
+        assert_eq!(team.counts, None);
+        assert!(team.trigger.is_some(), "COMM.md is still read");
+    }
+
     #[test]
     fn a_missing_file_gives_no_facts_and_no_guess() {
         let a = attention(None, None);
@@ -185,6 +252,8 @@ mod tests {
                 mentions: vec![],
                 in_progress_task: None,
                 turn: None,
+                counts: None,
+                trigger: None,
             }
         );
         let h = parse_handoffs(COMM, true);

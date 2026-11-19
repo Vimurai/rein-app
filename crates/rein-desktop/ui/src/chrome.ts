@@ -55,6 +55,9 @@ export interface TabControl {
 }
 
 export interface TitleBar {
+  /** Home (status.md §Home H1, E-80): first, not closable, not movable, not numbered; the
+   *  count of Now items across every project (nothing when zero). */
+  home: { current: boolean; count: number; select: ActionCall };
   tabs: TabControl[];
   add: ActionCall;
   /** The version chip: opens Update. */
@@ -64,8 +67,9 @@ export interface TitleBar {
   menu: ActionCall;
 }
 
-export function titleBar(tabs: readonly TabView[], version: string, update = false): TitleBar {
+export function titleBar(tabs: readonly TabView[], version: string, update = false, home = { current: tabs.length === 0, count: 0 }): TitleBar {
   return {
+    home: { current: home.current, count: home.count, select: { name: "home.show" } },
     tabs: tabs.map((t, i) => ({
       id: t.id ?? i,
       label: t.title,

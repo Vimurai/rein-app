@@ -12,6 +12,7 @@ import { attentionDismiss, attentionItems, tabBell, tabCurrent, type HealthView 
 import type { ActionCall } from "./keymap.ts";
 import { PanelHost, useVisible, type AttentionFeed } from "./panel-host.tsx";
 import type { StatusMark } from "./status.ts";
+import { HOME_PANELS, HOME_PANEL_TIP } from "./home.ts";
 import { PANEL_DEFAULT, POLL_MS, clampWidth, descriptor, enabledPanels, maxWidth, overlays as panelOverlays } from "./panels.ts";
 import { Rail } from "./rail.tsx";
 import type { TermTab } from "./term.ts";
@@ -53,6 +54,8 @@ export interface SideMenuView {
   modal: boolean;
   /** The current tab's status for the Dashboard's first row (status.md §3, E-77). */
   status: StatusMark | null;
+  /** Home is shown (status.md §Home H4, E-80): only "Needs you" has something to show. */
+  home?: boolean;
 }
 
 export interface SideMenu {
@@ -60,8 +63,9 @@ export interface SideMenu {
   resizing: MutableRefObject<boolean>;
   /** Runs a `panel.*` action; false for any other action. */
   act: (call: ActionCall) => boolean;
-  /** The rail (or null), the open panel (or null), and whether it lies over the stage. */
-  view: (v: SideMenuView) => { rail: ReactNode; panel: ReactNode; over: boolean };
+  /** The rail (or null), the open panel (or null), whether it lies over the stage, and the
+   *  Now items with their Dismiss (Home, E-80). */
+  view: (v: SideMenuView) => { rail: ReactNode; panel: ReactNode; over: boolean; feed: AttentionFeed };
   /** A tab's terminal rang its bell (E-61): marked unless it is in front of the user. */
   bell: (t: SideTab, isCurrent: boolean) => void;
 }
@@ -203,6 +207,11 @@ export function useSideMenu(
         case "panel.toggle": {
           const id = call.arg ?? "";
           const d = descriptor(id);
+          // Home (H4): a per-project panel has no project to show.
+          if (tabsRef.current().current < 0 && !HOME_PANELS.includes(id)) {
+            say(HOME_PANEL_TIP);
+            return true;
+          }
           if (!d || !enabledRef.current.includes(id)) {
             say(`the ${d?.title ?? id} panel is turned off — Settings → Panel: ${d?.title ?? id}`, true);
             return true;
@@ -246,10 +255,12 @@ export function useSideMenu(
 
   // The rail while a project is open, and the open panel for the current tab — beside the
   // terminal, or over it in a narrow window.
-  const view = ({ termOpen, current, health, runner, modal, status }: SideMenuView) => {
+  const view = ({ termOpen, current, health, runner, modal, status, home = false }: SideMenuView) => {
     const offered = enabledPanels(panelsEnabled);
-    const coreTab = current?.term.tab;
-    const openPanel = panel !== null && panelsEnabled.includes(panel) ? descriptor(panel) : null;
+    // Home (H4): "Needs you" reads every open tab; the others wait for a project tab.
+    const homeTab = home ? openTabs().tabs.find((t) => t.term.tab)?.term.tab : undefined;
+    const coreTab = home ? homeTab : current?.term.tab;
+    const openPanel = panel !== null && panelsEnabled.includes(panel) && (!home || HOME_PANELS.includes(panel)) ? descriptor(panel) : null;
     // The health word goes with the next ask (a change shows within POLL_MS).
     healthRef.current = health?.status ?? "unknown";
     const shown = watching ? lists.lists : NO_ITEMS;
@@ -268,14 +279,14 @@ export function useSideMenu(
     };
     const rail =
       termOpen && panelsRail === "shown" && offered.length > 0 ? (
-        <Rail panels={offered} open={openPanel ? openPanel.id : null} r={runner} badge={shown.now.length} />
+        <Rail panels={offered} open={openPanel ? openPanel.id : null} r={runner} badge={shown.now.length} home={home ? { panels: HOME_PANELS, tip: HOME_PANEL_TIP } : null} />
       ) : null;
     const el =
-      termOpen && openPanel && current && coreTab ? (
+      termOpen && openPanel && (current || home) && coreTab ? (
         <PanelHost
           d={openPanel}
           tab={coreTab.id}
-          project={current.title}
+          project={current?.title ?? ""}
           width={clampWidth(liveWidth ?? panelWidth, maxWidth(winWidth))}
           maxWidth={maxWidth(winWidth)}
           modal={modal}
@@ -285,7 +296,7 @@ export function useSideMenu(
           attention={feed}
           app={{
             health: HEALTH_WORDS[health?.status ?? "unknown"],
-            server: coreTab.server === "app" ? "rein-app's own" : "your own",
+            server: current?.term.tab?.server === "app" ? "rein-app's own" : "your own",
             status,
           }}
           onClose={() => runner.run({ name: "panel.close" })}
@@ -304,7 +315,7 @@ export function useSideMenu(
           }}
         />
       ) : null;
-    return { rail, panel: el, over: panelOverlays(winWidth) };
+    return { rail, panel: el, over: panelOverlays(winWidth), feed };
   };
 
   return { resizing, act, view, bell };

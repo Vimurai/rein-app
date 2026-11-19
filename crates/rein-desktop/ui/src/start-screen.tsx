@@ -11,11 +11,13 @@ import { TruncStart } from "./frame.tsx";
 import { Folder, FolderOpen, ShieldCheck, TriangleAlert } from "./icons.ts";
 import type { StartScreen as Model } from "./start.ts";
 
-export function StartScreen({ model, r }: { model: Model; r: Runner }) {
-  return (
-    <div id="start" className="flex h-full justify-center overflow-y-auto px-6 font-ui text-[13px] text-foreground">
-      <div className="my-auto flex w-full max-w-[560px] flex-col gap-6 py-10">
-        <div className="flex items-center gap-3">
+/** `embedded` (Home with projects open, status.md §Home H2, E-80): the WSL card, the two
+ *  buttons and the recent projects only — no wordmark, no centring, no key hints (those keys
+ *  are the start screen's, with no project open). */
+export function StartScreen({ model, r, embedded = false }: { model: Model; r: Runner; embedded?: boolean }) {
+  const body = (
+    <>
+        {!embedded && <div className="flex items-center gap-3">
           <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-lg bg-primary text-[20px] font-bold text-primary-foreground">
             r
           </span>
@@ -23,7 +25,7 @@ export function StartScreen({ model, r }: { model: Model; r: Runner }) {
             <span className="text-[22px] leading-7 font-semibold tracking-tight">rein</span>
             <span className="text-[12px] text-muted-foreground">Open a project to start its Architect and Engineer.</span>
           </span>
-        </div>
+        </div>}
 
         {model.setup && (
           <div role="alert" className="grid gap-3 rounded-lg border border-destructive bg-card p-4 text-card-foreground">
@@ -117,15 +119,20 @@ export function StartScreen({ model, r }: { model: Model; r: Runner }) {
           )}
         </section>
 
-        <div className="flex flex-wrap gap-x-4 gap-y-2 text-[12px] text-muted-foreground">
+        {!embedded && <div className="flex flex-wrap gap-x-4 gap-y-2 text-[12px] text-muted-foreground">
           {model.hints.map(([k, what]) => (
             <span key={k} className="flex items-center gap-1.5">
               <Kbd>{k}</Kbd>
               {what}
             </span>
           ))}
-        </div>
-      </div>
+        </div>}
+    </>
+  );
+  if (embedded) return <div className="flex flex-col gap-6">{body}</div>;
+  return (
+    <div id="start" className="flex h-full justify-center overflow-y-auto px-6 font-ui text-[13px] text-foreground">
+      <div className="my-auto flex w-full max-w-[560px] flex-col gap-6 py-10">{body}</div>
     </div>
   );
 }

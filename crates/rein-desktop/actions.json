@@ -6,6 +6,7 @@
     { "name": "mode.command", "arg": null, "label": "Command line" },
     { "name": "project.pick", "arg": null, "label": "Open project…" },
     { "name": "project.open", "arg": "dir", "label": "Choose a folder…" },
+    { "name": "home.show", "arg": null, "label": "Home" },
     { "name": "tab.next", "arg": null, "label": "Next tab" },
     { "name": "tab.prev", "arg": null, "label": "Previous tab" },
     { "name": "tab.goto", "arg": "n", "label": "Go to tab" },

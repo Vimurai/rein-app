@@ -73,6 +73,7 @@ pub fn pty_resize(
     cols: u32,
     rows: u32,
 ) -> Result<(), IpcError> {
+    crate::debug_trace::pty_resize(pty, cols, rows);
     state.resize(pty, cols, rows)
 }
 

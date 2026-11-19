@@ -5,8 +5,9 @@
 use serde::Serialize;
 
 use crate::activity::WORK_GAP_S;
+use crate::agents::Agent;
 use crate::attention::{Item, handoff_seconds};
-use crate::panel_attention::{Attention, InProgress};
+use crate::panel_attention::{Attention, InProgress, TaskCounts, WORD};
 
 /// The closed list of states, in the order the table tries them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -81,6 +82,28 @@ pub struct ProjectStatus {
     /// Seconds since the last handoff's time; null when its time is not in the written shape
     /// or lies ahead of the clock.
     pub last_handoff_s: Option<u32>,
+    /// The Home card's fields (status.md §Home H3 and §Data model `ProjectCard`, E-80): the
+    /// task counts (null: tasks not available), the last handoff's trigger, and the agents
+    /// by role from the status script.
+    pub counts: Option<TaskCounts>,
+    pub trigger: Option<String>,
+    pub agents: Vec<Agent>,
+}
+
+/// The Home card's task counts and trigger from one tab's facts (none: null, never a guess).
+pub fn home_fields(f: Option<&Attention>) -> (Option<TaskCounts>, Option<String>) {
+    f.map_or((None, None), |f| (f.counts, f.trigger.clone()))
+}
+
+/// The agents as a card shows them: each role cut and cleaned like every other project text.
+pub fn card_agents(agents: &[Agent]) -> Vec<Agent> {
+    agents
+        .iter()
+        .map(|a| Agent {
+            role: crate::panel_sources::shown(&a.role, WORD, false),
+            state: a.state,
+        })
+        .collect()
 }
 
 /// The three fields from one tab's facts, at `now` (seconds since the epoch).
@@ -114,6 +137,9 @@ impl ProjectStatus {
             || self.in_progress != next.in_progress
             || self.turn != next.turn
             || self.last_handoff_s.map(|s| s / 60) != next.last_handoff_s.map(|s| s / 60)
+            || self.counts != next.counts
+            || self.trigger != next.trigger
+            || self.agents != next.agents
     }
 }
 
@@ -195,6 +221,9 @@ mod tests {
             in_progress: None,
             turn: None,
             last_handoff_s: None,
+            counts: None,
+            trigger: None,
+            agents: vec![],
         };
         assert!(!s(State::Quiet, Some(20)).differs(&s(State::Quiet, Some(25))));
         assert!(
@@ -235,7 +264,8 @@ mod tests {
             shape,
             serde_json::json!({"tab": 1, "state": "needs_you", "quiet_s": null, "worked_s": 30,
                                "waiting": null, "now": [], "info": [], "in_progress": null,
-                               "turn": null, "last_handoff_s": null})
+                               "turn": null, "last_handoff_s": null,
+                               "counts": null, "trigger": null, "agents": []})
         );
     }
 
@@ -254,6 +284,8 @@ mod tests {
                 title: "Show each project's status.".into(),
             }),
             turn: Some("Engineer".into()),
+            counts: None,
+            trigger: None,
         };
         assert_eq!(
             card_fields(Some(&facts), NOW),

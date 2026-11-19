@@ -37,7 +37,12 @@ mod tests {
 
     #[test]
     fn the_list_is_the_blueprint_data_model() {
-        assert_eq!(ACTIONS.len(), 33);
+        assert_eq!(ACTIONS.len(), 34);
+        assert_eq!(
+            find("home.show").unwrap().arg,
+            ActionArg::None,
+            "E-80: Home"
+        );
         assert_eq!(find("panel.toggle").unwrap().arg, ActionArg::PanelId);
         assert_eq!(find("project.team").unwrap().arg, ActionArg::None);
         assert_eq!(find("tab.goto").unwrap().arg, ActionArg::TabNumber);

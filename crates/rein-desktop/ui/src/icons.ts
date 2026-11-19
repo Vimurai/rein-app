@@ -18,6 +18,7 @@ export {
   Folder,
   FolderOpen,
   Hourglass,
+  House,
   Keyboard,
   LayoutDashboard,
   ListChecks,

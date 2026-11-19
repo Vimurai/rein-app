@@ -536,6 +536,8 @@ mod tests {
             mentions: vec![],
             in_progress_task: None,
             turn: None,
+            counts: None,
+            trigger: None,
         }
     }
     fn core(f: Attention) -> TabCore {
