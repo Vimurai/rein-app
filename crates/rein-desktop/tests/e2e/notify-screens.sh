@@ -4,7 +4,7 @@
 # and github-light. Three projects, each with a stand-in agent:
 #   worker — prints a line every second for 25 s, then nothing (a background tab that works
 #            and stops);
-#   later  — nothing for 75 s, then prints for 40 s, then nothing (it stops while the window
+#   later  — nothing for 75 s, then prints for 20 s, then nothing (it stops while the window
 #            is hidden);
 #   front  — runs and prints nothing; opened last, so it is the current tab.
 # Checked from the core's trace (REIN_DESKTOP_TRACE_NOTIFY, debug builds only; no sentence in
@@ -64,7 +64,7 @@ if ! tmux has-session -t "\$w" 2>/dev/null; then
   tmux new-session -d -s "\$w" -n "\$w" -x 200 -y 50
   case "\$w" in
     worker) a="agent-burst 0 25" ;;
-    later) a="agent-burst 75 40" ;;
+    later) a="agent-burst 75 20" ;;
     *) a="agent-burst 3600 0" ;;
   esac
   tmux set-option -p -t "\$w:\$w.0" @rein_role engineer
@@ -151,9 +151,8 @@ run() { # run <theme>
   fi
   first=$(grep "^notify-trace .* event=" "$W/app.log" | awk 'NR == 1 {print $2}')
   check "nothing in the first 30 s after the tabs opened" "$([ -n "$first" ] && [ $((first - t0)) -ge 30 ] && echo yes || echo "first at $((${first:-0} - t0)) s")"
-  # Hidden: later starts working at ~75 s after its start and stops 40 s on; the hidden poll
-  # runs every 15 s. It works 40 s, not 20: a sample every 15 s first sees a stretch of work
-  # up to 15 s after it began, so `worked_s` reads short by up to one period (E-78 finding).
+  # Hidden: later starts working at ~75 s after its start and stops 20 s on; the hidden poll
+  # runs every 15 s.
   "$W/bin/xmap" rein unmap >/dev/null
   if wait_for "event=stopped .*project=later" 150; then
     check "later raised stopped with the window hidden" yes

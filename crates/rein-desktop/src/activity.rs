@@ -43,6 +43,18 @@ pub struct Activity {
     pub waiting: Option<bool>,
 }
 
+/// Where a stretch of work that a sample has just seen begins (status.md §Components 1 "Where
+/// a stretch of work begins", D-062 addendum 5; E-96): its first output lies after the
+/// previous sample, so the previous sample's clock + 1 s — not earlier than 14 s before the
+/// output just read (one sighting never reads 15 s or more, whatever the gap between the two
+/// samples) and not later than that output.
+fn stretch_start(previous_sample: Option<u64>, output: u64) -> u64 {
+    let earliest = output.saturating_sub(WORK_GAP_S - 1);
+    previous_sample
+        .map_or(output, |s| s.saturating_add(1))
+        .clamp(earliest, output)
+}
+
 impl Tracker {
     /// One sample: `activity` is `#{window_activity}`, `clock` the same machine's time.
     pub fn sample(&mut self, activity: u64, clock: u64) {
@@ -56,7 +68,7 @@ impl Tracker {
                 // window had already been quiet for the gap by the previous sample.
                 let quiet_before = self.sampled.map_or(0, |s| s.saturating_sub(last));
                 if quiet_before >= WORK_GAP_S {
-                    self.began = Some(activity);
+                    self.began = Some(stretch_start(self.sampled, activity));
                 }
                 self.last_output = Some(activity);
             }
@@ -121,7 +133,7 @@ mod tests {
                 (1029, 1040),
                 (1029, 1045), // quiet 16 s
                 (1029, 1060), // quiet 31 s; worked 29 s, from 1000 to 1029
-                (1062, 1065), // new output after quiet ≥ 15 s: a new stretch
+                (1062, 1065), // new output after quiet ≥ 15 s: a new stretch from 1061 (E-96)
                 (1068, 1070),
             ]),
             [
@@ -136,10 +148,64 @@ mod tests {
                 (Some(11), 29),
                 (Some(16), 29),
                 (Some(31), 29),
-                (Some(3), 0),
-                (Some(2), 6),
+                (Some(3), 1),
+                (Some(2), 7),
             ]
         );
+    }
+
+    /// A burst of `work_s` seconds of output (a line every second) starting `offset` s after a
+    /// sample, read by samples every `period` s on a window quiet long before: the largest
+    /// `worked_s` the tracker reports.
+    fn burst(period: u64, offset: u64, work_s: u64) -> u32 {
+        let t0 = 10_000;
+        let start = t0 + offset;
+        let last = start + work_s;
+        let mut t = Tracker::default();
+        let mut most = 0;
+        let mut clock = t0;
+        while clock <= last + 3 * period {
+            // tmux's window_activity: the newest output at or before the sample.
+            let activity = if clock < start {
+                t0 - 600
+            } else {
+                clock.min(last)
+            };
+            t.sample(activity, clock);
+            most = most.max(t.at(clock).worked_s);
+            clock += period;
+        }
+        most
+    }
+
+    /// E-96 (D-062 addendum 5) (1): work of 15 s or more reaches 15 s at every start offset
+    /// after a sample, at the hidden period (15 s) and the shown one (5 s).
+    #[test]
+    fn work_of_fifteen_seconds_or_more_reads_fifteen_at_every_offset() {
+        for (period, work) in [(15, 20), (15, 15), (5, 20), (5, 15)] {
+            for offset in 1..=period {
+                let w = burst(period, offset, work);
+                assert!(
+                    w >= 15,
+                    "period {period}, {work} s burst at +{offset} s: worked {w}"
+                );
+            }
+        }
+    }
+
+    /// E-96 (2): output seen by one sample alone reads at most 14 s, whatever the gap
+    /// between that sample and the one before (a late poll, a machine that slept).
+    #[test]
+    fn one_sighting_reads_at_most_fourteen_seconds() {
+        for gap in [5, 15, 3600] {
+            let mut t = Tracker::default();
+            t.sample(1_000, 2_000); // quiet for 1000 s
+            let out = 2_000 + gap - 1; // one line, just before the next sample
+            t.sample(out, 2_000 + gap);
+            t.sample(out, 2_000 + gap + 15);
+            let w = t.at(2_000 + gap + 15).worked_s;
+            assert!(w <= 14, "gap {gap}: worked {w}");
+        }
     }
 
     #[test]
