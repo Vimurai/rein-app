@@ -72,6 +72,20 @@ timer (a hidden web view's timers are throttled — same reason as `status.md`).
   (c) what the size of the window's executable becomes.
   If (a) fails, STOP and hand back — the fallback (Tauri's updater plugin) reverses
   D-035 "no Tauri plugin" and needs `dependency_gate` and a new ruling.
+- **As read, ruled 2026-11-20 (E-86's three reads, D-066 addendum 1):**
+  (a) passed with one part unobserved — a real HTTPS GET from the native Windows
+  executable. E-86 shows it once on windows-latest before it closes; if that fails it is
+  the STOP above. `ReqwestHttp` gains a timeout argument (the check uses 20 s); progress
+  and Cancel are a counting, cancelling `Write` passed to `download`, with no change to
+  the trait. `fetch_release` / `ReleaseSource` are not reused.
+  (b) The installer's argv is the constant `/P /UPDATE /R`. Under `/P` the installer
+  kills a window that is still running, so **the window saves first and starts the
+  installer last**: verify and compare → do everything the ordinary quit does (the V12
+  record) → start the installer detached → exit at once, with no work after the start.
+  The installer's kill is then only a fallback and loses nothing. No wait is added.
+  (c) +6.0 MiB on the Linux proxy is accepted and aws-lc stays: one crypto stack for the
+  CLI and the window, no feature change, no dependency gate. The Windows figure is
+  reported from the first desktop-windows run; over +10 MiB, hand back before closing.
 - **Check:** GET the constant URL
   `https://github.com/Vimurai/rein-app/releases/latest/download/desktop-latest.json`
   (≤ 64 KiB, strict parse, schema 1). Same schedule as component 2. HTTPS only, no

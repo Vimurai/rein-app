@@ -669,3 +669,82 @@ stored state depends on it beyond dismissal hashes, which only hide rows.
 9. **E-101 (Tier 2)** — R1, R2, R3.
 10. **E-102 (Tier 2)** — R4, R5. After E-101.
 11. **E-103 (Tier 2)** — R6. After E-81.
+
+### Addendum 2026-11-20 — R7: speak to an agent from its lane (D-071 addendum 1)
+
+> Operator, asked whether Home may type into an agent and whether to ask rein for the
+> model and context facts: "just do best". Both are taken as yes. This replaces "Not in
+> this revision" for the first two points above and amends Home's Security sentence:
+> **Home types into a terminal only through `pane_send`, on the operator's click.**
+
+**Core concept.** The desk dashboard sends "continue", Escape or a message to any Claude
+pane it lists. The app does the same for a lane, with one rule the dashboard does not
+have: **the app never presses Enter in a pane it cannot tell is at an ordinary prompt.**
+Enter at a permission prompt approves it. Approving is done in the pane, by the operator.
+
+**Components.**
+R7a. **Lane actions (web)** — each lane of R6 gains `Continue`, `Message…` and
+   `Interrupt`. `Message…` opens a composer under the lane: a text area (at most 4000
+   characters, counted), Send (`Ctrl+Enter`) and Cancel (`Esc`, which never reaches the
+   pane). `Interrupt` asks once in place ("Interrupt the <role>?" Yes / No) and then
+   sends Escape. After a send the lane says "Sent." or the fixed refusal for 2 s.
+R7b. **When an action is offered (core decides, web only draws)** — per role, from
+   E-81's `roles`:
+   | state | Continue / Message | Interrupt |
+   |---|---|---|
+   | `running`, `reports` true | offered | offered |
+   | `waiting` (any kind) | not offered: "Answer in its pane." and the lane goes there | offered |
+   | `unknown` or `reports` false | not offered: "This agent does not report its state." | not offered |
+   | `ended` | not offered | not offered |
+   The core checks the same table again when the command arrives, on a fresh read of
+   the pane's options — the web side's picture may be five seconds old.
+R7c. **Delivery (core)** — `Continue` is the literal text `continue`. Text is placed in
+   a tmux buffer through the process's standard input (never in an argument or a shell
+   string), pasted bracketed into the role's pane, the buffer deleted, then one Enter.
+   `Interrupt` is one Escape key. All on the app's own tmux server, to the pane id the
+   core holds for the role.
+R7d. **Switch** — `[home] actions = "shown" | "hidden"` (default `shown`), also in
+   Settings. Hidden: no buttons are drawn and `pane_send` refuses every call.
+R8. **Model, context and running tool on the lane** — drawn only when rein publishes
+   them as pane options. Requested of rein's Architect 2026-11-20; no task until rein
+   rules and names the options.
+
+**Data model.** `roles[i] += can: { send: bool, interrupt: bool, why: String | null }`
+(`why` is one of the fixed sentences of R7b). Nothing is stored: no message text is
+written to a file, a log or the state file.
+
+**API.** **Command `pane_send(tab, role, action, text)`** — `action` is `continue`,
+`message` or `interrupt`; `text` only with `message`. `role` is checked as in
+`pane_focus`. `text`: control characters removed except newline and tab, trimmed,
+1–4000 characters after that, else "that message cannot be sent". A refusal by R7b
+answers its fixed sentence. Answers `sent` or a fixed sentence; never tmux's output.
+
+**Security (Tier 3 — `security_engineer` before the commit, SEC_CLEARED required).**
+- The web side names a role, never a pane; the pane id never leaves the core.
+- The text is data on standard input; no shell sees it. Bracketed paste keeps a newline
+  from submitting early; removing control characters keeps an escape sequence from
+  ending the paste.
+- R7b is the guard against approving a permission prompt from Home. A pane that does
+  not report gets nothing — the conservative side of "unknown".
+- The command is reachable only from the app's own window (the existing IPC scope); no
+  listener, port or token is added, unlike the desk dashboard's HTTP server.
+- Threats to write down in the review: text from a project reaching `pane_send` (none
+  may: only the composer's own text and the literal `continue`), a stale lane sending
+  to a pane whose agent changed (the fresh read of R7b), a paste into a pane whose
+  process is no longer the agent (state `ended` → refused).
+
+**Execution constraints.** One send is at most four tmux calls and answers within the
+time one status read takes; a second send to the same pane waits for the first. No
+retry. No animation beyond the 2 s text.
+
+**Tests.** Core: the R7b table for every state; hostile text (4001 characters, only
+control characters, an ESC `[201~` inside the text, a NUL); the argv of every tmux call
+is constant apart from the pane id; `hidden` refuses. Real tmux on Linux: a fixture pane
+running `cat` with rein's options set to reporting receives a two-line message as one
+paste and one Enter (the captured pane shows both lines, in order, once); the same pane
+set to `waiting` receives nothing; Interrupt delivers one Escape. Web: composer limits,
+`Ctrl+Enter`, `Esc` stays in the composer, pointer and key parity. Screens, both themes.
+
+**Rollback.** One commit. `[home] actions = "hidden"` turns it off without a build.
+
+**Task.** 12. **E-104 (Tier 3)** — R7a–R7d. After E-103.

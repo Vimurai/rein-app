@@ -2744,3 +2744,49 @@ The operator saw "2 need you" for two projects where nothing waited on them: the
 
 ### Rollback
 Revert the task's commit; each is one commit.
+
+### D-071 addendum 1 (2026-11-20) — Home may speak to an agent, through one guarded command; rein is asked for the model and context facts
+
+**Task**: E-104; request to rein's Architect. Operator, asked both questions of D-071 r5 and r6: "just do best".
+**Decision**: Rulings 5 and 6 of D-071 are answered yes. Home gains Continue, Message and Interrupt on a role lane through the closed command `pane_send`; "Home types into no terminal" (D-064) becomes "Home types into a terminal only through `pane_send`, on the operator's click".
+
+### Rulings
+1. **The app never presses Enter in a pane it cannot tell is at an ordinary prompt.** Continue and Message are offered only for a role that reports and is `running`; a `waiting` role is answered in its pane; a role that does not report gets no action. The core checks again on a fresh read when the command arrives.
+2. **Approving a permission prompt from Home is not offered**, now or as a later convenience, without a new decision.
+3. **Text goes through standard input into a tmux buffer and is pasted bracketed**; no shell string, no argument. Nothing of it is stored.
+4. **`[home] actions = "hidden"`** removes the buttons and refuses the command.
+5. **Tier 3**: `security_engineer` and SEC_CLEARED before the commit.
+6. **Model, context and running tool** are requested of rein as pane options; the app reads nothing from the `tmux-claude-status` plugin (D-071 r6 stands).
+
+### Alternatives considered
+1. **Send to any pane, as the desk dashboard does** — rejected: its "continue" + Enter at a permission prompt approves the prompt.
+2. **Keep Home read-only** — rejected: the operator's own dashboard shows they use it, and a lane that says "running" with no way to nudge it sends them to the pane for one word.
+3. **A local HTTP endpoint with a token, as the dashboard** — rejected: the window already has an IPC scope; a listener is a new attack surface for nothing.
+
+### Impact
+- Unlocks: E-104 (after E-103, which is after E-81). Risk if wrong: text typed into the wrong program — bounded by ruling 1 and the per-role pane id held by the core.
+
+### Rollback
+Revert E-104's commit, or set `[home] actions = "hidden"`.
+
+### D-066 addendum 1 (2026-11-20) — E-86's three reads ruled: save first and start the installer last; aws-lc stays; E-100 accepted
+
+**Task**: E-86 (reads reported in the Engineer's handoff 2026-11-20 15:02 UTC, 37880d8); E-100 (4e3e9b4)
+**Decision**: The window does its ordinary quit's saving before it starts the installer and exits at once after; the installer's argv is the constant `/P /UPDATE /R`; the +6 MiB of aws-lc, rustls and hyper is accepted.
+
+### Rulings
+1. **Order.** Verify and compare → the V12 record and every other step of an ordinary quit → start the installer detached → exit with no work after the start. The installer's kill of a running window under `/P` is then a fallback that loses nothing. A wait in the installer is not ours to add, and a wait in the window would only widen the race.
+2. **aws-lc stays.** Switching to `ring` changes reqwest's features for the CLI too, needs a dependency gate, and leaves two crypto stacks to reason about for 6 MiB. If the Windows figure from the first desktop-windows run is over +10 MiB, the Engineer hands back before closing.
+3. **Read (a) is a pass with a condition**: one real HTTPS GET to github.com from the native Windows build, shown on windows-latest, before E-86 closes. A failure is the STOP of component 3.
+4. **Accepted shapes**: a timeout argument on `ReqwestHttp`; progress and Cancel as a `Write` wrapper; `fetch_release` / `ReleaseSource` not reused.
+5. **E-100 accepted** (hosted runs 44753433233 and 44753433244 as reported; both themes' `tab.prev` line).
+
+### Alternatives considered
+1. **Exit first, let a helper start the installer** — rejected: a second program to ship, sign and verify.
+2. **`/S` silent** — rejected: the operator would see nothing between the window closing and the new one opening.
+
+### Impact
+- Unlocks: E-86's first write. Risk if wrong: the one real Windows run in E-86's acceptance shows whether the tabs come back.
+
+### Rollback
+Text only; E-86 has written nothing.

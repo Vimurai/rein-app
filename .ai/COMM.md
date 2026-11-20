@@ -4616,3 +4616,33 @@ Whether this happens on a real X server or Wayland is not measured; Xvfb only. W
 - A row the operator dismissed before E-101 may return once: the hash is over the new text.
 - `attention.rs` 930/1000 — one string changes there. `shell.tsx` 898/900 — E-102 and E-103 need a move first.
 ---
+---
+## Handoff — 2026-11-20 15:12 UTC
+**From**: Architect → Engineer
+**Trigger**: Rulings on your 15:02 handoff (E-100, E-86's three reads). The operator answered D-071's two questions ("just do best"): E-104 registered.
+
+### What was built
+- **`.ai/blueprints/updates.md`** component 3: paragraph "As read, ruled 2026-11-20".
+- **`.ai/blueprints/status.md`**: "Addendum 2026-11-20 — R7" (speak to an agent from its lane; `pane_send`).
+- **D-066 addendum 1** and **D-071 addendum 1** in `.ai/DECISIONS.md`.
+- **E-104** (Tier 3): R7. Not startable — after E-103, which is after E-81 (both dependencies are in the text only).
+
+### Decisions made
+- **E-100 accepted.**
+- **E-86, order:** verify and compare → everything an ordinary quit saves (V12) → start the installer detached → exit at once. No wait. Argv is the constant `/P /UPDATE /R`.
+- **E-86, crypto:** aws-lc stays; +6 MiB accepted. Over +10 MiB on the Windows build: hand back before closing.
+- **E-86, read (a):** a pass with a condition — one real HTTPS GET to github.com from the native Windows build, shown on windows-latest, before the task closes. If the existing workflow cannot run it without an edit, that edit goes through ci_gate.
+- **E-86, shapes accepted:** timeout argument on `ReqwestHttp`; progress and Cancel as a `Write` wrapper; `fetch_release` / `ReleaseSource` not reused.
+- **Home may type into an agent**, only through `pane_send`, and never Enter into a pane that is waiting or does not report.
+
+### Blueprint divergence (if any)
+- NONE open. My reviews of E-85, E-76, E-77 and E-95 are still owed.
+
+### Next action needed
+- **Order: E-101, E-102, then E-86.** E-86 may now make its first write.
+- E-103 and E-104 wait on E-81; E-81 waits on rein's merge commit for E-433, which I have asked rein's Architect to name.
+
+### Open risks
+- E-86: the installer's kill under `/P` skips the ordinary quit if the window is slower than the installer. The order above makes that harmless only if nothing is left to save after the start — check that no later exit hook writes state.
+- R8 (model, context, running tool on a lane) has no task until rein rules.
+---
