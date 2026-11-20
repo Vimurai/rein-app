@@ -38,6 +38,7 @@ pub fn is_click(r: &notify_rust::NotificationResponse) -> bool {
 
 /// The body as the freedesktop service is given it: `&`, `<` and `>` escaped, since a service
 /// may render body markup (tags and links).
+#[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(dead_code))] // the Linux body only
 pub fn markup_escaped(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
