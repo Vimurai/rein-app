@@ -7,9 +7,10 @@
 
 import { useCallback, useReducer, useRef, type MutableRefObject } from "react";
 import { Button } from "../components/button.tsx";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../components/tooltip.tsx";
 import type { Item } from "./attention.ts";
 import type { Runner } from "./frame.tsx";
-import { cardModel, cardOrder, heldOrder, summaryLine, type CardModel } from "./home.ts";
+import { cardModel, cardOrder, heldOrder, nowRow, summaryLine, type CardModel } from "./home.ts";
 import { Bell } from "./icons.ts";
 import { StartScreen } from "./start-screen.tsx";
 import type { StartScreen as StartModel } from "./start.ts";
@@ -58,7 +59,7 @@ export function HomeView({ tabs, now, dismiss, goTo, start, r }: HomeProps) {
   if (tabs.length === 0) return <StartScreen model={start} r={r} />;
   return (
     <div id="home" className="h-full overflow-y-auto px-6 font-ui text-[13px] text-foreground">
-      <div className="mx-auto flex w-full max-w-[1240px] flex-col gap-6 py-8">
+      <div className="mx-auto flex w-full max-w-[1240px] min-w-0 flex-col gap-6 py-8">
         <header className="grid gap-1">
           <h1 className="m-0 text-[18px] leading-6 font-semibold tracking-tight">Home</h1>
           {summary && (
@@ -75,35 +76,46 @@ export function HomeView({ tabs, now, dismiss, goTo, start, r }: HomeProps) {
   );
 }
 
-/** H2 "Needs you now": each Now item a row that goes to its tab, Dismiss where allowed. */
+/** H2 "Needs you now": each Now item a row that goes to its tab, Dismiss where allowed. R3
+ *  (status.md "Home, second revision", D-071): a row never widens Home — the name and the
+ *  sentence on the first line, cut; the quote under it, wrapped to three lines; the whole row
+ *  as its tooltip. The one column is minmax(0, 1fr), so no row's text sizes the track. */
 function NeedsYouNow({ items, tabs, dismiss, goTo }: { items: readonly Item[]; tabs: readonly HomeTab[]; dismiss: HomeProps["dismiss"]; goTo: (i: number) => void }) {
   const title = (index: number | null) => (index === null ? "Installation" : (tabs.find((t) => t.index === index)?.title ?? `Tab ${index + 1}`));
   return (
-    <section aria-label="Needs you now" className="grid gap-2">
+    <section aria-label="Needs you now" className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
       <h2 className="m-0 text-[12px] font-medium text-muted-foreground">Needs you now</h2>
-      <ul className="m-0 grid list-none gap-1 p-0">
-        {items.map((it) => (
-          <li key={`${it.tab ?? "x"}:${it.key}`} className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-card px-2 py-1 text-card-foreground">
-            <button
-              type="button"
-              disabled={it.index === null}
-              onClick={() => it.index !== null && goTo(it.index)}
-              className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent"
-            >
-              <Bell size={13} aria-hidden="true" className="shrink-0 text-primary" />
-              <span className="shrink-0 font-medium">{title(it.index)}</span>
-              <span className="min-w-0 truncate text-muted-foreground">
-                {it.text}
-                {it.quote ? ` “${it.quote}”` : ""}
-              </span>
-            </button>
-            {dismiss && it.dismissable && it.tab !== null && (
-              <Button size="sm" variant="ghost" onClick={() => it.tab !== null && dismiss(it.tab, it.key)}>
-                Dismiss
-              </Button>
-            )}
-          </li>
-        ))}
+      <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-1 p-0">
+        {items.map((it) => {
+          const row = nowRow(title(it.index), it);
+          return (
+            <li key={`${it.tab ?? "x"}:${it.key}`} className="flex min-h-10 min-w-0 items-start gap-2 rounded-md border border-border bg-card px-2 py-1 text-card-foreground">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={it.index === null}
+                    onClick={() => it.index !== null && goTo(it.index)}
+                    className="grid min-w-0 flex-1 cursor-pointer gap-0.5 rounded-md px-1 py-1 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Bell size={13} aria-hidden="true" className="shrink-0 text-primary" />
+                      <span className="min-w-0 max-w-[45%] truncate font-medium">{row.name}</span>
+                      <span className="min-w-0 truncate text-muted-foreground">{row.sentence}</span>
+                    </span>
+                    {row.quote && <span className="line-clamp-3 min-w-0 pl-[21px] [overflow-wrap:anywhere] text-muted-foreground">{row.quote}</span>}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[min(480px,calc(100vw-16px))] whitespace-normal [overflow-wrap:anywhere]">{row.tip}</TooltipContent>
+              </Tooltip>
+              {dismiss && it.dismissable && it.tab !== null && (
+                <Button size="sm" variant="ghost" onClick={() => it.tab !== null && dismiss(it.tab, it.key)}>
+                  Dismiss
+                </Button>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -125,11 +137,11 @@ function Cards({ tabs, goTo }: { tabs: readonly HomeTab[]; goTo: (i: number) => 
     rerender();
   };
   return (
-    <section aria-label="Open projects" className="grid gap-2">
+    <section aria-label="Open projects" className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
       <h2 className="m-0 text-[12px] font-medium text-muted-foreground">Open projects</h2>
       <div
         data-home-grid
-        className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 max-[720px]:grid-cols-1"
+        className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 max-[720px]:grid-cols-[minmax(0,1fr)]"
         onPointerEnter={() => (held.current.pointer = true)}
         onPointerLeave={() => release("pointer")}
         onFocus={() => (held.current.focus = true)}

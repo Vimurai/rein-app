@@ -117,3 +117,21 @@ export function homeAtStart(startDir: boolean, last: boolean, restored: number):
   if (restored === 0) return true;
   return !last;
 }
+
+/** R3 (status.md "Home, second revision", D-071): the quote under a "Needs you now" row is
+ *  wrapped to at most this many lines, then an ellipsis. */
+export const QUOTE_LINES = 3;
+
+/** One "Needs you now" row (R3): the project's name and the app's sentence on the first line,
+ *  the quote under it, and the whole row as its tooltip (the quote is never cut there). */
+export interface NowRow {
+  name: string;
+  sentence: string;
+  quote: string | null;
+  tip: string;
+}
+
+export function nowRow(name: string, it: { text: string; quote: string | null }): NowRow {
+  const quote = it.quote && it.quote.trim() ? `“${it.quote}”` : null;
+  return { name, sentence: it.text, quote, tip: quote ? `${name}: ${it.text} ${quote}` : `${name}: ${it.text}` };
+}

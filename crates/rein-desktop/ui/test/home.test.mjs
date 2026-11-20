@@ -4,7 +4,7 @@
 // status.test.mjs (the marks and sentences the cards reuse).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { STATE_ORDER, cardModel, cardOrder, cycle, heldOrder, homeAtStart, summaryLine } from "../src/home.ts";
+import { QUOTE_LINES, STATE_ORDER, cardModel, cardOrder, cycle, heldOrder, homeAtStart, nowRow, summaryLine } from "../src/home.ts";
 import { MARKS } from "../src/status.ts";
 
 const st = (state, over = {}) => ({ tab: 4, state, quiet_s: 0, worked_s: 0, waiting: null, now: [], info: [], in_progress: null, turn: null, last_handoff_s: null, ...over });
@@ -130,4 +130,17 @@ test("on Home only Needs you has something to show (H4)", async () => {
   assert.deepEqual(HOME_PANELS, ["attention"]);
   assert.ok(HOME_PANELS.every((p) => PANEL_IDS.includes(p)));
   assert.equal(HOME_PANEL_TIP, "Open a project to see this");
+});
+
+test("a Needs you now row: name and sentence, the quote apart, the whole row as its tooltip (R3)", () => {
+  const quote = "Operator: " + "merge #61–#64 after #60 ".repeat(12).slice(0, 290);
+  const r = nowRow("rein-app", { text: "The last handoff asks the operator:", quote });
+  assert.equal(r.name, "rein-app");
+  assert.equal(r.sentence, "The last handoff asks the operator:");
+  assert.equal(r.quote, `“${quote}”`, "the quote is whole; the row cuts it to QUOTE_LINES by style");
+  assert.equal(r.tip, `rein-app: The last handoff asks the operator: “${quote}”`);
+  assert.equal(QUOTE_LINES, 3);
+  const bell = nowRow("Installation", { text: "The terminal rang its bell.", quote: null });
+  assert.deepEqual(bell, { name: "Installation", sentence: "The terminal rang its bell.", quote: null, tip: "Installation: The terminal rang its bell." });
+  assert.equal(nowRow("p", { text: "t", quote: "  " }).quote, null, "a blank quote is no quote");
 });

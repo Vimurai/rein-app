@@ -267,7 +267,7 @@ pub fn lists(
                 now_items.push(item(
                     Kind::Mention,
                     format!("mention:{i}"),
-                    "The last handoff mentions the operator:".into(),
+                    "The last handoff asks the operator:".into(),
                     Some(m.clone()),
                     true,
                 ));

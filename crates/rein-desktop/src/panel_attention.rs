@@ -55,7 +55,8 @@ pub struct Attention {
     pub in_progress: bool,
     /// The last handoff's timestamp as written (the web side parses it, or does not guess).
     pub last_handoff: Option<String>,
-    /// Lines of the last handoff's "Next action needed" holding the word operator.
+    /// Lines of the last handoff's "Next action needed" addressed to the operator, cleaned
+    /// (R1, R2 — D-071).
     pub mentions: Vec<String>,
     /// The first task `IN_PROGRESS` (status.md §Data Model `in_progress`, E-95).
     pub in_progress_task: Option<InProgress>,
@@ -67,10 +68,82 @@ pub struct Attention {
     pub trigger: Option<String>,
 }
 
-/// True when `line` holds the word "operator" (or "operators"), in any case, as a word.
-pub fn names_operator(line: &str) -> bool {
-    line.split(|c: char| !c.is_alphanumeric())
-        .any(|w| w.eq_ignore_ascii_case("operator") || w.eq_ignore_ascii_case("operators"))
+/// `line` without one leading list marker (`-`, `*`, `+`, or digits with `.` or `)`, each
+/// followed by white space) and the white space before and after it.
+fn without_list_marker(line: &str) -> &str {
+    let s = line.trim_start();
+    let rest = match s.strip_prefix(['-', '*', '+']) {
+        Some(r) => r,
+        None => {
+            let r = s.trim_start_matches(|c: char| c.is_ascii_digit());
+            if r.len() == s.len() {
+                return s;
+            }
+            match r.strip_prefix(['.', ')']) {
+                Some(r) => r,
+                None => return s,
+            }
+        }
+    };
+    if rest.starts_with(char::is_whitespace) {
+        rest.trim_start()
+    } else {
+        s
+    }
+}
+
+/// Emphasis marks and spaces a line may open with.
+fn is_mark(c: char) -> bool {
+    matches!(c, '*' | '_' | '`') || c.is_whitespace()
+}
+
+/// `s` without one leading task label: an id in the `[A-Z]-[0-9]{1,6}` shape, emphasis
+/// marks, then `:`. `s` itself when it does not open with one.
+fn without_task_label(s: &str) -> &str {
+    let mut it = s.char_indices();
+    let shaped = matches!(it.next(), Some((_, c)) if c.is_ascii_uppercase())
+        && matches!(it.next(), Some((_, '-')));
+    if !shaped {
+        return s;
+    }
+    let digits = &s[2..];
+    let n = digits.len()
+        - digits
+            .trim_start_matches(|c: char| c.is_ascii_digit())
+            .len();
+    if !(1..=6).contains(&n) {
+        return s;
+    }
+    match digits[n..].trim_start_matches(is_mark).strip_prefix(':') {
+        Some(rest) => rest,
+        None => s,
+    }
+}
+
+/// R1 (status.md "Home, second revision", D-071): true when `line` is addressed to the
+/// operator — after its list marker, emphasis marks, one task label and an optional "the",
+/// the next word is "operator" or "operators" (any case) and the word ends there. A line
+/// that only holds the word ("E-79 (operator)", "the operator's keys") is not.
+pub fn addressed_to_operator(line: &str) -> bool {
+    let s = without_list_marker(line).trim_start_matches(is_mark);
+    let s = without_task_label(s).trim_start_matches(is_mark);
+    let s = match s.get(..4) {
+        Some(the) if the.eq_ignore_ascii_case("the ") => s[4..].trim_start_matches(is_mark),
+        _ => s,
+    };
+    let end = s.find(|c: char| !c.is_alphanumeric()).unwrap_or(s.len());
+    let (word, after) = s.split_at(end);
+    (word.eq_ignore_ascii_case("operator") || word.eq_ignore_ascii_case("operators"))
+        && !after.starts_with(['\'', '\u{2019}'])
+}
+
+/// R2: a mention's quote — the line without its list marker, with `**`, `__` and backticks
+/// removed (the words stay). Characters are removed; markdown is never interpreted.
+pub fn mention_text(line: &str) -> String {
+    without_list_marker(line)
+        .replace("**", "")
+        .replace("__", "")
+        .replace('`', "")
 }
 
 pub fn attention(tasks: Option<&Tasks>, handoffs: Option<&Handoffs>) -> Attention {
@@ -96,9 +169,9 @@ pub fn attention(tasks: Option<&Tasks>, handoffs: Option<&Handoffs>) -> Attentio
         .filter(|s| s.name.trim().eq_ignore_ascii_case(NEXT_ACTION))
         .flat_map(|s| s.text.lines())
         .map(str::trim)
-        .filter(|l| names_operator(l))
+        .filter(|l| addressed_to_operator(l))
         .take(MAX_MENTIONS)
-        .map(|l| shown(l, LINE, false))
+        .map(|l| shown(&mention_text(l), LINE, false))
         .collect();
     let in_progress_task = tasks
         .and_then(|t| t.tasks.iter().find(|x| x.status == "IN_PROGRESS"))
@@ -191,14 +264,9 @@ mod tests {
             })
         );
         assert_eq!(a.turn.as_deref(), Some("Engineer"));
-        // Only the last handoff, only its "Next action needed", only the word as a word.
-        assert_eq!(
-            a.mentions,
-            [
-                "- **Operator:** choose for Windows.",
-                "- Ask the OPERATORS about it."
-            ]
-        );
+        // Only the last handoff, only its "Next action needed", only a line addressed to the
+        // operator (R1), cleaned (R2).
+        assert_eq!(a.mentions, ["Operator: choose for Windows."]);
     }
 
     /// E-80 (status.md §Home H3): the task counts and the last handoff's trigger for a
@@ -258,7 +326,7 @@ mod tests {
         );
         let h = parse_handoffs(COMM, true);
         let a = attention(None, Some(&h));
-        assert!(!a.tasks_read && a.blocked.is_empty() && a.mentions.len() == 2);
+        assert!(!a.tasks_read && a.blocked.is_empty() && a.mentions.len() == 1);
     }
 
     #[test]
@@ -277,13 +345,65 @@ mod tests {
         assert_eq!(attention(None, Some(&h)).mentions.len(), MAX_MENTIONS);
     }
 
+    /// R1 (status.md "Home, second revision", D-071): every example of the blueprint and its
+    /// Tests list. A mention is a line addressed to the operator, not a line holding the word.
     #[test]
-    fn the_word_is_matched_as_a_word() {
-        assert!(names_operator("Operator: decide"));
-        assert!(names_operator("the operator's call"));
-        assert!(names_operator("ask the operators"));
-        assert!(!names_operator("cooperator"));
-        assert!(!names_operator("operatorship"));
-        assert!(!names_operator("Engineer: build"));
+    fn a_mention_is_a_line_addressed_to_the_operator() {
+        let long = format!("- **Operator**: {}", "x".repeat(2000));
+        let table: &[(&str, bool)] = &[
+            ("- **Operator**: merge #61\u{2013}#64 after #60", true),
+            ("Operator \u{2014} sign the tag", true),
+            ("- **E-79:** the operator installs the build", true),
+            ("- **E-79**: the operator installs the build", true),
+            ("1. Operator: tag v0.6.0", true),
+            ("2) operator decides", true),
+            ("- ***Operator***: decide", true),
+            ("Operators: both of you", true),
+            ("- `operator` runs it", true),
+            ("- The operator signs", true),
+            (&long, true),
+            ("E-79 (operator)", false),
+            ("tasks that wait on the operator's keys", false),
+            ("operator's keys first on the line", false),
+            ("operator\u{2019}s keys", false),
+            (
+                "- **Close E-99, then E-100.** After it the queue holds only tasks that wait: E-79 (operator), E-81 (rein's E-433), E-86..E-88 and E-6 (operator's keys).",
+                false,
+            ),
+            ("- Ask the OPERATORS about it.", false),
+            ("- **Engineer:** E-61.", false),
+            ("cooperator", false),
+            ("operatorship", false),
+            ("E-1234567: operator", false),
+            ("the", false),
+            ("", false),
+            ("-", false),
+        ];
+        for (line, want) in table {
+            assert_eq!(addressed_to_operator(line), *want, "{line:?}");
+        }
+    }
+
+    /// R2: the quote loses its list marker, `**`, `__` and backticks; the words stay; cut at
+    /// [`LINE`] through `attention`.
+    #[test]
+    fn a_mention_is_cleaned_and_cut() {
+        let t = mention_text("- **Operator**: merge #61\u{2013}#64 after #60");
+        assert_eq!(t, "Operator: merge #61\u{2013}#64 after #60");
+        assert!(!t.contains('-'), "no list dash");
+        assert!(!t.contains('*'));
+        assert_eq!(
+            mention_text("3. __Operator__: run `rein doctor`"),
+            "Operator: run rein doctor"
+        );
+        assert_eq!(mention_text("**Operator**: keep"), "Operator: keep");
+        let comm = format!(
+            "## Handoff \u{2014} 2026-11-17 14:40 UTC\n**From**: A \u{2192} B\n\n### Next action needed\n- **Operator**: {}\n---\n",
+            "y".repeat(2000)
+        );
+        let h = parse_handoffs(comm.as_bytes(), true);
+        let m = attention(None, Some(&h)).mentions;
+        assert_eq!(m.len(), 1);
+        assert!(m[0].starts_with("Operator: yyy") && m[0].chars().count() <= LINE + 1);
     }
 }

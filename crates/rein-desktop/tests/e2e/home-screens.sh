@@ -14,6 +14,14 @@
 #                   needs-you card first, the Home button's count;
 #   home-700      — the same at 700 px wide (one column);
 #   home-prev     — Home again after Ctrl+Shift+Tab (tab.prev) from the first tab.
+# Then (E-101, status.md "Home, second revision" R1–R3, D-071) one project whose folder name,
+# trigger and a recent project's path are 200 characters and whose last handoff holds a
+# 300-character line addressed to the operator and a line that only names them: the
+# width trace (REIN_DESKTOP_TRACE_WIDTH) prints scrollWidth/clientWidth of #home and of the
+# document at 1280, 700 and 360 px asked (catppuccin-mocha; the window's minimum inner width,
+# 480 px, holds the last at 480 — the line says so) and 1280 (github-light), each checked
+# equal, with a screen of each at the window's real width (home-wide-<theme>-<w>). `home-screens.sh <out> widths` runs
+# only this part.
 # Ctrl+Shift+Tab running tab.prev is checked from the stage trace (E-100).
 # Then (E-98, keys on a set-up card, from REIN_DESKTOP_TRACE_STAGE — what the stage shows once a
 # second): Ctrl+Shift+H shows Home from the set-up tab; Ctrl+Tab leaves it for the next tab;
@@ -129,7 +137,7 @@ export DISPLAY=$started
 
 desktop() { # desktop [dir]: the window, or (a second start) a handoff to the running one
   exec env -u TMUX -u TMUX_PANE -u CLAUDECODE \
-    HOME="$W/home" PATH="$W/bin:$PATH" SHELL=/bin/sh REIN_DESKTOP_TRACE_PTY=1 REIN_DESKTOP_TRACE_FRAMES=1 REIN_DESKTOP_TRACE_STAGE=1 \
+    HOME="$W/home" PATH="$W/bin:$PATH" SHELL=/bin/sh REIN_DESKTOP_TRACE_PTY=1 REIN_DESKTOP_TRACE_FRAMES=1 REIN_DESKTOP_TRACE_STAGE=1 REIN_DESKTOP_TRACE_WIDTH=1 \
     XDG_RUNTIME_DIR="$W/run" XDG_CONFIG_HOME="$W/xdg/config" XDG_DATA_HOME="$W/xdg/data" \
     XDG_STATE_HOME="$W/xdg/state" XDG_CACHE_HOME="$W/xdg/cache" \
     WEBKIT_DISABLE_DMABUF_RENDERER=1 \
@@ -251,11 +259,77 @@ frames() { # 16 open projects on Home: the longest animation frame per second
   quit
 }
 
-for theme in catppuccin-mocha github-light; do
-  echo "[$theme ${GW}x${GH}]"
-  run "$theme"
-done
-echo "[16 projects]"
-frames
+LONG=""
+long_name() { # long_name <n>: n letters, no separator (a folder name a card must cut)
+  python3 -c 'import sys; print(("averyverylongprojectname" * 20)[: int(sys.argv[1])])' "$1"
+}
+widths() { # widths <theme> <width>...: Home with long project text; nothing scrolls sideways
+  local theme=$1 d="$W/Dev/w-$1" p st w line hs hc ds dc t iw
+  shift
+  fresh_state "$theme" "$d"
+  LONG=$(long_name 200)
+  p="$d/$LONG"
+  project "$p"
+  t=$(python3 -c 'print(("Review of the handoff and the ruling on the long trigger line " * 5)[:200])')
+  python3 - "$p/.ai/COMM.md" "$t" <<'PY'
+import sys
+path, trigger = sys.argv[1], sys.argv[2]
+quote = ("merge #61\u2013#64 after #60, then tag v0.6.0 from master and run rein doctor on the installed build; "
+         "the path is C:\\Users\\someone\\AppData\\Local\\rein-app\\" + "x" * 90 + " and ")
+quote = (quote * 3)[:286]
+open(path, "w").write(f"""# COMM
+
+## Handoff \u2014 2026-11-20 15:05 UTC
+**From**: Architect \u2192 Engineer
+**Trigger**: {trigger}
+### Next action needed
+- **Close E-99, then E-100.** After it the queue holds only tasks that wait: E-79 (operator), E-6 (operator's keys).
+- **Operator**: {quote}
+---
+""")
+PY
+  st="$W/xdg/state/rein-app"
+  mkdir -p "$d/recent/$LONG"
+  python3 - "$st/projects.json" "$d/recent/$LONG" <<'PY'
+import json, sys, time
+path, long_dir = sys.argv[1], sys.argv[2]
+j = json.load(open(path))
+j["recent"].insert(0, {"path": long_dir, "last_opened": int(time.time()) - 60})
+json.dump(j, open(path, "w"))
+PY
+  : >"$W/app.log"
+  desktop "$p" &
+  APP=$!
+  for _ in $(seq 1 300); do "$W/bin/xresize" rein "$GW" "$GH" >/dev/null 2>&1 && break; sleep 0.05; done
+  sleep 6
+  X move 900 20
+  X key ctrl+shift+h; sleep 7 # one attention poll: the mention row is there
+  for w in "$@"; do
+    "$W/bin/xresize" rein "$w" "$GH" >/dev/null; sleep 3
+    line=$(grep "^width-trace" "$W/app.log" | tail -1)
+    iw=$(sed -n 's/.* inner=\([0-9]*\) .*/\1/p' <<<"$line")
+    # The window's minimum inner width (main.rs) may hold it wider than asked: say so, and
+    # capture what is on the screen.
+    echo "  asked $w px, window ${iw:-?} px: ${line#* * }"
+    hs=$(sed -n 's/.* home=\([0-9]*\)\/.*/\1/p' <<<"$line"); hc=$(sed -n 's/.* home=[0-9]*\/\([0-9]*\) .*/\1/p' <<<"$line")
+    ds=$(sed -n 's/.* doc=\([0-9]*\)\/.*/\1/p' <<<"$line"); dc=$(sed -n 's/.* doc=[0-9]*\/\([0-9]*\).*/\1/p' <<<"$line")
+    check "${iw:-$w} px: #home and the document do not scroll sideways" "$([ -n "$hs" ] && [ "$hs" = "$hc" ] && [ -n "$ds" ] && [ "$ds" = "$dc" ] && echo yes || echo "${line:-no width-trace}")"
+    ffmpeg -loglevel error -y -f x11grab -draw_mouse 0 -video_size "${iw:-$w}x${GH}" -i "$DISPLAY" -frames:v 1 "$OUT/home-wide-$theme-${iw:-$w}.png" && echo "  $OUT/home-wide-$theme-${iw:-$w}.png"
+  done
+  "$W/bin/xresize" rein "$GW" "$GH" >/dev/null
+  quit
+}
+
+if [ "${2:-}" != widths ]; then
+  for theme in catppuccin-mocha github-light; do
+    echo "[$theme ${GW}x${GH}]"
+    run "$theme"
+  done
+  echo "[16 projects]"
+  frames
+fi
+echo "[widths: long project text]"
+widths catppuccin-mocha 1280 700 360
+widths github-light 1280
 [ "$FAIL" = 0 ] && echo "PASS: screens in $OUT" || echo "FAIL"
 exit "$FAIL"

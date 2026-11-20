@@ -66,7 +66,7 @@ export function StartScreen({ model, r, embedded = false }: { model: Model; r: R
           </Button>
         </div>
 
-        <section aria-label="Recent projects" aria-busy={model.loading || undefined} className="grid gap-2">
+        <section aria-label="Recent projects" aria-busy={model.loading || undefined} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
           <h2 className="m-0 text-[12px] font-medium text-muted-foreground">Recent projects</h2>
           {model.loading ? (
             <div className="grid gap-0.5">
@@ -87,7 +87,7 @@ export function StartScreen({ model, r, embedded = false }: { model: Model; r: R
               No recent projects yet. Open one and it appears here.
             </p>
           ) : (
-            <ul className="m-0 grid list-none gap-0.5 p-0">
+            <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-0.5 p-0">
               {model.recent.map((row) => {
                 const tip = r.tip(row.action);
                 return (
@@ -105,7 +105,7 @@ export function StartScreen({ model, r, embedded = false }: { model: Model; r: R
                         >
                           <Kbd className="shrink-0">{row.n}</Kbd>
                           <Folder size={15} aria-hidden="true" className="shrink-0 text-muted-foreground" />
-                          <span className="shrink-0 font-medium">{row.name}</span>
+                          <span className="min-w-0 truncate font-medium">{row.name}</span>
                           <TruncStart text={row.path} className="flex-1 font-mono text-[11px] text-muted-foreground" />
                           <span className="shrink-0 text-[12px] text-muted-foreground tabular-nums">{row.missing ? "missing" : row.ago}</span>
                         </button>

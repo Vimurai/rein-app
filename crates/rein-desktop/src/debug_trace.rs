@@ -1,5 +1,5 @@
-//! Debug builds only: four traces a window run reads from stderr (tests/e2e/home-screens.sh,
-//! tests/e2e/key-fields.sh; E-80, E-98, E-99). Release builds ignore all four variables, as they
+//! Debug builds only: five traces a window run reads from stderr (tests/e2e/home-screens.sh,
+//! tests/e2e/key-fields.sh; E-80, E-98, E-99, E-101). Release builds ignore all five variables, as they
 //! do `REIN_DESKTOP_RELOAD_AFTER_MS`.
 //! - `REIN_DESKTOP_TRACE_FRAMES`: once a second the core asks the page for the longest gap
 //!   between two animation frames since the last ask (a `requestAnimationFrame` loop the first
@@ -12,6 +12,9 @@
 //! - `REIN_DESKTOP_TRACE_KEYS` (E-99): the fields of every keydown the page receives —
 //!   `key-trace <unix s> {"key":…,"code":…,"ctrlKey":…,"shiftKey":…,"altKey":…,"metaKey":…}`,
 //!   one line per key, read once a second (a capture listener the first ask installs).
+//! - `REIN_DESKTOP_TRACE_WIDTH` (E-101): once a second, whether anything scrolls sideways —
+//!   `width-trace <unix s> inner=<innerWidth> home=<scrollWidth>/<clientWidth>
+//!   doc=<scrollWidth>/<clientWidth>` (`home=-` when Home is not shown). Numbers only.
 //!
 //! None reads or prints any text of a terminal; the only project text printed is the current
 //! tab's label (its folder name), by the stage trace.
@@ -25,7 +28,10 @@ const STAGE_PROBE: &str = "(() => { const sel = document.querySelector('[role=ta
 #[cfg(debug_assertions)]
 const KEYS_PROBE: &str = "(() => { const w = window; if (!w.__reinKeys) { w.__reinKeys = []; w.addEventListener('keydown', (e) => w.__reinKeys.push({ key: e.key, code: e.code, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey }), true); } const out = JSON.stringify(w.__reinKeys); w.__reinKeys = []; return out; })()";
 
-/// Starts the frame, stage and key traces when their variables are set (debug builds).
+#[cfg(debug_assertions)]
+const WIDTH_PROBE: &str = "(() => { const h = document.getElementById('home'); const d = document.documentElement; return [window.innerWidth, h ? h.scrollWidth + '/' + h.clientWidth : '-', d.scrollWidth + '/' + d.clientWidth].join(' '); })()";
+
+/// Starts the frame, stage, key and width traces when their variables are set (debug builds).
 pub fn frames(window: &tauri::WebviewWindow) {
     #[cfg(debug_assertions)]
     if crate::dirs::process_env("REIN_DESKTOP_TRACE_KEYS").is_some() {
@@ -66,6 +72,31 @@ pub fn frames(window: &tauri::WebviewWindow) {
                     );
                     eprintln!(
                         "stage-trace {} home={home} setup={setup} tabs={tabs} current={current}",
+                        unix_ms() / 1000
+                    );
+                });
+                if r.is_err() {
+                    return;
+                }
+            }
+        });
+    }
+    #[cfg(debug_assertions)]
+    if crate::dirs::process_env("REIN_DESKTOP_TRACE_WIDTH").is_some() {
+        let w = window.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                let r = w.eval_with_callback(WIDTH_PROBE, |answer| {
+                    let a = answer.trim_matches('"');
+                    let mut it = a.split(' ');
+                    let (inner, home, doc) = (
+                        it.next().unwrap_or("?"),
+                        it.next().unwrap_or("?"),
+                        it.next().unwrap_or("?"),
+                    );
+                    eprintln!(
+                        "width-trace {} inner={inner} home={home} doc={doc}",
                         unix_ms() / 1000
                     );
                 });
