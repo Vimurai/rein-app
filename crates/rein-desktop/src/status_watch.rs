@@ -136,7 +136,7 @@ fn items_of(lists: &Lists, tab: u32) -> (Vec<crate::attention::Item>, Vec<crate:
 /// A `setup` status: no activity, no items; the card fields when the core has them.
 fn setup_status(tab: u32, facts: Option<&Attention>, now_s: u64) -> ProjectStatus {
     let (in_progress, turn, last_handoff_s) = card_fields(facts, now_s);
-    let (counts, trigger) = home_fields(facts);
+    let (counts, trigger, active) = home_fields(facts);
     ProjectStatus {
         tab,
         state: Status::Setup,
@@ -151,6 +151,7 @@ fn setup_status(tab: u32, facts: Option<&Attention>, now_s: u64) -> ProjectStatu
         counts,
         trigger,
         agents: vec![],
+        active,
     }
 }
 
@@ -198,7 +199,7 @@ pub fn statuses(
                 quiet_s: seen.activity.quiet_s,
             };
             let (in_progress, turn, last_handoff_s) = card_fields(facts.get(&tab), now_s);
-            let (counts, trigger) = home_fields(facts.get(&tab));
+            let (counts, trigger, active) = home_fields(facts.get(&tab));
             ProjectStatus {
                 tab,
                 state: state(&f),
@@ -218,6 +219,7 @@ pub fn statuses(
                 } else {
                     vec![]
                 },
+                active,
             }
         })
         .collect();
@@ -435,6 +437,7 @@ mod tests {
             counts: None,
             trigger: None,
             agents: vec![],
+            active: vec![],
         }
     }
 

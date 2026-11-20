@@ -7,7 +7,7 @@ use serde::Serialize;
 use crate::activity::WORK_GAP_S;
 use crate::agents::Agent;
 use crate::attention::{Item, handoff_seconds};
-use crate::panel_attention::{Attention, InProgress, TaskCounts, WORD};
+use crate::panel_attention::{ActiveTask, Attention, InProgress, TaskCounts, WORD};
 
 /// The closed list of states, in the order the table tries them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -88,11 +88,17 @@ pub struct ProjectStatus {
     pub counts: Option<TaskCounts>,
     pub trigger: Option<String>,
     pub agents: Vec<Agent>,
+    /// The active tasks the card lists (status.md "Home, second revision" R4, D-071): at most
+    /// three; empty when `state.json` was not read.
+    pub active: Vec<ActiveTask>,
 }
 
-/// The Home card's task counts and trigger from one tab's facts (none: null, never a guess).
-pub fn home_fields(f: Option<&Attention>) -> (Option<TaskCounts>, Option<String>) {
-    f.map_or((None, None), |f| (f.counts, f.trigger.clone()))
+/// The Home card's task counts, trigger and active tasks from one tab's facts (none: null or
+/// empty, never a guess).
+pub fn home_fields(f: Option<&Attention>) -> (Option<TaskCounts>, Option<String>, Vec<ActiveTask>) {
+    f.map_or((None, None, Vec::new()), |f| {
+        (f.counts, f.trigger.clone(), f.active.clone())
+    })
 }
 
 /// The agents as a card shows them: each role cut and cleaned like every other project text.
@@ -140,6 +146,7 @@ impl ProjectStatus {
             || self.counts != next.counts
             || self.trigger != next.trigger
             || self.agents != next.agents
+            || self.active != next.active
     }
 }
 
@@ -224,6 +231,7 @@ mod tests {
             counts: None,
             trigger: None,
             agents: vec![],
+            active: vec![],
         };
         assert!(!s(State::Quiet, Some(20)).differs(&s(State::Quiet, Some(25))));
         assert!(
@@ -251,6 +259,13 @@ mod tests {
                 title: "t".into(),
             })
         })));
+        assert!(base.differs(&with(&|x| {
+            x.active = vec![ActiveTask {
+                id: "E-2".into(),
+                title: "t".into(),
+                status: crate::panel_attention::ActiveStatus::Open,
+            }]
+        })));
         assert!(
             !with(&|x| x.last_handoff_s = Some(61))
                 .differs(&with(&|x| x.last_handoff_s = Some(119)))
@@ -265,7 +280,7 @@ mod tests {
             serde_json::json!({"tab": 1, "state": "needs_you", "quiet_s": null, "worked_s": 30,
                                "waiting": null, "now": [], "info": [], "in_progress": null,
                                "turn": null, "last_handoff_s": null,
-                               "counts": null, "trigger": null, "agents": []})
+                               "counts": null, "trigger": null, "agents": [], "active": []})
         );
     }
 
@@ -286,6 +301,7 @@ mod tests {
             turn: Some("Engineer".into()),
             counts: None,
             trigger: None,
+            active: vec![],
         };
         assert_eq!(
             card_fields(Some(&facts), NOW),

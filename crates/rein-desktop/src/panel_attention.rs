@@ -26,6 +26,61 @@ pub const WORD: usize = 40;
 /// Characters kept of the last handoff's trigger (status.md §Home H3, E-80).
 pub const TRIGGER: usize = 120;
 
+/// The most active tasks a Home card lists, and the characters kept of one's title
+/// (status.md "Home, second revision" R4, D-071).
+pub const MAX_ACTIVE: usize = 3;
+pub const ACTIVE_TITLE: usize = 120;
+
+/// The status of an active task, as a card marks it.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ActiveStatus {
+    InProgress,
+    Open,
+    Blocked,
+}
+
+/// One task a Home card lists (R4): id ≤ [`WORD`], title one line ≤ [`ACTIVE_TITLE`].
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ActiveTask {
+    pub id: String,
+    pub title: String,
+    pub status: ActiveStatus,
+}
+
+/// R4: at most [`MAX_ACTIVE`] tasks — `IN_PROGRESS`, then `OPEN`, then `BLOCKED`, newest
+/// first inside a status (`updated_at` compares as text; later in the file first on a tie).
+pub fn active_tasks(t: &Tasks) -> Vec<ActiveTask> {
+    let rank = |s: &str| match s {
+        "IN_PROGRESS" => Some(ActiveStatus::InProgress),
+        "OPEN" => Some(ActiveStatus::Open),
+        "BLOCKED" => Some(ActiveStatus::Blocked),
+        _ => None,
+    };
+    let mut picked: Vec<(usize, ActiveStatus)> = t
+        .tasks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, x)| rank(&x.status).map(|r| (i, r)))
+        .collect();
+    picked.sort_by(|&(a, ra), &(b, rb)| {
+        (ra as u8)
+            .cmp(&(rb as u8))
+            .then(t.tasks[b].updated_at.cmp(&t.tasks[a].updated_at))
+            .then(b.cmp(&a))
+    });
+    picked
+        .into_iter()
+        .take(MAX_ACTIVE)
+        .map(|(i, status)| ActiveTask {
+            // `shown` adds "…" after the characters it keeps: one fewer keeps the whole ≤ cap.
+            id: shown(&t.tasks[i].id, WORD - 1, false),
+            title: shown(&t.tasks[i].description, ACTIVE_TITLE - 1, false),
+            status,
+        })
+        .collect()
+}
+
 /// The task counts a Home card shows (status.md §Home H3, E-80).
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 pub struct TaskCounts {
@@ -66,6 +121,8 @@ pub struct Attention {
     pub counts: Option<TaskCounts>,
     /// The last handoff's trigger, one line, at most [`TRIGGER`] characters (E-80).
     pub trigger: Option<String>,
+    /// The active tasks a Home card lists (R4); empty when `state.json` was not read.
+    pub active: Vec<ActiveTask>,
 }
 
 /// `line` without one leading list marker (`-`, `*`, `+`, or digits with `.` or `)`, each
@@ -195,9 +252,11 @@ pub fn attention(tasks: Option<&Tasks>, handoffs: Option<&Handoffs>) -> Attentio
         // `shown` adds "…" after the characters it keeps: one fewer keeps the whole ≤ TRIGGER.
         .map(|h| shown(&h.trigger, TRIGGER - 1, false))
         .filter(|t| !t.trim().is_empty());
+    let active = tasks.map(active_tasks).unwrap_or_default();
     Attention {
         counts,
         trigger,
+        active,
         tasks_read: tasks.is_some(),
         blocked,
         in_progress,
@@ -322,6 +381,7 @@ mod tests {
                 turn: None,
                 counts: None,
                 trigger: None,
+                active: vec![],
             }
         );
         let h = parse_handoffs(COMM, true);
@@ -405,5 +465,72 @@ mod tests {
         let m = attention(None, Some(&h)).mentions;
         assert_eq!(m.len(), 1);
         assert!(m[0].starts_with("Operator: yyy") && m[0].chars().count() <= LINE + 1);
+    }
+
+    /// R4 (status.md "Home, second revision", D-071): in progress, then open, then blocked,
+    /// newest first inside a status; three at most; id and title cut; none without
+    /// `state.json`.
+    #[test]
+    fn the_active_tasks_are_ordered_capped_and_read_or_empty() {
+        let t = parse_tasks(br#"{"tasks":[
+            {"id":"E-1","status":"BLOCKED","description":"old blocked","updated_at":"2026-11-01T00:00:00Z"},
+            {"id":"E-2","status":"OPEN","description":"old open","updated_at":"2026-11-02T00:00:00Z"},
+            {"id":"E-3","status":"DONE","description":"done","updated_at":"2026-11-20T00:00:00Z"},
+            {"id":"E-4","status":"OPEN","description":"new open","updated_at":"2026-11-19T00:00:00Z"},
+            {"id":"E-5","status":"IN_PROGRESS","description":"doing","updated_at":"2026-11-03T00:00:00Z"},
+            {"id":"E-6","status":"BLOCKED","description":"new blocked","updated_at":"2026-11-18T00:00:00Z"}
+        ]}"#)
+        .unwrap();
+        let a = active_tasks(&t);
+        let ids = |a: &[ActiveTask]| a.iter().map(|x| x.id.clone()).collect::<Vec<_>>();
+        assert_eq!(
+            ids(&a),
+            ["E-5", "E-4", "E-2"],
+            "in progress, then open newest first; cap 3"
+        );
+        assert_eq!(
+            a.iter().map(|x| x.status).collect::<Vec<_>>(),
+            [
+                ActiveStatus::InProgress,
+                ActiveStatus::Open,
+                ActiveStatus::Open
+            ]
+        );
+        let few = parse_tasks(
+            br#"{"tasks":[
+            {"id":"E-1","status":"BLOCKED","updated_at":"2026-11-01T00:00:00Z"},
+            {"id":"E-6","status":"BLOCKED","updated_at":"2026-11-18T00:00:00Z"},
+            {"id":"E-7","status":"OPEN"}
+        ]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            ids(&active_tasks(&few)),
+            ["E-7", "E-6", "E-1"],
+            "blocked last, newest first"
+        );
+        let long = format!(
+            r#"{{"tasks":[{{"id":"{}","status":"OPEN","description":"{}\nsecond line"}}]}}"#,
+            "E".repeat(80),
+            "t".repeat(300)
+        );
+        let one = &active_tasks(&parse_tasks(long.as_bytes()).unwrap())[0];
+        assert!(one.id.chars().count() <= WORD, "id ≤ 40");
+        assert!(
+            one.title.chars().count() <= ACTIVE_TITLE && !one.title.contains('\n'),
+            "one line ≤ 120"
+        );
+        // Through `attention`: the same list with state.json, none without it.
+        assert_eq!(
+            ids(&attention(Some(&t), None).active),
+            ["E-5", "E-4", "E-2"]
+        );
+        assert!(
+            attention(None, Some(&parse_handoffs(COMM, true)))
+                .active
+                .is_empty()
+        );
+        let json = serde_json::to_value(&a[0]).unwrap();
+        assert_eq!(json["status"], "in_progress", "the web side's spelling");
     }
 }

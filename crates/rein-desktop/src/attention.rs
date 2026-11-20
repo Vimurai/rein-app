@@ -538,6 +538,7 @@ mod tests {
             turn: None,
             counts: None,
             trigger: None,
+            active: vec![],
         }
     }
     fn core(f: Attention) -> TabCore {

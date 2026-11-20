@@ -103,6 +103,8 @@ export interface AttentionFeed {
   refresh: () => void;
   /** Dismiss a row the core sent as dismissable. */
   dismiss: (tab: number, key: string) => void;
+  /** The open panel's id, or null (Home's "Tasks" button opens Tasks only when it is not). */
+  panel: string | null;
 }
 
 /** What the descriptor's view draws for one answer. Exported for the render test. */

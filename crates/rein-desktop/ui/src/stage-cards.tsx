@@ -13,6 +13,7 @@ import { SetupCard } from "./project-ui.tsx";
 import { RestoreCard } from "./restore-ui.tsx";
 import { goToTab } from "./attention.ts";
 import { HomeView } from "./home.tsx";
+import { tasksCalls } from "./home.ts";
 import type { AttentionFeed } from "./panel-host.tsx";
 import { startScreen, type RecentView } from "./start.ts";
 import type { TabStatus } from "./tab-status.tsx";
@@ -73,6 +74,7 @@ export function StageCards(p: StageCardsProps) {
           now={feed.lists.now}
           dismiss={feed.dismiss}
           goTo={goToTab(run)}
+          openTasks={(index) => tasksCalls(index, feed.panel).forEach(run)}
           start={startScreen(
             tabs.current.length ? recent.filter((r) => !openPaths.has(r.path)) : recent,
             health?.setup ? { reason: health.reason ?? "WSL is not ready", command: health.setup } : null,

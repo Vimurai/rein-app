@@ -15,14 +15,19 @@
 #   home-700      — the same at 700 px wide (one column);
 #   home-prev     — Home again after Ctrl+Shift+Tab (tab.prev) from the first tab.
 # Then (E-101, status.md "Home, second revision" R1–R3, D-071) one project whose folder name,
-# trigger and a recent project's path are 200 characters and whose last handoff holds a
+# trigger, task titles (E-102) and a recent project's path are 200 characters and whose last handoff holds a
 # 300-character line addressed to the operator and a line that only names them: the
 # width trace (REIN_DESKTOP_TRACE_WIDTH) prints scrollWidth/clientWidth of #home and of the
-# document at 1280, 700 and 360 px asked (catppuccin-mocha; the window's minimum inner width,
-# 480 px, holds the last at 480 — the line says so) and 1280 (github-light), each checked
-# equal, with a screen of each at the window's real width (home-wide-<theme>-<w>). `home-screens.sh <out> widths` runs
+# document at 1280, 700 and 480 px — the window's minimum inner width (D-072) —
+# (catppuccin-mocha) and 1280 (github-light), each checked equal, with a screen of each at
+# the window's real width (home-wide-<theme>-<w>). `home-screens.sh <out> widths` runs
 # only this part.
 # Ctrl+Shift+Tab running tab.prev is checked from the stage trace (E-100).
+# Each card lists its active tasks and has a "Tasks" button (status.md "Home, second
+# revision" R4, R5, D-071; E-102): at the end of each run, from Home with no panel open, the
+# Tasks button is pressed — by keyboard in catppuccin-mocha (Tab to it, Enter), by pointer in
+# github-light (a click at its centre, read from the width trace) — and the stage trace must
+# show a project tab with the Tasks panel open (home-tasks-<theme>).
 # Then (E-98, keys on a set-up card, from REIN_DESKTOP_TRACE_STAGE — what the stage shows once a
 # second): Ctrl+Shift+H shows Home from the set-up tab; Ctrl+Tab leaves it for the next tab;
 # Enter on the card presses its focused button (Shift+Tab twice to "Close tab": the tab closes).
@@ -230,6 +235,22 @@ run() { # run <theme>
   X key shift+Tab; X key shift+Tab
   X key Return; t=$(date +%s)
   check "Enter on the card presses its focused button (Close tab)" "$(stage_after "$t" "tabs=4" && echo yes || echo "$(last_stage)")"
+  # E-102 (R5): the card's Tasks button, from Home with no panel open.
+  local i xy
+  X key ctrl+shift+h; sleep 2
+  if [ "$theme" = catppuccin-mocha ]; then
+    for i in $(seq 1 30); do
+      X key Tab; sleep 0.6
+      grep "^width-trace" "$W/app.log" | tail -1 | grep -q "focus=tasks" && break
+    done
+    X key Return; t=$(date +%s)
+    check "Tab to a card's Tasks button and Enter: its tab with the Tasks panel open" "$(stage_after "$t" "home=0 .* panel=tasks" && echo yes || echo "$(last_stage)")"
+  else
+    xy=$(grep "^width-trace" "$W/app.log" | tail -1 | sed -n 's/.* tasks=\([0-9]*\),\([0-9]*\) .*/\1 \2/p')
+    [ -n "$xy" ] && X click $xy; t=$(date +%s)
+    check "a click on a card's Tasks button: its tab with the Tasks panel open" "$([ -n "$xy" ] && stage_after "$t" "home=0 .* panel=tasks" && echo yes || echo "${xy:-no Tasks button} $(last_stage)")"
+  fi
+  sleep 1; shot "home-tasks-$theme"
   quit
 }
 
@@ -271,6 +292,13 @@ widths() { # widths <theme> <width>...: Home with long project text; nothing scr
   p="$d/$LONG"
   project "$p"
   t=$(python3 -c 'print(("Review of the handoff and the ruling on the long trigger line " * 5)[:200])')
+  python3 - "$p/.ai/state.json" <<'PY'
+import json, sys
+title = ("Show the active tasks on each Home card and a Tasks button that opens the board " * 3)[:200]
+json.dump({"tasks": [{"id": "E-80", "status": "IN_PROGRESS", "description": title},
+                     {"id": "E-79", "status": "OPEN", "description": title},
+                     {"id": "E-81", "status": "BLOCKED", "description": title}]}, open(sys.argv[1], "w"))
+PY
   python3 - "$p/.ai/COMM.md" "$t" <<'PY'
 import sys
 path, trigger = sys.argv[1], sys.argv[2]
@@ -329,7 +357,7 @@ if [ "${2:-}" != widths ]; then
   frames
 fi
 echo "[widths: long project text]"
-widths catppuccin-mocha 1280 700 360
+widths catppuccin-mocha 1280 700 480
 widths github-light 1280
 [ "$FAIL" = 0 ] && echo "PASS: screens in $OUT" || echo "FAIL"
 exit "$FAIL"

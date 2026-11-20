@@ -5,7 +5,8 @@
 
 import { age } from "./panels.ts";
 import { taskTitle } from "./panel-text.ts";
-import { TASK_ID, sentence, type ProjectStatus, type StatusState } from "./status.ts";
+import type { ActionCall } from "./keymap.ts";
+import { TASK_ID, sentence, type ActiveTask, type ProjectStatus, type StatusState } from "./status.ts";
 
 /** H2: the cards' order by state; tab order within a state. */
 export const STATE_ORDER: readonly StatusState[] = ["needs_you", "ended", "setup", "quiet", "working", "starting", "unknown"];
@@ -70,6 +71,8 @@ export interface CardModel {
   agents: string[];
   /** Open / in progress / blocked; null: "Tasks not available". */
   chips: { open: number; in_progress: number; blocked: number } | null;
+  /** The active tasks under the task line (R4), the in-progress one not repeated. */
+  active: CardTask[];
   /** The project's Now items. */
   now: number;
 }
@@ -77,7 +80,7 @@ export interface CardModel {
 /** The card of one open project. `s` undefined: the core has sent nothing yet — its state is
  *  unknown and nothing is guessed. */
 export function cardModel(name: string, s: ProjectStatus | undefined): CardModel {
-  if (!s) return { name, state: "unknown", sentence: "—", task: null, turn: null, trigger: null, agents: [], chips: null, now: 0 };
+  if (!s) return { name, state: "unknown", sentence: "—", task: null, turn: null, trigger: null, agents: [], chips: null, active: [], now: 0 };
   const counts = s.counts ?? null;
   const ip = s.in_progress;
   const task =
@@ -89,7 +92,33 @@ export function cardModel(name: string, s: ProjectStatus | undefined): CardModel
   const turn = s.turn ? `${s.turn}'s turn${s.last_handoff_s != null ? ` · last handoff ${age(s.last_handoff_s)}` : ""}` : null;
   const trigger = s.trigger ? oneLine(s.trigger, TRIGGER_MAX) : null;
   const agents = (s.agents ?? []).filter((a) => a.state !== "unknown").map((a) => `${a.role}: ${a.state}`);
-  return { name, state: s.state, sentence: sentence(s), task, turn, trigger, agents, chips: counts, now: s.now.length };
+  const active = (s.active ?? [])
+    .filter((t) => TASK_ID.test(t.id) && t.id !== (task !== null && ip ? ip.id : null))
+    .slice(0, ACTIVE_MAX)
+    .map((t): CardTask => ({ id: t.id, title: oneLine(taskTitle(t.title), ACTIVE_TITLE_MAX), status: t.status, label: ACTIVE_LABEL[t.status] }));
+  return { name, state: s.state, sentence: sentence(s), task, turn, trigger, agents, chips: counts, active, now: s.now.length };
+}
+
+/** R4: at most three active tasks; a title is one line of at most 120 characters. */
+export const ACTIVE_MAX = 3;
+export const ACTIVE_TITLE_MAX = 120;
+
+/** An active task's status in words: its mark's accessible name (the mark differs by shape). */
+export const ACTIVE_LABEL: Record<ActiveTask["status"], string> = { in_progress: "In progress", open: "Open", blocked: "Blocked" };
+
+/** One active task as a card lists it. */
+export interface CardTask {
+  id: string;
+  title: string;
+  status: ActiveTask["status"];
+  label: string;
+}
+
+/** R5: the card's "Tasks" button — go to the project's tab, then open the Tasks panel through
+ *  the existing actions (a toggle: not sent when Tasks is already the open panel). */
+export function tasksCalls(index: number, openPanel: string | null): ActionCall[] {
+  const go: ActionCall = { name: "tab.goto", arg: String(index + 1) };
+  return openPanel === "tasks" ? [go] : [go, { name: "panel.toggle", arg: "tasks" }];
 }
 
 function oneLine(text: string, max: number): string {

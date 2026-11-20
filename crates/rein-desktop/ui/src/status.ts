@@ -9,6 +9,13 @@ import { taskTitle } from "./panel-text.ts";
 
 export type StatusState = "setup" | "ended" | "starting" | "needs_you" | "working" | "quiet" | "unknown";
 
+/** One task a Home card lists (R4). */
+export interface ActiveTask {
+  id: string;
+  title: string;
+  status: "in_progress" | "open" | "blocked";
+}
+
 export interface ProjectStatus {
   /** The tab's core id. */
   tab: number;
@@ -32,6 +39,9 @@ export interface ProjectStatus {
   counts?: { open: number; in_progress: number; blocked: number } | null;
   trigger?: string | null;
   agents?: { role: string; state: "running" | "ended" | "unknown" }[];
+  /** The active tasks the card lists (status.md "Home, second revision" R4, D-071): at most
+   *  three, in progress / open / blocked, newest first in a status. Absent from an older core. */
+  active?: ActiveTask[];
 }
 
 /** The mark of a state (lucide names, 12 px). `spinner` is the tab's existing V7 spinner;

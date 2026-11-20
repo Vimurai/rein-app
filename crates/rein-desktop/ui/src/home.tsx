@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../components/tooltip.t
 import type { Item } from "./attention.ts";
 import type { Runner } from "./frame.tsx";
 import { cardModel, cardOrder, heldOrder, nowRow, summaryLine, type CardModel } from "./home.ts";
-import { Bell } from "./icons.ts";
+import { Bell, Circle, CircleDot, CircleX, ListChecks } from "./icons.ts";
 import { StartScreen } from "./start-screen.tsx";
 import type { StartScreen as StartModel } from "./start.ts";
 import { statusMark, type ProjectStatus } from "./status.ts";
@@ -50,11 +50,13 @@ export interface HomeProps {
   /** A dismissable row's Dismiss; null when rows cannot be dismissed here. */
   dismiss: ((tab: number, key: string) => void) | null;
   goTo: (index: number) => void;
+  /** R5: go to the tab with the Tasks panel open. */
+  openTasks: (index: number) => void;
   start: StartModel;
   r: Runner;
 }
 
-export function HomeView({ tabs, now, dismiss, goTo, start, r }: HomeProps) {
+export function HomeView({ tabs, now, dismiss, goTo, openTasks, start, r }: HomeProps) {
   const summary = summaryLine(tabs.map((t) => t.status?.state ?? "unknown"));
   if (tabs.length === 0) return <StartScreen model={start} r={r} />;
   return (
@@ -69,7 +71,7 @@ export function HomeView({ tabs, now, dismiss, goTo, start, r }: HomeProps) {
           )}
         </header>
         {now.length > 0 && <NeedsYouNow items={now} tabs={tabs} dismiss={dismiss} goTo={goTo} />}
-        <Cards tabs={tabs} goTo={goTo} />
+        <Cards tabs={tabs} goTo={goTo} openTasks={openTasks} />
         <StartScreen model={start} r={r} embedded />
       </div>
     </div>
@@ -123,7 +125,7 @@ function NeedsYouNow({ items, tabs, dismiss, goTo }: { items: readonly Item[]; t
 
 /** H2 "Open projects": the cards in state order; held while the pointer is over the grid or a
  *  card has keyboard focus, so a card never moves under a click. */
-function Cards({ tabs, goTo }: { tabs: readonly HomeTab[]; goTo: (i: number) => void }) {
+function Cards({ tabs, goTo, openTasks }: { tabs: readonly HomeTab[]; goTo: (i: number) => void; openTasks: (i: number) => void }) {
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const held = useRef({ pointer: false, focus: false });
   const drawn = useRef<number[]>([]);
@@ -151,7 +153,7 @@ function Cards({ tabs, goTo }: { tabs: readonly HomeTab[]; goTo: (i: number) => 
       >
         {order.map((id) => {
           const t = byId.get(id);
-          return t ? <Card key={id} t={t} m={cardModel(t.title, t.status)} onGo={() => goTo(t.index)} /> : null;
+          return t ? <Card key={id} t={t} m={cardModel(t.title, t.status)} onGo={() => goTo(t.index)} onTasks={() => openTasks(t.index)} /> : null;
         })}
       </div>
     </section>
@@ -160,36 +162,77 @@ function Cards({ tabs, goTo }: { tabs: readonly HomeTab[]; goTo: (i: number) => 
 
 const CHIP = "rounded-full border border-border px-2 text-[11px] leading-5 text-muted-foreground tabular-nums";
 
-/** H3: one project — a button that goes to its tab. Every string is a text node. */
-function Card({ t, m, onGo }: { t: HomeTab; m: CardModel; onGo: () => void }) {
+/** R4: an active task's mark — told by shape (dot, ring, cross) as well as colour. */
+const ACTIVE_MARK = {
+  in_progress: { Icon: CircleDot, tone: "text-primary" },
+  open: { Icon: Circle, tone: "text-muted-foreground" },
+  blocked: { Icon: CircleX, tone: "text-destructive" },
+} as const;
+
+/** H3: one project. The card goes to its tab (its first tab stop); R5's "Tasks" button, the
+ *  second tab stop, goes there with the Tasks panel open. A click anywhere else on the card
+ *  goes to the tab too. Every string is a text node. */
+function Card({ t, m, onGo, onTasks }: { t: HomeTab; m: CardModel; onGo: () => void; onTasks: () => void }) {
   const mark = statusMark(t.title, t.status, true);
   return (
-    <button
-      type="button"
-      onClick={onGo}
-      aria-label={`${m.name}: ${m.sentence} — go to its tab`}
+    <div
       data-state={m.state}
-      className="grid min-w-0 cursor-pointer content-start gap-1.5 rounded-lg border border-border bg-card p-3 text-left text-card-foreground outline-none transition-colors duration-[var(--motion-base)] hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={onGo}
+      className="grid min-w-0 cursor-pointer content-start gap-1.5 rounded-lg border border-border bg-card p-3 text-card-foreground transition-colors duration-[var(--motion-base)] hover:bg-muted/60 has-[[data-card-go]:focus-visible]:ring-2 has-[[data-card-go]:focus-visible]:ring-ring"
     >
-      <span className="flex min-w-0 items-center gap-2">
-        {mark && <StatusGlyph s={mark} />}
-        <span className="truncate font-semibold">{m.name}</span>
-        <span className="ml-auto shrink-0 text-[12px] text-muted-foreground">{m.sentence}</span>
-        {m.now > 0 && (
-          <span className="shrink-0 rounded-full bg-primary px-1.5 text-[11px] leading-4 font-medium text-primary-foreground tabular-nums">{m.now}</span>
+      <button
+        type="button"
+        data-card-go
+        onClick={(e) => (e.stopPropagation(), onGo())}
+        aria-label={`${m.name}: ${m.sentence} — go to its tab`}
+        className="grid min-w-0 cursor-pointer content-start gap-1.5 text-left outline-none"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          {mark && <StatusGlyph s={mark} />}
+          <span className="truncate font-semibold">{m.name}</span>
+          <span className="ml-auto shrink-0 text-[12px] text-muted-foreground">{m.sentence}</span>
+          {m.now > 0 && (
+            <span className="shrink-0 rounded-full bg-primary px-1.5 text-[11px] leading-4 font-medium text-primary-foreground tabular-nums">{m.now}</span>
+          )}
+        </span>
+        <span className="truncate text-muted-foreground">{m.task ?? "Tasks not available"}</span>
+        {m.active.length > 0 && (
+          <span className="grid min-w-0 gap-0.5" data-card-active>
+            {m.active.map((a) => {
+              const { Icon, tone } = ACTIVE_MARK[a.status];
+              return (
+                <span key={a.id} className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
+                  <Icon size={12} role="img" aria-label={a.label} className={`shrink-0 ${tone}`} />
+                  <span className="shrink-0 font-mono text-[11px]">{a.id}</span>
+                  <span className="min-w-0 truncate">{a.title}</span>
+                </span>
+              );
+            })}
+          </span>
         )}
-      </span>
-      <span className="truncate text-muted-foreground">{m.task ?? "Tasks not available"}</span>
-      {m.turn && <span className="truncate text-[12px] text-muted-foreground">{m.turn}</span>}
-      {m.trigger && <span className="truncate text-[12px] text-muted-foreground">{m.trigger}</span>}
-      {m.agents.length > 0 && <span className="truncate font-mono text-[11px] text-muted-foreground">{m.agents.join(" · ")}</span>}
+        {m.turn && <span className="truncate text-[12px] text-muted-foreground">{m.turn}</span>}
+        {m.trigger && <span className="truncate text-[12px] text-muted-foreground">{m.trigger}</span>}
+        {m.agents.length > 0 && <span className="truncate font-mono text-[11px] text-muted-foreground">{m.agents.join(" · ")}</span>}
+      </button>
       {m.chips && (
-        <span className="flex flex-wrap gap-1 pt-0.5">
+        <span className="flex min-w-0 flex-wrap items-center gap-1 pt-0.5">
           <span className={CHIP}>{m.chips.open} open</span>
           <span className={CHIP}>{m.chips.in_progress} in progress</span>
           <span className={CHIP}>{m.chips.blocked} blocked</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            data-card-tasks
+            className="ml-auto h-6 px-2 text-[12px]"
+            aria-label={`Tasks of ${m.name}`}
+            onClick={(e) => (e.stopPropagation(), onTasks())}
+          >
+            <ListChecks size={13} aria-hidden="true" />
+            Tasks
+          </Button>
         </span>
       )}
-    </button>
+    </div>
   );
 }

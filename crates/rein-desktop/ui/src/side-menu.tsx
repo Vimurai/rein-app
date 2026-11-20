@@ -276,6 +276,7 @@ export function useSideMenu(
           () => setPanelRefresh((n) => n + 1),
           (e: { message?: string }) => say(e.message ?? String(e), true),
         ),
+      panel,
     };
     const rail =
       termOpen && panelsRail === "shown" && offered.length > 0 ? (
