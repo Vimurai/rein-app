@@ -18,7 +18,7 @@ use crate::agents::AgentState;
 use crate::attention::{AttentionState, Lists, TabIn};
 use crate::config::ConfigService;
 use crate::ipc::Desktop;
-use crate::notify::{Notifier, Seen, Settings};
+use crate::notify::{Notifier, Raised, Seen, Settings, SystemLimit};
 use crate::panel_attention::Attention;
 use crate::status::{
     Facts, ProjectStatus, State as Status, card_agents, card_fields, home_fields, state,
@@ -46,6 +46,8 @@ pub struct StatusWatch {
     woken: Mutex<Option<Receiver<()>>>,
     /// The notifications (E-78): what each tab last raised, and the icon's count last set.
     notifier: Mutex<Notifier>,
+    /// Channel 3's one-per-project-per-minute limit (E-79).
+    system: Mutex<SystemLimit>,
     badge: Mutex<Option<Option<i64>>>,
 }
 
@@ -58,6 +60,7 @@ impl Default for StatusWatch {
             kick: Mutex::new(tx),
             woken: Mutex::new(Some(rx)),
             notifier: Mutex::new(Notifier::default()),
+            system: Mutex::new(SystemLimit::default()),
             badge: Mutex::new(None),
         }
     }
@@ -257,20 +260,25 @@ pub fn seen_of(d: &Desktop, all: &[ProjectStatus], now_s: u64) -> Vec<Seen> {
         .collect()
 }
 
-/// Channels 1 and 2 (component 6): the `notify` event for the toast; when the window is not
+/// Channels 1–3 (component 6): the `notify` event for the toast; when the window is not
 /// focused, one informational attention request per event; the count of Now items on the
 /// app's icon where the system has one (macOS, and Linux docks that read the launcher
-/// entry; Windows has none — `set_badge_count` is unsupported there).
+/// entry; Windows has none — `set_badge_count` is unsupported there); and, when the window is
+/// not focused or is hidden and `[notifications] system` is on, the system's own notification
+/// through the per-project limit (E-79).
 fn raise(
     app: &AppHandle,
     w: &StatusWatch,
     all: &[ProjectStatus],
     notes: Vec<crate::notify::Notification>,
+    settings: &Settings,
+    now: Instant,
 ) {
     let window = app.get_webview_window(crate::ipc::MAIN_WINDOW);
     let focused = window
         .as_ref()
         .is_some_and(|w| w.is_focused().unwrap_or(false) && w.is_visible().unwrap_or(true));
+    let mut raised = Vec::new();
     for n in notes {
         let _ = app.emit("notify", &n);
         let attention = !focused
@@ -278,16 +286,31 @@ fn raise(
                 win.request_user_attention(Some(tauri::UserAttentionType::Informational))
                     .is_ok()
             });
-        let folder = app
-            .state::<Desktop>()
-            .tab_project(n.tab)
-            .map(|p| crate::notify::folder_name(&p))
+        let project = app.state::<Desktop>().tab_project(n.tab);
+        let folder = project
+            .as_deref()
+            .map(crate::notify::folder_name)
             .unwrap_or_default();
         trace(&format!(
             "event={} tab={} project={folder} attention={attention}",
             n.event.name(),
             n.tab
         ));
+        if let Some(p) = project {
+            raised.push(Raised {
+                project: p.to_string_lossy().into_owned(),
+                folder,
+                sentence: n.sentence.clone(),
+            });
+        }
+    }
+    let texts = w.system.lock().unwrap_or_else(|e| e.into_inner()).step(
+        &raised,
+        settings.system && !focused,
+        now,
+    );
+    for text in texts {
+        crate::system_notify::show(app, &text);
     }
     let count = crate::notify::badge(all.iter().map(|s| s.now.len()).sum());
     if let (Some(c), Some(win)) = (w.badge_changed(count), &window) {
@@ -299,7 +322,7 @@ fn raise(
 /// Debug builds only: with `REIN_DESKTOP_TRACE_NOTIFY` set, one stderr line per notification
 /// raised and per change of the icon's count — the event, the tab, its folder name and whether
 /// the system took the request; never the sentence. A window run reads it (tests/e2e/notify-screens.sh).
-fn trace(what: &str) {
+pub fn trace(what: &str) {
     #[cfg(debug_assertions)]
     if crate::dirs::process_env("REIN_DESKTOP_TRACE_NOTIFY").is_some() {
         eprintln!("notify-trace {} {what}", wall_s());
@@ -359,7 +382,7 @@ pub fn spawn(app: AppHandle) {
                 a.reported.front(),
                 &settings,
             );
-            raise(&app, &w, &all, notes);
+            raise(&app, &w, &all, notes, &settings, now);
             for s in w.changed(all) {
                 let _ = app.emit("project_status", s);
             }

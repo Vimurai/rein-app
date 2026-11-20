@@ -48,7 +48,11 @@ pub fn notify_settings(v: &UiView) -> (crate::notify::Settings, u32) {
         .filter(|m| STUCK_AFTER_MIN.contains(m))
         .unwrap_or(10);
     (
-        crate::notify::Settings { enabled, events },
+        crate::notify::Settings {
+            enabled,
+            events,
+            system: v.notifications_system.value.as_bool().unwrap_or(true),
+        },
         stuck_min.saturating_mul(60),
     )
 }

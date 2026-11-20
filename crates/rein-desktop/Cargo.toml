@@ -34,6 +34,10 @@ sha2 = "0.11.1"
 # config.toml (E-37, D-043): the version Tauri's build already uses.
 toml = "1.2.1"
 tauri = { version = "2.11.6", default-features = false, features = ["wry", "x11", "compression"] }
+# The system's own notification (status.md §Components 6 channel 3, E-79; D-069 — the
+# operator's choice under dependency_gate, critic_security SEC_PASS): default features only
+# (zbus over the session bus on Linux, WinRT toasts on Windows, NSUserNotification on macOS).
+notify-rust = "4.19.0"
 
 [target.'cfg(unix)'.dependencies]
 # The master fd duplicated for writing without portable-pty's drop behaviour (pty_sys.rs);

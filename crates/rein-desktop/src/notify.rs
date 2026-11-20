@@ -76,6 +76,8 @@ pub struct Settings {
     pub enabled: bool,
     /// `[notifications] events`: the events that are raised.
     pub events: Vec<Event>,
+    /// `[notifications] system`: the operating system's own notification (channel 3, E-79).
+    pub system: bool,
 }
 
 impl Default for Settings {
@@ -83,7 +85,81 @@ impl Default for Settings {
         Self {
             enabled: true,
             events: Event::ALL.to_vec(),
+            system: true,
         }
+    }
+}
+
+/// At most one system notification per project in this long (component 6 limits).
+pub const SYSTEM_EVERY: Duration = Duration::from_secs(60);
+
+/// The system notification's limit (channel 3, E-79): one per project per [`SYSTEM_EVERY`];
+/// the events raised later in that minute become one merged sentence when it ends. Keyed by
+/// the project's path, so two tabs of one project share it.
+#[derive(Debug, Default)]
+pub struct SystemLimit {
+    projects: HashMap<String, Held>,
+}
+
+#[derive(Debug)]
+struct Held {
+    sent: Instant,
+    later: u32,
+    folder: String,
+}
+
+/// One raised notification as channel 3 sees it: whose project, its folder name, its sentence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Raised {
+    pub project: String,
+    pub folder: String,
+    pub sentence: String,
+}
+
+impl SystemLimit {
+    /// The texts to show now for `raised` (this poll's notifications) and for any minute that
+    /// has ended with events held. `show`: the window is not focused or is hidden, and
+    /// `[notifications] system` is on — otherwise nothing is shown and nothing is held.
+    pub fn step(&mut self, raised: &[Raised], show: bool, now: Instant) -> Vec<String> {
+        if !show {
+            self.projects.clear();
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        // A minute that has ended: its later events, merged.
+        for h in self.projects.values_mut() {
+            if h.later > 0 && now.duration_since(h.sent) >= SYSTEM_EVERY {
+                out.push(merged(&h.folder, h.later));
+                h.later = 0;
+                h.sent = now;
+            }
+        }
+        for r in raised {
+            match self.projects.get_mut(&r.project) {
+                Some(h) if now.duration_since(h.sent) < SYSTEM_EVERY => h.later += 1,
+                _ => {
+                    out.push(r.sentence.clone());
+                    self.projects.insert(
+                        r.project.clone(),
+                        Held {
+                            sent: now,
+                            later: 0,
+                            folder: r.folder.clone(),
+                        },
+                    );
+                }
+            }
+        }
+        out
+    }
+}
+
+/// The merged sentence: "<project>: <n> things need you." Only the folder name and a number.
+pub fn merged(folder: &str, n: u32) -> String {
+    if n == 1 {
+        format!("{folder}: 1 thing needs you.")
+    } else {
+        format!("{folder}: {n} things need you.")
     }
 }
 
@@ -496,6 +572,7 @@ mod tests {
             let s = Settings {
                 enabled: true,
                 events: Event::ALL.into_iter().filter(|e| *e != off).collect(),
+                system: true,
             };
             let mut n = Notifier::default();
             let t1 = opened(&mut n, t);
@@ -526,6 +603,119 @@ mod tests {
             full(&mut n, t, &Settings::default()).is_empty(),
             "not raised when switched back on"
         );
+    }
+
+    fn raised(project: &str, sentence: &str) -> Raised {
+        Raised {
+            project: project.into(),
+            folder: project.trim_start_matches('/').into(),
+            sentence: sentence.into(),
+        }
+    }
+
+    /// E-79: one system notification per project per 60 s; the later events of that minute
+    /// become one merged sentence when it ends; another project has its own minute.
+    #[test]
+    fn the_sixty_second_limit_and_the_merged_sentence() {
+        let mut l = SystemLimit::default();
+        let t = Instant::now();
+        let s = |d: u64| t + Duration::from_secs(d);
+        assert_eq!(
+            l.step(&[raised("/a", "a needs you.")], true, t),
+            ["a needs you."]
+        );
+        assert!(
+            l.step(&[raised("/a", "a: an agent has ended.")], true, s(10))
+                .is_empty()
+        );
+        assert!(
+            l.step(&[raised("/a", "a needs you.")], true, s(40))
+                .is_empty()
+        );
+        assert_eq!(
+            l.step(&[raised("/b", "b needs you.")], true, s(41)),
+            ["b needs you."],
+            "another project's minute"
+        );
+        assert!(
+            l.step(&[], true, s(59)).is_empty(),
+            "the minute has not ended"
+        );
+        assert_eq!(l.step(&[], true, s(60)), ["a: 2 things need you."]);
+        assert!(l.step(&[], true, s(70)).is_empty(), "merged once");
+        // The merged one starts a minute of its own.
+        assert!(
+            l.step(&[raised("/a", "a needs you.")], true, s(100))
+                .is_empty()
+        );
+        assert_eq!(l.step(&[], true, s(120)), ["a: 1 thing needs you."]);
+        assert_eq!(
+            l.step(&[raised("/a", "a needs you.")], true, s(181)),
+            ["a needs you."]
+        );
+    }
+
+    /// E-79: `system = false` (or the window in front) shows nothing and holds nothing.
+    #[test]
+    fn nothing_is_shown_while_switched_off_or_in_front() {
+        let mut l = SystemLimit::default();
+        let t = Instant::now();
+        assert!(l.step(&[raised("/a", "a needs you.")], false, t).is_empty());
+        assert_eq!(
+            l.step(
+                &[raised("/a", "a needs you.")],
+                true,
+                t + Duration::from_secs(1)
+            ),
+            ["a needs you."],
+            "nothing was held while off"
+        );
+        assert!(
+            l.step(&[raised("/a", "x")], true, t + Duration::from_secs(2))
+                .is_empty()
+        );
+        assert!(
+            l.step(&[], false, t + Duration::from_secs(61)).is_empty(),
+            "a held event is dropped once the window is in front"
+        );
+        assert_eq!(
+            l.step(
+                &[raised("/a", "a needs you.")],
+                true,
+                t + Duration::from_secs(62)
+            ),
+            ["a needs you."]
+        );
+    }
+
+    /// E-79 (status.md §Security): no notification text can hold text from a project file.
+    /// The builders take only the event, the folder name and a number; the folder name is the
+    /// only outside text, and every event's sentence is its fixed template around it.
+    /// D-069 condition 3: `<`, `&` and `"` in a folder name reach the text as they are (the
+    /// Windows toast sets it with `SetInnerText`, never as markup).
+    #[test]
+    fn the_system_text_holds_only_the_folder_name_and_a_number() {
+        let hostile = "<b &amp; \"x\">&lt;i";
+        let folder = folder_name(std::path::Path::new(&format!("/p/{hostile}")));
+        assert_eq!(folder, hostile);
+        for e in Event::ALL {
+            let text = sentence(e, &folder, 600);
+            let template = sentence(e, "\u{1}", 600);
+            assert_eq!(text, template.replace('\u{1}', &folder), "{e:?}");
+        }
+        assert_eq!(merged(&folder, 3), format!("{hostile}: 3 things need you."));
+        // A task title, a handoff line or a quote never has a way in: `Seen` carries the
+        // folder name, kinds, numbers and times only. A field added to it breaks this match
+        // until someone has looked at what it carries.
+        let Seen {
+            tab: _,
+            project: _,
+            now: _,
+            worked_s: _,
+            quiet_s: _,
+            last_output: _,
+            handoff_at: _,
+        }: Seen = Seen::default();
     }
 
     /// The sentences: fixed text, the folder name and a number only.

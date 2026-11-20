@@ -394,6 +394,10 @@ fn the_notification_settings_are_kept_closed_and_config_wins() {
     assert_eq!(again.notifications_system.value, Value::from(false));
     let (n, stuck) = notify_settings(&again);
     assert!(!n.enabled);
+    assert!(
+        !n.system,
+        "E-79: system off reaches the notifier's settings"
+    );
     assert_eq!(n.events, [Event::Stuck, Event::Ended]);
     assert_eq!(stuck, 180);
     for (field, value) in [

@@ -1,0 +1,21 @@
+# RustSec advisory-db 074ea9a 2026-11-19 against the crates E-79 adds to Cargo.lock (git diff HEAD -- Cargo.lock)
+async-trait 0.1.92 : none
+endi 1.1.1 : none
+futures-lite 2.6.1 : none
+mac-notification-sys 0.6.15 : none
+notify-rust 4.19.0 : none
+ordered-stream 0.2.0 : none
+parking 2.2.1 : none
+tauri-winrt-notification 0.8.1 : none
+uds_windows 1.2.1 : none
+windows 0.61.3 0.62.2 : advisories RUSTSEC-2022-0008.md 
+windows-collections 0.2.0 0.3.2 : none
+windows-future 0.2.1 0.3.2 : none
+windows-numerics 0.2.0 0.3.1 : none
+windows-threading 0.1.0 0.2.1 : none
+zbus 6.4.0 : none
+zbus_macros 6.4.0 : none
+zbus_utils 6.1.0 : none
+zcheapstr 1.3.0 : none
+zruntime 0.2.4 : none
+# windows RUSTSEC-2022-0008: patched >= 0.32.0 — the lock has the versions above: not affected

@@ -47,6 +47,7 @@ mod single_instance;
 mod single_instance;
 mod status;
 mod status_watch;
+mod system_notify;
 mod team;
 mod tmux_overlay;
 mod tmux_server;

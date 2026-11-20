@@ -1,0 +1,9 @@
+# notifyd (the stand-in server on the run's private session bus)
+ready
+notify id=1 app=rein-app summary=rein-app body=worker has stopped — it is finished or waiting.
+clicked id=1
+# the core's trace (REIN_DESKTOP_TRACE_NOTIFY)
+notify-trace 1795164167 badge=0 ok=true
+notify-trace 1795164222 event=stopped tab=1 project=worker attention=true
+notify-trace 1795164222 system shown
+notify-trace 1795164222 system clicked
