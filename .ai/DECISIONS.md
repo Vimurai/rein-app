@@ -2599,3 +2599,37 @@ The Engineer found that the activity tracker (E-76) starts a stretch at the firs
 
 ### Rollback
 Revert E-96's commit; `worked_s` reads short again and the window run goes back to a 40 s burst.
+
+## D-069 — Dependency gate (E-79): the crate for the system's own notification
+
+**Task**: E-79 (status.md §Components 6 channel 3, §Security; D-062). Written by the Engineer under `dependency_gate` (2026-11-20).
+**Decision**: Option 1 — `notify-rust` 4.19 with default features, used only from the core, under the four conditions below. Chosen by the operator 2026-11-20.
+
+### Why needed
+Channel 3 shows the operating system's own notification when the window is not focused or is hidden. The window has no way to do that today: the Tauri core offers attention requests and a badge (channel 2, E-78), not a notification.
+
+### Candidates (read from crates.io 2026-11-20 and the crates' own source)
+1. **`notify-rust` 4.19.0, default features** (MIT OR Apache-2.0; rust-version 1.89; maintained, the crate the official Tauri plugin wraps).
+   - Linux: the freedesktop notification service over D-Bus through `zbus` 6.4.0 (pure Rust, no libdbus; features `proxy` and `default-rt` only — the process-spawning `unixexec` transport is not compiled in). A local socket to the user's session bus; no TCP unless the user's own `DBUS_SESSION_BUS_ADDRESS` names one. A click arrives as the service's `ActionInvoked` signal.
+   - Windows: `tauri-winrt-notification` 0.8.1 → the WinRT `ToastNotificationManager` API in process (the `windows` crate, already in our tree). The only "powershell" in its source is a fallback AppUserModelID *string*; no process is started. A click arrives through the toast's activation callback.
+   - macOS: `mac-notification-sys` 0.6.15 → `NSUserNotificationCenter` in process, through an Objective-C file its `build.rs` compiles with `cc` (a clang at build time on macOS only; linked with AppKit). Its `get_bundle_identifier` runs an NSAppleScript lookup — not to be called. A click arrives as the notification's response.
+   - Source scan of the three crates (excluding examples): no `std::process`, no `Command::new`, no socket, no HTTP client.
+   - New crates over today's Cargo.lock (cargo tree of a throwaway crate, per target): Linux 11 (`zbus` 6, `zbus_macros`, `zbus_utils`, `zcheapstr`, `zruntime`, `endi`, `ordered-stream`, `async-trait`, `futures-lite`, `parking`, `notify-rust`); Windows 2 (`notify-rust`, `tauri-winrt-notification`); macOS 2 (`notify-rust`, `mac-notification-sys`).
+2. **`tauri-plugin-notification` 2.8.1** (official): wraps `notify-rust` 4.18 — same backends — and adds a JS API and permissions the window does not use (the core alone raises notifications; no command from the web side). It requires `tauri` 2.12; the window is on 2.11.6, so it forces a Tauri upgrade into this task.
+3. **Implement it ourselves**: `zbus` calls on Linux (the same 11 crates), WinRT toasts through the `windows` crate, `objc2` on macOS — three platform backends of our own to keep, for the code `notify-rust` already has.
+4. **No channel 3**: channels 1 and 2 (E-78) stand; a hidden window then has only the taskbar flash / dock bounce.
+
+### Security track record
+`critic_security` [SEC_PASS] (2026-11-20, E-79): no process spawning, no socket other than the Linux session bus, no file writes in the three crates; `tauri-winrt-notification` has no `unsafe`. Advisories not yet checked: `cargo audit` is not installed here — it runs on the change before the commit. The reviewer's judgement: the session-bus connection is local IPC, not network use. Text that reaches the system stays the app's fixed sentence with the folder name and a number (status.md §Security; E-79's sentence builder takes only the event, the folder name and a number).
+
+### Conditions (critic_security) if option 1 or 2 is chosen
+1. Windows: set an explicit AppUserModelID (the app's identifier), so the toast is not attributed to PowerShell.
+2. macOS: never call `get_bundle_identifier_or_default` (NSAppleScript); a fixed bundle id or the default.
+3. A test that a folder name holding `<`, `&` and `"` reaches the toast as text (the Windows toast is built through the XML DOM).
+4. `cargo audit` on the lockfile before the commit.
+
+### Engineer's recommendation
+Option 1, `notify-rust` with default features, used only from the core. It meets the three constraints on its face (no network, no shell, no new process on Windows), adds 2 crates on Windows and macOS, and does not pull a Tauri upgrade into E-79.
+
+### Rollback
+Remove the dependency and the channel-3 module in one revert; `[notifications] system = false` turns channel 3 off without a rebuild.

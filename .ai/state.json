@@ -1202,18 +1202,18 @@
     {
       "id": "E-80",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Build Home — a fixed first entry of the tab bar showing every project at a glance — per .ai/blueprints/status.md §Home H1-H5 (D-064). Operator direction 2026-11-17: \"home button at beginning of tabs on top bar; this should be the top system to check how everything is going\". After the tab-marks task (and the triage task, whose Now items it lists). Add the Home button (house icon, first, not closable, not movable, not numbered, carrying the count of Now items); the Home view replacing the start screen: summary line, \"Needs you now\" rows, one card per open project ordered by state and never moving under the pointer or keyboard focus, recent projects, the installation rows; the project card (mark and sentence, task in progress, whose turn, last handoff age and trigger, agents by role, task-count chips, Now count); the card fields on the project_status event from the summary source and the status script, with no new file read and no new IPC command; the action home.show (Ctrl+Shift+H, Space h, menu row) and tab.next / tab.prev cycling through Home; the side-menu rule H4; start-up rule H5. Going Home and back resizes or closes no pty. New code in its own files; shell.tsx must not grow. Acceptance: the web and core tests in §Home Tests; the window run with three fixture projects (a project that stops moves up and the Home badge counts it; no pty resize on return); 32 projects without a frame over 50 ms; screens in both themes at 1280×800 and one at 700 px — five projects in mixed states, none open, with \"Needs you now\" rows — every PNG opened before the handoff names it.",
       "created_at": "2026-11-17T18:25:46.506Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-19T10:09:49.037Z",
+      "summary": "Home (b0b0e7c): Home button first (Now count, not closable/numbered), home.show Ctrl+Shift+H / Space H, Home view (summary, Needs you now, held card grid, recent, installation), card …[full in LOG.md]",
       "depends_on": [
         "E-77"
       ],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-18T18:26:50.063Z"
+      "updated_at": "2026-11-19T10:09:49.037Z"
     },
     {
       "id": "E-81",
@@ -1440,30 +1440,30 @@
     {
       "id": "E-96",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Change where a stretch of work begins in the activity tracker, per .ai/blueprints/status.md §Components 1 \"Where a stretch of work begins\" (D-062 addendum 5). In crates/rein-desktop/src/activity.rs: when a sample sees new output and the window had been quiet 15 s or more by the previous sample, set the start to the previous sample's clock + 1 s, not earlier than 14 s before the output just read and not later than that output; the first sample of a tab and a client showing another window stay as they are. Change nothing in notify.rs. Then make the hidden case of tests/e2e/notify-screens.sh use a 20 s burst and remove the comment that explains 40 s. After the Home task (E-80), before the system-notification task (E-79). Acceptance: `cargo test -p rein-desktop activity` passes with scripted series showing (1) at a 15 s period a 20 s burst and a 15 s burst read worked_s >= 15 for every start offset 1..=15 s after a sample, and the same at a 5 s period for offsets 1..=5; (2) output seen by one sample alone reads worked_s <= 14 at a 5 s gap, a 15 s gap and a 3600 s gap between the two samples; (3) the existing series for a first sample and for another window are unchanged; `tests/e2e/notify-screens.sh` exits 0 in both themes with the hidden tab's burst at 20 s and its output line names stopped raised with the window hidden; hosted ci on all three systems and desktop-windows green on the commit.",
       "created_at": "2026-11-19T09:22:40.106Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-20T08:25:53.319Z",
+      "summary": "Stretch start (d6af628): a stretch begins at the previous sample + 1 s, clamped to [output − 14, output]; tests per offset at 5/15 s periods and one sighting ≤ 14 s; notify-screens.s …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-19T09:22:40.109Z"
+      "updated_at": "2026-11-20T08:25:53.319Z"
     },
     {
       "id": "E-97",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 1,
       "description": "Split crates/rein-desktop/ui/src/shell.tsx (1138 lines, over the 1000-line standard) into focused files beside it, moves only, per D-062 addendum 5 ruling 4 and the way E-83 split ipc.rs: no behaviour, name, prop, action id or test changes; pick the cohesive pieces yourself (the pieces Home will touch — the start screen and the tab-bar wiring — are the first candidates) and name them in the handoff. Do this BEFORE the first shell.tsx edit of the Home task (E-80); if E-80 work is already in the tree, commit the split first on its own. Acceptance: `wc -l crates/rein-desktop/ui/src/shell.tsx` prints 900 or less and no new file is over 500 lines; `npm test` in crates/rein-desktop/ui passes with the same test count as before the split (state both counts); the UI build (`npm run build`) exits 0; `git show --stat` of the commit lists only files under crates/rein-desktop/ui/src; one window harness run (tests/e2e/status-screens.sh) exits 0 on the split build.",
       "created_at": "2026-11-19T09:22:40.201Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-19T09:30:21.600Z",
+      "summary": "shell.tsx split, moves only (feb336a): 1138 → 886 lines; tab-bars.tsx 80, stage-cards.tsx 73, shell-overlays.tsx 214, open-tab.ts 45. npm test 115/115 before and after; npm run build …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-19T09:22:40.203Z"
+      "updated_at": "2026-11-19T09:30:21.600Z"
     }
   ],
   "stamps": [
@@ -4345,6 +4345,105 @@
       "timestamp": "2026-11-19T09:15:44.058Z",
       "summary": "[ACCEPT_PASS] E-78 at 5bab42c — 6 PASS, 0 FAIL, 0 UNVERIFIED\n1 | PASS | `cargo test -p rein-desktop notif` 9 pass; each_event_is_raised_once_and_not_again, stopped_*once_per_stop, handoff_* read\n2 | PASS | notify::tests::the_thirty_second_silence_after_a_tab_opens ok (asserts nothing at 29 s/31 s for pre-existing state)\n3 | PASS | notify::tests::settings_switch_each_event_off ok (loops Event::ALL, enabled=false); ui_store notification test ok\n4 | PASS | notify-screens.sh into mktemp exit 0 \"PASS\": \"ok worker raised stopped with the window shown\", both themes\n5 | PASS | same run: \"ok later raised stopped with the window hidden\", trace project=later attention=true, both themes\n6 | PASS | opened .ai/screens/E-78/notify-toast-{catppuccin-mocha,github-light}: toast \"worker has stopped — it is finished or waiting.\"",
       "sha": "5bab42cfa2a2f334ce6eb1c4a5e2c713ea64409d",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier1",
+      "task_id": "E-97",
+      "timestamp": "2026-11-19T09:27:04.666Z",
+      "summary": "[TIER_1] E-97 shell.tsx split, moves only: every removed line matches an added line (whitespace-insensitive); only extraction glue (imports, prop interfaces, spread calls, OpenTab export, UpdateSheetState); shell.tsx 886 (<=900), largest new file 214 (<500); 5 files all under crates/rein-desktop/ui/src; tsc --noEmit exit 0. Classifier suggested Tier 2 on file type only; Architect's Tier 1 kept.",
+      "sha": "843a9bea5ee1b0ad58d5624fb789ee42ce9c0226",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-80",
+      "timestamp": "2026-11-19T10:03:18.697Z",
+      "summary": "E-80: manual clean-code review of unstaged crates/rein-desktop diff PASS — shell.tsx 886 (not grown), no file >1000, new files all <=232 lines, no secret patterns, trace code cfg(debug_assertions)-gated with release stubs; attention.rs 930 near limit (warning-level, not blocking)",
+      "sha": "feb336a5c9f370fc40304011d4eb7486a3ad95ad",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint_aligner",
+      "task_id": "E-80",
+      "timestamp": "2026-11-19T10:04:16.247Z",
+      "summary": "E-80: Home H1-H5 aligned (manual alignment, unstaged tree). (1) Space H IN: the Interface contracts allow the nearest free key, and <leader> h is health.show; the handoff must name it. (2) 16-project frame run IN: the window caps at 16 (desktop.md:318); status.md:426 \"32\" is V12's record cap and needs an Architect fix. (3) Badge = Now count IN per H1/§4: quiet is not Now, and the ended fixture moves up and is counted; the Architect should clarify \"stops\". (4) Traces IN: everything is under cfg(debug_assertions) and release keeps no-op functions. (5) start=last gives Home with no restore, IN per H5. (6) shell.tsx 886 = HEAD. No new IPC or file read; Home is not closable, draggable or numbered; no pty resize on Home.",
+      "sha": "feb336a5c9f370fc40304011d4eb7486a3ad95ad",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-80",
+      "timestamp": "2026-11-19T10:04:35.425Z",
+      "summary": "[TIER_2] E-80 blueprint aligned (manual; align_diff saw no staged changes) + clean-code gate clear (CLEAN_PASS) — 0 blocking; notes: status.md:426 says 32 projects but window cap is 16 (Architect to fix text); 'a project that stops' read as ended (Now item) — Architect to confirm; handoff must name Space H for home.show; attention.rs 930 lines near limit",
+      "sha": "feb336a5c9f370fc40304011d4eb7486a3ad95ad",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ACCEPT_PASS",
+      "agent": "critic_acceptance",
+      "task_id": "E-80",
+      "timestamp": "2026-11-19T10:09:33.620Z",
+      "summary": "[ACCEPT_PASS] E-80 at b0b0e7c — 10 PASS, 0 FAIL, 0 UNVERIFIED\n1 | PASS | ui `npm test` exit 0, 124 pass; home.test.mjs 9/9\n2 | PASS | `cargo test -p rein-desktop` 224 pass 0 fail; home_card, card_fields, status_watch card ok\n3 | PASS | home-screens.sh exit 0, 5 projects; stopper moved above working when quiet (my PNG)\n4 | PASS | badge = Now items (H1): 1 ended (moved 4th->1st), 2 after bell; quiet stopper not counted\n5 | PASS | harness \"ok ... resizes no pty\" both themes; pty-trace emitted debug_trace.rs:42\n6 | PASS | 16 tabs (MAX_TABS, not 32): per-second max 16-21 ms, \"ok no frame over 50 ms\"\n7 | PASS | opened mocha + github-light 1280x800 PNGs (projects/stopped/needs-you/empty)\n8 | PASS | opened home-700-catppuccin-mocha.png: one column\n9 | PASS | 5 mixed states, empty=recents only, 2 Needs-you-now rows seen\n10 | PASS | opened all 12 E-80 PNGs; home-prev: Ctrl+Shift+Tab reached the terminal",
+      "sha": "b0b0e7c0e8e53837bab5d88d052b611641fd5514",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-96",
+      "timestamp": "2026-11-19T10:16:36.788Z",
+      "summary": "E-96 standards-checker PASS — 2 files clean (activity.rs, notify-screens.sh), 0 errors, 0 warnings, 5ms (used ~/.rein mirror; in-tree scripts/standards.mjs absent)",
+      "sha": "b0b0e7c0e8e53837bab5d88d052b611641fd5514",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint-aligner",
+      "task_id": "E-96",
+      "timestamp": "2026-11-19T10:16:40.484Z",
+      "summary": "E-96 aligned with status.md §Components 1 \"Where a stretch of work begins\" and D-062 addendum 5: activity.rs stretch_start = prev sample +1 s clamped to [output-14, output] only on new output after quiet >=15 s; first sample / other window still restart at output; notify.rs untouched; notify-screens.sh hidden burst 20 s, 40 s comment removed. align_diff WARN was ORPHANED_WORK (files not named in architect.md) only, covered by status.md blueprint. cargo test activity: 5 passed. No deviations.",
+      "sha": "b0b0e7c0e8e53837bab5d88d052b611641fd5514",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-96",
+      "timestamp": "2026-11-19T10:16:54.119Z",
+      "summary": "[TIER_2] E-96 Blueprint aligned + clean-code gate clear — ALIGN_PASS (align_diff WARN ORPHANED_WORK only: files governed by blueprints/status.md §Components 1, not architect.md), CLEAN_PASS 0 errors 0 warnings",
+      "sha": "b0b0e7c0e8e53837bab5d88d052b611641fd5514",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "critic_security",
+      "task_id": "E-79",
+      "timestamp": "2026-11-20T08:19:41.146Z",
+      "summary": "notify-rust 4.19.0 default features: no P0. No process spawn/network/file write in notify-rust, tauri-winrt-notification 0.8.1, mac-notification-sys 0.6.15 (only build.rs: macOS cc compile). Linux = zbus 6.4.0 (NOT 5 as D-069 says) over session-bus unix socket; unixexec/ibus features off. P1/P2 notes: D-069 zbus version wrong, macOS NSAppleScript only via get_bundle_identifier, cargo audit not run (not installed), TCP transport reachable only via DBUS_SESSION_BUS_ADDRESS.",
+      "sha": "d6af628f935bfc13d0017d3e19c921e34744a3fd",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ACCEPT_PASS",
+      "agent": "critic_acceptance",
+      "task_id": "E-96",
+      "timestamp": "2026-11-20T08:22:31.331Z",
+      "summary": "[ACCEPT_PASS] E-96 at d6af628 — 7 PASS, 0 FAIL, 0 UNVERIFIED\n1 | PASS | `cargo test -p rein-desktop activity` exit 0, 5 passed (4 activity:: tests + 1 agents::), 0 failed\n2 | PASS | work_of_fifteen_seconds_or_more_reads_fifteen_at_every_offset ok; asserts >=15 for (15,20),(15,15),(5,20),(5,15), offsets 1..=period\n3 | PASS | one_sighting_reads_at_most_fourteen_seconds ok; asserts worked_s<=14 for gaps 5, 15, 3600\n4 | PASS | another_window test byte-identical to d6af628^; scripted series first-sample row unchanged, only the new-stretch rows changed\n5 | PASS | notify-screens.sh (later = agent-burst 75 20, 40 s comment removed) EXIT=0, PASS in catppuccin-mocha and github-light\n6 | PASS | output line \"ok   later raised stopped with the window hidden\" in both themes\n7 | PASS | gh: ci 44504282013 success (ubuntu/windows/macos test jobs success), desktop-windows 44504281797 success on d6af628",
+      "sha": "d6af628f935bfc13d0017d3e19c921e34744a3fd",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier1",
+      "task_id": "E-79",
+      "timestamp": "2026-11-20T08:26:06.469Z",
+      "summary": "[TIER_1] D-069 dependency-gate record only (.ai/DECISIONS.md + bookkeeping views; no source): critic_security [SEC_PASS] on notify-rust 4.19 / tauri-winrt-notification 0.8.1 / mac-notification-sys 0.6.15 / zbus 6.4.0 — no process, no socket beyond the session bus, no file writes; its two factual corrections (zbus 6, macOS cc build) applied; four conditions recorded; operator chose option 1.",
+      "sha": "d6af628f935bfc13d0017d3e19c921e34744a3fd",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
