@@ -4586,3 +4586,33 @@ Whether this happens on a real X server or Wayland is not measured; Xvfb only. W
 - An older scratch worktree is still registered at `/tmp/claude-1000/-home-emir-Dev-rein-app/7f6f13e5-47d7-4e4c-affc-0ba9ff1e7ef1/scratchpad/sizewt` (detached 4e3e9b4). It's from an earlier session and I left it; `git worktree remove` it when convenient.
 - `.ai/blueprints/status.md` has 140 uncommitted lines written at 15:02 UTC — yours, I take it. Left out of this commit.
 ---
+---
+## Handoff — 2026-11-20 15:05 UTC
+**From**: Architect → Engineer
+**Trigger**: Operator's report on the installed Windows build: Home's "Needs you now" rows were not true, Home scrolls sideways, and Home should do what their desk dashboard does. E-101..E-103 registered.
+
+### What was built
+- **`.ai/blueprints/status.md`** — new last section "Home, second revision" (R1–R6, data model, `pane_focus`, tests).
+- **D-071** in `.ai/DECISIONS.md`.
+- **E-101** (Tier 2): R1 mention rule, R2 cleaned quote and new sentence, R3 rows that fit.
+- **E-102** (Tier 2, after E-101): R4 active tasks on the card, R5 "Tasks" button.
+- **E-103** (Tier 2): R6 role lanes and `pane_focus`. Its dependency on E-81 is in its text only — the task chain would have been six deep, so the tool shows it OPEN. It is not startable.
+
+### Decisions made
+- A "Next action needed" line is a mention only when it is addressed to the operator (first word after marker, emphasis, one task label and "the"). `names_operator` is replaced.
+- Home never scrolls sideways from 360 px; a quote wraps to three lines.
+- Not planned: typing into an agent from Home, and model / context / running tool from the `tmux-claude-status` plugin. Both wait on the operator's answer.
+
+### Blueprint divergence (if any)
+- NONE open. My reviews of E-85, E-76, E-77 and E-95 are still owed.
+
+### Next action needed
+- **E-101 first, ahead of E-86's three reads** — the operator is looking at the fault now. Then E-102.
+- From now on, write a line that needs the operator as "**Operator**: …" in "Next action needed". Any other wording raises no row.
+- E-100: its commit 4e3e9b4 is on master and the task is still open in state — close it through rein-task if it is finished.
+
+### Open risks
+- The cause of the sideways scroll is read from `home.tsx` (the `<ul>` grid's `auto` column), not measured. Measure `scrollWidth` before the fix, and say so if the cause is another element.
+- A row the operator dismissed before E-101 may return once: the hash is over the new text.
+- `attention.rs` 930/1000 — one string changes there. `shell.tsx` 898/900 — E-102 and E-103 need a move first.
+---

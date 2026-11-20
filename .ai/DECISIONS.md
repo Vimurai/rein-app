@@ -2707,3 +2707,40 @@ E-99 measured that Ctrl is not lost: WebKitGTK reports a Tab pressed with Shift 
 
 ### Rollback
 Revert E-100's commit.
+
+---
+
+## D-071 — A handoff line needs the operator only when it is addressed to them; Home fits its window and gains the desk dashboard's facts
+
+**Date**: 2026-11-20
+**Task**: E-101, E-102, E-103 (operator's report on the installed Windows build, 2026-11-20; blueprint `.ai/blueprints/status.md` "Home, second revision")
+**Decision**: A `mention` item is raised only for a "Next action needed" line addressed to the operator; Home never scrolls sideways; the Home card gains the active tasks, a Tasks button and, after E-81, one lane per agent role.
+
+### Why needed
+The operator saw "2 need you" for two projects where nothing waited on them: the rule matched the word "operator" anywhere in a line, and rein-app's row was an order to the Engineer ("… E-79 (operator), … E-6 (operator's keys)"). The same row made Home scroll sideways. The operator's own desk dashboard (Zebar `omarchy/dashboard.html` over `claude-desk/server.py`) is the model they want Home to follow.
+
+### Rulings
+1. **Addressed, not mentioned (E-101).** After the list marker, emphasis marks, one leading task label and an optional "the", the line's next word must be `operator` or `operators`. A handoff that wants the operator writes "**Operator**: …" (rein's handoffs already do).
+2. **The quote is cleaned** of its list marker, `**`, `__` and backticks; the sentence is "The last handoff asks the operator:".
+3. **Home never scrolls sideways** from 360 px wide; a long quote wraps to three lines.
+4. **From the desk dashboard, now:** the active tasks on the card and a way to the task board (E-102). **After E-81:** one lane per role with its waiting state, and a lane selects its pane through a closed command (E-103).
+5. **Typing into an agent from Home (Continue / Esc / a message) is not planned here.** It reverses "Home types into no terminal" (D-064) and is the operator's decision; it is asked of them and, on yes, becomes a Tier 3 task with `security_engineer`.
+6. **Model, context meter, running tool and background shells are not read from the `tmux-claude-status` plugin.** The app reads only rein's published pane options (`docs/app-contract.md` §6). On the operator's word a request goes to rein's Architect.
+
+### Alternatives considered
+1. **Move every mention to "For information"** — rejected: a line that does address the operator ("Operator: merge #61–#64") is the one thing in a handoff they must act on, and Info never notifies.
+2. **Drop mentions until E-81 gives the pane signal** — rejected: the two facts differ; a waiting agent and a request written in a handoff both exist.
+3. **Truncate the row to one line** — rejected: the quote is the content; one line of a 300-character request hides what is asked. Three wrapped lines and a tooltip show it.
+4. **Read the plugin's pane options as the desk dashboard does** — rejected: ruling 6; a second, unversioned contract with a program rein does not ship.
+5. **The addressed rule with cleaned text (chosen).**
+
+### Constraints driving this decision
+- Component 4's own rule: Now lists only what the operator can act on.
+- `attention.rs` 930/1000 lines, `shell.tsx` 898/900.
+
+### Impact
+- Unlocks: E-101, E-102; E-103 after E-81.
+- Risk if wrong: a request to the operator written mid-sentence ("then the operator signs") raises no row. The handoff's author is asked to lead with "Operator:"; the "Needs you" panel's handoff reader still shows the whole section.
+
+### Rollback
+Revert the task's commit; each is one commit.

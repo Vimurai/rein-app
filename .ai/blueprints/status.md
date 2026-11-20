@@ -529,3 +529,143 @@ Windows interop output).
 ### Task
 8. **E-81 (Tier 2)** — W1–W7. After the notifications task and Home, and only once
    rein's E-433 is merged and the Architect has named the commit.
+
+## Home, second revision — a true "needs you", rows that fit, and the desk dashboard's facts (2026-11-20, D-071)
+
+> Operator, 2026-11-20, on the installed Windows build with two projects open: (1) "this
+> needs me is not valid" — both "Needs you now" rows were handoff lines, and rein-app's
+> was addressed to the Engineer; (2) "has horizontal scroll which is ugly"; (3) "check on
+> windows using zebar how we build dashboard, I want similar functionality on our home".
+> The dashboard read is the operator's own `claude-desk/server.py` and
+> `omarchy/dashboard.html` under `C:\Users\Emir\.glzr\zebar\`.
+
+### Goal & architecture
+Home must say "needs you" only when the operator is asked for something, must fit its
+window at every width, and must show per project what the operator's desk dashboard
+shows: the tasks that are active and one lane per agent. It is for the operator who
+looks at Home to decide which project to go to. One sentence: **the row is true, the
+row fits, and the card says what each agent and the queue are doing.**
+
+### Core concept
+Two different facts were mixed in one list. **An agent waits for the operator** is a
+fact of the pane (rein's signal, E-81). **A handoff asks the operator for something** is
+a line of text addressed to them. A line that only contains the word "operator" is
+neither. The desk dashboard is believed because its "needs you" is a pane state, never a
+text search; Home gets the same footing: the `waiting` item when E-81 lands, and a
+`mention` only for a line addressed to the operator.
+
+### What went wrong (measured from the screenshot and the code)
+- `panel_attention.rs::names_operator` is true for any line of "Next action needed" that
+  holds the word. The row shown was "- **Close E-99, then E-100.** After it the queue
+  holds only tasks that wait: E-79 (operator), … E-6 (operator's keys)" — an order to
+  the Engineer that names the operator twice in passing.
+- The quote is shown as written, with its list dash and `**`.
+- `home.tsx` `NeedsYouNow`: the `<ul>` is a grid whose one column is `auto`, so a long
+  row makes the track as wide as its text; `truncate` on the inner span never applies
+  and `#home` (only `overflow-y-auto`) scrolls sideways.
+
+### Components
+R1. **Mention rule (core, `panel_attention.rs`)** — a line of the last handoff's "Next
+   action needed" is a mention only when it is **addressed to the operator**. Take the
+   line; remove a leading list marker (`-`, `*`, `+`, or digits with `.` or `)`), then
+   every leading `*`, `_`, `` ` `` and space; remove one leading task label (a task id
+   in the `[A-Z]-[0-9]{1,6}` shape followed by `:`, with emphasis marks around it);
+   remove an optional leading "the " (any case). It is a mention when the next word is
+   `operator` or `operators` (any case). Examples that count: "- **Operator**: merge
+   #61–#64 after #60", "Operator — sign the tag", "- **E-79:** the operator installs the
+   build". Examples that do not: "E-79 (operator)", "tasks that wait on the operator's
+   keys", "Close E-99 … E-6 (operator's keys)". `names_operator` is replaced, not kept
+   beside it.
+R2. **Mention text (core)** — the quote is the line without its list marker and with
+   `**`, `__` and backticks removed (the words stay), cut at 300 characters as today.
+   The sentence becomes "The last handoff asks the operator:". The dismissal hash is
+   over the new text, so a row dismissed before this build may return once.
+R3. **Rows that fit (web, `home.tsx`)** — Home never scrolls sideways, at any window
+   width from 360 px. A "Needs you now" row is: the bell, the project name and the
+   app's sentence on the first line; the quote under it, wrapped, at most three lines,
+   then an ellipsis; Dismiss stays at the right, top-aligned. The whole quote is the
+   row's tooltip and stays readable in the "Needs you" panel as today. Every grid and
+   flex child on Home that holds project text can shrink (`min-width: 0`), and the
+   single column is `minmax(0, 1fr)`. The same check covers the cards and the recent
+   rows: a 200-character project name, trigger or path is cut, not scrolled.
+R4. **Active tasks on the card (core + web)** — under the "In progress / No task in
+   progress" line the card lists up to three tasks: `IN_PROGRESS` first, then `OPEN`,
+   then `BLOCKED`, newest first inside a status (the desk dashboard's order), each
+   "<id> <title cut to one line>" with a mark for its status told by shape as well as
+   colour. The in-progress task is not repeated. None when `state.json` is not read.
+R5. **Chips open the board (web)** — the three chips become one button, "Tasks", beside
+   them: it goes to the project's tab with the Tasks panel open (the existing panel;
+   no new view). The card itself still goes to the tab. Keyboard: the button is the
+   card's second tab stop.
+R6. **Role lanes (core + web; after E-81)** — the agents line of the card becomes one
+   lane per role: role, state ("waiting for approval", "asked a question", "running",
+   "ended", "unknown") and, while waiting, "for <age>" from `since`. A waiting lane has
+   the `needs_you` mark. Selecting a lane goes to the tab **and makes that role's pane
+   the active pane** in the app's tmux server (a closed command; see API). Lanes are in
+   the order Engineer, Architect, then other roles by name.
+
+Not in this revision, and why:
+- **Continue / Esc / a typed message to an agent from Home** (the desk dashboard's
+  `/send`). It types into a terminal, which Home's Security section forbids today; it
+  is the operator's decision and is asked of them (D-071 r5). Not planned until yes.
+- **Model, context meter, the tool running now, background shells.** The desk dashboard
+  reads them from the `tmux-claude-status` plugin's pane options, which are not rein's
+  contract. The app reads only what `docs/app-contract.md` §6 publishes; a request to
+  rein's Architect is the way, sent when the operator confirms they want them on Home.
+- **Chime.** Notifications (E-78, E-79) already cover it.
+- **Start a project.** Home's recent rows and `Open a project…` already do.
+- **Slot numbers 1–9 per pane.** Tab numbers and `tab.goto` exist; a lane is reached
+  through its card.
+
+### Data model
+```
+Attention.mentions: [String]        unchanged shape; fewer lines, cleaned text (R1, R2)
+ProjectCard += active: [{ id: String (≤ 40), title: String (≤ 120, one line),
+                          status: in_progress | open | blocked }]      (≤ 3; R4)
+ProjectCard.agents (after E-81) = E-81's roles: [{ role, state: running | ended |
+                          unknown | waiting, kind, since, reports }]    (R6)
+```
+Nothing is stored; nothing is written to a project.
+
+### API / interface contracts
+- No new command for R1–R5: the card fields ride the `project_status` event; the Tasks
+  button uses the existing tab switch and panel-open actions.
+- **Command `pane_focus(tab, role)`** (R6) — `tab` is a core tab id; `role` must equal a
+  role the core last sent for that tab. The core runs `select-pane` on the app's own
+  tmux server for the pane id it holds for that role. Anything else answers the fixed
+  sentence "that agent is not in the list". No pane id, path or text comes from the web
+  side.
+
+### Security
+R1–R5 read no new file and add no command, process or network use. Mention lines are
+project text: cleaned and cut by the core, drawn as text nodes; the cleaning removes
+characters and never interprets markdown. R6 adds one tmux verb with a pane id the core
+already holds, chosen by a role name compared for equality with the core's own list —
+the web side cannot name a pane. Home still types into no terminal.
+
+### Execution constraints
+- R1–R2 run inside the existing 5 s facts read; at most 20 lines of 300 characters.
+- R3–R5 add no poll, timer or animation. The 16-project frame figure of E-80 holds.
+- `attention.rs` is at 930 of 1000 lines: its change is the one sentence. `shell.tsx`
+  is at 898 of 900: R5 and R6 must not add a line to it without first moving something
+  out (moves only, as E-97).
+
+### Tests
+- Core table test for R1 with every example above, plus: a numbered marker, a nested
+  emphasis (`***Operator***`), "Operators:", "operator's keys" first on the line (not a
+  mention: the word is `operator` followed by `'s` — count only when the word ends
+  there), an empty line, a 2000-character line. R2: markers gone, words kept.
+- Core: `active` order and cap; none without `state.json`.
+- Web: the row model (sentence, quote, tooltip); the Tasks button's action.
+- Window run: Home with a 300-character quote at 1280, 700 and 360 px wide —
+  `scrollWidth` equals `clientWidth` on `#home` and on the document, read and printed.
+- Screens (D-052): the three widths, both themes at 1280. The Architect opens each.
+
+### Rollback
+Each task is one commit and reverts alone. Reverting R1 brings the wide rule back; no
+stored state depends on it beyond dismissal hashes, which only hide rows.
+
+### Tasks
+9. **E-101 (Tier 2)** — R1, R2, R3.
+10. **E-102 (Tier 2)** — R4, R5. After E-101.
+11. **E-103 (Tier 2)** — R6. After E-81.
