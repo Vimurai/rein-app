@@ -1,0 +1,22 @@
+/tmp/claude-1000/-home-emir-Dev-rein-app/7f6f13e5-47d7-4e4c-affc-0ba9ff1e7ef1/scratchpad/hs.nHGgwG
+[catppuccin-mocha 1280x800]
+  ok   Ctrl+Shift+Tab runs tab.prev from the first tab (Home)
+  ok   going to a tab from Home and back resizes no pty
+  ok   Ctrl+Shift+H shows Home from a set-up tab
+  ok   Ctrl+Tab leaves a set-up tab for the next tab
+  ok   Enter on the card presses its focused button (Close tab)
+[github-light 1280x800]
+  ok   Ctrl+Shift+Tab runs tab.prev from the first tab (Home)
+  ok   going to a tab from Home and back resizes no pty
+  ok   Ctrl+Shift+H shows Home from a set-up tab
+  ok   Ctrl+Tab leaves a set-up tab for the next tab
+  ok   Enter on the card presses its focused button (Close tab)
+[16 projects]
+  tabs: 16
+  frame-trace on Home (per second, after the switch): 17 17 25 18 17 17 23 17 17 17 17 17 17 17 17 19 17 17 17 22 17 17 20 17 17 17 
+  the switch to Home: 17 ms
+  ok   16 open projects on Home: no frame over 50 ms
+PASS: screens in /tmp/claude-1000/-home-emir-Dev-rein-app/7f6f13e5-47d7-4e4c-affc-0ba9ff1e7ef1/scratchpad/hs.nHGgwG
+exit=
+
+[exited with code 0]

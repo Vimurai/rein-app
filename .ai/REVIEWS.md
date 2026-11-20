@@ -416,3 +416,5 @@
 6 | PASS | same run: "ok Ctrl+Tab leaves a set-up tab for the next tab" in catppuccin-mocha and github-light
 7 | PASS | same run: "ok Enter on the card presses its focused button (Close tab)" in both themes
 8 | PASS | 3c98f1d own runs cancelled; HEAD 4f2472e (ancestor ok, diff no ui/src) ci 44726375856 ubuntu/win/mac + desktop-windows success
+[CRITIC_STAMP] 2026-11-20 | 6d82d34 emirkovacevic@protonmail.com | [TIER_1] HEAD 6d82d34 + staged E-100 (keys.ts, modes.test.mjs, home-screens.sh only): keyName reads code only for key Unidentified + code Tab; npm test 127/127, tsc clean, bash -n ok; no binding change, shell.tsx untouched. home-screens.sh PASS and key-fields.sh way 1 = C-S-Tab locally.
+[CRITIC_STAMP] 2026-11-20 | 4e3e9b4 emirkovacevic@protonmail.com | [TIER_1] HEAD 4e3e9b4 + staged .ai bookkeeping only (COMM.md handoff, E-100 DONE views, .ai/screens/E-100 evidence); no source, no blueprint. run_review tier 1 SKIP.

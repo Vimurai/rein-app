@@ -4544,3 +4544,45 @@ Whether this happens on a real X server or Wayland is not measured; Xvfb only. W
 - The fallback is measured on Xvfb only. A real X or Wayland desktop and WebView2 are unobserved; the operator is asked to press Ctrl+Shift+Tab once on the installed Windows build during the E-79 sighting.
 - Windows: a toast under an AppUserModelID with no Start-menu shortcut that carries it may not be shown. If the operator sees none, that is the first thing to check, before the code.
 ---
+## Handoff — 2026-11-20 15:02 UTC
+**From**: Engineer → Architect
+**Trigger**: E-100 DONE; E-86's three reads (updates.md component 3) reported. No code written for E-86.
+
+### What was built
+- **E-100** (4e3e9b4): `keys.ts` keyName reads `code` only for key "Unidentified" + code "Tab" (C-S-Tab, S-Tab); `modes.test.mjs` cases incl. Unidentified/Unidentified and Unidentified/KeyA → no token; `home-screens.sh` tab.prev-by-key line. Stat: keys.ts, its test, the harness only; shell.tsx untouched (898/900).
+  - `npm test` 127/127. `tests/e2e/key-fields.sh` way 1: `1 key ctrl+shift+Tab  Unidentified  Tab  true  true  false  C-S-Tab`.
+  - `home-screens.sh` exit 0: `ok   Ctrl+Shift+Tab runs tab.prev from the first tab (Home)` in catppuccin-mocha and github-light.
+  - Hosted ci 44753433233 (macOS / Ubuntu / Windows) and desktop-windows 44753433244 success; local `rein ci` PASS 4e3e9b4. Evidence: `.ai/screens/E-100/`.
+
+### E-86 reads (component 3) — no write made
+**(a) rein-release's fetch and verify on native Windows: BUILDS AND RUNS — with one part unobserved.**
+- Hosted ci 44753433233, job test (windows-latest), MSVC: `rein-release` compiles and its tests pass natively, including `tests\fetch_release.rs` (`fetched_release_verifies_end_to_end ... ok`, 4/4), `tests\verify_release.rs` (5/5) and the fetch unit tests (`github_policy_allows_only_https_release_hosts`, `copy_capped_refuses_oversize_bodies`).
+- Unobserved: those fetches are plain HTTP to loopback. A real HTTPS GET to github.com from a native Windows exe (rustls + rustls-platform-verifier → the Windows certificate store) has not been run. That needs a Windows build; this machine has no MSVC linker. The first E-86 test run on windows-latest can show it.
+- What fits as is: `ReqwestHttp` + `HostPolicy::github()` (github.com and both asset CDNs, HTTPS only, redirects checked), `Http::download` with a byte cap, `MinisignVerifier::from_pub_file` (a second baked key slots in). What does not: the client has one fixed 15-min timeout (the check wants 20 s, so a constructor argument is needed); progress and Cancel have no hook (a counting/cancelling `Write` wrapper passed to `download` covers both without changing the trait); `fetch_release`/`ReleaseSource` are shaped for rein's tarball and are not reused.
+- Using it in the window adds 39 crates to rein-desktop's Windows tree, **no new crate in Cargo.lock** (lock diff: one `"rein-release"` line in rein-desktop's deps). New in the window: reqwest, hyper/hyper-util/hyper-rustls, rustls, rustls-webpki, rustls-platform-verifier, **aws-lc-rs / aws-lc-sys** (C crypto), tower*, futures-*, tar, filetime, minisign-verify, others small.
+
+**(b) Tauri NSIS flags** (read from the installer template inside tauri-cli 2.11.5, the version the workflow runs):
+- `/P` passive: progress UI, no questions, page auto-closes. `/S` silent (standard NSIS). `/UPDATE`: skips re-creating shortcuts and the "uninstall the old version" page. `/NS`: no shortcuts. `/R`: relaunch after success, **only honoured with /P or /S**; `/ARGS "<args>"` passes arguments to it. The relaunch is `nsis_tauri_utils::RunAsUser "$INSTDIR\rein-desktop.exe"` — not elevated.
+- **A running window is replaced by force.** In section Install, `CheckIfAppIsRunning` finds `rein-desktop.exe` for the current user (`FindProcessCurrentUser`, installMode currentUser). Under /P or /S it **kills it without asking** (`KillProcessCurrentUser`, Sleep 500), and aborts the install if the kill fails. So the window must quit by itself before the installer reaches that point (component 3's "start it … → exit the window"); the kill is only the fallback, and a killed window skips its ordinary quit (V12 save).
+- Proposed constant argv: `/P /UPDATE /R`. Passive shows the operator progress; silent would show nothing if the window is already gone. Not run on Windows yet — the one real run is in E-86's acceptance.
+- Downgrade: with allowDowngrades false, the template aborts a *silent* downgrade only. A passive run has its own check — the app's "no downgrade" rule (offer only a higher version) stays the guard.
+
+**(c) Size** — measured on Linux as a proxy (no Windows linker here); release profile = Cargo defaults (no LTO, workspace has no `[profile.release]`):
+- `rein-desktop` release at 4e3e9b4: **19,117,232 B**. With rein-release linked and a probe that calls `ReqwestHttp::download`, `MinisignVerifier::verify` and sha256 (kept live behind an env var): **25,381,752 B**. **+6,264,520 B (+6.0 MiB, +33 %).** Scratch worktree only, removed; nothing committed.
+- Most of the increase will be aws-lc + rustls + hyper. The Windows figure will differ (the platform verifier uses CryptoAPI there); the actual .exe figure comes from E-86's first desktop-windows run.
+
+### Decisions made
+- None. Every point above is a read.
+
+### Blueprint divergence (if any)
+- NONE in code. Two points for your ruling before E-86's first write: (1) the installer kills a still-running window under /P — confirm "the window exits first, then the installer runs" as the order, or rule a wait; (2) accept +~6 MiB, or rule `rustls` with the `ring` provider instead of aws-lc. That changes reqwest's features for the CLI too and needs dependency_gate.
+
+### Next action needed
+- Rule on (a)–(c) and the two points. E-86 stays OPEN; (a) did not fail, so no STOP.
+- Queue: everything else waits — E-79 (operator sightings), E-81 (rein E-433), E-87/E-88/E-6 (keys / E-86).
+
+### Open risks
+- Native-Windows HTTPS (the platform verifier against the system store) is unobserved; see (a).
+- An older scratch worktree is still registered at `/tmp/claude-1000/-home-emir-Dev-rein-app/7f6f13e5-47d7-4e4c-affc-0ba9ff1e7ef1/scratchpad/sizewt` (detached 4e3e9b4). It's from an earlier session and I left it; `git worktree remove` it when convenient.
+- `.ai/blueprints/status.md` has 140 uncommitted lines written at 15:02 UTC — yours, I take it. Left out of this commit.
+---

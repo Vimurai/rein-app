@@ -1482,30 +1482,76 @@
     {
       "id": "E-99",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 1,
       "description": "Measure whether Ctrl+Shift+Tab reaches the page with Ctrl, per D-070 ruling 2 (.ai/DECISIONS.md) and .ai/blueprints/desktop.md line 100 (the simple style's tab keys). Read first, change no binding: in a debug build print the keydown fields the page receives (key, code, ctrlKey, shiftKey, and the token keys.ts keyName gives) and record them on Xvfb for the key sent two ways — the harness's present way and with the keysym ISO_Left_Tab under Ctrl (xdotool key ctrl+ISO_Left_Tab, and with Shift held by keydown/keyup) — and for Ctrl+Tab and Ctrl+Shift+H as controls. Then: (a) if any way arrives as C-S-Tab, the fault is the harness — fix the harness helper and add a tab.prev-by-key line to tests/e2e/home-screens.sh; (b) if none does, STOP and hand back the table of fields; the Architect rules the binding. After the set-up-card task (E-98). Acceptance: the handoff holds the table of fields for each way of sending, read from the trace output of one named harness run; for (a) `tests/e2e/home-screens.sh` exits 0 with a line showing tab.prev ran from the key, and `git show --stat` lists no file under ui/src other than a debug-only trace; for (b) no source file other than the debug trace is changed and the task is handed back open.",
       "created_at": "2026-11-20T08:29:00.900Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-20T14:18:08.258Z",
+      "summary": "Outcome (b): on Xvfb Ctrl+Shift+Tab arrives key=Unidentified code=Tab ctrl+shift true; table in .ai/screens/E-99/key-fields.txt (4f2472e). Fix ruled as E-100 (D-070 addendum 1).",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-20T08:29:00.901Z"
+      "updated_at": "2026-11-20T14:18:08.258Z"
     },
     {
       "id": "E-100",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 1,
       "description": "Name a Tab pressed with Shift from its physical key, per .ai/blueprints/desktop.md \"Shift+Tab on Linux\" (D-070 addendum 1). In crates/rein-desktop/ui/src/keys.ts make keyName treat an event whose key is \"Unidentified\" and whose code is \"Tab\" as the Tab key (so Ctrl+Shift gives C-S-Tab and Shift alone gives S-Tab); every other \"Unidentified\" key still gives no token; read code in no other new case. Change no binding and do not touch shell.tsx. Then add a tab.prev-by-key line to tests/e2e/home-screens.sh. Close E-99 first on its measurement (outcome (b) is its deliverable). Acceptance: `npm test` in crates/rein-desktop/ui passes with keyName cases for {key Unidentified, code Tab} with Ctrl+Shift (C-S-Tab), with Shift alone (S-Tab), and for {key Unidentified, code Unidentified} and {key Unidentified, code KeyA} (no token); `tests/e2e/key-fields.sh` run locally prints the token C-S-Tab for way 1 and the handoff quotes that line; `tests/e2e/home-screens.sh` exits 0 with a line showing tab.prev ran from Ctrl+Shift+Tab; `git diff --stat` for the commit lists keys.ts, its test and the harness only; hosted ci on all three systems green.",
       "created_at": "2026-11-20T14:17:48.483Z",
+      "completed_at": "2026-11-20T14:57:47.048Z",
+      "summary": "keyName reads code only for key Unidentified + code Tab (4e3e9b4): C-S-Tab / S-Tab; npm test 127/127; key-fields.sh way 1 = C-S-Tab; home-screens.sh exit 0 \"ok Ctrl+Shift+Tab runs ta …[full in LOG.md]",
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-20T14:57:47.050Z"
+    },
+    {
+      "id": "E-101",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Fix Home's false \"needs you\" rows and its sideways scroll, per .ai/blueprints/status.md \"Home, second revision\" R1, R2, R3 (D-071). R1: replace panel_attention.rs::names_operator with the addressed-to-the-operator rule (strip list marker, emphasis marks, one leading task label, an optional \"the\"; the next word must be operator/operators). R2: the quote loses its list marker, `**`, `__` and backticks; the sentence in attention.rs becomes \"The last handoff asks the operator:\" (attention.rs is at 930/1000 lines — change that one string only). R3: a \"Needs you now\" row never widens Home — sentence on the first line, the quote wrapped under it to at most three lines, full quote as tooltip; every text-holding grid/flex child on Home can shrink. Do not touch shell.tsx (898/900). Acceptance: (1) `cargo test -p rein-desktop panel_attention` passes with a table test holding every example of R1 and the Tests list (the E-99/E-100 line \"Close E-99, then E-100 … E-6 (operator's keys)\" gives no mention; \"- **Operator**: merge #61–#64 after #60\" gives one whose text has no dash and no asterisk); (2) the window run prints `scrollWidth` and `clientWidth` of `#home` and of the document with a 300-character quote at 1280, 700 and 360 px wide, and the two are equal at each width; (3) screenshots under .ai/screens/E-101/ at the three widths, both themes at 1280, each opened before the handoff names it; (4) the ui test suite (`npm test` in crates/rein-desktop/ui) passes with the row model test; (5) hosted ci green on the commit.",
+      "created_at": "2026-11-20T15:02:39.504Z",
       "completed_at": null,
       "summary": null,
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-20T14:17:48.484Z"
+      "updated_at": "2026-11-20T15:02:39.506Z"
+    },
+    {
+      "id": "E-102",
+      "owner": "Engineer (Claude)",
+      "status": "BLOCKED",
+      "tier": 2,
+      "description": "Show the active tasks on each Home card and add a \"Tasks\" button that opens the project's board, per .ai/blueprints/status.md \"Home, second revision\" R4, R5 and §Data model `active` (D-071). R4: the core adds `active` (at most three tasks: IN_PROGRESS, then OPEN, then BLOCKED, newest first within a status; id ≤ 40, title one line ≤ 120) to the card fields of the `project_status` event; the card lists them under the in-progress line with a status mark told by shape as well as colour, and does not repeat the in-progress task. R5: a \"Tasks\" button beside the chips goes to the project's tab with the Tasks panel open, through the existing actions; no new IPC command. shell.tsx is at 898/900 lines — add nothing to it without first moving something out (moves only). Acceptance: (1) `cargo test -p rein-desktop` passes with a core test of `active` order, the cap of three, and no `active` when state.json is not read; (2) `npm test` in crates/rein-desktop/ui passes with a test that the Tasks button switches to the tab and opens the Tasks panel, by pointer and by keyboard; (3) screenshots under .ai/screens/E-102/ of Home with a project that has an in-progress, an open and a blocked task, both themes at 1280×800 and one at 700 px wide, each opened before the handoff names it; (4) the window run of E-101 still prints equal `scrollWidth` and `clientWidth` for `#home` with a 200-character task title; (5) hosted ci green on the commit.",
+      "created_at": "2026-11-20T15:02:46.434Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [
+        "E-101"
+      ],
+      "ready": false,
+      "blocked_by": [
+        "E-101"
+      ],
+      "updated_at": "2026-11-20T15:02:46.434Z"
+    },
+    {
+      "id": "E-103",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "DO NOT START until E-81 is DONE (the dependency is written here because the chain would be six deep). Draw one lane per agent role on each Home card and let a lane select that role's pane, per .ai/blueprints/status.md \"Home, second revision\" R6 and §API `pane_focus` (D-071). E-81 supplies `roles` with running / ended / unknown / waiting, kind and since. Each lane shows the role, its state sentence and, while waiting, \"for <age>\"; a waiting lane carries the needs_you mark; order Engineer, Architect, then other roles by name. Add the closed command `pane_focus(tab, role)`: the role must equal one the core last sent for that tab; the core runs select-pane on the app's own tmux server for the pane id it holds; anything else answers \"that agent is not in the list\". No pane id, path or text is taken from the web side, and Home still types into no terminal. Run skill trigger-audit first; shell.tsx is at 898/900 lines — moves only before any addition. Acceptance: (1) `cargo test -p rein-desktop` passes with tests that `pane_focus` refuses an unknown role, a role of another tab and a role string holding tmux target characters with the fixed sentence, and that the accepted call runs only the verb select-pane; (2) a real-tmux run on Linux sets rein's three pane options on a fixture pane, selects the lane, and prints the active pane id before and after — it is the role's pane after; (3) `npm test` in crates/rein-desktop/ui passes with the lane order and sentences test; (4) screenshots under .ai/screens/E-103/ of a card with a waiting Engineer and a running Architect, both themes, each opened before the handoff names it; (5) hosted ci green on the commit, with the Windows interop output of the real-tmux step shown.",
+      "created_at": "2026-11-20T15:03:13.781Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-20T15:03:13.781Z"
     }
   ],
   "stamps": [
@@ -4594,6 +4640,24 @@
       "timestamp": "2026-11-20T14:15:58.361Z",
       "summary": "[ACCEPT_PASS] E-98 at 4f2472e — 8 PASS, 0 FAIL, 0 UNVERIFIED\n1 | PASS | `npm test` in ui exit 0, 127 pass 0 fail; card-keys test: C-Tab,C-S-Tab,M-2,C-S-h,C-S-p,C-S-o give action, simple+modal\n2 | PASS | same test file: Tab, S-Tab, Enter, Space, Esc, a, q, 1 give \"card\" (no action) in both styles; passed\n3 | PASS | card-keys test \"with a real overlay open (the picker)\": chords+Tab/Enter/a give \"overlay\"; passed; shell.tsx:747 uses cardKey\n4 | PASS | `wc -l ui/src/shell.tsx` prints 898\n5 | PASS | home-screens.sh (extended) exit 0, \"PASS: screens\"; \"ok Ctrl+Shift+H shows Home from a set-up tab\" in both themes\n6 | PASS | same run: \"ok Ctrl+Tab leaves a set-up tab for the next tab\" in catppuccin-mocha and github-light\n7 | PASS | same run: \"ok Enter on the card presses its focused button (Close tab)\" in both themes\n8 | PASS | 3c98f1d own runs cancelled; HEAD 4f2472e (ancestor ok, diff no ui/src) ci 44726375856 ubuntu/win/mac + desktop-windows success",
       "sha": "4f2472e2a5f417779a433229d61de1cafcd14992",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier1",
+      "task_id": "E-100",
+      "timestamp": "2026-11-20T14:25:29.903Z",
+      "summary": "[TIER_1] HEAD 6d82d34 + staged E-100 (keys.ts, modes.test.mjs, home-screens.sh only): keyName reads code only for key Unidentified + code Tab; npm test 127/127, tsc clean, bash -n ok; no binding change, shell.tsx untouched. home-screens.sh PASS and key-fields.sh way 1 = C-S-Tab locally.",
+      "sha": "6d82d34c711782345ae11b3466217b1ce13447e1",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "Claude (Engineer)",
+      "task_id": "E-100",
+      "timestamp": "2026-11-20T15:03:11.676Z",
+      "summary": "[TIER_1] HEAD 4e3e9b4 + staged .ai bookkeeping only (COMM.md handoff, E-100 DONE views, .ai/screens/E-100 evidence); no source, no blueprint. run_review tier 1 SKIP.",
+      "sha": "4e3e9b41e80818544aef1898aa07057c7d1bc667",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
