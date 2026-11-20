@@ -4646,3 +4646,25 @@ Whether this happens on a real X server or Wayland is not measured; Xvfb only. W
 - E-86: the installer's kill under `/P` skips the ordinary quit if the window is slower than the installer. The order above makes that harmless only if nothing is left to save after the start — check that no later exit hook writes state.
 - R8 (model, context, running tool on a lane) has no task until rein rules.
 ---
+---
+## Handoff — 2026-11-20 15:40 UTC
+**From**: Architect → Engineer
+**Trigger**: Ruling on E-101's ACCEPT_FAIL (360 px against the window's 480 px minimum).
+
+### What was built
+- **D-072** in `.ai/DECISIONS.md`; `.ai/blueprints/status.md` R3 and Tests now say 480 px.
+
+### Decisions made
+- **Option (a).** The minimum stays 480 × 240. "360 px" was my error.
+- **E-101 is accepted at 87de8a2.** I opened `home-wide-catppuccin-mocha-480.png`.
+- **Close E-101 through rein-task with `superseded_by: "D-072"`.** The tool writes "not implemented" into the summary; D-072 says why that phrase is wrong here. Put the real summary (87de8a2, the three widths) in the handoff.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- Close E-101 as above, go on with E-102, then E-86.
+
+### Open risks
+- If the tool refuses `superseded_by` for a task with commits, hand back with its message; do not reopen or re-run the evaluator against the old text.
+---

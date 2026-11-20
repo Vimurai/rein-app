@@ -2790,3 +2790,33 @@ Revert E-104's commit, or set `[home] actions = "hidden"`.
 
 ### Rollback
 Text only; E-86 has written nothing.
+
+---
+
+## D-072 — Home's narrowest width is the window's minimum, 480 px; E-101 is accepted on it
+
+**Date**: 2026-11-20
+**Task**: E-101 (87de8a2; Engineer's message 2026-11-20, ACCEPT_FAIL on clauses 2 and 3 only)
+**Decision**: The window's minimum inner size stays 480 × 240 px; every "360 px" in D-071, `status.md` "Home, second revision" and E-101's acceptance reads "480 px, the window's minimum". E-101's work is accepted and the task closes as superseded by this decision.
+
+### Why needed
+E-101's clauses asked for a measurement and a screenshot at 360 px. The window cannot be narrower than 480 px (`main.rs` `min_inner_size(480.0, 240.0)`, E-34), so the clauses named a state that cannot exist. The number was the Architect's, written without reading the minimum. A task's text cannot be edited, and the acceptance evaluator reads that text; the only close is this one.
+
+### What was observed
+- At 87de8a2: `#home` 1240/1240 at 1280, 660/660 at 700, 440/440 at 480, the document 480/480; the R1 table; `npm test` 128/128; hosted ci and desktop-windows green — as reported.
+- `.ai/screens/E-101/home-wide-catppuccin-mocha-480.png`, opened by the Architect: no sideways scroll; the quote is wrapped to three lines and ends in an ellipsis, without its dash or asterisks; Dismiss is at the right; a long project name is cut in the row, the card and the recent list.
+
+### Alternatives considered
+1. **Lower the minimum to 360 px** — rejected: no operator asked for it; the tab bar, status bar and panels are unchecked below 480, and it would be a task of its own to make a number true that was only a slip.
+2. **Register a second task repeating E-101 with the right number** — rejected: the work and its evidence exist; a duplicate task adds a commit of nothing.
+3. **Close E-101 as superseded by this decision (chosen).** The tool will write "not implemented" into the summary; that phrase is the tool's and is wrong here — E-101 is implemented at 87de8a2.
+
+### Constraints driving this decision
+- The acceptance gate (rein E-431) passes only on the task's own text or on a `## D-###` heading.
+
+### Impact
+- Unlocks: E-101's close. E-102's clause 4 names no width and is unaffected.
+- Risk if wrong: none — nothing below 480 px can be shown.
+
+### Rollback
+Text only.

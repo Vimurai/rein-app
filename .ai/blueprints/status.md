@@ -581,7 +581,8 @@ R2. **Mention text (core)** — the quote is the line without its list marker an
    The sentence becomes "The last handoff asks the operator:". The dismissal hash is
    over the new text, so a row dismissed before this build may return once.
 R3. **Rows that fit (web, `home.tsx`)** — Home never scrolls sideways, at any window
-   width from 360 px. A "Needs you now" row is: the bell, the project name and the
+   width from the window's minimum, 480 px (`min_inner_size`, E-34; "360 px" here was
+   wrong and is replaced by D-072). A "Needs you now" row is: the bell, the project name and the
    app's sentence on the first line; the quote under it, wrapped, at most three lines,
    then an ellipsis; Dismiss stays at the right, top-aligned. The whole quote is the
    row's tooltip and stays readable in the "Needs you" panel as today. Every grid and
@@ -657,7 +658,7 @@ the web side cannot name a pane. Home still types into no terminal.
   there), an empty line, a 2000-character line. R2: markers gone, words kept.
 - Core: `active` order and cap; none without `state.json`.
 - Web: the row model (sentence, quote, tooltip); the Tasks button's action.
-- Window run: Home with a 300-character quote at 1280, 700 and 360 px wide —
+- Window run: Home with a 300-character quote at 1280, 700 and 480 px wide (the minimum; D-072) —
   `scrollWidth` equals `clientWidth` on `#home` and on the document, read and printed.
 - Screens (D-052): the three widths, both themes at 1280. The Architect opens each.
 
