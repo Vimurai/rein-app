@@ -1,0 +1,14 @@
+way	key	code	ctrlKey	shiftKey	altKey	keyName
+1 key ctrl+shift+Tab	Control	ControlLeft	true	false	false	(modifier)
+1 key ctrl+shift+Tab	Shift	ShiftLeft	true	true	false	(modifier)
+1 key ctrl+shift+Tab	Unidentified	Tab	true	true	false	(modifier)
+2 keysym ctrl+ISO_Left_Tab	Control	ControlLeft	true	false	false	(modifier)
+2 keysym ctrl+ISO_Left_Tab	Unidentified	Unidentified	true	false	false	(modifier)
+3 Shift held + keysym ctrl+ISO_Left_Tab	Shift	ShiftLeft	false	true	false	(modifier)
+3 Shift held + keysym ctrl+ISO_Left_Tab	Control	ControlLeft	true	true	false	(modifier)
+3 Shift held + keysym ctrl+ISO_Left_Tab	Unidentified	Unidentified	true	true	false	(modifier)
+4 key ctrl+Tab (control)	Control	ControlLeft	true	false	false	(modifier)
+4 key ctrl+Tab (control)	Tab	Tab	true	false	false	C-Tab
+5 key ctrl+shift+h (control)	Control	ControlLeft	true	false	false	(modifier)
+5 key ctrl+shift+h (control)	Shift	ShiftLeft	true	true	false	(modifier)
+5 key ctrl+shift+h (control)	H	KeyH	true	true	false	C-S-h

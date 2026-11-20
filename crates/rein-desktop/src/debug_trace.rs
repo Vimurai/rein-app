@@ -1,6 +1,6 @@
-//! Debug builds only: three traces a window run reads from stderr (tests/e2e/home-screens.sh,
-//! E-80, E-98). Release builds ignore all three variables, as they do
-//! `REIN_DESKTOP_RELOAD_AFTER_MS`.
+//! Debug builds only: four traces a window run reads from stderr (tests/e2e/home-screens.sh,
+//! tests/e2e/key-fields.sh; E-80, E-98, E-99). Release builds ignore all four variables, as they
+//! do `REIN_DESKTOP_RELOAD_AFTER_MS`.
 //! - `REIN_DESKTOP_TRACE_FRAMES`: once a second the core asks the page for the longest gap
 //!   between two animation frames since the last ask (a `requestAnimationFrame` loop the first
 //!   ask installs) and prints `frame-trace <unix s> max_ms=<n> frames=<n>`.
@@ -9,6 +9,9 @@
 //! - `REIN_DESKTOP_TRACE_STAGE` (E-98): once a second, what the stage shows —
 //!   `stage-trace <unix s> home=<0|1> setup=<0|1> tabs=<n> current=<the current tab's label>`
 //!   (a label is the project's folder name).
+//! - `REIN_DESKTOP_TRACE_KEYS` (E-99): the fields of every keydown the page receives —
+//!   `key-trace <unix s> {"key":…,"code":…,"ctrlKey":…,"shiftKey":…,"altKey":…,"metaKey":…}`,
+//!   one line per key, read once a second (a capture listener the first ask installs).
 //!
 //! None reads or prints any text of a terminal; the only project text printed is the current
 //! tab's label (its folder name), by the stage trace.
@@ -19,8 +22,33 @@ const FRAME_PROBE: &str = "(() => { const w = window; if (!w.__reinFrames) { w._
 #[cfg(debug_assertions)]
 const STAGE_PROBE: &str = "(() => { const sel = document.querySelector('[role=tab][aria-selected=true]:not([data-home])'); return [document.getElementById('home') || document.querySelector('[data-home][aria-selected=true]') ? 1 : 0, document.getElementById('setup-card') ? 1 : 0, document.querySelectorAll('[role=tab]:not([data-home])').length, sel ? (sel.textContent || '').trim() : '-'].join(' '); })()";
 
-/// Starts the frame trace and the stage trace when their variables are set (debug builds).
+#[cfg(debug_assertions)]
+const KEYS_PROBE: &str = "(() => { const w = window; if (!w.__reinKeys) { w.__reinKeys = []; w.addEventListener('keydown', (e) => w.__reinKeys.push({ key: e.key, code: e.code, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey }), true); } const out = JSON.stringify(w.__reinKeys); w.__reinKeys = []; return out; })()";
+
+/// Starts the frame, stage and key traces when their variables are set (debug builds).
 pub fn frames(window: &tauri::WebviewWindow) {
+    #[cfg(debug_assertions)]
+    if crate::dirs::process_env("REIN_DESKTOP_TRACE_KEYS").is_some() {
+        let w = window.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                let r = w.eval_with_callback(KEYS_PROBE, |answer| {
+                    // The page returns a JSON string holding a JSON array.
+                    let list = serde_json::from_str::<String>(&answer)
+                        .ok()
+                        .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(&s).ok())
+                        .unwrap_or_default();
+                    for k in list {
+                        eprintln!("key-trace {} {k}", unix_ms() / 1000);
+                    }
+                });
+                if r.is_err() {
+                    return;
+                }
+            }
+        });
+    }
     #[cfg(debug_assertions)]
     if crate::dirs::process_env("REIN_DESKTOP_TRACE_STAGE").is_some() {
         let w = window.clone();

@@ -4,6 +4,10 @@
 //   xinput type 'some text'      type printable ASCII, one key at a time
 //   xinput move X Y              move the pointer
 //   xinput click X Y [BUTTON]    move, then click (button 1 by default)
+//   xinput keysym ctrl+ISO_Left_Tab  the chord with the keysym itself at level 1: bound to a
+//                                spare keycode for the press, then unbound (as xdotool does) —
+//                                `key` would press the keycode the keysym shares with another
+//   xinput down KEY / up KEY     press or release one key (a modifier held across commands)
 // Exit 2: bad usage; 3: no display or no XTest; 4: a key that has no keycode.
 #include <X11/Xlib.h>
 #include <X11/extensions/XTest.h>
@@ -60,6 +64,48 @@ static int chord(char *spec) {
   return 0;
 }
 
+/* A spare keycode (no keysym at any level) bound to `ks` for one chord, then unbound. */
+static int keysym_chord(char *spec) {
+  KeyCode mods[3];
+  int n = 0;
+  char *last = spec, *tok = strtok(spec, "+");
+  while (tok) {
+    last = tok;
+    tok = strtok(NULL, "+");
+    if (!tok) break;
+    KeySym m = !strcmp(last, "ctrl") ? XK_Control_L : !strcmp(last, "shift") ? XK_Shift_L : !strcmp(last, "alt") ? XK_Alt_L : NoSymbol;
+    if (m == NoSymbol || n == 3) return 2;
+    mods[n++] = XKeysymToKeycode(d, m);
+  }
+  KeySym ks = XStringToKeysym(last);
+  if (ks == NoSymbol) return 4;
+  int lo, hi, per;
+  XDisplayKeycodes(d, &lo, &hi);
+  KeySym *map = XGetKeyboardMapping(d, (KeyCode)lo, hi - lo + 1, &per);
+  int spare = 0;
+  for (int kc = hi; kc >= lo && !spare; kc--) {
+    int empty = 1;
+    for (int j = 0; j < per; j++) empty &= map[(kc - lo) * per + j] == NoSymbol;
+    if (empty) spare = kc;
+  }
+  XFree(map);
+  if (!spare) return 4;
+  KeySym bind[1] = {ks};
+  XChangeKeyboardMapping(d, spare, 1, bind, 1);
+  XSync(d, False);
+  usleep(100000);
+  for (int i = 0; i < n; i++) XTestFakeKeyEvent(d, mods[i], True, 0);
+  XTestFakeKeyEvent(d, (KeyCode)spare, True, 0);
+  XTestFakeKeyEvent(d, (KeyCode)spare, False, 0);
+  for (int i = n - 1; i >= 0; i--) XTestFakeKeyEvent(d, mods[i], False, 0);
+  XSync(d, False);
+  usleep(100000);
+  KeySym none[1] = {NoSymbol};
+  XChangeKeyboardMapping(d, spare, 1, none, 1);
+  XSync(d, False);
+  return 0;
+}
+
 static int type(const char *s) {
   static const char *shifted = "~!@#$%^&*()_+{}|:\"<>?";
   for (; *s; s++) {
@@ -80,6 +126,12 @@ int main(int argc, char **argv) {
   int rc = 0;
   if (!strcmp(argv[1], "key")) {
     rc = chord(argv[2]);
+  } else if (!strcmp(argv[1], "keysym")) {
+    rc = keysym_chord(argv[2]);
+  } else if (!strcmp(argv[1], "down") || !strcmp(argv[1], "up")) {
+    KeyCode k = code_of(argv[2]);
+    if (!k) rc = 4;
+    else XTestFakeKeyEvent(d, k, !strcmp(argv[1], "down"), 0);
   } else if (!strcmp(argv[1], "type")) {
     rc = type(argv[2]);
   } else if (!strcmp(argv[1], "move") && argc >= 4) {
