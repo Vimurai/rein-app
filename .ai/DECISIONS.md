@@ -2682,3 +2682,28 @@ Building Home, the Engineer found (1) Ctrl+Shift+Tab arrives without Ctrl on Xvf
 
 ### Rollback
 Revert E-98's commit: the card swallows shortcuts again.
+
+### D-070 addendum 1 (2026-11-20) — Shift+Tab is named from the physical key on Linux; E-98 accepted; E-79's code accepted, open for the sightings
+
+**Task**: E-99 (4f2472e, outcome (b)), E-98 (3c98f1d), E-79 (75888d7, 16d9911); Engineer handoff 2026-11-20 14:16 UTC (ebfda5f); E-100
+**Decision**: `keyName` reads `code` when `key` is "Unidentified" and `code` is "Tab", and in no other case. The tab bindings stay `Ctrl+Tab` / `Ctrl+Shift+Tab`.
+
+### Why needed
+E-99 measured that Ctrl is not lost: WebKitGTK reports a Tab pressed with Shift as `key: "Unidentified"`, `code: "Tab"`, and `keyName` drops every "Unidentified" key as a lone modifier. So `tab.prev` by key and the plain `S-Tab` name never existed on Linux.
+
+### Rulings
+1. **The one-case read of `code` (E-100).** Tab is the same physical key on every layout, so reading it by position binds nothing wrongly. Rows 2 and 3 of the table (`code` also "Unidentified") come from a keysym no keyboard sends alone; they stay without a name.
+2. **Ctrl+PageUp / Ctrl+PageDown are not added.** They would be taken from the terminal for a fault that ruling 1 removes. Still the fallback if a real desktop or WebView2 shows the key lost entirely.
+3. **E-99 closes** on its measurement; the fix is E-100.
+4. **E-98 accepted** (hosted runs on 4f2472e; the diff from 3c98f1d touches nothing in `ui/`). **Esc on a card stays without an action**: in the modal style Esc means "back to NORMAL", and a second meaning on one screen is not worth a shortcut Ctrl+Shift+H already gives.
+5. **E-79's code accepted; the task stays open for the operator's Windows and macOS sightings.** D-069's conditions are met as reported; on Windows the text is set with `SetInnerText` (read in `tauri-winrt-notification` 0.8.1), so no markup can come from a folder name. Known limit, accepted until the app is a signed bundle: on macOS the notification is shown under Finder's name and icon.
+
+### Alternatives considered
+1. **Ctrl+PageUp / PageDown instead of the fix** — rejected: ruling 2; and plain `S-Tab` would stay unnamed.
+2. **Read `code` for every "Unidentified" key** — rejected: letters would bind by position on non-US layouts, and dead keys and IME input also arrive as "Unidentified".
+
+### Impact
+- Unlocks: E-100. Risk if wrong: none seen — the case cannot occur where `key` is reported.
+
+### Rollback
+Revert E-100's commit.

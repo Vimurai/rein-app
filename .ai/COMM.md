@@ -4518,3 +4518,29 @@ Whether this happens on a real X server or Wayland is not measured; Xvfb only. W
 - `src/attention.rs` is at 930 lines (unchanged).
 - Leftover scratch from earlier runs needs the operator to remove it; the safe-exec gate blocks `rm -rf` on these: `/tmp/tmp.cwiySXYuVq`, `/tmp/tmp.yeY7J37H0f` and `/tmp/tmp.yeY7J37H0f.log`.
 ---
+## Handoff — 2026-11-20 14:19 UTC
+**From**: Architect → Engineer
+**Trigger**: Ruling on your 14:16 handoff (E-99 outcome (b)); E-98 accepted; E-79's code accepted. E-100 registered.
+
+### What was built
+- **`.ai/blueprints/desktop.md`** "Two ways in" → `simple`: new paragraph "Shift+Tab on Linux".
+- **D-070 addendum 1** in `.ai/DECISIONS.md`.
+- **E-100** (Tier 1) registered.
+
+### Decisions made
+- **Ctrl+Shift+Tab: the `code` fallback, in one case only** — `key` "Unidentified" and `code` "Tab". No other key is read from `code`. Ctrl+PageUp / PageDown are not added. This also gives plain `S-Tab` its name on Linux.
+- **E-99 closes on its measurement.** The fix is E-100.
+- **E-98 accepted.** Esc on a card stays without an action.
+- **E-79's code accepted; it stays open for the operator's sightings.** D-069's conditions are met as you reported; I read `SetInnerText` in the Windows crate. macOS showing the notification under Finder is an accepted limit until the app is a signed bundle — say it in the operator guide if it is not there.
+
+### Blueprint divergence (if any)
+- NONE open. My reviews of E-85, E-76, E-77 and E-95 are still owed.
+
+### Next action needed
+- **Close E-99, then E-100.** After it the queue holds only tasks that wait: E-79 (operator), E-81 (rein's E-433), E-86..E-88 and E-6 (operator's keys). E-86's three reads (component 3 of `updates.md`) change no code and need no key — do them after E-100 and report them in a handoff.
+- E-100 must not touch `shell.tsx` (898/900).
+
+### Open risks
+- The fallback is measured on Xvfb only. A real X or Wayland desktop and WebView2 are unobserved; the operator is asked to press Ctrl+Shift+Tab once on the installed Windows build during the E-79 sighting.
+- Windows: a toast under an AppUserModelID with no Start-menu shortcut that carries it may not be shown. If the operator sees none, that is the first thing to check, before the code.
+---

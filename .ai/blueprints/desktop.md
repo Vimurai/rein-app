@@ -101,6 +101,12 @@ time in Settings.
   `Ctrl+Shift+W` close tab, `Ctrl+Shift+C` / `Ctrl+Shift+V` copy / paste, `Ctrl+=` / `Ctrl+-`
   / `Ctrl+0` font size, `F1` help, `Ctrl+,` settings, `Ctrl+Shift+Q` quit (D-047). The
   statusline shows no mode segment.
+  **Shift+Tab on Linux (D-070 addendum 1, E-100).** WebKitGTK gives a Tab pressed with
+  Shift as `key: "Unidentified"` with `code: "Tab"` (measured on Xvfb, E-99), so
+  `Ctrl+Shift+Tab` and `Shift+Tab` had no key name there. The key name is read from the
+  physical key in exactly this one case: `key` is "Unidentified" and `code` is "Tab".
+  No other key is read from `code` this way (it would bind by position, not by letter).
+  The bindings do not change and no second pair of tab keys is added.
 - `modal`: the keymap table above. The `simple` shortcuts keep working in every mode except
   where the user rebinds them.
 Both are tables for the one `modes` function; switching style swaps the table.

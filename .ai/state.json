@@ -1492,6 +1492,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-20T08:29:00.901Z"
+    },
+    {
+      "id": "E-100",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 1,
+      "description": "Name a Tab pressed with Shift from its physical key, per .ai/blueprints/desktop.md \"Shift+Tab on Linux\" (D-070 addendum 1). In crates/rein-desktop/ui/src/keys.ts make keyName treat an event whose key is \"Unidentified\" and whose code is \"Tab\" as the Tab key (so Ctrl+Shift gives C-S-Tab and Shift alone gives S-Tab); every other \"Unidentified\" key still gives no token; read code in no other new case. Change no binding and do not touch shell.tsx. Then add a tab.prev-by-key line to tests/e2e/home-screens.sh. Close E-99 first on its measurement (outcome (b) is its deliverable). Acceptance: `npm test` in crates/rein-desktop/ui passes with keyName cases for {key Unidentified, code Tab} with Ctrl+Shift (C-S-Tab), with Shift alone (S-Tab), and for {key Unidentified, code Unidentified} and {key Unidentified, code KeyA} (no token); `tests/e2e/key-fields.sh` run locally prints the token C-S-Tab for way 1 and the handoff quotes that line; `tests/e2e/home-screens.sh` exits 0 with a line showing tab.prev ran from Ctrl+Shift+Tab; `git diff --stat` for the commit lists keys.ts, its test and the harness only; hosted ci on all three systems green.",
+      "created_at": "2026-11-20T14:17:48.483Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-20T14:17:48.484Z"
     }
   ],
   "stamps": [
