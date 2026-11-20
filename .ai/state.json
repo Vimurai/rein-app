@@ -1468,16 +1468,16 @@
     {
       "id": "E-98",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Let the window's shortcuts through a set-up card, per .ai/blueprints/desktop.md §V9 \"Keys on a set-up card\" (D-070 ruling 1). Today shell.tsx counts a current set-up tab as an overlay (pickerRef), so every key is swallowed. Change it so that, while a set-up card or a restored tab's card is the current stage and no real overlay is open, plain keys (Tab, Shift+Tab, Enter, Space, Esc, letters) stay with the card and every chord of SIMPLE_SHORTCUTS runs its action in both input styles; an action that needs a terminal does nothing, as on Home. Real overlays (picker, confirm sheets, Settings, paste and stop questions) keep taking every key. Put the decision in a pure function with its own test; shell.tsx must not go over 900 lines. After the system-notification task (E-79). Acceptance: `npm test` in crates/rein-desktop/ui passes with a test showing, for a current set-up card, that C-Tab, C-S-Tab, M-2, C-S-h, C-S-p and C-S-o each give their action and that Tab, Enter and a letter give none; the same chords give no action with the picker open; `wc -l crates/rein-desktop/ui/src/shell.tsx` prints 900 or less; a window run (extend tests/e2e/home-screens.sh or status-screens.sh, say which) exits 0 with lines showing Ctrl+Shift+H shows Home from a set-up tab and Ctrl+Tab leaves a set-up tab for the next tab, and that Enter on the card still presses its focused button; hosted ci on all three systems and desktop-windows green on the commit.",
       "created_at": "2026-11-20T08:29:00.786Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-20T14:16:13.356Z",
+      "summary": "Shortcut chords act on a set-up/restored card in both input styles; plain keys stay with the card; real overlays still take every key (card-keys.ts cardKey, shell.tsx gate, showTab f …[full in LOG.md]",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-20T08:29:00.787Z"
+      "updated_at": "2026-11-20T14:16:13.356Z"
     },
     {
       "id": "E-99",
@@ -4472,6 +4472,114 @@
       "timestamp": "2026-11-20T08:26:06.469Z",
       "summary": "[TIER_1] D-069 dependency-gate record only (.ai/DECISIONS.md + bookkeeping views; no source): critic_security [SEC_PASS] on notify-rust 4.19 / tauri-winrt-notification 0.8.1 / mac-notification-sys 0.6.15 / zbus 6.4.0 — no process, no socket beyond the session bus, no file writes; its two factual corrections (zbus 6, macOS cc build) applied; four conditions recorded; operator chose option 1.",
       "sha": "d6af628f935bfc13d0017d3e19c921e34744a3fd",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-79",
+      "timestamp": "2026-11-20T08:39:11.945Z",
+      "summary": "E-79 [TIER_2] standards-checker PASS — 10 paths clean (per-file --file runs; unstaged), 0 errors, 0 warnings; all files under 1000 lines (max notify.rs 743), no secrets, no committed tmp files",
+      "sha": "5d898380cdd0fc87e3167aafdd8825061c77baf0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "SEC_PASS",
+      "agent": "critic_security",
+      "task_id": "E-79",
+      "timestamp": "2026-11-20T08:39:20.377Z",
+      "summary": "E-79 [TIER_2] dependency notify-rust 4.19.0: no P0. APP_ID matches tauri.conf.json (tested); no get_bundle_identifier/set_application call; Windows text via SetInnerText; text = fixed sentence + folder + number; no shell/network/process; e2e cleanup ok. P1: Linux body passes folder name raw (no markup escape). Lockfile: 19 new crates confirmed; cargo-audit/advisory-db NOT available, RUSTSEC scan not re-run (D-069 cond. 4 unverified here).",
+      "sha": "5d898380cdd0fc87e3167aafdd8825061c77baf0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_FAIL",
+      "agent": "blueprint-aligner",
+      "task_id": "E-79",
+      "timestamp": "2026-11-20T08:40:44.609Z",
+      "summary": "E-79 [TIER_2] manual (staged diff empty). Aligned: shown only when unfocused/hidden and system=true (default true); fixed sentence + folder + number; 60 s/project limit + merged sentence + system=false tests; APP_ID==tauri.conf identifier tested; no shell/network/process; Windows SetInnerText. BLOCKING: (1) Windows click never brings window forward: notify-rust windows wait_for_action maps body click (Default) to \"__closed\" (system_notify.rs:43-48) - use wait_for_response, treat Default|Action as click. (2) D-069 cond.2 unmet in effect: mac-notification-sys send_notification -> ensure_application_set -> get_bundle_identifier_or_default (NSAppleScript) on first send unless set_application called; comment system_notify.rs:8-10 false. Fix: notify_rust::set_application(APP_ID) once, or Architect ruling. Minor: Linux xdg body may render markup (escape &<>); n=1 singular sentence; macOS wait thread may never end (comment :10-11).",
+      "sha": "5d898380cdd0fc87e3167aafdd8825061c77baf0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-79",
+      "timestamp": "2026-11-20T08:44:29.061Z",
+      "summary": "E-79 [TIER_2] re-run: standards-checker PASS — 10 files clean (per-file --file runs), 0 errors, 0 warnings, max elapsed 7ms; .ai/screens/E-79/ has no tmp files/secrets",
+      "sha": "5d898380cdd0fc87e3167aafdd8825061c77baf0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-79",
+      "timestamp": "2026-11-20T08:45:01.081Z",
+      "summary": "[TIER_2] E-79 re-review: blueprint aligned (ALIGN_PASS, the 3 prior blockers resolved) and the clean-code gate is clear (CLEAN_PASS re-run, 10 paths, 0 warnings). 0 warnings ignored. ACCEPT gate is still pending: critic_acceptance must run after the E-79 commit, because the stamp binds to HEAD.",
+      "sha": "5d898380cdd0fc87e3167aafdd8825061c77baf0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint_aligner(manual)",
+      "task_id": "E-79",
+      "timestamp": "2026-11-20T08:45:07.173Z",
+      "summary": "E-79 [TIER_2] re-review (manual; nothing staged). All 3 ALIGN_FAIL findings fixed in system_notify.rs. (1) Windows: wait_for_response + is_click(Default|Action). In notify-rust windows.rs, on_activated(None) maps to Default, so a body click brings the window forward. Test a_click_is_the_body_or_a_button. (2) D-069 cond.2: set_application(\"com.apple.Finder\") runs once, before the first send. The default nsusernotifications backend's ensure_application_set then returns early, so get_bundle_identifier_or_default never runs. Finder is the crate's own default literal. (3) Linux body is markup_escaped (& first); test the_linux_body_is_escaped. n=1 is singular; comments are accurate. Cond.4: advisory-scan.txt is clean (windows RUSTSEC-2022-0008 patched >=0.32). Tests 3/3. Residual: the win/mac cfg paths are not compiled on this Linux host.",
+      "sha": "5d898380cdd0fc87e3167aafdd8825061c77baf0",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier1",
+      "task_id": "E-79",
+      "timestamp": "2026-11-20T09:14:25.008Z",
+      "summary": "[TIER_1] HEAD 75888d7 follow-up: system_notify.rs markup_escaped gains #[cfg_attr(not(all(unix, not(target_os = \"macos\"))), allow(dead_code))] — predicate identical to the sole non-test call site's cfg (Linux body), same pattern as APP_ID/MAC_SENDER; fixes ci run 44705208895 clippy dead_code on windows-latest/macos-latest. Linux clippy --all-targets -D warnings clean locally; win/mac cross-clippy not runnable locally (native build scripts) — hosted CI is the proof. Other working-tree changes (E-98 WIP, .claude/*, .gitignore, ENGINEER.md) not reviewed.",
+      "sha": "75888d721e5faccc36a93aee2c610976bc2c3a57",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CLEAN_PASS",
+      "agent": "critic_clean_code",
+      "task_id": "E-98",
+      "timestamp": "2026-11-20T11:05:52.162Z",
+      "summary": "E-98 manual standards review PASS (checker/blueprint absent in this repo, unstaged) — 5 files clean: shell.tsx 896/900, card-keys.ts kebab-case and reuses ActionCall, no secrets, no tmp files, 0 warnings",
+      "sha": "16d9911492c351fb6712277c944f5feddd2338aa",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "blueprint_aligner",
+      "task_id": "E-98",
+      "timestamp": "2026-11-20T11:06:46.243Z",
+      "summary": "E-98 aligns with desktop.md §V9 'Keys on a set-up card' / D-070 r1: setup+restored card out of pickerRef into cardRef; SIMPLE_SHORTCUTS chords run once (preventDefault+stopPropagation) in both styles, plain keys reach the card, real overlays still gated first by pickerRef, tab getter null on a card, showTab keeps focus off a card tab's terminal; test 3/3 green, tsc clean. align_diff WARN only ORPHANED_WORK card-keys.ts (covered by desktop.md V9, not architect.md). Non-blocking nits: cardKey overlayOpen branch never true in shell (card-keys.ts:17, overlay precedence lives at shell.tsx:741); debug_trace.rs:1,12 doc still says 'two traces'/'Neither' and stage-trace prints the folder name.",
+      "sha": "16d9911492c351fb6712277c944f5feddd2338aa",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier2",
+      "task_id": "E-98",
+      "timestamp": "2026-11-20T11:07:01.868Z",
+      "summary": "[TIER_2] E-98 Blueprint aligned (desktop.md §V9 / D-070 r1) + clean-code gate clear: ALIGN_PASS, CLEAN_PASS, 0 warnings; 2 non-blocking notes (card-keys overlay branch unreachable from shell; debug_trace.rs module doc stale)",
+      "sha": "16d9911492c351fb6712277c944f5feddd2338aa",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "rein-review-tier1",
+      "task_id": "E-99",
+      "timestamp": "2026-11-20T11:16:47.740Z",
+      "summary": "[TIER_1] HEAD 3c98f1d + unstaged E-99 measurement (outcome b: no way arrives as C-S-Tab; hand back). No ui/ change; KEYS_PROBE and the REIN_DESKTOP_TRACE_KEYS thread are cfg(debug_assertions) only; xinput keysym/down/up test-tool only; key-fields.sh refuses CI, cleanup trap set before state, mktemp workdir, private tmux socket, asserts nothing; cargo check passes.",
+      "sha": "3c98f1d8b7ea2dae75a72652a03a237ad4fac561",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ACCEPT_PASS",
+      "agent": "critic_acceptance",
+      "task_id": "E-98",
+      "timestamp": "2026-11-20T14:15:58.361Z",
+      "summary": "[ACCEPT_PASS] E-98 at 4f2472e — 8 PASS, 0 FAIL, 0 UNVERIFIED\n1 | PASS | `npm test` in ui exit 0, 127 pass 0 fail; card-keys test: C-Tab,C-S-Tab,M-2,C-S-h,C-S-p,C-S-o give action, simple+modal\n2 | PASS | same test file: Tab, S-Tab, Enter, Space, Esc, a, q, 1 give \"card\" (no action) in both styles; passed\n3 | PASS | card-keys test \"with a real overlay open (the picker)\": chords+Tab/Enter/a give \"overlay\"; passed; shell.tsx:747 uses cardKey\n4 | PASS | `wc -l ui/src/shell.tsx` prints 898\n5 | PASS | home-screens.sh (extended) exit 0, \"PASS: screens\"; \"ok Ctrl+Shift+H shows Home from a set-up tab\" in both themes\n6 | PASS | same run: \"ok Ctrl+Tab leaves a set-up tab for the next tab\" in catppuccin-mocha and github-light\n7 | PASS | same run: \"ok Enter on the card presses its focused button (Close tab)\" in both themes\n8 | PASS | 3c98f1d own runs cancelled; HEAD 4f2472e (ancestor ok, diff no ui/src) ci 44726375856 ubuntu/win/mac + desktop-windows success",
+      "sha": "4f2472e2a5f417779a433229d61de1cafcd14992",
       "author": "emirkovacevic@protonmail.com"
     }
   ],

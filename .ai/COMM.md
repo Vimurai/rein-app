@@ -4451,3 +4451,70 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - E-99 on Xvfb says nothing about WebView2. If (a) holds, the Windows key is still unobserved; the operator is asked to press it once on the installed build.
 - `src/attention.rs` at 930 lines: the next task that adds to it splits it first, moves only, as E-97 did.
 ---
+---
+## Handoff — 2026-11-20 14:16 UTC
+**From**: Engineer → Architect
+**Trigger**: Queue reached its operator/Architect stops. E-98 is DONE. E-79 is waiting on the operator's sightings, and E-99 ended in outcome (b) and is handed back.
+
+### What was built
+- **E-79** (OPEN; needs the operator's sightings). Commits: 75888d7, plus fix 16d9911.
+  - Channel 3 is in `src/system_notify.rs` and uses notify-rust 4.19.0. The limit is `SystemLimit` in `notify.rs`: one notification per project per 60 s, and later ones are merged as "<folder>: n things need you."
+  - The new setting is `notifications_system`, on by default. Nothing is shown for the front tab or while the setting is off.
+  - A click on the body or a button brings the window forward.
+  - **Linux proof** is in `.ai/screens/E-79/`, from `tests/e2e/notify-system.sh` (a libdbus stand-in server on a private bus):
+    - `linux-system-notification.txt` records the body "worker has stopped — it is finished or waiting.", then the click, then the core's trace "system shown" / "system clicked".
+    - `linux-after-click.png` shows the window after the click (opened).
+  - **Windows installer:** `C:\Users\Emir\Downloads\rein-app_0.1.0_x64-setup-E79-16d9911.exe` (sha256 4e8138ae0fadf4dce7e952385cb3b90a351425eafadae512a665b04cbaf338a5).
+  - **D-069 conditions:**
+    1. AppUserModelID is `system_notify::APP_ID`, which equals the tauri.conf.json identifier. A unit test reads the conf and checks this.
+    2. macOS does no AppleScript lookup: `set_application(MAC_SENDER = "com.apple.Finder")` runs once, behind a `Once`.
+    3. The Linux body goes through `markup_escaped` (& < >). It is unit-tested, and a hostile folder-name test checks that the text holds only the folder name and a number.
+    4. Advisory scan: `.ai/screens/E-79/advisory-scan.txt`. cargo-audit is not installed, so the RustSec advisory-db clone was scanned. The only match is RUSTSEC-2022-0008 (windows < 0.32), which does not apply because the lock has 0.61.3 and 0.62.2.
+  - Hosted CI: the first push failed on Windows and macOS because `markup_escaped` is dead code there. 16d9911 fixed it with `cfg_attr(not(linux), allow(dead_code))`. That run was green on all three systems.
+- **E-98** (DONE, 3c98f1d; ACCEPT_PASS 8/8 at 4f2472e). Files:
+  - `ui/src/card-keys.ts`: `cardKey` returns `"overlay"`, `{action}` or `"card"`.
+  - `shell.tsx`: overlays and cards share one key gate. A chord runs once, with `preventDefault` and `stopPropagation`, so xterm does not also handle it. `showTab` never focuses a set-up or card tab's hidden terminal; that was the cause of Enter going to the terminal and Ctrl+Tab running twice.
+  - `ui/test/card-keys.test.mjs`.
+  - `tests/e2e/home-screens.sh` gained three card checks, in both themes: Ctrl+Shift+H shows Home, Ctrl+Tab goes to the next tab, and Enter presses the focused button.
+- **E-99** (OPEN; outcome (b), handed back). Commit 4f2472e.
+  - Adds `tests/e2e/key-fields.sh`, a measurement with no asserts that refuses to run in CI.
+  - Adds the debug-only `REIN_DESKTOP_TRACE_KEYS`.
+  - `xinput.c` gained `keysym`, `down` and `up`.
+  - Table: `.ai/screens/E-99/key-fields.txt`.
+
+### E-99 table (keydowns the page received on Xvfb; keyName token)
+| way | key | code | ctrl | shift | token |
+|---|---|---|---|---|---|
+| 1 `key ctrl+shift+Tab` | Unidentified | Tab | true | true | (none) |
+| 2 `keysym ctrl+ISO_Left_Tab` | Unidentified | Unidentified | true | false | (none) |
+| 3 Shift held + way 2 | Unidentified | Unidentified | true | true | (none) |
+| 4 `key ctrl+Tab` (control) | Tab | Tab | true | false | C-Tab |
+| 5 `key ctrl+shift+h` (control) | H | KeyH | true | true | C-S-h |
+
+Ctrl is not lost: ctrlKey is true in every way. The key itself is lost. WebKitGTK reports Shift+Tab (ISO_Left_Tab) as `key: "Unidentified"`. In way 1 `code` is still "Tab". `keyName` treats "Unidentified" as a modifier and returns no token.
+
+This is outcome (b) as the task defines it: no way sent gives C-S-Tab. Two options are yours to rule, so I did not bind either:
+- Read `code === "Tab"` when key is "Unidentified".
+- Use the held fallback, Ctrl+PageUp / Ctrl+PageDown.
+
+Whether this happens on a real X server or Wayland is not measured; Xvfb only. WebView2 is not measured.
+
+### Decisions made
+- None new. D-069 was carried out as written.
+
+### Blueprint divergence (if any)
+- E-98: hosted CI for 3c98f1d is shown through its descendant 4f2472e. 3c98f1d's own runs were cancelled by concurrency. On 4f2472e, ci 44726375856 passed on ubuntu, windows and macos, and desktop-windows 44726375822 passed. The diff from 3c98f1d to 4f2472e touches nothing in ui/.
+- Otherwise NONE.
+
+### Next action needed
+- **E-99:** rule the Ctrl+Shift+Tab binding (code fallback or Ctrl+PageUp/PageDown).
+- **E-79:** the operator installs the build above on Windows and sees one notification and clicks it. A macOS sighting is also needed. E-79 closes after those.
+- Reviews of E-85, E-76, E-77 and E-95 are still owed by you.
+- E-81 still waits on rein's E-433 merge commit.
+
+### Open risks
+- **Esc on a card (your 08:31 question):** no card (`start-screen.tsx`, `stage-cards.tsx`, `restore-ui.tsx`, `project-ui.tsx`) handles Escape today. Esc on a card does nothing, so it is free for "leave to Home" if you rule it.
+- `shell.tsx` is at 898/900 lines. The next change to it must extract something first, moves only.
+- `src/attention.rs` is at 930 lines (unchanged).
+- Leftover scratch from earlier runs needs the operator to remove it; the safe-exec gate blocks `rm -rf` on these: `/tmp/tmp.cwiySXYuVq`, `/tmp/tmp.yeY7J37H0f` and `/tmp/tmp.yeY7J37H0f.log`.
+---
