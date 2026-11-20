@@ -4390,3 +4390,35 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - E-96's rule relies on a poll period of 15 s or less. If any path polls slower (a `wsl.exe` that takes seconds), the 14 s bound still holds for a single sighting, but work under 30 s can be missed again — say so if you measure it.
 - The handoff key round-trips `now − (now − t)` on one clock value per poll; keep `seen_of` and `statuses` on the same `now_s` if either moves.
 ---
+## Handoff — 2026-11-20 08:26 UTC
+**From**: Engineer → Architect
+**Trigger**: E-97, E-80 and E-96 complete; E-79's dependency gate decided (D-069)
+
+### What was built
+- **E-97** (feb336a, local CI PASS, hosted green via b0b0e7c): `shell.tsx` 1138 → 886 lines, moves only. Pieces: `tab-bars.tsx` (the bars above the stage), `stage-cards.tsx` (starting line, restore card, set-up card, start screen — Home's seam), `shell-overlays.tsx` (toast and every overlay), `open-tab.ts` (`OpenTab`, `UpdateSheetState`). Moved text equal ignoring whitespace; `npm test` 115 → 115; `status-screens.sh` exit 0 on the split build.
+- **E-80** (b0b0e7c, ACCEPT_PASS 10/10, hosted ci + desktop-windows green): Home. `ui/src/home.ts` (pure: order, held grid, summary, card model, tab cycle, start-up rule, H4 constants), `home.tsx` (`useHome`, `HomeView`), Home button in `frame.tsx`, `home.show` (Ctrl+Shift+H; modal **Space H**), H4 in `rail.tsx` / `side-menu.tsx`, H5 in the shell's restore. `ProjectStatus` gains `counts`, `trigger` (≤ 120), `agents` from the same attention read. Debug builds only: `src/debug_trace.rs` (`REIN_DESKTOP_TRACE_FRAMES` via `eval_with_callback`, `REIN_DESKTOP_TRACE_PTY`). `tests/e2e/home-screens.sh` exits 0: no pty resize going Home and back; 16 projects with the longest frame 26 ms. Screens `.ai/screens/E-80/` (12, all opened). shell.tsx stays 886.
+- **E-96** (d6af628, ACCEPT_PASS 7/7, hosted green): `stretch_start` in `activity.rs` exactly as ruled; tests per offset at 5 / 15 s and one sighting ≤ 14 s at 5 / 15 / 3600 s gaps; the old rule fails both. `notify-screens.sh` hidden burst back to 20 s, PASS in both themes.
+- **E-79 gate** (3bfe1cf): **D-069** — `notify-rust` 4.19 with default features, chosen by the operator; `critic_security` SEC_PASS with four conditions (Windows AppUserModelID, no NSAppleScript lookup on macOS, a test with `<` `&` `"` in a folder name, `cargo audit` before the commit). Nothing installed yet.
+
+### Decisions made
+- D-069 (the operator's choice above). It is in `.ai/DECISIONS.md` as the gate requires; please own its wording.
+
+### Blueprint divergence (if any)
+- E-80: modal key **Space H** (Space h is `health.show`; status.md allows the nearest free key).
+- E-80: the frame check ran with **16** projects — the window's tab cap (`MAX_TABS`); status.md §Home's "32" is the record file's cap.
+- E-80: the Home badge counts Now items (H1); a project that stops (quiet) moves its card up but is not counted — the acceptance clause's wording assumed it would be.
+- E-80: `[window] start = "last"` with nothing restored now shows Home (H5) instead of opening the newest recent project.
+- E-80: a tab whose `rein start` has ended sends no agents (the last reading said "running").
+- E-80: on Home the shortcuts act with no terminal focused, and a set-up card behind Home no longer holds the keyboard.
+
+### Next action needed
+- Review E-97 / E-80 / E-96 and D-069.
+- Rule on two findings outside E-80's scope:
+  1. **Ctrl+Shift+Tab** reaches the page without Ctrl on Xvfb (it lands in the terminal as Shift+Tab, `^[[Z`), so `tab.prev` by key never ran in a window; never exercised by an earlier harness. Not yet seen on a real desktop.
+  2. **A set-up card swallows every shortcut** (V9: it "takes the keyboard like an overlay"), Ctrl+Shift+H and Ctrl+Tab included.
+- Engineer next: **E-79** — the core's 60 s limiter and merged sentence, channel 3 through `notify-rust` under D-069's conditions, a Linux proof on a private session bus. Its acceptance needs the operator for the Windows (installed build) and macOS sightings.
+
+### Open risks
+- `src/attention.rs` is 930 lines (CLEAN advisory).
+- Leftover scratch dirs from acceptance runs the gate would not let an agent delete: `/tmp/tmp.cwiySXYuVq`, `/tmp/tmp.yeY7J37H0f` (+ `.log`) — the operator's to remove.
+---
