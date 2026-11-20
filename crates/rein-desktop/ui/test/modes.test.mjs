@@ -162,6 +162,11 @@ test("key names and the bytes of a held chord key", () => {
   assert.equal(k(" "), "Space");
   assert.equal(k("Escape"), "Esc");
   assert.equal(k("Shift", { shiftKey: true }), null);
+  // D-070 addendum 1 (E-100): Linux reports Shift+Tab as key "Unidentified", code "Tab".
+  assert.equal(k("Unidentified", { ctrlKey: true, shiftKey: true, code: "Tab" }), "C-S-Tab");
+  assert.equal(k("Unidentified", { shiftKey: true, code: "Tab" }), "S-Tab");
+  assert.equal(k("Unidentified", { ctrlKey: true, shiftKey: true, code: "Unidentified" }), null);
+  assert.equal(k("Unidentified", { code: "KeyA" }), null, "no other key is read from code");
   // E-60: Ctrl+Shift+digit is the digit on every layout (US `!`, others `+` or `1`).
   for (const key of ["!", "+", "1", "&"]) assert.equal(k(key, { ctrlKey: true, shiftKey: true, code: "Digit1" }), "C-S-1");
   assert.equal(k("0", { ctrlKey: true, code: "Digit0" }), "C-0", "Ctrl alone keeps font.reset's key");

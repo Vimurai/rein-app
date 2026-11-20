@@ -13,7 +13,8 @@
 #   home-needs-you — a bell rung in needs-you's background pane: a "Needs you now" row, the
 #                   needs-you card first, the Home button's count;
 #   home-700      — the same at 700 px wide (one column);
-#   home-prev     — what Ctrl+Shift+Tab did from the first tab (see the comment at that step).
+#   home-prev     — Home again after Ctrl+Shift+Tab (tab.prev) from the first tab.
+# Ctrl+Shift+Tab running tab.prev is checked from the stage trace (E-100).
 # Then (E-98, keys on a set-up card, from REIN_DESKTOP_TRACE_STAGE — what the stage shows once a
 # second): Ctrl+Shift+H shows Home from the set-up tab; Ctrl+Tab leaves it for the next tab;
 # Enter on the card presses its focused button (Shift+Tab twice to "Close tab": the tab closes).
@@ -189,10 +190,12 @@ run() { # run <theme>
   X key alt+1; sleep 2
   X key ctrl+shift+h; sleep 2
   X key ctrl+Tab; sleep 2 # Home → the first tab
-  # Ctrl+Shift+Tab (tab.prev, which goes Home from the first tab): on Xvfb the page has been
-  # seen to get it without Ctrl, as Shift+Tab into the terminal (E-80 handoff). The screen
-  # records what happened; Ctrl+Shift+H then goes Home whatever it did.
-  X key ctrl+shift+Tab; sleep 2
+  # Ctrl+Shift+Tab is tab.prev, which goes Home from the first tab. WebKitGTK sends it as key
+  # "Unidentified", code "Tab" (E-99); keys.ts names it from code (D-070 addendum 1, E-100).
+  local tp
+  stage_after "$(date +%s)" "home=0" || echo "  (not on a tab: $(last_stage))"
+  X key ctrl+shift+Tab; tp=$(date +%s)
+  check "Ctrl+Shift+Tab runs tab.prev from the first tab (Home)" "$(stage_after "$tp" "home=1" && echo yes || echo "$(last_stage)")"
   shot "home-prev-$theme"
   X key ctrl+shift+h; sleep 2
   check "going to a tab from Home and back resizes no pty" "$([ "$(pty_since "$t0")" -eq 0 ] && echo yes || echo "$(pty_since "$t0") resizes")"

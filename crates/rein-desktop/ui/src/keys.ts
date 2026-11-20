@@ -9,7 +9,8 @@ export interface KeyLike {
   shiftKey: boolean;
   metaKey: boolean;
   /** The physical key (`Digit1`); read only for Ctrl+Shift+digit, whose `key` differs by
-   *  layout (`!` on US, `+` on some) — the panel keys (E-60) must not. */
+   *  layout (`!` on US, `+` on some) — the panel keys (E-60) must not — and for Tab when
+   *  `key` is "Unidentified" (Shift+Tab on Linux; D-070 addendum 1). */
   code?: string;
 }
 
@@ -35,8 +36,12 @@ const MODIFIER_ONLY = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock", "N
 
 /** The token for a key press, or `null` for a lone modifier. */
 export function keyName(e: KeyLike): string | null {
-  if (MODIFIER_ONLY.has(e.key)) return null;
-  let base = NAMED[e.key] ?? e.key;
+  // WebKitGTK reports Shift+Tab (ISO_Left_Tab) as key "Unidentified" with code "Tab"
+  // (E-99, measured on Xvfb): that one case is named from the physical key; every other
+  // "Unidentified" key stays without a token (desktop.md "Shift+Tab on Linux").
+  const key = e.key === "Unidentified" && e.code === "Tab" ? "Tab" : e.key;
+  if (MODIFIER_ONLY.has(key)) return null;
+  let base = NAMED[key] ?? key;
   const printable = base.length === 1;
   const mods: string[] = [];
   if (e.ctrlKey) mods.push("C");
