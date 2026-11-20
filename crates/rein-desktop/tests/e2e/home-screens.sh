@@ -14,6 +14,9 @@
 #                   needs-you card first, the Home button's count;
 #   home-700      — the same at 700 px wide (one column);
 #   home-prev     — what Ctrl+Shift+Tab did from the first tab (see the comment at that step).
+# Then (E-98, keys on a set-up card, from REIN_DESKTOP_TRACE_STAGE — what the stage shows once a
+# second): Ctrl+Shift+H shows Home from the set-up tab; Ctrl+Tab leaves it for the next tab;
+# Enter on the card presses its focused button (Shift+Tab twice to "Close tab": the tab closes).
 # Checked from the core's debug traces (debug builds only, no project text in them):
 #   - going to a tab from Home and back resizes no pty (REIN_DESKTOP_TRACE_PTY: no line);
 #   - a second run with 16 open projects (the window's tab cap) on Home: no animation frame
@@ -125,7 +128,7 @@ export DISPLAY=$started
 
 desktop() { # desktop [dir]: the window, or (a second start) a handoff to the running one
   exec env -u TMUX -u TMUX_PANE -u CLAUDECODE \
-    HOME="$W/home" PATH="$W/bin:$PATH" SHELL=/bin/sh REIN_DESKTOP_TRACE_PTY=1 REIN_DESKTOP_TRACE_FRAMES=1 \
+    HOME="$W/home" PATH="$W/bin:$PATH" SHELL=/bin/sh REIN_DESKTOP_TRACE_PTY=1 REIN_DESKTOP_TRACE_FRAMES=1 REIN_DESKTOP_TRACE_STAGE=1 \
     XDG_RUNTIME_DIR="$W/run" XDG_CONFIG_HOME="$W/xdg/config" XDG_DATA_HOME="$W/xdg/data" \
     XDG_STATE_HOME="$W/xdg/state" XDG_CACHE_HOME="$W/xdg/cache" \
     WEBKIT_DISABLE_DMABUF_RENDERER=1 \
@@ -153,6 +156,15 @@ fresh_state() { # fresh_state <theme> <dir>: ui.json, and three recent projects 
   printf '{"schema":1,"recent":[{"path":"%s","last_opened":%d},{"path":"%s","last_opened":%d},{"path":"%s","last_opened":%d}]}' \
     "$2/recent/billing-api" $((t - 3600)) "$2/recent/docs-site" $((t - 90000)) "$2/recent/infra" $((t - 600000)) >"$st/projects.json"
 }
+stage_after() { # stage_after <unix s> <pattern> [seconds]: 0 once a stage-trace line at or after then matches
+  local i
+  for i in $(seq 1 $((${3:-6} * 4))); do
+    grep "^stage-trace" "$W/app.log" | awk -v t="$1" '$2 >= t' | grep -q -- "$2" && return 0
+    sleep 0.25
+  done
+  return 1
+}
+last_stage() { grep "^stage-trace" "$W/app.log" | tail -1; }
 pty_since() { grep "^pty-trace" "$W/app.log" | awk -v t="$1" '$2 >= t' | grep -c .; }
 
 run() { # run <theme>
@@ -192,7 +204,21 @@ run() { # run <theme>
   if [ "$theme" = catppuccin-mocha ]; then
     "$W/bin/xresize" rein 700 "$GH" >/dev/null; sleep 2
     ffmpeg -loglevel error -y -f x11grab -draw_mouse 0 -video_size "700x${GH}" -i "$DISPLAY" -frames:v 1 "$OUT/home-700-$theme.png" && echo "  $OUT/home-700-$theme.png"
+    "$W/bin/xresize" rein "$GW" "$GH" >/dev/null; sleep 1
   fi
+  # E-98 (desktop.md §V9 "Keys on a set-up card"): the set-up tab is the second tab.
+  local t
+  X key alt+2; t=$(date +%s)
+  stage_after "$t" "setup=1 tabs=5 current=setup" || echo "  (not on the set-up card: $(last_stage))"
+  X key ctrl+shift+h; t=$(date +%s)
+  check "Ctrl+Shift+H shows Home from a set-up tab" "$(stage_after "$t" "home=1 setup=0" && echo yes || echo "$(last_stage)")"
+  X key alt+2; sleep 1.5
+  X key ctrl+Tab; t=$(date +%s)
+  check "Ctrl+Tab leaves a set-up tab for the next tab" "$(stage_after "$t" "home=0 setup=0 tabs=5 current=stopper" && echo yes || echo "$(last_stage)")"
+  X key alt+2; sleep 1.5 # the card's first focus is "Set up this project"; Shift+Tab twice: "Close tab"
+  X key shift+Tab; X key shift+Tab
+  X key Return; t=$(date +%s)
+  check "Enter on the card presses its focused button (Close tab)" "$(stage_after "$t" "tabs=4" && echo yes || echo "$(last_stage)")"
   quit
 }
 

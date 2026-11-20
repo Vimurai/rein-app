@@ -57,6 +57,7 @@ import { ShellOverlays, useToastFade } from "./shell-overlays.tsx";
 import { StageCards } from "./stage-cards.tsx";
 import { TabBars } from "./tab-bars.tsx";
 import { cycle, homeAtStart } from "./home.ts";
+import { cardKey } from "./card-keys.ts";
 import { useHome } from "./home.tsx";
 import { SideRow, panelOwnsKey, useSideMenu, useStageFit, type SideMenuProps } from "./side-menu.tsx";
 import { THEME_NAMES, cssVariables, tmuxColours, type Theme } from "./theme.ts";
@@ -170,17 +171,19 @@ export function Shell(props: ShellProps) {
   const cur = useRef(0);
   /** The current tab's terminal, read like a ref. */
   const home = useHome(rerender, () => tabs.current[cur.current]?.term); // status.md §Home (E-80)
-  const tab = { get current(): TermTab | null { return home.shown.current ? null : (tabs.current[cur.current]?.term ?? null); } };
+  const tab = { get current(): TermTab | null { return home.shown.current || cardRef.current ? null : (tabs.current[cur.current]?.term ?? null); } };
+  // A set-up card or a restored tab's card is part of its stage: plain keys stay with it, the
+  // shortcuts act (E-98, card-keys.ts); only real overlays take every key.
+  const cardRef = useRef(false);
+  cardRef.current = !home.shown.current && (tabs.current[cur.current]?.setup !== undefined || tabs.current[cur.current]?.card !== undefined);
   const pickerRef = useRef(false);
-  // The set-up card (V9) takes the keyboard like an overlay: Tab and Enter work its buttons.
   pickerRef.current =
     picker ||
     stop !== null ||
     overlay !== null ||
     pasteText !== null ||
     confirmClose !== null ||
-    updateSheet !== null ||
-    (!home.shown.current && tabs.current[cur.current]?.setup !== undefined);
+    updateSheet !== null;
   // No tab open: the start screen's keys (p o h u q, digits) join the keymap.
   const keys = tabs.current.length ? projectKeys : withStartKeys(projectKeys);
   /** The other input style's table: the menu and tooltips name its key when this one has none. */
@@ -304,8 +307,10 @@ export function Shell(props: ShellProps) {
     tabs.current.forEach((t, k) => t.el.classList.toggle("hidden", k !== cur.current));
     const t = tabs.current[cur.current];
     if (t) {
-      requestAnimationFrame(() => (t.term.shown(), modeRef.current.mode === "TERMINAL" && t.term.focus())); // #term is shown by then (Home)
-      if (modeRef.current.mode === "TERMINAL") t.term.focus();
+      // A card's tab keeps the focus on its card (E-98); #term is shown by the frame (Home).
+      const focus = () => modeRef.current.mode === "TERMINAL" && !t.setup && !t.card && t.term.focus();
+      requestAnimationFrame(() => (t.term.shown(), focus()));
+      focus();
     }
     rerender();
   }, []);
@@ -733,9 +738,16 @@ export function Shell(props: ShellProps) {
   // NORMAL and COMMAND keys: the window handles them before anything else sees them.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (pickerRef.current) return; // the picker's own keys (j k C-n C-p Enter Esc Del)
       // Any open dialog or menu owns its keys (the first-run choice, Radix menus …).
       if (e.target instanceof Element && e.target.closest('[role="dialog"], [role="menu"], [role="listbox"]')) return;
+      // A real overlay takes every key (the picker's j k C-n C-p Enter Esc Del); a stage card
+      // keeps its plain keys and lets the shortcuts act (E-98, card-keys.ts).
+      if (pickerRef.current || cardRef.current) {
+        const t = keyName(e);
+        const c = t ? cardKey(t, keys.shortcuts, pickerRef.current) : "card";
+        if (typeof c === "object") (e.preventDefault(), e.stopPropagation(), run(c.action)); // once: not also xterm's
+        return;
+      }
       const k = keyName(e);
       if (!k) return;
       if (panelOwnsKey(e, keys.shortcuts.get(k), run)) return;
