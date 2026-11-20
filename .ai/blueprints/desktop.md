@@ -920,6 +920,16 @@ prerequisite it can, and name the rest in `--check`; a machine-readable project 
   blocking prerequisite.
 - Provisional: the exit-code meaning of `init --check` is not in the contract (asked of
   rein). If rein changes it, the bar fails to silence, not to a wrong offer.
+- **Keys on a set-up card (D-070, E-98).** A set-up card is part of its tab's stage, not
+  an overlay over the window. It keeps the plain keys: `Tab`, `Shift+Tab`, `Enter`,
+  `Space`, `Esc` and letters work its buttons and reach nothing else. Every shortcut of
+  the every-mode table (`SIMPLE_SHORTCUTS`: the chords with Ctrl or Alt — next and
+  previous tab, go to tab N, Home, the menu, open and pick a project, close the tab,
+  quit, the panels) runs its action, in both input styles. An action that needs a
+  terminal does nothing there, as on Home. The same holds for a restored tab's card
+  (V12). Real overlays — the picker, a confirm sheet, Settings, the paste and stop
+  questions — still take every key. Before E-98 the card swallowed all of them, so a
+  keyboard-only operator could not leave a set-up tab.
 
 **Rework ruled on review of E-63 (2026-11-13) — built in d03b0b2; E-63 accepted at 1f5a3a8.** Windows: the parent search is exit 6 of the one validation call. The blank failed-set-up terminal was the window (text written, not drawn); a repaint ends it and the screens script now fails on a blank shot, but the cause inside xterm is not known.
 - **Update project asks before it runs.** `rein init` replaces `ENGINEER.md`,

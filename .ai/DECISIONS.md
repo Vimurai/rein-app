@@ -2633,3 +2633,52 @@ Option 1, `notify-rust` with default features, used only from the core. It meets
 
 ### Rollback
 Remove the dependency and the channel-3 module in one revert; `[notifications] system = false` turns channel 3 off without a rebuild.
+
+### D-069 addendum 1 (2026-11-20) — accepted by the Architect
+
+**Task**: E-79
+**Decision**: D-069 stands as the Engineer wrote it. The four `critic_security` conditions are part of E-79's acceptance: the handoff that closes E-79 names where each is met (the AppUserModelID line, the absence of `get_bundle_identifier*` calls, the test with `<` `&` `"`, the `cargo audit` output).
+
+### Why needed
+The gate's entry was written by the Engineer under `dependency_gate`; DECISIONS.md is Architect-owned.
+
+### Alternatives considered
+1. **Rewrite the entry** — rejected: it holds what was read and who chose; nothing in it is wrong.
+
+### Impact
+- The session-bus connection on Linux is local IPC and does not break "no network use" (`status.md` §Security). Risk if wrong: none beyond D-069's own.
+
+### Rollback
+As D-069.
+
+---
+
+## D-070 — A set-up card does not take the window's shortcuts; E-97, E-80 and E-96 accepted
+
+**Date**: 2026-11-20
+**Task**: E-97 (feb336a), E-80 (b0b0e7c), E-96 (d6af628); Engineer handoff 2026-11-20 08:26 UTC (7987775); E-98, E-99
+**Decision**: A set-up card keeps the plain keys and lets every Ctrl / Alt shortcut of the every-mode table through. Whether Ctrl+Shift+Tab reaches the page is measured before any binding changes.
+
+### Why needed
+Building Home, the Engineer found (1) Ctrl+Shift+Tab arrives without Ctrl on Xvfb, so `tab.prev` by key has never run in a window run, and (2) a set-up card swallows every shortcut, Ctrl+Shift+H and Ctrl+Tab included, because V9's code treats it as an overlay.
+
+### Rulings
+1. **Set-up card (E-98).** The card is part of a tab's stage. Plain keys (`Tab`, `Shift+Tab`, `Enter`, `Space`, `Esc`, letters) stay with the card; the chords of `SIMPLE_SHORTCUTS` run their actions in both input styles; the same for a restored tab's card. Real overlays still take every key. Written in `desktop.md` V9.
+2. **Ctrl+Shift+Tab (E-99): measure first.** One observation on Xvfb, by a synthetic key, is not a fact about desktops. E-99 records the key event's fields two ways on Xvfb and decides between a harness fault (fixed in the harness, and `tab.prev` by key joins a window run) and a real loss of Ctrl (stop, hand back with the fields). No binding is added or changed until then.
+3. **E-80 as built, accepted** — the six divergences of the handoff, recorded in `status.md` §Home "As built". The frame figure is for 16 projects, the window's tab cap. I opened four of the twelve screens (both themes, 700 px, none open): order, marks, chips and the "Needs you now" rows are as H2 and H3 say.
+4. **E-97 and E-96 accepted.** `stretch_start` is the rule of D-062 addendum 5 exactly.
+5. **Order**: E-79 → E-98 → E-99.
+
+### Alternatives considered
+1. **Leave the card as an overlay and add a "Close tab" hint** — rejected: an operator who restores five tabs and lands on a set-up card cannot reach Home or another tab by keyboard; D-034 asks pointer and keyboard parity.
+2. **Let every key through, the modal style's `g t` included** — rejected: letters work the card's buttons; one key cannot do both.
+3. **Add Ctrl+PageUp / Ctrl+PageDown as tab keys now** — held, not rejected: it is the fallback if E-99 finds Ctrl is really lost.
+
+### Constraints driving this decision
+- "Fully usable by keyboard" (`desktop.md` goal) and D-034.
+
+### Impact
+- Unlocks: E-98, E-99. Risk if wrong: a chord a card should have kept (none is known) runs an action.
+
+### Rollback
+Revert E-98's commit: the card swallows shortcuts again.

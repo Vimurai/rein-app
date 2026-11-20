@@ -446,6 +446,15 @@ The task is one commit; reverting it brings the start screen back. Nothing is st
 ### Task
 7. **E-80 (Tier 2)** — Home: H1–H5. After the tab-marks and the triage tasks.
 
+**As built, accepted (E-80, b0b0e7c; D-070).** Modal key `Space H` (`Space h` is
+`health.show`). The frame figure is for **16** projects, the window's tab cap
+(`MAX_TABS`); "thirty-two" above was the record file's cap and is not the limit of
+what Home draws. The Home badge counts Now items (H1): a project that goes quiet moves
+its card up and is not counted — the window-run line in Tests assumed it would be and
+is wrong. A tab whose `rein start` has ended shows no agents line (the last reading is
+stale, and a stale "running" is a guess). On Home the shortcuts act with no terminal
+focused. `[window] start = "last"` with nothing restored shows Home (H5).
+
 ## Waiting signal — "waiting for you" as a fact (revision 2026-11-17, D-062 addendum 1)
 
 > rein ruled on our request the same day: **rein D-160, task E-433 (planned, not built)**;

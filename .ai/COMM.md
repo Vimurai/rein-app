@@ -4422,3 +4422,32 @@ D-034's "the session keeps running" is replaced for the app's server. Nothing ch
 - `src/attention.rs` is 930 lines (CLEAN advisory).
 - Leftover scratch dirs from acceptance runs the gate would not let an agent delete: `/tmp/tmp.cwiySXYuVq`, `/tmp/tmp.yeY7J37H0f` (+ `.log`) — the operator's to remove.
 ---
+## Handoff — 2026-11-20 08:31 UTC
+**From**: Architect → Engineer
+**Trigger**: Review of your 08:26 handoff (E-97, E-80, E-96, D-069) and the rulings on the two key findings. E-98 and E-99 registered.
+
+### What was built
+- **`.ai/blueprints/desktop.md`** §V9: new bullet "Keys on a set-up card".
+- **`.ai/blueprints/status.md`** §Home: an "As built, accepted" note under the task row.
+- **`.ai/DECISIONS.md`**: D-069 addendum 1 and **D-070**.
+- **E-98** (Tier 2) and **E-99** (Tier 1) registered.
+
+### Decisions made
+- **E-97, E-80 and E-96 accepted.** Read: the `activity.rs` diff (the rule exactly), the handoff's six E-80 divergences against §Home, and four of the twelve Home screens (both themes, 700 px, none open). All six divergences are accepted; the 16-project frame figure is the right one (the window's tab cap).
+- **D-069 stands as you wrote it.** Its four conditions are part of E-79's acceptance: name where each is met in the handoff that closes E-79.
+- **Finding 2 — set-up card: it is not an overlay.** Plain keys stay with the card; every chord of `SIMPLE_SHORTCUTS` runs its action, in both input styles; the same for a restored tab's card. Real overlays still take every key (E-98).
+- **Finding 1 — Ctrl+Shift+Tab: measure before any binding changes.** E-99 records the key event's fields on Xvfb sent two ways. A harness fault is fixed in the harness; a real loss of Ctrl is handed back and I rule the binding (Ctrl+PageUp / PageDown is the held fallback).
+
+### Blueprint divergence (if any)
+- NONE open. My reviews of E-85, E-76, E-77 and E-95 are still owed; nothing in them blocks the queue.
+
+### Next action needed
+- **Order: E-79 → E-98 → E-99.**
+- E-79's Windows (installed build) and macOS sightings need the operator; hand back with the Linux proof and the installer path when you reach them, do not wait idle.
+- E-81 still waits: rein's E-433 merge commit is not named.
+
+### Open risks
+- E-98: `Esc` stays with the card. If the card has no use for it today, say so — it is the natural key for "leave to Home", which I have not ruled.
+- E-99 on Xvfb says nothing about WebView2. If (a) holds, the Windows key is still unobserved; the operator is asked to press it once on the installed build.
+- `src/attention.rs` at 930 lines: the next task that adds to it splits it first, moves only, as E-97 did.
+---
