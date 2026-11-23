@@ -1,0 +1,40 @@
+E-86 — one real run of the installer flags on Windows (operator's machine, 2026-11-23)
+
+Installer: CI artifact rein-desktop-windows-x64-setup from desktop-windows run 45186361764 (commit 5d38e53),
+  rein-app_0.1.0_x64-setup.exe, 5,873,983 bytes, sha256 e27ec3ead7ffcefabb7a39dcabff69b341249f90334f364551515b6e43add6dd
+  staged as %USERPROFILE%\Downloads\rein-app_0.1.0_x64-setup-E86-5d38e53.exe
+Command: Start-Process <installer> -ArgumentList '/P','/UPDATE','/R'  (the constant argv of app_update.rs), started while
+  the installed window was running.
+
+Before:
+  running rein-desktop PID 15016 (C:\Users\Emir\AppData\Local\rein-app\rein-desktop.exe)
+  installed exe 16,994,304 bytes, sha256 1b3961499b8c9da8ae3d4171e6a1b163f013f531cad44c501df3cbab7ae8bf7a
+  projects.json open = [/home/emir/Dev/rein-app, /home/emir/Dev/rein] (Ubuntu), active = 1
+  |   "open": [
+  |     {
+  |       "path": "/home/emir/Dev/rein-app",
+  |       "distro": "Ubuntu"
+  |     },
+  |     {
+  |       "path": "/home/emir/Dev/rein",
+  |       "distro": "Ubuntu"
+  |     }
+  |   ],
+  |   "active": 1
+  | }
+
+Timeline (CET):
+  15:36:44.35  installer started (script start, file timestamp of the run's output)
+  15:36:46     new rein-desktop PID 5572 started (Get-Process StartTime); PID 15016 gone
+  15:36:47     new window wrote projects.json: last_opened 1795444607 for rein-app and rein
+  => window replaced and relaunched in ~2-3 s; no prompt, no operator action
+
+After:
+  running rein-desktop PID 5572, MainWindowTitle "rein-app"
+  projects.json open = [/home/emir/Dev/rein-app, /home/emir/Dev/rein] (Ubuntu), active = 1  -> tabs restored, same order, same active tab
+  installed exe 16,994,304 bytes, sha256 1b39...7a (unchanged: the operator had already installed this 5d38e53 build at 14:49;
+  the run proves the flags close, replace and relaunch a running window, not a byte change)
+
+Executable size afterwards (read c): 16,994,304 bytes (16.2 MiB).
+Caveat: the timing script's Windows-side PowerShell process ended without printing its own figures (likely caught in the
+  installer's close of the running app's tree); the timeline above is taken from process StartTime and file timestamps.
