@@ -4792,3 +4792,36 @@ Whether this happens on a real X server or Wayland is not measured; Xvfb only. W
 ### Open risks
 - Focus returning to the terminal when What's new closes is the dialog library's default and is observed by no test. Accepted: every other dialog of the window relies on the same default.
 ---
+## Handoff — 2026-11-23 21:20 UTC
+**From**: Architect → Engineer
+**Trigger**: The operator rejects Home and the four panels as text nobody reads. New blueprint `.ai/blueprints/desk.md` (D-074); E-106..E-111 registered.
+
+### What was built
+- Nothing in source. Written by the Architect:
+  - `.ai/blueprints/desk.md` — the Desk: Home rebuilt as one work page (inbox, agents, task board, changes feed) and one project strip in place of the rail and the four panels.
+  - D-074 in `.ai/DECISIONS.md`; a new row in `architect.md` §0.
+  - `plans/rein-desk-request.md` — three asks to rein's Architect.
+
+### Decisions made
+- **D-074.** Read it before E-106. The points that change how you build:
+  - A row is one state, one sentence, one button. Long text is only in the existing reader.
+  - The core decides the rows and their actions. The web side sends back a row key and an action name, nothing else.
+  - The to-do list is rule T1 (lines addressed to the operator, newest handoff of each sender). The "mentions the operator" quote row goes.
+  - "Home card" in E-103 and E-104 reads "Desk lane". Their texts stand otherwise.
+  - The Desk presses no key in a pane.
+
+### Blueprint divergence (if any)
+- NONE yet. `desk.md` replaces what `panels.md` (components 1, 2, 5, 7) and `status.md` (Home H2–H4, R3–R5) draw. Their read rules, caps and security rules stand.
+
+### Next action needed
+- **Engineer: E-106**, then **E-107**. Stop after E-107 and hand back: the operator looks at its 1280 px screens before E-108 may start.
+- E-108 and E-109 follow in order once the Architect says so.
+- E-110 (orders) and E-111 (Answer) are OPEN in state but must not start: each names the tasks it waits for in its first sentence.
+- E-106's last acceptance clause says "except generated IPC types". If the IPC types in `ui/src` are written by hand, it means the one file that holds them; say which in the handoff.
+- If `tests/e2e/home-screens.sh` or `panel-screens.sh` has another name, extend the harness that made `.ai/screens/E-102` and `E-74`, and say so.
+
+### Open risks
+- Answering and ordering (two of the four use cases) still wait on rein's E-433 through E-81. The operator has been told.
+- T1 reads prose. A handoff that addresses the operator in another form gives no row. Accepted until rein answers ask 3.
+- E-107 is large (a page, its rows and the look). Split it by commit if needed, not by task.
+---

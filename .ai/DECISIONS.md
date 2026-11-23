@@ -2860,3 +2860,50 @@ Text only.
 
 ### Rollback
 Text only; E-105 is one commit.
+
+---
+
+## D-074 — The Desk: Home and the four panels become one work page built on use cases
+
+**Date**: 2026-11-23
+**Task**: E-106..E-111; operator's message 2026-11-23 and their three answers
+**Decision**: Home is rebuilt as the Desk (`.ai/blueprints/desk.md`): an inbox, the agents with their controls, the tasks as a board and a feed of changes, for every open project. The rail and the Dashboard, Communication, Tasks and "Needs you" panels are removed; one narrow strip of the same parts stays beside the terminal.
+
+### Why needed
+The operator: the dashboard is not usable, not readable and ugly; not interactive; unclear; "that goes for all modules"; "it should have use cases". The Architect opened the current screens (`.ai/screens/E-102`, `E-77`, `E-74`, `E-75`): every panel is a mirror of `.ai` text, and the only actions are "Go to tab", "Dismiss" and "Read all". `panels.md` was written as "data-only panels" (D-056) and `status.md` made the text readable (D-063); neither asked what the operator does with it.
+
+### What the operator chose (asked 2026-11-23)
+- Use cases, all four: answer a waiting agent; give the next order; my own to-do list; what changed since I looked.
+- Layout: one Desk page (over "keep the panels, make each act" and "a chat-style feed").
+- The look, all four faults: no hierarchy; too much text; unfinished; unclear words.
+
+### Rulings
+1. **A row is a thing with one state, one sentence and one button.** Text longer than a line is behind the row, in the existing reader.
+2. **The core decides rows and their actions; the web side returns a row key and an action name.** No path, pane, task or free action comes from the web side.
+3. **The to-do list is the lines addressed to the operator** in the newest handoff of each sender (rule T1), plus the app's own facts. It replaces the "mentions the operator" quote. It is provisional, as the handoff parser is; a record from rein is asked for.
+4. **Built first: what needs nothing from rein** (E-106..E-109). Answering and ordering stay behind rein's E-433 through E-81 → E-103 → E-104, whose texts stand; "Home card" in E-103 and E-104 reads "Desk lane".
+5. **The Desk presses no key in a pane.** "Answer" brings the waiting pane to the front, enlarged. Allow / Deny on the row needs the ask's text, which rein does not publish and the app does not read from the screen (D-062 stands).
+6. **Orders are fixed sentences** through `pane_send` under its table (D-071 addendum 1). The one project text ever sent is a to-do line the operator has just ticked, on their click.
+7. **The operator sees the E-107 screens before E-108 starts.** The look is judged on the real window, not on a description.
+8. `plans/rein-desk-request.md` carries three asks to rein's Architect: the E-433 merge commit; the ask's text and a way to answer; a to-do record.
+
+### Alternatives considered
+1. **Keep the five places and add actions to each** — rejected by the operator; it keeps five views to switch between.
+2. **A chat-style feed per project** — rejected by the operator; it orders by time, and the first question is "what needs me", not "what happened last".
+3. **Relax R7b so orders work before rein's signal** — rejected: Enter or a digit typed into a permission prompt approves it, and without the signal the app cannot tell a prompt from an ordinary input line.
+4. **Read the pane's screen to show the ask** — rejected: D-062; a screen scrape is a guess shown as a fact.
+5. **One Desk page with a core-decided row list (chosen).**
+
+### Constraints driving this decision
+- The app writes nothing to a project and reads only what it reads today.
+- rein's E-433 is not on rein's main (local clone, 2026-11-23: `origin/main` 3fb9253 of 2026-11-17).
+- `shell.tsx` is at 898 of 900 lines; the Desk lives in new files and deletes what it replaces.
+
+### Impact
+- Unlocks: E-106..E-109 now; E-111 after E-103; E-110 after E-104.
+- Supersedes as the description of what is drawn: `panels.md` components 1, 2, 5, 7; `status.md` Home H2–H4 and R3–R5. Their read rules, caps and security stand.
+- Settings `[panels] enabled` and `rail` stop doing anything; keys `Ctrl+Shift+2…4` are freed.
+- Risk if wrong: the operator dislikes the E-107 screens. The cost is then one task, and ruling 7 exists to find that out early.
+
+### Rollback
+E-107 and E-109 delete what they replace, so reverting them restores Home and the panels whole.
