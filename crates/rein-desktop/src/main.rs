@@ -17,6 +17,8 @@ mod cli;
 mod cli_ipc;
 mod config;
 mod debug_trace;
+mod desk;
+mod desk_ipc;
 mod dirs;
 mod dismissed;
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -46,6 +48,7 @@ mod single_instance;
 #[cfg(windows)]
 #[path = "single_instance_windows.rs"]
 mod single_instance;
+mod stamps;
 mod status;
 mod status_watch;
 mod system_notify;
@@ -260,6 +263,7 @@ fn main() -> ExitCode {
         .manage(ui_store)
         .manage(watch)
         .manage(status_watch::StatusWatch::default())
+        .manage(desk_ipc::DeskState::default())
         .manage(attention::AttentionState::new(dismissed::Dismissed::open(
             dirs::state_dir(&dirs::process_env),
         )))
@@ -313,7 +317,10 @@ fn main() -> ExitCode {
             updates::app_update_cancel,
             status_watch::project_status_all,
             reported::tab_current,
-            reported::tab_bell
+            reported::tab_bell,
+            desk_ipc::desk_all,
+            desk_ipc::desk_act,
+            desk_ipc::desk_seen
         ]);
     let result = builder
         .setup(move |app| {

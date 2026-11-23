@@ -245,3 +245,74 @@ export const tabBell = (tab: number) => invoke<void>("tab_bell", { tab });
 export const projectStatusAll = () => invoke<import("./status.ts").ProjectStatus[]>("project_status_all", {});
 /** Dismiss a bell, stuck or mention row the core sent for `tab` (anything else is refused). */
 export const attentionDismiss = (tab: number, key: string) => invoke<void>("attention_dismiss", { tab, key });
+
+// ── The Desk (desk.md §Data Model and §API, D-074; E-106) ──────────────────────────────
+export type DeskRowKind =
+  | "waiting" | "ended" | "setup" | "review_failed" | "stalled" | "bell" | "todo" | "update" | "outdated" | "health";
+export type DeskAction =
+  | "answer" | "restart" | "setup" | "why" | "open" | "done" | "update" | "ask" | "check"
+  | "dismiss" | "details" | "copy" | "later";
+/** What the reader opens on: a task by id, or an index into the tab's handoffs or stamps. */
+export type DeskRef = { task: string } | { handoff: number } | { stamp: number };
+export interface DeskRow {
+  /** Issued by the core; the only thing `deskAct` names besides the action. */
+  key: string;
+  kind: DeskRowKind;
+  /** The tab's core id; null for the app's own rows (an update, the installation). */
+  tab: number | null;
+  text: string;
+  age_s: number | null;
+  primary: DeskAction;
+  more: DeskAction[];
+  ref: DeskRef | null;
+}
+export interface DeskCard { id: string; title: string; tier: 1 | 2 | 3 | null; age_s: number | null; waits_on: string[] }
+export interface DeskBoard {
+  next: DeskCard[];
+  doing: DeskCard[];
+  blocked: DeskCard[];
+  done: DeskCard[];
+  counts: { next: number; doing: number; blocked: number; done: number };
+}
+export interface DeskEvent {
+  key: string;
+  kind: "task_done" | "review_failed" | "accepted" | "handoff";
+  /** Seconds since the epoch. */
+  at: number;
+  title: string;
+  task: string | null;
+  commit: string | null;
+  from: string | null;
+  to: string | null;
+  new: boolean;
+  ref: DeskRef | null;
+}
+export interface Desk {
+  for_you: DeskRow[];
+  lanes: import("./agents.ts").Agent[];
+  board: DeskBoard | null;
+  activity: DeskEvent[];
+  /** Why the tasks are not available (`board` is then null). */
+  unavailable: string | null;
+}
+export interface DeskAll {
+  /** Every row in inbox order: the app's and every open tab's. */
+  for_you: DeskRow[];
+  tabs: { tab: number; desk: Desk }[];
+}
+export interface DeskStamp { type: string; task_id: string; timestamp: string; sha: string; summary: string }
+/** `done`: the core did it (Done, Dismiss, Later); `run`: the window's own action to run, with
+ *  the tab and the reader's reference from the core's record. */
+export type DeskActReply = "done" | { run: { action: DeskAction; tab: number | null; ref: DeskRef | null } };
+/** Every open project's Desk in one reply (the page's first draw). */
+export const deskAll = () => invoke<DeskAll>("desk_all", {});
+/** One project's Desk, after its `project_status` carried a new `files` mark. */
+export const deskOne = (tab: number) =>
+  invoke<import("./panels.ts").Reply<Desk>>("panel_data", { tab, source: "desk" });
+/** One stamp of `tab`'s project, by the index a row or an event carries (for the reader). */
+export const deskStamp = (tab: number, index: number) =>
+  invoke<import("./panels.ts").Reply<DeskStamp>>("panel_data", { tab, source: "stamps", index });
+/** A row's action: only a key the core sent and an action that row offered. */
+export const deskAct = (key: string, action: DeskAction) => invoke<DeskActReply>("desk_act", { key, action });
+/** Mark the changes of `tab`'s project read (null: every open project). */
+export const deskSeen = (tab: number | null) => invoke<void>("desk_seen", { tab });

@@ -93,7 +93,7 @@ pub fn shown(s: &str, max: usize, lines: bool) -> String {
 // ── state.json → tasks ──────────────────────────────────────────────────────────────────
 
 /// A task as the panels show it.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
 pub struct Task {
     pub id: String,
     pub status: String,
@@ -102,6 +102,12 @@ pub struct Task {
     pub description: String,
     pub blocked_by: Vec<String>,
     pub updated_at: String,
+    /// The Desk's fields (desk.md §Components 1, E-106): when the task was made and done, what
+    /// its DONE said, and the tasks it waits for.
+    pub created_at: String,
+    pub completed_at: String,
+    pub summary: String,
+    pub depends_on: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -116,7 +122,7 @@ pub struct Tasks {
 /// A string, a number, a boolean or null — taken as text. Anything else (an object, a list)
 /// is not a field this version reads.
 #[derive(Default)]
-struct Lenient(Option<String>);
+pub(crate) struct Lenient(pub(crate) Option<String>);
 
 impl<'de> Deserialize<'de> for Lenient {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
@@ -199,6 +205,14 @@ struct RawTask {
     blocked_by: BlockedBy,
     #[serde(default)]
     updated_at: Lenient,
+    #[serde(default)]
+    created_at: Lenient,
+    #[serde(default)]
+    completed_at: Lenient,
+    #[serde(default)]
+    summary: Lenient,
+    #[serde(default)]
+    depends_on: BlockedBy,
 }
 
 /// The `tasks` array, read element by element: more than [`MAX_TASKS_READ`] stops the read.
@@ -275,6 +289,15 @@ pub fn parse_tasks(bytes: &[u8]) -> Result<Tasks, Unavailable> {
                 .map(|b| shown(b, SHORT, false))
                 .collect(),
             updated_at: s(t.updated_at.0),
+            created_at: s(t.created_at.0),
+            completed_at: s(t.completed_at.0),
+            summary: shown(t.summary.0.as_deref().unwrap_or(""), DESCRIPTION, false),
+            depends_on: t
+                .depends_on
+                .0
+                .iter()
+                .map(|b| shown(b, SHORT, false))
+                .collect(),
         });
     }
     let cut = tasks.len() > MAX_TASKS;

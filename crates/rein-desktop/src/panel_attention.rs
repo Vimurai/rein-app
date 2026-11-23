@@ -182,6 +182,14 @@ fn without_task_label(s: &str) -> &str {
 /// the next word is "operator" or "operators" (any case) and the word ends there. A line
 /// that only holds the word ("E-79 (operator)", "the operator's keys") is not.
 pub fn addressed_to_operator(line: &str) -> bool {
+    after_operator_address(line).is_some()
+}
+
+/// R1's address taken off: what follows "operator" in a line addressed to the operator, with
+/// the emphasis marks, colon or dash that close the address (T1, desk.md §Components 1,
+/// E-106). `None` when the line is not addressed to the operator; `Some("")` when the address
+/// is all there is (its list follows on deeper lines).
+pub fn after_operator_address(line: &str) -> Option<&str> {
     let s = without_list_marker(line).trim_start_matches(is_mark);
     let s = without_task_label(s).trim_start_matches(is_mark);
     let s = match s.get(..4) {
@@ -190,8 +198,14 @@ pub fn addressed_to_operator(line: &str) -> bool {
     };
     let end = s.find(|c: char| !c.is_alphanumeric()).unwrap_or(s.len());
     let (word, after) = s.split_at(end);
-    (word.eq_ignore_ascii_case("operator") || word.eq_ignore_ascii_case("operators"))
-        && !after.starts_with(['\'', '\u{2019}'])
+    let addressed = (word.eq_ignore_ascii_case("operator")
+        || word.eq_ignore_ascii_case("operators"))
+        && !after.starts_with(['\'', '\u{2019}']);
+    addressed.then(|| {
+        after
+            .trim_start_matches(|c: char| is_mark(c) || matches!(c, ':' | '—' | '–' | '-' | ','))
+            .trim_end()
+    })
 }
 
 /// R2: a mention's quote — the line without its list marker, with `**`, `__` and backticks

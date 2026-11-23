@@ -91,6 +91,9 @@ pub struct ProjectStatus {
     /// The active tasks the card lists (status.md "Home, second revision" R4, D-071): at most
     /// three; empty when `state.json` was not read.
     pub active: Vec<ActiveTask>,
+    /// Changes when the tab's `state.json` or `COMM.md` changed: the Desk asks again for this
+    /// tab only (desk.md §API, E-106). 0 for a set-up tab.
+    pub files: u32,
 }
 
 /// The Home card's task counts, trigger and active tasks from one tab's facts (none: null or
@@ -146,6 +149,7 @@ impl ProjectStatus {
             || self.counts != next.counts
             || self.trigger != next.trigger
             || self.agents != next.agents
+            || self.files != next.files
             || self.active != next.active
     }
 }
@@ -232,6 +236,7 @@ mod tests {
             trigger: None,
             agents: vec![],
             active: vec![],
+            files: 0,
         };
         assert!(!s(State::Quiet, Some(20)).differs(&s(State::Quiet, Some(25))));
         assert!(
@@ -266,6 +271,8 @@ mod tests {
                 status: crate::panel_attention::ActiveStatus::Open,
             }]
         })));
+        // A file of the tab changed: the Desk asks again for it (E-106).
+        assert!(base.differs(&with(&|x| x.files = 7)));
         assert!(
             !with(&|x| x.last_handoff_s = Some(61))
                 .differs(&with(&|x| x.last_handoff_s = Some(119)))
@@ -280,7 +287,8 @@ mod tests {
             serde_json::json!({"tab": 1, "state": "needs_you", "quiet_s": null, "worked_s": 30,
                                "waiting": null, "now": [], "info": [], "in_progress": null,
                                "turn": null, "last_handoff_s": null,
-                               "counts": null, "trigger": null, "agents": [], "active": []})
+                               "counts": null, "trigger": null, "agents": [], "active": [],
+                               "files": 0})
         );
     }
 

@@ -108,7 +108,6 @@ pub struct Lists {
 
 /// "2026-11-13 12:20 UTC" in seconds since the epoch; anything else is not guessed at. The
 /// old quiet rule's reader, kept for the Home card's last-handoff age (status.md §Home, E-80).
-#[allow(dead_code)]
 pub fn handoff_seconds(ts: &str) -> Option<u64> {
     let b = ts.trim().as_bytes();
     if b.len() != 20
@@ -133,7 +132,18 @@ pub fn handoff_seconds(ts: &str) -> Option<u64> {
         num(11..13)?,
         num(14..16)?,
     );
-    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || h > 23 || mi > 59 {
+    civil_seconds(y, mo, d, h, mi, 0)
+}
+
+/// Seconds since the epoch of a UTC civil time; `None` for a field out of range or a time
+/// before the epoch. Shared by the handoff reader and the Desk's ISO reader (E-106).
+pub fn civil_seconds(y: i64, mo: i64, d: i64, h: i64, mi: i64, sec: i64) -> Option<u64> {
+    if !(1..=12).contains(&mo)
+        || !(1..=31).contains(&d)
+        || !(0..=23).contains(&h)
+        || !(0..=59).contains(&mi)
+        || !(0..=60).contains(&sec)
+    {
         return None;
     }
     // Days from the civil date (Howard Hinnant's algorithm).
@@ -144,7 +154,7 @@ pub fn handoff_seconds(ts: &str) -> Option<u64> {
     let doy = (153 * mp + 2) / 5 + d - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     let days = era * 146_097 + doe - 719_468;
-    u64::try_from(days * 86_400 + h * 3600 + mi * 60).ok()
+    u64::try_from(days * 86_400 + h * 3600 + mi * 60 + sec).ok()
 }
 
 /// A span as the panel says it: minutes up to two hours, then hours, then days.
@@ -372,14 +382,19 @@ fn core_of(d: &Desktop, a: &AttentionState, t: &TabIn, stuck_after_s: u32) -> Ta
     let Some((pty, _, project)) = d.tab_target(tab) else {
         return TabCore::default();
     };
-    let facts =
-        match crate::panel_ipc::panel_reply(d, tab, crate::panel_ipc::Source::Attention, now_s()) {
-            crate::panel_ipc::Reply::Ok { ok, .. } => match *ok {
-                crate::panel_ipc::Data::Attention(a) => Some(a),
-                _ => None,
-            },
-            crate::panel_ipc::Reply::Unavailable { .. } => None,
-        };
+    let facts = match crate::panel_ipc::panel_reply(
+        d,
+        tab,
+        crate::panel_ipc::Source::Attention,
+        None,
+        now_s(),
+    ) {
+        crate::panel_ipc::Reply::Ok { ok, .. } => match *ok {
+            crate::panel_ipc::Data::Attention(a) => Some(a),
+            _ => None,
+        },
+        crate::panel_ipc::Reply::Unavailable { .. } => None,
+    };
     let seen = d.agents.seen(tab);
     TabCore {
         project: Some(project.to_string_lossy().into_owned()),

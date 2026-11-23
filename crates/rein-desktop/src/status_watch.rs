@@ -152,6 +152,7 @@ fn setup_status(tab: u32, facts: Option<&Attention>, now_s: u64) -> ProjectStatu
         trigger,
         agents: vec![],
         active,
+        files: 0,
     }
 }
 
@@ -220,6 +221,7 @@ pub fn statuses(
                     vec![]
                 },
                 active,
+                files: crate::panel_ipc::files_mark(d, tab),
             }
         })
         .collect();
@@ -438,6 +440,7 @@ mod tests {
             trigger: None,
             agents: vec![],
             active: vec![],
+            files: 0,
         }
     }
 

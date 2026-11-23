@@ -68,6 +68,9 @@ const ALLOWED: &[&str] = &[
     "allow-project-status-all",
     "allow-tab-current",
     "allow-tab-bell",
+    "allow-desk-all",
+    "allow-desk-act",
+    "allow-desk-seen",
 ];
 
 fn json(rel: &str) -> serde_json::Value {

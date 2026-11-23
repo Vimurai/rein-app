@@ -47,4 +47,7 @@ pub const COMMANDS: &[&str] = &[
     "project_status_all",
     "tab_current",
     "tab_bell",
+    "desk_all",
+    "desk_act",
+    "desk_seen",
 ];

@@ -23,6 +23,9 @@ pub const MAX_DONT_ASK: usize = 500;
 /// by status.md §Components 7, E-74 — the window also keeps it under half its own width).
 pub const PANEL_WIDTH: std::ops::RangeInclusive<u32> = 320..=720;
 pub const PANEL_WIDTH_DEFAULT: u32 = 400;
+/// The most projects the Desk keeps a "seen" time for.
+pub const MAX_DESK_SEEN: usize = 64;
+
 /// `[notifications] stuck_after_min`'s range (status.md §Data Model).
 pub const STUCK_AFTER_MIN: std::ops::RangeInclusive<u32> = 3..=120;
 
@@ -105,6 +108,11 @@ pub struct UiFile {
     /// The window's version when it started its own update (updates.md §Data Model, E-86);
     /// the next window that runs another version says "Updated to X." once and clears it.
     pub updated_from: Option<String>,
+    /// The Desk (desk.md §Data Model, E-106): the scope chip chosen (`all` or a project path),
+    /// and per project path the time its changes were last marked read (at most
+    /// [`MAX_DESK_SEEN`], the oldest dropped).
+    pub desk_scope: Option<String>,
+    pub desk_seen: std::collections::BTreeMap<String, u64>,
 }
 
 impl Default for UiFile {
@@ -134,6 +142,8 @@ impl Default for UiFile {
             first_run_done: false,
             updates_asked: Default::default(),
             updated_from: None,
+            desk_scope: None,
+            desk_seen: Default::default(),
         }
     }
 }
@@ -168,6 +178,8 @@ pub struct UiView {
     pub notifications_events: Effective,
     pub notifications_stuck_after_min: Effective,
     pub first_run_done: bool,
+    /// The Desk's scope chip: `all` (the default) or a project path (E-106).
+    pub desk_scope: String,
 }
 
 pub struct UiStore {
@@ -227,6 +239,26 @@ impl UiStore {
             *live = d;
         }
         crate::updates::parse_version(from.as_bytes()).filter(|v| v != running)
+    }
+
+    /// When the Desk's changes of `project` were last marked read.
+    pub fn desk_seen(&self, project: &str) -> Option<u64> {
+        self.lock().desk_seen.get(project).copied()
+    }
+
+    /// Mark the changes of `projects` read at `now`; at most [`MAX_DESK_SEEN`] kept, the
+    /// oldest dropped.
+    pub fn set_desk_seen(&self, projects: &[String], now: u64) -> Result<(), IpcError> {
+        let mut live = self.lock();
+        let mut d = live.clone();
+        for p in projects {
+            d.desk_seen.insert(p.clone(), now);
+        }
+        trim_seen(&mut d.desk_seen);
+        self.save(&d)
+            .map_err(|e| err("io", format!("cannot save ui.json: {e}")))?;
+        *live = d;
+        Ok(())
     }
 
     /// Effective = config.toml if it sets the key, else ui.json, else the default.
@@ -370,6 +402,7 @@ impl UiStore {
                 .clone()
                 .filter(|p| PANEL_IDS.contains(&p.as_str())),
             first_run_done: d.first_run_done,
+            desk_scope: d.desk_scope.clone().unwrap_or_else(|| "all".into()),
         }
     }
 
@@ -577,6 +610,17 @@ impl UiStore {
                 };
             }
             "first_run_done" => d.first_run_done = value.as_bool().ok_or_else(bad)?,
+            // `all` or a project path passing the path text rule (E-106).
+            "desk_scope" => {
+                d.desk_scope = match value {
+                    Value::Null => None,
+                    v => match v.as_str() {
+                        Some("all") => Some("all".into()),
+                        Some(p) if crate::project_path::check(p).is_ok() => Some(p.into()),
+                        _ => return Err(bad()),
+                    },
+                };
+            }
             _ => return Err(err("bad_field", "not a setting")),
         }
         self.save(&d)
@@ -596,6 +640,17 @@ impl UiStore {
         let text = serde_json::to_string_pretty(d).map_err(std::io::Error::other)?;
         std::fs::write(&tmp, text)?;
         std::fs::rename(&tmp, file)
+    }
+}
+
+/// The oldest "seen" times dropped until at most [`MAX_DESK_SEEN`] remain.
+fn trim_seen(m: &mut std::collections::BTreeMap<String, u64>) {
+    while m.len() > MAX_DESK_SEEN {
+        let oldest = m.iter().min_by_key(|(_, t)| **t).map(|(k, _)| k.clone());
+        match oldest {
+            Some(k) => m.remove(&k),
+            None => break,
+        };
     }
 }
 
@@ -636,12 +691,17 @@ fn load(file: &Path) -> UiFile {
         .and_then(|t| serde_json::from_str::<UiFile>(&t).ok())
         .and_then(|mut u| panels_read(&mut u).ok().map(|()| u));
     match parsed {
-        Some(u)
+        Some(mut u)
             if u.schema == 1
                 && matches!(u.input_style.as_str(), "simple" | "modal")
                 && u.theme.as_deref().is_none_or(|t| THEMES.contains(&t))
                 && u.font_size.is_none_or(|n| (6..=72).contains(&n)) =>
         {
+            // A hand-edited Desk choice out of shape is dropped, not refused (E-106).
+            u.desk_scope = u
+                .desk_scope
+                .filter(|p| p == "all" || crate::project_path::check(p).is_ok());
+            trim_seen(&mut u.desk_seen);
             u
         }
         _ => UiFile::default(),

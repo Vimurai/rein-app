@@ -656,9 +656,20 @@ pub fn updates_later(
     ui: State<'_, UiStore>,
     which: String,
 ) -> Result<UpdatesState, IpcError> {
+    later(&app, &watch, &ui, &which)
+}
+
+/// "Later" on the card, the dialog or a Desk row (E-106): the newest version of `which` is
+/// recorded as answered.
+pub fn later(
+    app: &AppHandle,
+    watch: &Watch,
+    ui: &UiStore,
+    which: &str,
+) -> Result<UpdatesState, IpcError> {
     let mut asked = watch.state().asked;
     let s = watch.state();
-    match which.as_str() {
+    match which {
         "rein" => asked.rein = s.rein.newest,
         "app" => asked.app = s.app.newest,
         _ => return Err(err("bad_kind", "rein or app")),
@@ -668,6 +679,22 @@ pub fn updates_later(
         let _ = app.emit(EVENT_UPDATES, s);
     }
     Ok(watch.state())
+}
+
+/// The versions a Desk row offers (E-106): a newer window or Rein, not answered "Later" —
+/// the same rule as the web side's `appAsk` / `reinAsk` (updates.ts).
+pub fn offered(s: &UpdatesState) -> (Option<String>, Option<String>) {
+    let newer = |newest: &Option<String>, running: Option<&str>| -> Option<String> {
+        let n = newest.as_deref()?;
+        let v = |x: &str| semver::Version::parse(x.strip_prefix('v').unwrap_or(x)).ok();
+        let (a, b) = (v(n)?, v(running?)?);
+        (a > b).then(|| n.to_string())
+    };
+    let app = newer(&s.app.newest, Some(s.app.running))
+        .filter(|v| s.app.mode != "none" && s.asked.app.as_deref() != Some(v));
+    let rein = newer(&s.rein.newest, s.rein.installed.as_deref())
+        .filter(|v| s.asked.rein.as_deref() != Some(v));
+    (app, rein)
 }
 
 #[cfg(test)]
