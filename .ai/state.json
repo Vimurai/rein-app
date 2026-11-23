@@ -1560,6 +1560,20 @@
       "ready": true,
       "blocked_by": [],
       "updated_at": "2026-11-20T15:10:56.559Z"
+    },
+    {
+      "id": "E-105",
+      "owner": "Engineer (Claude)",
+      "status": "OPEN",
+      "tier": 2,
+      "description": "Add a Close button to the What's new dialog and title the Update dialog \"Updates\", per .ai/blueprints/updates.md §Components 4 and D-073. NotesReader (ui/src/update-ui.tsx) passes no footer to Panel, so the dialog closes only by Esc or a click outside; give it the same Close footer button the Update dialog has, focused when the dialog opens, and return focus to where it was on close. In ui/src/release.tsx the dialog of kind update is titled \"Updates\"; the action label \"Update Rein\" in actions.ts and the Rein card's button keep their text. Extend updates.test.mjs and the existing harness tests/e2e/app-update-screens.sh; add no new suite. Acceptance: `npm test` in crates/rein-desktop/ui exits 0 with a test that the rendered notes dialog contains a Close button and a test that the update dialog's title is \"Updates\"; the run log of tests/e2e/app-update-screens.sh ends \"PASS: app update screens\" and includes a check that clicking Close removes the What's new dialog; .ai/screens/E-105/ holds app-whatsnew and app-dialog screens in catppuccin-mocha and github-light, each showing the Close button and the title \"Updates\"; `grep -n \"Update Rein\" crates/rein-desktop/ui/src/release.tsx` prints no dialog-title line.",
+      "created_at": "2026-11-23T17:30:59.709Z",
+      "completed_at": null,
+      "summary": null,
+      "depends_on": [],
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-23T17:30:59.713Z"
     }
   ],
   "stamps": [

@@ -4710,3 +4710,34 @@ Whether this happens on a real X server or Wayland is not measured; Xvfb only. W
 - E-86 Lows carried over: the host policy ignores the port; U+061C is not in the direction-mark filter; the signature's trusted comment is not checked (unused); a same-user race between verify and start (no privilege boundary).
 - A throwaway `/tmp/rein-aup.djtEUE` dir from the first probe run is left. The safe-exec gate blocked `rm -rf` on it. Its tmux server is stopped; the dir is harmless.
 ---
+## Handoff — 2026-11-23 17:45 UTC
+**From**: Architect → Engineer
+**Trigger**: Review of E-86 and E-87 (handoff 17:28 UTC); D-073; E-105 registered.
+
+### What was built
+- Nothing by the Architect. Reviewed: the stamps at b0d7d02 / b90d77f and five screens of `.ai/screens/E-87/`, each opened (card, failed, updated, dialog, whatsnew). **E-86 and E-87 are accepted.**
+
+### Decisions made
+- **D-073.** What's new opens a dialog, not the `status.md` §7 reader. `updates.md` §4 now says so.
+  - A hidden window asks for attention (channel 2). That stays; E-79 adds no update event to the system notification.
+  - Running-version notes, the hold variable of the test build and the test-file move are accepted.
+  - E-86's carried Lows get no task.
+- **Found in review, not in the stamps:**
+  1. The What's new dialog has no button: `NotesReader` passes no `footer` to `Panel` (`ui/src/update-ui.tsx:253`). It closes by Esc or a click outside only.
+  2. The Update dialog is titled "Update Rein" when the only newer row is the window (`ui/src/release.tsx:214`).
+
+### Blueprint divergence (if any)
+- NONE open. The four divergences of the 17:28 handoff are written into `updates.md` §4 and D-073.
+
+### Next action needed
+- **Engineer: E-105** (Tier 2) — Close in the What's new dialog; the Update dialog's title "Updates". It is the only task that can start.
+- E-81 stays closed to start. Read on 2026-11-23 in the local rein clone: no commit naming E-433 is on `origin/main` (tip 3fb9253, 2026-11-17). The Architect names the merge commit when rein has one. E-103 and E-104 wait behind it.
+- **Operator:**
+  - Create the rein-app update key, store its secret in the repository, and say go for a tag (E-88, E-6).
+  - Give the notification sightings E-79 waits on.
+  - Replace the Windows build installed from E-86 by hand, once, with a build at or after a4c5e82. Its Update button fails before the download, so it cannot take the first published release in place (D-073 ruling 4).
+
+### Open risks
+- The Linux / macOS card (the command with Copy) has no window screen. Accepted: the test build is always in place, and the unit tests cover the form.
+- The clone's `origin/main` may be behind the remote; the Architect role may not fetch. If rein's E-433 has merged since 2026-11-17, rein's Architect will say so.
+---

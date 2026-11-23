@@ -2820,3 +2820,43 @@ E-101's clauses asked for a measurement and a screenshot at 360 px. The window c
 
 ### Rollback
 Text only.
+
+---
+
+## D-073 — "What's new" opens a dialog, not the panel reader; E-86 and E-87 accepted
+
+**Date**: 2026-11-23
+**Task**: E-86 (5d38e53), E-87 (a4c5e82, b90d77f); Engineer's handoff 2026-11-23 17:28 UTC
+**Decision**: The release notes open in the window's ordinary dialog (title "What's new in rein-app X", body through the closed structured-text component). "The reader" in `updates.md` §4 reads "a dialog". E-86 and E-87 are accepted as built, with the three other divergences of the handoff.
+
+### Why needed
+`updates.md` §4 said the "What's new" link "opens the notes in the reader". The only reader the blueprints define is `status.md` §7: a sheet beside a side panel, for a task or a handoff, with previous / next. E-87 drew a dialog; critic_arch rated it P2 and asked for a ruling.
+
+### What was observed (Architect, 2026-11-23)
+- `.ai/screens/E-87/` opened: `app-card-github-light`, `app-failed-github-light`, `app-updated-github-light`, `app-dialog-catppuccin-mocha`, `app-whatsnew-catppuccin-mocha`. Each shows the state its name says; the sentences match `updates.md` §4.
+- Stamps at b0d7d02 / b90d77f: SEC_CLEARED (20 hostile signature probes, 0 exploited), ARCH_PASS, SEC_PASS, TESTS_PASS, ACCEPT_PASS 5/5.
+- **Defect, not in the stamps:** the What's new dialog has no button. `NotesReader` passes no `footer` to `Panel` (`ui/src/update-ui.tsx:253`), so it closes by Esc or a click outside only. The Update dialog has Close. → E-105.
+- The Update dialog is titled "Update Rein" while its only newer row is the window (`ui/src/release.tsx:214`). → E-105.
+
+### Rulings
+1. **Dialog, not the reader.** Notes are at most 4 KiB of plain text with nothing before or after them; the §7 reader exists for a list of items beside a panel, and no panel is open here.
+2. **A hidden window asks for attention** (`request_user_attention`, `status.md` §6 channel 2), once per version, never after Later, never with `[updates] app = false`. This is the built behaviour and it stays. E-79 does not add an update event to the system notification; a later task may, on an operator's ask.
+3. **Running-version notes are kept** when the verified document's version equals the running one; `newest` stays empty. Accepted: it is the only source of text for What's new after a restart.
+4. **The two E-86 faults fixed inside E-87** (TAB in the minisign trusted comment; the blocking client built on a tokio worker) are accepted with their re-review. Consequence for the operator: **the E-86 build now installed on Windows cannot update itself** (its button panics before the download). It must be replaced by hand once, with a build at or after a4c5e82, before the first published release can be taken in place.
+5. `REIN_DESKTOP_UPDATE_HOLD_MS` (test build only, compiled out of release) and the move of the tests to `updates_tests.rs` are accepted.
+6. E-86's carried Lows stay recorded and get no task: none of them crosses a privilege boundary.
+
+### Alternatives considered
+1. **Move the notes into the §7 reader** — rejected: the reader's header, chips and previous / next have no meaning for one text; it would need a panel-less mode built only for this.
+2. **Open the Update dialog on the window's row** — rejected: after a restart nothing is newer, so that row is absent.
+3. **A dialog (chosen)** — built, tested, drawn in both themes.
+
+### Constraints driving this decision
+- Notes text comes from the network (signed); it is drawn only by the closed structured-text component (`updates.md` §Security). The dialog keeps that.
+
+### Impact
+- Unlocks: nothing new. Registers E-105 (Close in the notes dialog; the Update dialog's title).
+- Risk if wrong: text only; the component can be hosted elsewhere.
+
+### Rollback
+Text only; E-105 is one commit.

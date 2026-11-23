@@ -109,14 +109,16 @@ timer (a hidden web view's timers are throttled — same reason as `status.md`).
   title bar left of the version chip: an arrow-up icon and "Update". It replaces the
   chip's dot. Click → the Update dialog, which now has two rows: "Rein 0.5.0 → 0.5.1"
   and "rein-app window 0.1.0 → 0.2.0", each with its own button and notes.
+  The dialog's title is "Updates" (D-073, E-105); the action that runs Rein's own update
+  keeps its name "Update Rein".
 - **Ask, once per version.** The first time a version is known, a card rises at the
   bottom right, not modal, never taking focus from the terminal:
   "rein-app 0.2.0 is available. Your projects keep running during the update."
   **Later** · **Update and restart** (for Rein: **Later** · **Update Rein**, which opens
   the existing confirm). **Later** records the version in the app's state file; that
-  version does not ask again, the button stays. A hidden or minimised window raises the
-  notification of `status.md` §6 instead (event `update`, sentence fixed, no version text
-  from the network in a system notification).
+  version does not ask again, the button stays. A hidden or minimised window asks for
+  attention instead (`status.md` §6 channel 2, once per version, never after Later; as
+  built in E-87, D-073 ruling 2 — an update raises no system notification).
 - **Progress** (window update): the card becomes "Downloading 0.2.0 — 41 %" with the
   2 px progress line, then "Checking the signature…", then "Restarting…". **Cancel**
   while downloading. A failure shows its sentence and **Try again**.
@@ -130,7 +132,8 @@ timer (a hidden web view's timers are throttled — same reason as `status.md`).
   - on a verified download a check mark draws itself (stroke, 300 ms) before
     "Restarting…";
   - after the restart, "Updated to 0.2.0" appears as a toast with the same check mark
-    and a "What's new" link that opens the notes in the reader.
+    and a "What's new" link that opens the notes in a dialog (D-073: the window's
+    ordinary dialog with a Close button, not the `status.md` §7 reader).
   No effect delays a click; no effect loops.
 
 ### 5. Release side (CI) — Tier 3, blocked on the operator
@@ -237,3 +240,5 @@ config.toml gains      [updates] check = true          // false: no background c
 3. **E-87 (Tier 2)** — component 4 for the window: card, progress, motion, "Updated to".
 4. **E-88 (Tier 3)** — component 5; must not start until the operator has made the key
    and said go for a tag.
+5. **E-105 (Tier 2)** — D-073: a Close button in the What's new dialog; the Update
+   dialog's title is "Updates".
