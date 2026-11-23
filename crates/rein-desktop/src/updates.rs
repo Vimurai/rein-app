@@ -457,6 +457,18 @@ impl Io for AppIo<'_> {
     }
 }
 
+/// The test build only: `REIN_DESKTOP_UPDATE_HOLD_MS` keeps "Checking the signature…" and
+/// "Restarting…" on screen long enough for the window harness to capture them (E-87). A
+/// release build has no such variable and never waits.
+fn test_hold() {
+    #[cfg(feature = "update-test")]
+    if let Some(ms) =
+        crate::dirs::process_env("REIN_DESKTOP_UPDATE_HOLD_MS").and_then(|v| v.parse::<u64>().ok())
+    {
+        std::thread::sleep(std::time::Duration::from_millis(ms.min(10_000)));
+    }
+}
+
 /// The window's download directory, when the app has a cache directory.
 fn update_dir() -> Option<std::path::PathBuf> {
     crate::dirs::cache_dir(&crate::dirs::process_env).map(|c| app_update::update_dir(&c))
@@ -591,7 +603,13 @@ fn start_blocking(app: &AppHandle) -> Result<UpdatesState, IpcError> {
                     run: &run,
                     cancel: &watch.cancel,
                 },
-                &mut |job| set_job(app, watch, job),
+                &mut |job| {
+                    let held = matches!(job, Job::Verifying | Job::Restarting);
+                    set_job(app, watch, job);
+                    if held {
+                        test_hold();
+                    }
+                },
                 // The ordinary quit (D-066 addendum 1 r1): the version this window had, so the next
                 // one says "Updated to"; every tab detached and its pty reaped. The sessions run on.
                 &mut || {

@@ -15,9 +15,11 @@
 #                  sentence with Try again, no file is left, nothing started;
 #   app-updated  — a window started with ui.json `updated_from` 0.0.9 and a document for its own
 #                  version: "Updated to 0.1.0", then "What's new" opens the notes.
+#   app-verifying / app-restarting — Try again with a good installer: "Checking the signature…",
+#                  then the drawn check and "Restarting…" (the test build holds each state
+#                  REIN_DESKTOP_UPDATE_HOLD_MS); the window reaches "would start … /P /UPDATE /R"
+#                  (the update-test build prints instead of starting) and exits by itself.
 # Then once, with GTK animations off (prefers-reduced-motion): app-reduced, the card at rest.
-# Last, a good installer: the window reaches "would start … /P /UPDATE /R" (the update-test
-# build prints instead of starting) and exits by itself.
 # Checks print ok/FAIL; the screens are read by eye (each PNG opened before a handoff names it).
 # A local tool only: it refuses to run when CI is set. Needs: Xvfb, tmux, cc, Xlib + XTest
 # headers, ffmpeg, python3, minisign.
@@ -145,6 +147,7 @@ export DISPLAY=$started
 
 ST="$W/xdg/state/rein-app"
 CACHE="$W/xdg/cache/rein-app/update"
+HOLD=4000 INSTALLER_BYTES=3145728
 app() { # app <theme> [ui.json extra]
   mkdir -p "$ST"
   printf '{"schema":1,"input_style":"simple","first_run_done":true,"theme":"%s"%s}' "$1" "${2:-}" >"$ST/ui.json"
@@ -153,7 +156,7 @@ app() { # app <theme> [ui.json extra]
     HOME="$W/home" PATH="$W/bin:$PATH" SHELL=/bin/sh \
     XDG_RUNTIME_DIR="$W/run" XDG_CONFIG_HOME="$W/xdg/config" XDG_DATA_HOME="$W/xdg/data" \
     XDG_STATE_HOME="$W/xdg/state" XDG_CACHE_HOME="$W/xdg/cache" \
-    REIN_DESKTOP_UPDATE_URL="http://127.0.0.1:$PORT/desktop-latest.json" REIN_DESKTOP_UPDATE_KEY="$W/key.pub" \
+    REIN_DESKTOP_UPDATE_HOLD_MS="$HOLD" REIN_DESKTOP_UPDATE_URL="http://127.0.0.1:$PORT/desktop-latest.json" REIN_DESKTOP_UPDATE_KEY="$W/key.pub" \
     WEBKIT_DISABLE_DMABUF_RENDERER=1 \
     "$W/app/rein-desktop" "$W/Dev/proj" >>"$W/app.log" 2>&1 &
   APP=$!
@@ -201,11 +204,28 @@ for theme in catppuccin-mocha github-light; do
   X click "$BUTTON_X" "$BUTTON_Y"
   sleep 2
   X click "$DIALOG_UPDATE_X" "$DIALOG_UPDATE_Y"
-  sleep 25 # the whole slow download, then the signature
+  sleep 30 # the whole slow download, the held "Checking the signature…", then the failure
   shot "app-failed-$theme"
   check "failed: the installer was fetched again" 2 "$(fetched)"
   check "failed: no file left" 0 "$(leftover)"
   check "failed: nothing started" 0 "$(grep -c 'would start' "$W/app.log")"
+  # Try again with a good installer: "Checking the signature…", the drawn check and
+  # "Restarting…" (each held HOLD ms by the test build), then the installer starts with the
+  # constant argv and the window exits by itself.
+  echo good >"$W/srv/mode"
+  X click "$CARD_RIGHT_X" "$CARD_BTN_Y" # Try again
+  until [ "$(find "$CACHE" -type f -size "${INSTALLER_BYTES}c" 2>/dev/null | wc -l)" -ge 1 ] || ! kill -0 "$APP" 2>/dev/null; do sleep 0.2; done
+  sleep 1.5
+  shot "app-verifying-$theme"
+  sleep "$((HOLD / 1000))"
+  shot "app-restarting-$theme"
+  for _ in $(seq 1 30); do kill -0 "$APP" 2>/dev/null || break; sleep 1; done
+  check "good: the installer was fetched a third time" 3 "$(fetched)"
+  check "good: the window exited by itself" gone "$(kill -0 "$APP" 2>/dev/null && echo running || echo gone)"
+  check "good: the installer started with the constant argv" yes "$(grep -q 'would start .*rein-app-update-.*\.exe /P /UPDATE /R$' "$W/app.log" && echo yes || echo no)"
+  grep 'would start' "$W/app.log" | sed 's/^/  /'
+  : >"$W/app.log"
+  APP=""
   quit
   # After a restart: updated_from in the state file, a document for the running version.
   doc 0.1.0
@@ -230,16 +250,7 @@ echo good >"$W/srv/mode"
 app catppuccin-mocha
 sleep 36
 shot "app-reduced-catppuccin-mocha"
-echo "[a good installer]"
-: >"$W/app.log"
-X click "$CARD_RIGHT_X" "$CARD_BTN_Y" # Update and restart
-for _ in $(seq 1 60); do kill -0 "$APP" 2>/dev/null || break; sleep 1; done
-check "good: the installer was fetched" 1 "$(fetched)"
-check "good: the window exited by itself" gone "$(kill -0 "$APP" 2>/dev/null && echo running || echo gone)"
-APP=""
-check "good: the installer started with the constant argv" yes "$(grep -q 'would start .*rein-app-update-.*\.exe /P /UPDATE /R$' "$W/app.log" && echo yes || echo no)"
-grep 'would start' "$W/app.log" | sed 's/^/  /'
-T kill-server 2>/dev/null
+quit
 echo "requests:"; sort "$W/requests.log" | uniq -c | sed 's/^/  /'
 if [ "$fails" -eq 0 ]; then echo "PASS: app update screens"; else echo "$fails failure(s)"; fi
 [ "$fails" -eq 0 ]

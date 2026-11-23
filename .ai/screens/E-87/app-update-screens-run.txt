@@ -14,6 +14,12 @@
   ok   failed: the installer was fetched again
   ok   failed: no file left
   ok   failed: nothing started
+  .ai/screens/E-87/app-verifying-catppuccin-mocha.png
+  .ai/screens/E-87/app-restarting-catppuccin-mocha.png
+  ok   good: the installer was fetched a third time
+  ok   good: the window exited by itself
+  ok   good: the installer started with the constant argv
+  rein-desktop: update-test: would start <workdir>/xdg/cache/rein-app/update/rein-app-update-1864483-1795447640.exe /P /UPDATE /R
   .ai/screens/E-87/app-updated-catppuccin-mocha.png
   .ai/screens/E-87/app-updated-notes-catppuccin-mocha.png
   .ai/screens/E-87/app-whatsnew-catppuccin-mocha.png
@@ -34,19 +40,19 @@
   ok   failed: the installer was fetched again
   ok   failed: no file left
   ok   failed: nothing started
+  .ai/screens/E-87/app-verifying-github-light.png
+  .ai/screens/E-87/app-restarting-github-light.png
+  ok   good: the installer was fetched a third time
+  ok   good: the window exited by itself
+  ok   good: the installer started with the constant argv
+  rein-desktop: update-test: would start <workdir>/xdg/cache/rein-app/update/rein-app-update-1901536-1795447796.exe /P /UPDATE /R
   .ai/screens/E-87/app-updated-github-light.png
   .ai/screens/E-87/app-updated-notes-github-light.png
   .ai/screens/E-87/app-whatsnew-github-light.png
   ok   updated_from read once
 [reduced motion]
   .ai/screens/E-87/app-reduced-catppuccin-mocha.png
-[a good installer]
-  ok   good: the installer was fetched
-  ok   good: the window exited by itself
-  ok   good: the installer started with the constant argv
-  rein-desktop: update-test: would start <workdir>/xdg/cache/rein-app/update/rein-app-update-1050363-1795446331.exe /P /UPDATE /R
 requests:
         1 /desktop-latest.json
         1 /desktop-latest.json.minisig
-        1 /rein-app_0.2.0_x64-setup.exe
 PASS: app update screens
