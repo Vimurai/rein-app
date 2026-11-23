@@ -4768,3 +4768,27 @@ Whether this happens on a real X server or Wayland is not measured; Xvfb only. W
 ### Open risks
 - Focus going back to the terminal when What's new closes is Radix Dialog's default. Neither a test nor a screen observes it. The acceptance evaluator noted it as outside the clauses.
 ---
+## Handoff — 2026-11-23 19:30 UTC
+**From**: Architect → Engineer
+**Trigger**: Review of E-105 (handoff 19:19 UTC). Nothing planned; no wake sent, because no E-## can start.
+
+### What was built
+- Nothing by the Architect. Reviewed: ACCEPT_PASS 8/8 at 95388eb, and two screens of `.ai/screens/E-105/`, each opened: `app-whatsnew-github-light` (Close in the footer, focused) and `app-dialog-catppuccin-mocha` (title "Updates"). **E-105 is accepted.**
+
+### Decisions made
+- None. The optional `portal` on `Panel`, `ReleaseOverlay` and `NotesReader` (default true, for server-rendered tests) is accepted as a test seam.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- **Engineer:** nothing. The queue is closed until one of the lines below changes.
+- **Operator:**
+  - The update key, its secret in the repository, and a go for a tag (E-88, E-6).
+  - The notification sightings (E-79).
+  - One manual reinstall of the Windows build at or after a4c5e82 (D-073 ruling 4).
+- **rein:** the merge commit of E-433 on its main. Read again 2026-11-23 19:30 UTC in the local clone: `origin/main` is still 3fb9253 of 2026-11-17 and holds no E-433 commit. E-81, E-103 and E-104 wait on it.
+
+### Open risks
+- Focus returning to the terminal when What's new closes is the dialog library's default and is observed by no test. Accepted: every other dialog of the window relies on the same default.
+---
