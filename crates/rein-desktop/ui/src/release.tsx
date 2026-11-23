@@ -32,6 +32,7 @@ export function Panel({
   children,
   footer,
   yes,
+  portal = true,
 }: {
   title: string;
   onClose: () => void;
@@ -40,10 +41,12 @@ export function Panel({
   footer?: ReactNode;
   /** A confirm step: what `y` does (`n` cancels), shown at the left of the buttons. */
   yes?: string | undefined;
+  /** false: drawn in place (the server render of the tests). */
+  portal?: boolean;
 }) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent title={title} aria-describedby={undefined} onKeyDown={onKeyDown} className="w-[min(680px,calc(100vw-32px))]">
+      <DialogContent portal={portal} title={title} aria-describedby={undefined} onKeyDown={onKeyDown} className="w-[min(680px,calc(100vw-32px))]">
         {/* Scrolls inside the dialog (min-h-0 lets it shrink in the column), by wheel, arrows or
             PageDown once focused. */}
         <div tabIndex={0} className="-mx-1 grid min-h-0 flex-1 content-start gap-3 overflow-y-auto px-1 outline-none">
@@ -159,10 +162,12 @@ export function ReleaseOverlay({
   onCommand,
   rows,
   app,
+  portal = true,
 }: {
   kind: "update" | "rollback";
   /** The window's own row: its button or command, and its notes (E-87). */
   app?: ReactNode;
+  portal?: boolean;
   /** The Update dialog's two rows from the update watch (updates.md component 4). */
   rows?: readonly UpdateRow[];
   onClose: () => void;
@@ -211,7 +216,8 @@ export function ReleaseOverlay({
     );
   };
 
-  const title = kind === "update" ? "Update Rein" : "Undo last update";
+  // "Updates": the dialog lists Rein and the window (D-073); the release.update action keeps its label.
+  const title = kind === "update" ? "Updates" : "Undo last update";
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (phase.at !== "confirm") return;
     if (e.key === "y") {
@@ -225,6 +231,7 @@ export function ReleaseOverlay({
   const busy = phase.at === "running" || phase.at === "checking";
   return (
     <Panel
+      portal={portal}
       title={title}
       onClose={() => !busy && onClose()}
       onKeyDown={onKeyDown}

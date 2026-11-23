@@ -26,6 +26,7 @@
 set -uo pipefail
 if [ -n "${CI:-}" ]; then echo "app-update-screens.sh: not in CI (it drives a real window on Xvfb)" >&2; exit 2; fi
 OUT=$1
+MODE=${2:-all} # all | updated (only the "Updated to" / What's new part, both themes)
 GW=1280 GH=800
 REPO="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 . "$(dirname "$0")/window-binary.sh" && window_binary # the UI bundle must be current
@@ -171,9 +172,13 @@ fetched() { grep -c '\.exe$' "$W/requests.log" | tr -d ' '; } # installer reques
 CARD_RIGHT_X=${CARD_RIGHT_X:-1205} CARD_LEFT_X=${CARD_LEFT_X:-1100} CARD_BTN_Y=${CARD_BTN_Y:-735}
 BUTTON_X=${BUTTON_X:-1150} BUTTON_Y=${BUTTON_Y:-20}
 DIALOG_UPDATE_X=${DIALOG_UPDATE_X:-880} DIALOG_UPDATE_Y=${DIALOG_UPDATE_Y:-348}
+CLOSE_X=${CLOSE_X:-928} CLOSE_Y=${CLOSE_Y:-458} # the What's new dialog's Close
+
+crop() { ffmpeg -loglevel error -i "$OUT/$1.png" -vf crop=680:240:300:280 -f md5 - 2>/dev/null; } # the dialog's area
 
 for theme in catppuccin-mocha github-light; do
   echo "[$theme]"
+  if [ "$MODE" = all ]; then
   doc 0.2.0
   echo good >"$W/srv/mode"
   : >"$W/requests.log"
@@ -227,6 +232,7 @@ for theme in catppuccin-mocha github-light; do
   : >"$W/app.log"
   APP=""
   quit
+  fi
   # After a restart: updated_from in the state file, a document for the running version.
   doc 0.1.0
   app "$theme" ',"updated_from":"0.0.9"'
@@ -237,10 +243,22 @@ for theme in catppuccin-mocha github-light; do
   X click "${WHATSNEW_X:-1150}" "$CARD_BTN_Y" # What's new
   sleep 2
   shot "app-whatsnew-$theme"
+  # E-105: the dialog's Close button, clicked, removes it — the dialog's area is as before it opened.
+  # A click on the dialog's own text first leaves it open, so the closing below is the button's.
+  X click 640 380
+  sleep 1
+  shot "app-whatsnew-body-click-$theme"
+  check "what's new: a click on its text keeps it open" yes "$([ "$(crop "app-whatsnew-body-click-$theme")" != "$(crop "app-updated-notes-$theme")" ] && echo yes || echo no)"
+  X click "$CLOSE_X" "$CLOSE_Y"
+  sleep 1.5
+  shot "app-whatsnew-closed-$theme"
+  check "what's new: the dialog was drawn" yes "$([ "$(crop "app-whatsnew-$theme")" != "$(crop "app-updated-notes-$theme")" ] && echo yes || echo no)"
+  check "what's new: Close removes the dialog" "$(crop "app-updated-notes-$theme")" "$(crop "app-whatsnew-closed-$theme")"
   check "updated_from read once" yes "$(grep -q '"updated_from": *null' "$ST/ui.json" && echo yes || echo no)"
   quit
 done
 
+[ "$MODE" = all ] || { echo "requests:"; sort "$W/requests.log" | uniq -c | sed 's/^/  /'; [ "$fails" -eq 0 ] && echo "PASS: app update screens (updated only)"; exit "$fails"; }
 echo "[reduced motion]"
 mkdir -p "$W/xdg/config/gtk-3.0"
 printf '[Settings]\ngtk-enable-animations=false\n' >"$W/xdg/config/gtk-3.0/settings.ini"

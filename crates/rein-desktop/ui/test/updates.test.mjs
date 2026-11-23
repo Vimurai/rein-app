@@ -190,3 +190,18 @@ test("the Updated toast and the dialog's window row", () => {
   assert.match(r, /<strong[^>]*>real<\/strong>/);
   assert.equal(render.row(offer("idle", { newest: null })), "", "nothing newer: no row");
 });
+
+// E-105 (D-073): the What's new dialog closes by a button, and the Update dialog — Rein and the
+// window — is titled "Updates"; the action keeps "Update Rein".
+test("What's new has a Close button; the Update dialog is titled Updates", async () => {
+  const n = render.notes();
+  assert.match(n, /What&#x27;s new in rein-app <!-- -->0.2.0|What&#x27;s new in rein-app 0.2.0/);
+  const close = [...n.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].filter((m) => m[1].replace(/<[^>]+>/g, "") === "Close");
+  assert.ok(close.length >= 1, "a Close button in the footer");
+  assert.ok(n.lastIndexOf(">Close</button>") > n.indexOf("Faster tabs."), "Close sits under the notes, in the footer");
+  const d = render.updateDialog();
+  assert.match(d, />Updates</, "the dialog's title");
+  assert.doesNotMatch(d, />Update Rein</, "not the old title");
+  const { ACTIONS } = await import("../src/actions.ts");
+  assert.equal(ACTIONS.find((a) => a.name === "release.update")?.label, "Update Rein", "the action keeps its label");
+});

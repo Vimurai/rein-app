@@ -250,9 +250,19 @@ export function UpdatedToast({ version, notes, onNotes, onClose }: { version: st
 }
 
 /** The release notes in a reader: plain text through the closed structured-text component. */
-export function NotesReader({ version, notes, onClose }: { version: string; notes: string; onClose: () => void }) {
+export function NotesReader({ version, notes, onClose, portal = true }: { version: string; notes: string; onClose: () => void; portal?: boolean }) {
+  // Close is focused on open; on close the dialog gives focus back to where it was (the terminal).
   return (
-    <Panel title={`What's new in rein-app ${version}`} onClose={onClose}>
+    <Panel
+      portal={portal}
+      title={`What's new in rein-app ${version}`}
+      onClose={onClose}
+      footer={
+        <Button variant="primary" autoFocus onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
       <StructuredText text={notes} />
     </Panel>
   );

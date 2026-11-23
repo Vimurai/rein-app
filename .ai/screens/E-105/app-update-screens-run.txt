@@ -1,0 +1,68 @@
+[catppuccin-mocha]
+  .ai/screens/E-105/app-card-catppuccin-mocha.png
+  ok   card: the document and its signature were fetched
+  .ai/screens/E-105/app-later-catppuccin-mocha.png
+  ok   later: 0.2.0 recorded
+  .ai/screens/E-105/app-dialog-catppuccin-mocha.png
+  .ai/screens/E-105/app-progress-catppuccin-mocha.png
+  .ai/screens/E-105/app-progress2-catppuccin-mocha.png
+  ok   progress: the installer is being fetched
+  ok   progress: a partial file in the cache
+  .ai/screens/E-105/app-cancel-catppuccin-mocha.png
+  ok   cancel: no file left
+  .ai/screens/E-105/app-failed-catppuccin-mocha.png
+  ok   failed: the installer was fetched again
+  ok   failed: no file left
+  ok   failed: nothing started
+  .ai/screens/E-105/app-verifying-catppuccin-mocha.png
+  .ai/screens/E-105/app-restarting-catppuccin-mocha.png
+  ok   good: the installer was fetched a third time
+  ok   good: the window exited by itself
+  ok   good: the installer started with the constant argv
+  rein-desktop: update-test: would start <workdir>/xdg/cache/rein-app/update/rein-app-update-4061804-1795455365.exe /P /UPDATE /R
+  .ai/screens/E-105/app-updated-catppuccin-mocha.png
+  .ai/screens/E-105/app-updated-notes-catppuccin-mocha.png
+  .ai/screens/E-105/app-whatsnew-catppuccin-mocha.png
+  .ai/screens/E-105/app-whatsnew-body-click-catppuccin-mocha.png
+  ok   what's new: a click on its text keeps it open
+  .ai/screens/E-105/app-whatsnew-closed-catppuccin-mocha.png
+  ok   what's new: the dialog was drawn
+  ok   what's new: Close removes the dialog
+  ok   updated_from read once
+[github-light]
+  .ai/screens/E-105/app-card-github-light.png
+  ok   card: the document and its signature were fetched
+  .ai/screens/E-105/app-later-github-light.png
+  ok   later: 0.2.0 recorded
+  .ai/screens/E-105/app-dialog-github-light.png
+  .ai/screens/E-105/app-progress-github-light.png
+  .ai/screens/E-105/app-progress2-github-light.png
+  ok   progress: the installer is being fetched
+  ok   progress: a partial file in the cache
+  .ai/screens/E-105/app-cancel-github-light.png
+  ok   cancel: no file left
+  .ai/screens/E-105/app-failed-github-light.png
+  ok   failed: the installer was fetched again
+  ok   failed: no file left
+  ok   failed: nothing started
+  .ai/screens/E-105/app-verifying-github-light.png
+  .ai/screens/E-105/app-restarting-github-light.png
+  ok   good: the installer was fetched a third time
+  ok   good: the window exited by itself
+  ok   good: the installer started with the constant argv
+  rein-desktop: update-test: would start <workdir>/xdg/cache/rein-app/update/rein-app-update-4089720-1795455526.exe /P /UPDATE /R
+  .ai/screens/E-105/app-updated-github-light.png
+  .ai/screens/E-105/app-updated-notes-github-light.png
+  .ai/screens/E-105/app-whatsnew-github-light.png
+  .ai/screens/E-105/app-whatsnew-body-click-github-light.png
+  ok   what's new: a click on its text keeps it open
+  .ai/screens/E-105/app-whatsnew-closed-github-light.png
+  ok   what's new: the dialog was drawn
+  ok   what's new: Close removes the dialog
+  ok   updated_from read once
+[reduced motion]
+  .ai/screens/E-105/app-reduced-catppuccin-mocha.png
+requests:
+        1 /desktop-latest.json
+        1 /desktop-latest.json.minisig
+PASS: app update screens
