@@ -1,0 +1,44 @@
+[catppuccin-mocha 1280x800]
+  .ai/screens/E-101/home-empty-catppuccin-mocha.png
+  .ai/screens/E-101/home-projects-catppuccin-mocha.png
+  ok   Ctrl+Shift+Tab runs tab.prev from the first tab (Home)
+  .ai/screens/E-101/home-prev-catppuccin-mocha.png
+  ok   going to a tab from Home and back resizes no pty
+  .ai/screens/E-101/home-stopped-catppuccin-mocha.png
+  .ai/screens/E-101/home-needs-you-catppuccin-mocha.png
+  .ai/screens/E-101/home-700-catppuccin-mocha.png
+  ok   Ctrl+Shift+H shows Home from a set-up tab
+  ok   Ctrl+Tab leaves a set-up tab for the next tab
+  ok   Enter on the card presses its focused button (Close tab)
+[github-light 1280x800]
+  .ai/screens/E-101/home-empty-github-light.png
+  .ai/screens/E-101/home-projects-github-light.png
+  ok   Ctrl+Shift+Tab runs tab.prev from the first tab (Home)
+  .ai/screens/E-101/home-prev-github-light.png
+  ok   going to a tab from Home and back resizes no pty
+  .ai/screens/E-101/home-stopped-github-light.png
+  .ai/screens/E-101/home-needs-you-github-light.png
+  ok   Ctrl+Shift+H shows Home from a set-up tab
+  ok   Ctrl+Tab leaves a set-up tab for the next tab
+  ok   Enter on the card presses its focused button (Close tab)
+[16 projects]
+  tabs: 16
+  frame-trace on Home (per second, after the switch): 17 17 17 17 17 17 18 23 19 17 17 18 17 17 17 17 17 17 17 17 22 16 16 17 17 17 
+  the switch to Home: 17 ms
+  ok   16 open projects on Home: no frame over 50 ms
+  .ai/screens/E-101/home-16-catppuccin-mocha.png
+[widths: long project text]
+  asked 1280 px, window 1280 px: inner=1280 home=1240/1240 doc=1280/1280
+  ok   1280 px: #home and the document do not scroll sideways
+  .ai/screens/E-101/home-wide-catppuccin-mocha-1280.png
+  asked 700 px, window 700 px: inner=700 home=660/660 doc=700/700
+  ok   700 px: #home and the document do not scroll sideways
+  .ai/screens/E-101/home-wide-catppuccin-mocha-700.png
+  asked 360 px, window 480 px: inner=480 home=440/440 doc=480/480
+  ok   480 px: #home and the document do not scroll sideways
+  .ai/screens/E-101/home-wide-catppuccin-mocha-480.png
+  asked 1280 px, window 1280 px: inner=1280 home=1240/1240 doc=1280/1280
+  ok   1280 px: #home and the document do not scroll sideways
+  .ai/screens/E-101/home-wide-github-light-1280.png
+PASS: screens in .ai/screens/E-101
+exit=0

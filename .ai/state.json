@@ -1510,34 +1510,32 @@
     {
       "id": "E-101",
       "owner": "Engineer (Claude)",
-      "status": "OPEN",
+      "status": "DONE",
       "tier": 2,
       "description": "Fix Home's false \"needs you\" rows and its sideways scroll, per .ai/blueprints/status.md \"Home, second revision\" R1, R2, R3 (D-071). R1: replace panel_attention.rs::names_operator with the addressed-to-the-operator rule (strip list marker, emphasis marks, one leading task label, an optional \"the\"; the next word must be operator/operators). R2: the quote loses its list marker, `**`, `__` and backticks; the sentence in attention.rs becomes \"The last handoff asks the operator:\" (attention.rs is at 930/1000 lines — change that one string only). R3: a \"Needs you now\" row never widens Home — sentence on the first line, the quote wrapped under it to at most three lines, full quote as tooltip; every text-holding grid/flex child on Home can shrink. Do not touch shell.tsx (898/900). Acceptance: (1) `cargo test -p rein-desktop panel_attention` passes with a table test holding every example of R1 and the Tests list (the E-99/E-100 line \"Close E-99, then E-100 … E-6 (operator's keys)\" gives no mention; \"- **Operator**: merge #61–#64 after #60\" gives one whose text has no dash and no asterisk); (2) the window run prints `scrollWidth` and `clientWidth` of `#home` and of the document with a 300-character quote at 1280, 700 and 360 px wide, and the two are equal at each width; (3) screenshots under .ai/screens/E-101/ at the three widths, both themes at 1280, each opened before the handoff names it; (4) the ui test suite (`npm test` in crates/rein-desktop/ui) passes with the row model test; (5) hosted ci green on the commit.",
       "created_at": "2026-11-20T15:02:39.504Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-20T15:30:46.383Z",
+      "summary": "superseded by D-072 — not implemented. Implemented and accepted at 87de8a2 per D-072: R1 mention rule, R2 cleaned quote, R3 rows fit; #home equal at 1280/700/480; ci + desktop-windows green.",
       "depends_on": [],
       "ready": true,
       "blocked_by": [],
-      "updated_at": "2026-11-20T15:02:39.506Z"
+      "updated_at": "2026-11-20T15:30:46.383Z"
     },
     {
       "id": "E-102",
       "owner": "Engineer (Claude)",
-      "status": "BLOCKED",
+      "status": "DONE",
       "tier": 2,
       "description": "Show the active tasks on each Home card and add a \"Tasks\" button that opens the project's board, per .ai/blueprints/status.md \"Home, second revision\" R4, R5 and §Data model `active` (D-071). R4: the core adds `active` (at most three tasks: IN_PROGRESS, then OPEN, then BLOCKED, newest first within a status; id ≤ 40, title one line ≤ 120) to the card fields of the `project_status` event; the card lists them under the in-progress line with a status mark told by shape as well as colour, and does not repeat the in-progress task. R5: a \"Tasks\" button beside the chips goes to the project's tab with the Tasks panel open, through the existing actions; no new IPC command. shell.tsx is at 898/900 lines — add nothing to it without first moving something out (moves only). Acceptance: (1) `cargo test -p rein-desktop` passes with a core test of `active` order, the cap of three, and no `active` when state.json is not read; (2) `npm test` in crates/rein-desktop/ui passes with a test that the Tasks button switches to the tab and opens the Tasks panel, by pointer and by keyboard; (3) screenshots under .ai/screens/E-102/ of Home with a project that has an in-progress, an open and a blocked task, both themes at 1280×800 and one at 700 px wide, each opened before the handoff names it; (4) the window run of E-101 still prints equal `scrollWidth` and `clientWidth` for `#home` with a 200-character task title; (5) hosted ci green on the commit.",
       "created_at": "2026-11-20T15:02:46.434Z",
-      "completed_at": null,
-      "summary": null,
+      "completed_at": "2026-11-23T13:18:56.641Z",
+      "summary": "E-102 (9e49829): core `active` (≤3, IN_PROGRESS→OPEN→BLOCKED, newest first; id ≤40, title one line ≤120; empty without state.json) on project_status cards; Home card lists them with …[full in LOG.md]",
       "depends_on": [
         "E-101"
       ],
-      "ready": false,
-      "blocked_by": [
-        "E-101"
-      ],
-      "updated_at": "2026-11-20T15:02:46.434Z"
+      "ready": true,
+      "blocked_by": [],
+      "updated_at": "2026-11-23T13:18:56.641Z"
     },
     {
       "id": "E-103",
@@ -4699,6 +4697,42 @@
       "timestamp": "2026-11-20T15:29:28.929Z",
       "summary": "[ACCEPT_FAIL] E-101 at 87de8a2 — 6 PASS, 2 FAIL, 1 UNVERIFIED ‖ 1 | PASS | worktree@87de8a2 cargo test panel_attention: 6 pass; table has all R1+Tests examples, E-99 line false, Operator line no -/* ‖ 2a | PASS | Engineer's saved run (not rerun): 1280 px home=1240/1240 doc=1280/1280 ‖ 2b | PASS | same run: 700 px home=660/660 doc=700/700 ‖ 2c | FAIL | 360 px not observed: \"asked 360 px, window 480 px\", home=440/440 doc=480/480; min_inner_size 480 ‖ 3a | PASS | opened mocha-1280, mocha-700, github-light-1280: no sideways scroll, quote in 3 lines ‖ 3b | FAIL | third screen is mocha-480.png; no 360 px screen (same cause as 2c) ‖ 3c | UNVERIFIED | opened-before-handoff is a past agent action, not observable ‖ 4 | PASS | worktree@87de8a2 npm test exit 0, 128 pass incl. Needs you now row (R3) ‖ 5 | PASS | gh: ci 44761738415 success (3 OS), desktop-windows 44761738480 success",
       "sha": "87de8a2e4a32c3053022829161f1fc1248ab09ff",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ALIGN_PASS",
+      "agent": "Claude (Engineer)",
+      "task_id": "E-102",
+      "timestamp": "2026-11-20T15:41:48.398Z",
+      "summary": "[TIER_2] HEAD 54e487d + staged E-102 (14 files): status.md \"Home, second revision\" R4/R5. Aligner WARN ORPHANED_WORK only (panel_attention/attention/debug_trace — R4 core + debug-only traces). UNAPPROVED_DEP = JSON line in status.rs test, no manifest change. shell.tsx untouched (898/900); no new IPC command (tab.goto + panel.toggle).",
+      "sha": "54e487dc58d1d1928088c27441ecdfcd5fe87a5c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "Claude (Engineer)",
+      "task_id": "E-102",
+      "timestamp": "2026-11-20T15:41:50.108Z",
+      "summary": "[TIER_2] HEAD 54e487d + staged E-102: cargo test -p rein-desktop 226/226, clippy/fmt clean; npm test 131/131, tsc clean; home-screens.sh exit 0 (Tasks by keyboard mocha, by pointer light: tab + Tasks panel; widths equal at 1280/700/480 with 200-char titles).",
+      "sha": "54e487dc58d1d1928088c27441ecdfcd5fe87a5c",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "ACCEPT_PASS",
+      "agent": "critic_acceptance",
+      "task_id": "E-102",
+      "timestamp": "2026-11-23T13:18:36.409Z",
+      "summary": "[ACCEPT_PASS] E-102 at 9e49829 — 5 PASS, 0 FAIL, 0 UNVERIFIED ‖ 1 | PASS | cargo test -p rein-desktop exit 0, 226+5+3 pass; the_active_tasks_are_ordered_capped_and_read_or_empty checks order, cap 3, empty without state ‖ 2 | PASS | ui npm test exit 0, 131 pass incl. Tasks-button test (tab.goto+panel.toggle) and native-button render; run log: click and Tab+Enter ok ‖ 3 | PASS | opened home-projects-{mocha,light} 1280x800 and home-700 700x800: in-progress line, open ring, blocked cross, Tasks button ‖ 4 | PASS | home-screens-run.txt: home=1240/1240, 660/660, 440/440 at 1280/700/480; home-screens.sh sets 200-char titles (l.291-297) ‖ 5 | PASS | gh run list --commit 9e49829: ci 44772604668 and desktop-windows 44772604690 completed success",
+      "sha": "9e49829874a28e0bb98f1298a375e6186a5e1838",
+      "author": "emirkovacevic@protonmail.com"
+    },
+    {
+      "type": "CRITIC_STAMP",
+      "agent": "Claude",
+      "task_id": "E-102",
+      "timestamp": "2026-11-23T13:19:15.051Z",
+      "summary": "[TIER_1] HEAD 9e49829 + staged .ai bookkeeping only (state.json, TASKS.md, REVIEWS.md, DIGEST.md — E-102 DONE) and .ai/screens/E-101, E-102 PNGs + run logs, each opened. No source change; run_review tier 1 SKIP.",
+      "sha": "9e49829874a28e0bb98f1298a375e6186a5e1838",
       "author": "emirkovacevic@protonmail.com"
     }
   ],
