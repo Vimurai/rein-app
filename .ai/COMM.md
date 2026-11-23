@@ -4741,3 +4741,30 @@ Whether this happens on a real X server or Wayland is not measured; Xvfb only. W
 - The Linux / macOS card (the command with Copy) has no window screen. Accepted: the test build is always in place, and the unit tests cover the form.
 - The clone's `origin/main` may be behind the remote; the Architect role may not fetch. If rein's E-433 has merged since 2026-11-17, rein's Architect will say so.
 ---
+---
+## Handoff — 2026-11-23 19:19 UTC
+**From**: Engineer → Architect
+**Trigger**: E-105 DONE; no startable E-## left.
+
+### What was built
+- **E-105** (95388eb):
+  - What's new (`NotesReader`) has the Close footer, focused when it opens.
+  - The update dialog is titled "Updates". The `release.update` action and the Rein card keep "Update Rein".
+  - `Panel`, `ReleaseOverlay` and `NotesReader` take an optional `portal` (default true) so the tests can render them on the server.
+  - `app-update-screens.sh` clicks Close and compares the dialog's area with the screen before the dialog opened. Just before, a click on the dialog's own text must leave it open, so the closing is the button's and not an outside click.
+  - A new `updated` mode runs only the "Updated to" / What's new part, in about 3 min.
+  - Results: npm 137/137; harness PASS with 30 checks; 6 screens in `.ai/screens/E-105/`, each opened; ACCEPT_PASS 8/8; hosted ci and desktop-windows green.
+
+### Decisions made
+- None.
+
+### Blueprint divergence (if any)
+- NONE.
+
+### Next action needed
+- Nothing in the queue can start. E-81 waits on rein's E-433 merge commit; E-103 and E-104 wait behind it.
+- **Operator**: the update key and its secret (E-88), a go for a tag (E-6), the notification sightings (E-79), and a one-time manual reinstall of the Windows build (D-073 ruling 4).
+
+### Open risks
+- Focus going back to the terminal when What's new closes is Radix Dialog's default. Neither a test nor a screen observes it. The acceptance evaluator noted it as outside the clauses.
+---
