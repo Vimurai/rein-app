@@ -174,6 +174,40 @@ fn a_document_parses_strictly() {
     assert!(parse(&cdn).is_ok());
 }
 
+/// E-87: the `minisign` tool writes its trusted comment as "timestamp:<n>\tfile:<name>\thashed";
+/// a signature it made parses and verifies (the first window run offered nothing for it).
+#[test]
+fn a_signature_from_the_minisign_tool_parses_and_verifies() {
+    let key = TestKey::generate();
+    let installer = b"installer";
+    let tool = |data: &[u8]| {
+        minisign::sign(
+            Some(&key.pk),
+            &key.sk,
+            data,
+            Some("timestamp:1795445400\tfile:good.exe\thashed"),
+            None,
+        )
+        .unwrap()
+        .into_string()
+    };
+    let mut v = doc_json(&key, "9.0.0", URL, installer);
+    v["windows_x64"]["sig"] = tool(installer).into();
+    assert!(v["windows_x64"]["sig"].as_str().unwrap().contains('\t'));
+    let body = v.to_string().into_bytes();
+    let d = verified_doc(
+        &body,
+        tool(&body).as_bytes(),
+        &key.verifier(),
+        ASSET_PREFIXES,
+    )
+    .unwrap();
+    assert!(key.verifier().verify(&mut &installer[..], &d.sig).is_ok());
+    // Other control characters stay refused.
+    v["windows_x64"]["sig"] = "untrusted comment: x\rRUQ=\n".into();
+    assert!(parse(&v).is_err());
+}
+
 #[test]
 fn only_a_newer_version_for_the_baked_key_is_offered_in_place() {
     let key = TestKey::generate();

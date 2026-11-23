@@ -61,6 +61,7 @@ html, body {
 @keyframes rein-ring { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 35%, transparent); } }
 @keyframes rein-card-in { from { opacity: 0; transform: translateY(12px); } }
 @keyframes rein-card-out { to { opacity: 0; transform: translateY(12px); } }
+@keyframes rein-draw { from { stroke-dashoffset: 24; } }
 @keyframes rein-slide-in { from { opacity: 0; transform: translateX(-8px); } }
 
 /* The loading primitives (components/loaders.tsx). Each is held invisible for
@@ -112,6 +113,11 @@ html, body {
 /* panels.md §Components 2 (E-60): the panel slides in beside the terminal, never over its text. */
 .panel-in { animation: rein-slide-in var(--motion-base) var(--motion-ease); }
 .update-in { animation: rein-update-in 200ms var(--motion-ease), rein-ring 600ms var(--motion-ease) 200ms 2; }
+/* The window's update (E-87): a determinate 2 px line, and a check mark that draws itself once.
+   Under reduced motion neither moves: the line jumps, the mark is drawn from the start. */
+.progress-fill { position: relative; height: 2px; overflow: hidden; border-radius: 1px; background: var(--muted); }
+.progress-fill > span { position: absolute; inset-block: 0; left: 0; background: var(--primary); transition: width var(--motion-base) var(--motion-ease); }
+.check-draw path { stroke-dasharray: 24; stroke-dashoffset: 0; animation: rein-draw 300ms var(--motion-ease); }
 .card-in { animation: rein-card-in var(--motion-slow) var(--motion-ease); }
 .card-out { animation: rein-card-out var(--motion-fast) var(--motion-ease) forwards; }
 

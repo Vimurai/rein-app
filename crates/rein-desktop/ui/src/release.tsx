@@ -158,8 +158,11 @@ export function ReleaseOverlay({
   onClose,
   onCommand,
   rows,
+  app,
 }: {
   kind: "update" | "rollback";
+  /** The window's own row: its button or command, and its notes (E-87). */
+  app?: ReactNode;
   /** The Update dialog's two rows from the update watch (updates.md component 4). */
   rows?: readonly UpdateRow[];
   onClose: () => void;
@@ -253,6 +256,7 @@ export function ReleaseOverlay({
       }
     >
       {kind === "update" && rows && <UpdateRows rows={rows} />}
+      {kind === "update" && app}
       {phase.at === "checking" && <StatusLine status="busy">Checking for a newer release…</StatusLine>}
       {phase.at === "confirm" && kind === "update" && phase.check && (
         <>

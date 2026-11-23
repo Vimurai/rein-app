@@ -103,3 +103,72 @@ export function recheckOrder(count: number, active: number): number[] {
   const all = Array.from({ length: count }, (_, i) => i);
   return active >= 0 && active < count ? [active, ...all.filter((i) => i !== active)] : all;
 }
+
+// ── The window's own update drawn (updates.md §Components 4, D-066; E-87) ──
+
+/** The core's fixed sentence for each failed step (app_update.rs `Step::sentence`). */
+export const STEP_SENTENCES: Record<UpdateStep, string> = {
+  fetch: "The update could not be downloaded.",
+  too_large: "The update is larger than its release says. Nothing was installed.",
+  signature: "The update's signature did not verify. Nothing was installed.",
+  checksum: "The update's checksum did not match. Nothing was installed.",
+  start: "The installer could not be started.",
+};
+
+/** The ask card's sentence for the window. */
+export const appAskText = (v: string) => `rein-app ${v} is available. Your projects keep running during the update.`;
+/** `by_hand`: the release is signed for another key; this window does not install it. */
+export const BY_HAND_TEXT = "Install it by hand from the release page.";
+
+/** Whole percent of a download, 0–100; nothing known yet is 0. */
+export function percent(done: number, total: number): number {
+  if (!(total > 0) || !(done > 0)) return 0;
+  return Math.min(100, Math.floor((done * 100) / total));
+}
+
+/** What the window's card shows: the ask (once per version), or the running job. */
+export type AppCard =
+  | { at: "ask"; version: string; mode: "in_place" | "command" | "by_hand"; command: string | null }
+  | { at: "downloading"; version: string; percent: number }
+  | { at: "verifying"; version: string }
+  | { at: "restarting"; version: string }
+  | { at: "failed"; version: string; step: UpdateStep; sentence: string };
+
+export function appCard(s: UpdatesState | null): AppCard | null {
+  if (!s) return null;
+  const version = s.app.newest ?? "";
+  const j = s.job;
+  if (j === "verifying" || j === "restarting") return { at: j, version };
+  if (typeof j === "object" && "downloading" in j) return { at: "downloading", version, percent: percent(j.downloading.done, j.downloading.total) };
+  if (typeof j === "object" && "failed" in j) return { at: "failed", version, step: j.failed, sentence: STEP_SENTENCES[j.failed] ?? STEP_SENTENCES.fetch };
+  const v = appNewer(s);
+  if (v === null || s.asked.app === v || s.app.mode === "none") return null;
+  return { at: "ask", version: v, mode: s.app.mode, command: s.app.command };
+}
+
+/** The card's one line for each state. */
+export function appCardText(c: AppCard): string {
+  switch (c.at) {
+    case "ask":
+      return appAskText(c.version);
+    case "downloading":
+      return `Downloading ${c.version} — ${c.percent} %`;
+    case "verifying":
+      return "Checking the signature…";
+    case "restarting":
+      return "Restarting…";
+    case "failed":
+      return c.sentence;
+  }
+}
+
+/** After a restart into a new version: "Updated to X", once per run of the window. */
+export function updatedTo(s: UpdatesState | null): string | null {
+  return s?.app.updated_from ? s.app.running : null;
+}
+
+/** The running version's notes, for "What's new": only while no newer one is offered (the
+ *  notes are then the running version's own). */
+export function runningNotes(s: UpdatesState | null): string | null {
+  return s && s.app.newest === null && s.app.notes ? s.app.notes : null;
+}

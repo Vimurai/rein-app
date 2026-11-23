@@ -9,7 +9,7 @@ import { CloseConfirm, StopConfirm } from "./agent-bar.tsx";
 import { TOAST_MS } from "./chrome.ts";
 import { CommandPalette, Toast } from "./frame.tsx";
 import { MOTION } from "./motion.ts";
-import { projectsForget, updatesLater, type HealthView } from "./ipc.ts";
+import { appUpdateStart, projectsForget, type HealthView } from "./ipc.ts";
 import type { ActionCall, KeyTable } from "./keymap.ts";
 import { closeTabText } from "./lifecycle.ts";
 import { menuEntries } from "./menu.ts";
@@ -23,8 +23,8 @@ import type { ShellProps } from "./shell.tsx";
 import type { RecentView } from "./start.ts";
 import { TeamSheet } from "./team-sheet.tsx";
 import type { TermTab } from "./term.ts";
-import { UpdateCard } from "./update-ui.tsx";
-import { reinAsk, updateRows, type UpdatesState } from "./updates.ts";
+import { AppRow, UpdateStack } from "./update-ui.tsx";
+import { updateRows, type UpdatesState } from "./updates.ts";
 
 type Message = { text: string; error: boolean; seq: number; leaving?: boolean } | null;
 
@@ -199,10 +199,16 @@ export function ShellOverlays(p: ShellOverlaysProps) {
       <Exit
         show={overlay === "update" || overlay === "rollback"}
         render={() => (
-          <ReleaseOverlay kind={overlay === "rollback" ? "rollback" : "update"} rows={updateRows(updates)} onClose={closeOverlay} onCommand={showCommand} />
+          <ReleaseOverlay
+            kind={overlay === "rollback" ? "rollback" : "update"}
+            rows={updateRows(updates)}
+            app={<AppRow updates={updates} onStart={() => { closeOverlay(); void appUpdateStart().catch(() => {}); }} />}
+            onClose={closeOverlay}
+            onCommand={showCommand}
+          />
         )}
       />
-      <Exit show={reinAsk(updates) !== null && overlay !== "update"} render={() => <UpdateCard version={reinAsk(updates) ?? ""} onLater={() => void updatesLater("rein").catch(() => {})} onUpdate={() => run({ name: "release.update" })} />} />
+      <UpdateStack updates={updates} dialog={overlay === "update"} onReinUpdate={() => run({ name: "release.update" })} />
       <Exit show={overlay === "profiles"} render={() => <ProfilesOverlay onClose={closeOverlay} onCommand={showCommand} />} />
       <Exit
         show={overlay === "team"}

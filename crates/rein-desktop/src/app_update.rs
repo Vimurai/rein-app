@@ -196,7 +196,8 @@ pub fn parse_doc(bytes: &[u8], prefixes: &[&str]) -> Result<Doc, String> {
     let sig_ok = (1..=MAX_SIG_BYTES).contains(&a.sig.len())
         && a.sig
             .bytes()
-            .all(|b| b == b'\n' || b.is_ascii_graphic() || b == b' ');
+            // A tab: the minisign tool's trusted comment is "timestamp:<n>\tfile:<name>" (E-87).
+            .all(|b| b == b'\n' || b == b'\t' || b.is_ascii_graphic() || b == b' ');
     if !sig_ok {
         return Err("sig is not a minisign signature text".into());
     }

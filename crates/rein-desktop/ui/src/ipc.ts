@@ -145,6 +145,9 @@ export const releaseCheck = () => invoke<ReleaseCheck>("release_check", {});
 export const updatesGet = () => invoke<import("./updates.ts").UpdatesState>("updates_get", {});
 export const updatesCheck = () => invoke<import("./updates.ts").UpdatesState>("updates_check", {});
 export const updatesLater = (which: "rein" | "app") => invoke<import("./updates.ts").UpdatesState>("updates_later", { which });
+/** The window's own update (E-86): no argument — the core installs only what it verified. */
+export const appUpdateStart = () => invoke<import("./updates.ts").UpdatesState>("app_update_start", {});
+export const appUpdateCancel = () => invoke<import("./updates.ts").UpdatesState>("app_update_cancel", {});
 /** `update` | `rollback`: the CLI's lines arrive on `output`; resolves to its exit code. */
 export const releaseApply = (kind: "update" | "rollback", output: Channel<string>) =>
   invoke<number | null>("release_apply", { kind, output });
