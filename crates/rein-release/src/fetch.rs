@@ -49,6 +49,21 @@ impl HostPolicy {
         }
     }
 
+    /// The window's own update (updates.md §Components 3, E-86): `github.com` and its two
+    /// asset CDNs, HTTPS only — no API host, since the window reads one release asset.
+    pub fn github_assets() -> Self {
+        Self {
+            https_hosts: [
+                "github.com",
+                "objects.githubusercontent.com",
+                "release-assets.githubusercontent.com",
+            ]
+            .map(String::from)
+            .to_vec(),
+            allow_loopback_http: false,
+        }
+    }
+
     /// Plain HTTP to 127.0.0.1/localhost only — for the local fixture server in tests.
     pub fn loopback_only() -> Self {
         Self {
@@ -77,7 +92,13 @@ pub struct ReqwestHttp {
 }
 
 impl ReqwestHttp {
+    /// The CLI's client: a whole download may take up to 15 minutes.
     pub fn new(policy: HostPolicy) -> Result<Self, FetchError> {
+        Self::with_timeout(policy, Duration::from_secs(15 * 60))
+    }
+
+    /// A client whose every request ends after `timeout` (E-86: the window's check uses 20 s).
+    pub fn with_timeout(policy: HostPolicy, timeout: Duration) -> Result<Self, FetchError> {
         let policy = Arc::new(policy);
         let redirect_policy = Arc::clone(&policy);
         let client = reqwest::blocking::Client::builder()
@@ -93,8 +114,8 @@ impl ReqwestHttp {
             }))
             // GitHub's API refuses requests without a User-Agent; a generic client name.
             .user_agent(concat!("rein-app/", env!("CARGO_PKG_VERSION")))
-            .connect_timeout(Duration::from_secs(30))
-            .timeout(Duration::from_secs(15 * 60))
+            .connect_timeout(Duration::from_secs(30).min(timeout))
+            .timeout(timeout)
             .build()
             .map_err(|e| FetchError::Network(error_chain(&e)))?;
         Ok(Self { client, policy })
@@ -249,6 +270,20 @@ mod tests {
         assert!(!ok("http://github.com/x"));
         assert!(!ok("https://evil.example/x"));
         assert!(!ok("https://github.com.evil.example/x"));
+        assert!(!ok("http://127.0.0.1:8080/x"));
+    }
+
+    #[test]
+    fn the_windows_asset_policy_has_no_api_host() {
+        let p = HostPolicy::github_assets();
+        let ok = |u: &str| p.allows(&Url::parse(u).unwrap());
+        assert!(ok(
+            "https://github.com/Vimurai/rein-app/releases/latest/download/desktop-latest.json"
+        ));
+        assert!(ok("https://objects.githubusercontent.com/x"));
+        assert!(ok("https://release-assets.githubusercontent.com/x"));
+        assert!(!ok(crate::latest::REIN_LATEST_API));
+        assert!(!ok("http://github.com/x"));
         assert!(!ok("http://127.0.0.1:8080/x"));
     }
 

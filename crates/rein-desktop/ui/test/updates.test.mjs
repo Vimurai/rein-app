@@ -17,7 +17,7 @@ import {
 
 const state = (rein = {}, asked = {}, app = {}) => ({
   rein: { installed: "0.5.0", newest: null, checked_at: null, offline: false, ...rein },
-  app: { running: "0.1.0", newest: null, notes: null, mode: "none", command: null, ...app },
+  app: { running: "0.1.0", newest: null, notes: null, mode: "none", command: null, updated_from: null, ...app },
   job: "idle",
   asked: { rein: null, app: null, ...asked },
 });

@@ -492,3 +492,47 @@ fn the_panel_choices_are_closed_and_config_wins() {
         (PANEL_WIDTH_DEFAULT, None)
     );
 }
+
+/// E-86: `updated_from` is saved before the window starts its own update and read once by the
+/// next window — cleared on that read, dropped when it equals the running version (the update
+/// did not happen) or is not a version.
+#[test]
+fn updated_from_is_read_once_and_only_when_the_version_changed() {
+    let t = tempfile::tempdir().unwrap();
+    let dir = || Some(t.path().to_path_buf());
+    UiStore::open(dir()).set_updated_from("0.5.0").unwrap();
+    let s = UiStore::open(dir());
+    assert_eq!(
+        s.take_updated_from("0.6.0").as_deref(),
+        Some("0.5.0"),
+        "persisted"
+    );
+    assert_eq!(s.take_updated_from("0.6.0"), None, "once");
+    assert_eq!(
+        UiStore::open(dir()).take_updated_from("0.6.0"),
+        None,
+        "the clear is saved"
+    );
+    let s = UiStore::open(dir());
+    s.set_updated_from("0.6.0").unwrap();
+    assert_eq!(
+        s.take_updated_from("0.6.0"),
+        None,
+        "same version: no update happened"
+    );
+    assert_eq!(
+        UiStore::open(dir()).take_updated_from("0.7.0"),
+        None,
+        "and it is cleared"
+    );
+    let file = t.path().join(FILE_NAME);
+    let mut v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    v["updated_from"] = "0.5.0; rm -rf ~".into();
+    std::fs::write(&file, v.to_string()).unwrap();
+    assert_eq!(
+        UiStore::open(dir()).take_updated_from("0.7.0"),
+        None,
+        "not a version"
+    );
+}

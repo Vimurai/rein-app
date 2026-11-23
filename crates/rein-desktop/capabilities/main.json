@@ -45,6 +45,8 @@
     "allow-updates-get",
     "allow-updates-check",
     "allow-updates-later",
+    "allow-app-update-start",
+    "allow-app-update-cancel",
     "allow-project-status-all",
     "allow-tab-current",
     "allow-tab-bell",

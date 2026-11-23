@@ -20,11 +20,13 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::app_update::{self, Doc, Job, Offer};
 use crate::cli::{CliAction, ReleaseCheck};
 use crate::cli_ipc::{CliState, EVENT_HEALTH_CHANGED};
 use crate::config::{ConfigService, Updates};
 use crate::ipc::{Desktop, IpcError, err};
 use crate::ui_store::UiStore;
+use rein_release::SignatureVerifier;
 
 pub const EVENT_UPDATES: &str = "updates";
 /// The first published check this long after start.
@@ -59,15 +61,19 @@ pub struct ReinFacts {
     pub offline: bool,
 }
 
-/// The window's own update (component 3, a later task): the running version only for now.
+/// The window's own update (component 3, E-86).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AppFacts {
     pub running: &'static str,
+    /// A newer published window, when one is offered.
     pub newest: Option<String>,
     pub notes: Option<String>,
-    /// `in_place` | `command` | `none`.
+    /// `in_place` (Windows: the core installs it) | `command` (Linux / macOS: the package
+    /// manager's line) | `by_hand` (signed for another key: install it by hand) | `none`.
     pub mode: &'static str,
     pub command: Option<String>,
+    /// The version this window was updated from, once after the restart ("Updated to X.").
+    pub updated_from: Option<String>,
 }
 
 /// `UpdatesState` (updates.md §Data Model), sent whole on every change.
@@ -75,13 +81,14 @@ pub struct AppFacts {
 pub struct UpdatesState {
     pub rein: ReinFacts,
     pub app: AppFacts,
-    /// `idle` until the window's own update exists.
-    pub job: &'static str,
+    /// The window's own install (component 3): `idle`, `downloading`, `verifying`,
+    /// `restarting` or `failed` with its step.
+    pub job: Job,
     pub asked: Asked,
 }
 
 impl UpdatesState {
-    pub fn new(asked: Asked) -> Self {
+    pub fn new(asked: Asked, updated_from: Option<String>) -> Self {
         Self {
             rein: ReinFacts::default(),
             app: AppFacts {
@@ -90,8 +97,9 @@ impl UpdatesState {
                 notes: None,
                 mode: "none",
                 command: None,
+                updated_from,
             },
-            job: "idle",
+            job: Job::Idle,
             asked,
         }
     }
@@ -190,12 +198,39 @@ pub fn apply_check(rein: &mut ReinFacts, c: &ReleaseCheck, wall: u64) {
     }
 }
 
+/// Fold a parsed document into the window's facts; the document to install when it is
+/// offered in place. Nothing newer clears the offer.
+pub fn apply_doc(app: &mut AppFacts, doc: &Doc, baked_key_id: Option<&str>) -> Option<Doc> {
+    let o = app_update::offer(doc, app.running, baked_key_id);
+    let (mode, command) = app_update::mode(o);
+    app.mode = mode;
+    app.command = command.map(Into::into);
+    if o == Offer::Nothing {
+        app.newest = None;
+        app.notes = None;
+        return None;
+    }
+    app.newest = Some(doc.version.to_string());
+    app.notes = Some(doc.notes.clone());
+    (mode == "in_place").then(|| doc.clone())
+}
+
 /// What one step needs from the window: the host, the CLI runner and the web side.
 pub trait Io {
     fn busy(&self) -> bool;
     fn version(&self) -> Option<Vec<u8>>;
     fn check(&self) -> Result<ReleaseCheck, IpcError>;
     fn emit(&self, state: &UpdatesState);
+    /// The window's document (`desktop-latest.json`) and its `.minisig`, or `None` when there
+    /// is no answer (offline, no release yet): the last known offer stands.
+    fn app_doc(&self) -> Option<(Vec<u8>, Vec<u8>)>;
+    /// The verifier with the baked key, and the installer URL prefixes.
+    fn app_trust(
+        &self,
+    ) -> (
+        Box<dyn SignatureVerifier + Send + Sync>,
+        &'static [&'static str],
+    );
     /// The installed version changed: the install health check runs again.
     fn installed_changed(&self);
 }
@@ -205,15 +240,48 @@ pub struct Watch {
     state: Mutex<UpdatesState>,
     schedule: Mutex<Schedule>,
     focus: AtomicBool,
+    /// The document last verified as an in-place offer: the only one `app_update_start` installs.
+    doc: Mutex<Option<Doc>>,
+    /// Cancel of the running download.
+    cancel: AtomicBool,
 }
 
 impl Watch {
-    pub fn new(asked: Asked) -> Self {
+    pub fn new(asked: Asked, updated_from: Option<String>) -> Self {
         Self {
-            state: Mutex::new(UpdatesState::new(asked)),
+            state: Mutex::new(UpdatesState::new(asked, updated_from)),
             schedule: Mutex::new(Schedule::default()),
             focus: AtomicBool::new(false),
+            doc: Mutex::new(None),
+            cancel: AtomicBool::new(false),
         }
+    }
+
+    /// The window's document: verify its signature, parse it and fold it in. A document whose
+    /// signature does not verify with the baked key, or that does not parse, changes nothing.
+    pub fn app_checked(
+        &self,
+        bytes: &[u8],
+        sig: &[u8],
+        verifier: &dyn SignatureVerifier,
+        prefixes: &[&str],
+    ) -> Option<UpdatesState> {
+        let doc = app_update::verified_doc(bytes, sig, verifier, prefixes).ok()?;
+        let baked = verifier.key_id().ok();
+        let mut keep = None;
+        let s = self.update(|s| keep = apply_doc(&mut s.app, &doc, baked.as_deref()));
+        *self.doc.lock().unwrap_or_else(|e| e.into_inner()) = keep;
+        s
+    }
+
+    /// One check of the window's document, unless `[updates] app = false` or a job runs.
+    fn app_check(&self, cfg: &Updates, io: &dyn Io) -> Option<UpdatesState> {
+        if !cfg.app || self.state().job.running() {
+            return None;
+        }
+        let (bytes, sig) = io.app_doc()?;
+        let (verifier, prefixes) = io.app_trust();
+        self.app_checked(&bytes, &sig, verifier.as_ref(), prefixes)
     }
 
     pub fn state(&self) -> UpdatesState {
@@ -271,12 +339,16 @@ impl Watch {
                     }
                 }
                 // A run began between the tick's look and the check: due again next tick.
-                Err(e) if e.kind == "busy" => {}
+                Err(e) if e.kind == "busy" => return,
                 Err(_) => self
                     .schedule
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .check_done(now),
+            }
+            // The window's own document rides the same schedule (component 3 "Check").
+            if let Some(s) = self.app_check(cfg, io) {
+                io.emit(&s);
             }
         }
     }
@@ -323,6 +395,23 @@ impl Io for AppIo<'_> {
         let _ = self.app.emit(EVENT_UPDATES, state.clone());
     }
 
+    fn app_doc(&self) -> Option<(Vec<u8>, Vec<u8>)> {
+        let (url, policy, _) = app_update::endpoint();
+        let http =
+            rein_release::ReqwestHttp::with_timeout(policy, app_update::CHECK_TIMEOUT).ok()?;
+        app_update::fetch_doc(&http, &url).ok()
+    }
+
+    fn app_trust(
+        &self,
+    ) -> (
+        Box<dyn SignatureVerifier + Send + Sync>,
+        &'static [&'static str],
+    ) {
+        let (_, _, prefixes) = app_update::endpoint();
+        (app_update::verifier(), prefixes)
+    }
+
     fn installed_changed(&self) {
         let desktop = self.app.state::<Desktop>();
         let (view, fresh) = self
@@ -335,9 +424,18 @@ impl Io for AppIo<'_> {
     }
 }
 
-/// The watch's thread: one step per second for the life of the window.
+/// The window's download directory, when the app has a cache directory.
+fn update_dir() -> Option<std::path::PathBuf> {
+    crate::dirs::cache_dir(&crate::dirs::process_env).map(|c| app_update::update_dir(&c))
+}
+
+/// The watch's thread: one step per second for the life of the window. An installer a previous
+/// run left is deleted first (updates.md §Security).
 pub fn spawn(app: AppHandle) {
     std::thread::spawn(move || {
+        if let Some(dir) = update_dir() {
+            app_update::clean(&dir);
+        }
         let began = std::time::Instant::now();
         let period = if app.state::<Desktop>().platform.in_wsl() {
             WSL_PERIOD_S
@@ -371,9 +469,114 @@ pub fn updates_get(watch: State<'_, Watch>) -> UpdatesState {
 /// `updates_check()`: Check now; refused while a check or another run is in progress.
 #[tauri::command(async)]
 pub fn updates_check(app: AppHandle, watch: State<'_, Watch>) -> Result<UpdatesState, IpcError> {
-    let c = AppIo { app: &app }.check()?;
+    let io = AppIo { app: &app };
+    let c = io.check()?;
     watch.checked(&c, &app);
+    let cfg = app
+        .state::<std::sync::Arc<ConfigService>>()
+        .view()
+        .config
+        .updates;
+    if let Some(s) = watch.app_check(&cfg, &io) {
+        let _ = app.emit(EVENT_UPDATES, s);
+    }
     Ok(watch.state())
+}
+
+/// Set the job and tell the web side.
+fn set_job(app: &AppHandle, watch: &Watch, job: Job) {
+    if let Some(s) = watch.update(|s| s.job = job) {
+        let _ = app.emit(EVENT_UPDATES, s);
+    }
+}
+
+/// `app_update_start()` (updates.md §API, component 3 "Install"): on the user's click only. No
+/// argument: the core installs only the document it last verified as an in-place offer.
+/// Download → signature → sha256 → the ordinary quit → the installer, detached → exit. A
+/// failed step answers its fixed sentence; Cancel answers the state, back to idle.
+#[tauri::command(async)]
+pub fn app_update_start(app: AppHandle, watch: State<'_, Watch>) -> Result<UpdatesState, IpcError> {
+    let cfg = app
+        .state::<std::sync::Arc<ConfigService>>()
+        .view()
+        .config
+        .updates;
+    let doc = watch.doc.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let Some(doc) = doc.filter(|_| cfg.app) else {
+        return Err(err("no_update", "There is no update to install."));
+    };
+    if app.state::<CliState>().busy.busy() {
+        return Err(err("busy", "Wait for the running command to finish."));
+    }
+    {
+        // Claim the job under the state's lock: a second click is refused.
+        let mut s = watch.state.lock().unwrap_or_else(|e| e.into_inner());
+        if s.job.running() {
+            return Err(err("busy", "The update is already running."));
+        }
+        s.job = Job::Downloading {
+            done: 0,
+            total: doc.size,
+        };
+    }
+    watch.cancel.store(false, Ordering::Release);
+    let Some(dir) = update_dir() else {
+        set_job(&app, &watch, Job::Failed(app_update::Step::Fetch));
+        let step = app_update::Step::Fetch;
+        return Err(err(step.kind(), step.sentence()));
+    };
+    let (_, policy, _) = app_update::endpoint();
+    let verifier = app_update::verifier();
+    let run = format!("{}-{}", std::process::id(), wall_now());
+    let outcome =
+        match rein_release::ReqwestHttp::with_timeout(policy, app_update::DOWNLOAD_TIMEOUT) {
+            Err(_) => Err(app_update::Step::Fetch),
+            Ok(http) => app_update::install(
+                &doc,
+                &app_update::Ctx {
+                    http: &http,
+                    verifier: verifier.as_ref(),
+                    dir: &dir,
+                    run: &run,
+                    cancel: &watch.cancel,
+                },
+                &mut |job| set_job(&app, &watch, job),
+                // The ordinary quit (D-066 addendum 1 r1): the version this window had, so the next
+                // one says "Updated to"; every tab detached and its pty reaped. The sessions run on.
+                &mut || {
+                    let _ = app
+                        .state::<UiStore>()
+                        .set_updated_from(env!("CARGO_PKG_VERSION"));
+                    app.state::<Desktop>().detach_all();
+                },
+                &mut app_update::start_installer,
+            ),
+        };
+    match outcome {
+        // No work after the start: exit now.
+        Ok(app_update::Outcome::Started) => {
+            app.exit(0);
+            Ok(watch.state())
+        }
+        Ok(app_update::Outcome::Cancelled) => {
+            set_job(&app, &watch, Job::Idle);
+            Ok(watch.state())
+        }
+        Err(step) => {
+            set_job(&app, &watch, Job::Failed(step));
+            Err(err(step.kind(), step.sentence()))
+        }
+    }
+}
+
+/// `app_update_cancel()`: stop the running download; the file is deleted, nothing starts. Once
+/// the download is complete there is nothing to cancel.
+#[tauri::command]
+pub fn app_update_cancel(watch: State<'_, Watch>) -> UpdatesState {
+    if matches!(watch.state().job, Job::Downloading { .. }) {
+        watch.cancel.store(true, Ordering::Release);
+    }
+    watch.state()
 }
 
 /// `updates_later(which)`: `rein` | `app` — the known newest version does not ask again.
@@ -555,6 +758,9 @@ mod tests {
         checks: Cell<u32>,
         emitted: RefCell<Vec<UpdatesState>>,
         health: Cell<u32>,
+        doc: RefCell<Option<Vec<u8>>>,
+        key_id: RefCell<Option<String>>,
+        app_docs: Cell<u32>,
     }
 
     impl Io for Fake {
@@ -579,13 +785,42 @@ mod tests {
         fn installed_changed(&self) {
             self.health.set(self.health.get() + 1);
         }
+        fn app_doc(&self) -> Option<(Vec<u8>, Vec<u8>)> {
+            self.app_docs.set(self.app_docs.get() + 1);
+            self.doc.borrow().clone().map(|d| (d, b"signed".to_vec()))
+        }
+        fn app_trust(
+            &self,
+        ) -> (
+            Box<dyn SignatureVerifier + Send + Sync>,
+            &'static [&'static str],
+        ) {
+            (
+                Box::new(Signed(self.key_id.borrow().clone().unwrap_or_default())),
+                crate::app_update::ASSET_PREFIXES,
+            )
+        }
+    }
+
+    /// A verifier for one key id: a signature is good when it reads `signed`.
+    struct Signed(String);
+
+    impl SignatureVerifier for Signed {
+        fn key_id(&self) -> Result<String, String> {
+            Ok(self.0.clone())
+        }
+        fn verify(&self, _data: &mut dyn std::io::Read, signature: &str) -> Result<(), String> {
+            (signature == "signed")
+                .then_some(())
+                .ok_or("bad signature".into())
+        }
     }
 
     /// A changed VERSION under a running window: one event with the new version and one health
     /// check, however many reads follow; no check while a run holds the runner.
     #[test]
     fn a_version_change_is_told_once_and_rechecks_health_once() {
-        let w = Watch::new(Asked::default());
+        let w = Watch::new(Asked::default(), None);
         let io = Fake::default();
         *io.version.borrow_mut() = Some(b"0.5.0\n".to_vec());
         *io.newest.borrow_mut() = Some("0.5.1");
@@ -624,12 +859,95 @@ mod tests {
 
     #[test]
     fn later_is_kept_in_the_state() {
-        let w = Watch::new(Asked {
-            rein: Some("0.5.1".into()),
-            app: None,
-        });
+        let w = Watch::new(
+            Asked {
+                rein: Some("0.5.1".into()),
+                app: None,
+            },
+            None,
+        );
         assert_eq!(w.state().asked.rein.as_deref(), Some("0.5.1"));
         assert!(w.update(|s| s.asked.rein = Some("0.5.1".into())).is_none());
         assert!(w.update(|s| s.asked.rein = Some("0.5.2".into())).is_some());
+    }
+
+    fn app_doc_json(version: &str, key_id: &str) -> Vec<u8> {
+        serde_json::json!({
+            "schema": 1,
+            "version": version,
+            "key_id": key_id,
+            "notes": "Notes.",
+            "windows_x64": {
+                "url": "https://github.com/Vimurai/rein-app/releases/download/v9/x.exe",
+                "size": 10,
+                "sha256": "0".repeat(64),
+                "sig": "untrusted comment: x\nRUQ=\n",
+            }
+        })
+        .to_string()
+        .into_bytes()
+    }
+
+    /// E-86: the window's document rides the Rein check's schedule; a newer version for the
+    /// baked key is offered in place (on Windows) and kept for `app_update_start`; a key
+    /// mismatch is offered by hand and keeps nothing; `[updates] app = false` fetches nothing.
+    #[test]
+    fn the_window_document_rides_the_check_and_offers_only_a_newer_version() {
+        const P: &[&str] = crate::app_update::ASSET_PREFIXES;
+        let key = "0123456789ABCDEF";
+        let w = Watch::new(Asked::default(), Some("0.0.9".into()));
+        assert_eq!(w.state().app.updated_from.as_deref(), Some("0.0.9"));
+        let io = Fake::default();
+        *io.version.borrow_mut() = Some(b"0.5.0\n".to_vec());
+        *io.doc.borrow_mut() = Some(app_doc_json("99.0.0", key));
+        *io.key_id.borrow_mut() = Some(key.into());
+        for t in 0..31 {
+            w.step(t, 1000 + t, &cfg(), 5, &io);
+        }
+        assert_eq!(io.app_docs.get(), 1, "once, with the start check");
+        let s = w.state();
+        assert_eq!(s.app.newest.as_deref(), Some("99.0.0"));
+        assert_eq!(s.app.notes.as_deref(), Some("Notes."));
+        let in_place = crate::app_update::in_place_here();
+        assert_eq!(s.app.mode, if in_place { "in_place" } else { "command" });
+        assert_eq!(s.app.command.is_some(), !in_place);
+        assert_eq!(w.doc.lock().unwrap().is_some(), in_place);
+        // Another key: by hand on Windows, nothing kept to install.
+        let other = Signed("FEDCBA9876543210".into());
+        let changed = w.app_checked(&app_doc_json("99.0.1", key), b"signed", &other, P);
+        assert!(changed.is_some());
+        assert!(w.doc.lock().unwrap().is_none());
+        assert_eq!(
+            w.state().app.mode,
+            if in_place { "by_hand" } else { "command" }
+        );
+        // Not newer: nothing offered. Garbage: nothing changes.
+        let baked = Signed(key.into());
+        w.app_checked(
+            &app_doc_json(env!("CARGO_PKG_VERSION"), key),
+            b"signed",
+            &baked,
+            P,
+        );
+        assert_eq!((w.state().app.newest, w.state().app.mode), (None, "none"));
+        assert!(w.app_checked(b"{}", b"signed", &baked, P).is_none());
+        // A document whose own signature does not verify is no offer at all.
+        assert!(
+            w.app_checked(&app_doc_json("99.0.2", key), b"forged", &baked, P)
+                .is_none()
+        );
+        assert_eq!(w.state().app.newest, None);
+        // app = false: the Rein check runs, the window's document is never fetched.
+        let off = Updates {
+            app: false,
+            ..cfg()
+        };
+        let w = Watch::new(Asked::default(), None);
+        let io2 = Fake::default();
+        *io2.doc.borrow_mut() = Some(app_doc_json("99.0.0", key));
+        for t in 0..31 {
+            w.step(t, 1000 + t, &off, 5, &io2);
+        }
+        assert_eq!((io2.checks.get(), io2.app_docs.get()), (1, 0));
     }
 }

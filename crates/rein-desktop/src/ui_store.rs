@@ -102,6 +102,9 @@ pub struct UiFile {
     /// The versions answered "Later" on the update card (updates.md §Data Model): that version
     /// does not ask again.
     pub updates_asked: crate::updates::Asked,
+    /// The window's version when it started its own update (updates.md §Data Model, E-86);
+    /// the next window that runs another version says "Updated to X." once and clears it.
+    pub updated_from: Option<String>,
 }
 
 impl Default for UiFile {
@@ -130,6 +133,7 @@ impl Default for UiFile {
             notifications_stuck_after_min: None,
             first_run_done: false,
             updates_asked: Default::default(),
+            updated_from: None,
         }
     }
 }
@@ -199,6 +203,30 @@ impl UiStore {
             .map_err(|e| err("io", format!("cannot save ui.json: {e}")))?;
         *live = d;
         Ok(())
+    }
+
+    /// Record the running version before the window starts its own update (E-86).
+    pub fn set_updated_from(&self, version: &str) -> Result<(), IpcError> {
+        let mut live = self.lock();
+        let mut d = live.clone();
+        d.updated_from = Some(version.to_owned());
+        self.save(&d)
+            .map_err(|e| err("io", format!("cannot save ui.json: {e}")))?;
+        *live = d;
+        Ok(())
+    }
+
+    /// `updated_from`, once: cleared on the first read. Only a well-formed version that is
+    /// not `running` is returned; the same version means the update did not happen.
+    pub fn take_updated_from(&self, running: &str) -> Option<String> {
+        let mut live = self.lock();
+        let from = live.updated_from.clone()?;
+        let mut d = live.clone();
+        d.updated_from = None;
+        if self.save(&d).is_ok() {
+            *live = d;
+        }
+        crate::updates::parse_version(from.as_bytes()).filter(|v| v != running)
     }
 
     /// Effective = config.toml if it sets the key, else ui.json, else the default.

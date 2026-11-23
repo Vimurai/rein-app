@@ -11,6 +11,7 @@
 mod actions;
 mod activity;
 mod agents;
+mod app_update;
 mod attention;
 mod cli;
 mod cli_ipc;
@@ -244,7 +245,10 @@ fn main() -> ExitCode {
     // window can be created in the effective theme's background (V7: no white flash).
     let ui_store = ui_store::UiStore::open(dirs::state_dir(&dirs::process_env));
     let theme = ui_store.view(&config.view()).theme.value;
-    let watch = updates::Watch::new(ui_store.asked());
+    let watch = updates::Watch::new(
+        ui_store.asked(),
+        ui_store.take_updated_from(env!("CARGO_PKG_VERSION")),
+    );
     let (r, g, b) = window_bg::background(
         theme.as_str().unwrap_or_default(),
         start.theme.custom.get("bg").map(String::as_str),
@@ -305,6 +309,8 @@ fn main() -> ExitCode {
             updates::updates_get,
             updates::updates_check,
             updates::updates_later,
+            updates::app_update_start,
+            updates::app_update_cancel,
             status_watch::project_status_all,
             reported::tab_current,
             reported::tab_bell

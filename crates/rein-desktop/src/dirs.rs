@@ -33,6 +33,15 @@ pub fn config_dir(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
     xdg(env, "XDG_CONFIG_HOME", ".config")
 }
 
+/// `$XDG_CACHE_HOME/rein-app` (default `~/.cache/rein-app`); on Windows
+/// `%LOCALAPPDATA%\rein-app\cache`. The window's downloaded update lives here (E-86).
+pub fn cache_dir(env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    if cfg!(windows) {
+        return windows_dir(env("LOCALAPPDATA")).map(|d| d.join("cache"));
+    }
+    xdg(env, "XDG_CACHE_HOME", ".cache")
+}
+
 /// `<value>\rein-app` when `value` is a drive-absolute Windows path (`X:\…`). A network
 /// share is refused: the lock and the handoff directory must sit under the profile's own
 /// permissions (security review of E-43). Checked as text, so the rule is the same (and
@@ -74,6 +83,13 @@ mod tests {
         };
         assert_eq!(state_dir(&unset), Some(PathBuf::from(want)));
         assert_eq!(state_dir(&|_: &str| None), None);
+        let cache = |k: &str| match k {
+            "XDG_CACHE_HOME" => Some("/k".into()),
+            "HOME" => Some("/home/u".into()),
+            _ => None,
+        };
+        assert_eq!(cache_dir(&cache), Some(PathBuf::from("/k/rein-app")));
+        assert_eq!(cache_dir(&|_: &str| None), None);
         let cfg = |k: &str| match k {
             "XDG_CONFIG_HOME" => Some("/c".into()),
             "HOME" => Some("/home/u".into()),

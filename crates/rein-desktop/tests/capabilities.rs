@@ -62,6 +62,9 @@ const ALLOWED: &[&str] = &[
     "allow-updates-get",
     "allow-updates-check",
     "allow-updates-later",
+    // E-86: the window's own update (updates.md §API) — no argument, no plugin.
+    "allow-app-update-start",
+    "allow-app-update-cancel",
     "allow-project-status-all",
     "allow-tab-current",
     "allow-tab-bell",

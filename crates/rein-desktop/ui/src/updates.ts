@@ -6,10 +6,29 @@
 /** `UpdatesState` as the core sends it. */
 export interface UpdatesState {
   rein: { installed: string | null; newest: string | null; checked_at: number | null; offline: boolean };
-  app: { running: string; newest: string | null; notes: string | null; mode: "in_place" | "command" | "none"; command: string | null };
-  job: string;
+  app: {
+    running: string;
+    newest: string | null;
+    notes: string | null;
+    /** in_place: the core installs it (Windows); command: the package manager's line;
+     *  by_hand: signed for another key, install it by hand (E-86). */
+    mode: "in_place" | "command" | "by_hand" | "none";
+    command: string | null;
+    /** The version this window was updated from, once after the restart. */
+    updated_from: string | null;
+  };
+  job: UpdateJob;
   asked: { rein: string | null; app: string | null };
 }
+
+/** The window's own install (E-86): a failed step is one of five fixed sentences in the core. */
+export type UpdateStep = "fetch" | "too_large" | "signature" | "checksum" | "start";
+export type UpdateJob =
+  | "idle"
+  | "verifying"
+  | "restarting"
+  | { downloading: { done: number; total: number } }
+  | { failed: UpdateStep };
 
 /** `a` compared with `b` as semver (major.minor.patch, a pre-release below its release);
  *  `null` when either is not a version. */

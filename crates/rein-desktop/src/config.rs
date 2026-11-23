@@ -228,6 +228,8 @@ pub struct Updates {
     pub check: bool,
     /// Minutes between checks for a newer published Rein, 10–1440.
     pub interval_min: u32,
+    /// false: never offer the window's own update (updates.md §Data Model, E-86).
+    pub app: bool,
 }
 
 impl Default for Updates {
@@ -235,6 +237,7 @@ impl Default for Updates {
         Self {
             check: true,
             interval_min: 30,
+            app: true,
         }
     }
 }
@@ -336,6 +339,7 @@ pub const DEFAULTS_FILE: &str = r##"# rein-app window configuration (desktop.md)
 # [updates]               # the window watches for a newer Rein by itself
 # check = true            # false: only the Update dialog checks
 # interval_min = 30       # 10 – 1440 minutes between checks for a published release
+# app = true              # false: never offer the window's own update
 
 # [notifications]         # a project that needs you, stops, is stuck or ends: a toast, the taskbar
 # enabled = true          # false: no notifications (the tab marks and "Needs you" stay)
