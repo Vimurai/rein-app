@@ -4668,3 +4668,45 @@ Whether this happens on a real X server or Wayland is not measured; Xvfb only. W
 ### Open risks
 - If the tool refuses `superseded_by` for a task with commits, hand back with its message; do not reopen or re-run the evaluator against the old text.
 ---
+---
+## Handoff — 2026-11-23 17:28 UTC
+**From**: Engineer → Architect
+**Trigger**: E-86 and E-87 DONE; every open E-## waits on the operator or on you.
+
+### What was built
+- **E-86** (5d38e53; DONE b0d7d02): the window's self-update core, SEC_CLEARED. Read (a): `a_real_https_get_reaches_github_from_windows ... ok` on windows-latest (desktop-windows 45186361764). **One real installer-flags run on the operator's machine:** the CI installer started with `/P /UPDATE /R` while the window (PID 15016) was running. A new window (PID 5572) was up about 2 s later. Tabs were restored: [rein-app, rein], active 1, same order. Executable 16,994,304 B. Record: `.ai/screens/E-86/windows-installer-flags-run.txt`.
+- **E-87** (a4c5e82, b90d77f; DONE 88dc719): the update drawn, in `ui/src/update-ui.tsx` and `updates.ts`:
+  - the ask card once per version, with Later / Update and restart; the command with Copy on Linux and macOS; by hand for another key;
+  - Downloading with the determinate 2 px line, a counting percent and Cancel;
+  - "Checking the signature…", then the drawn check with "Restarting…";
+  - each failure's fixed sentence with Try again;
+  - "Updated to X" with What's new;
+  - the dialog gains the window's row with its button and notes.
+  - shell.tsx and ipc.rs are unchanged. npm 136/136, cargo 241/241 (and with `update-test`).
+  - `tests/e2e/app-update-screens.sh` drives the update-test build on Xvfb against a minisign-signed loopback release: 24 checks, PASS. 25 screens are in `.ai/screens/E-87/`, every one opened.
+  - ACCEPT_PASS 5/5 at b90d77f. The first evaluation at a4c5e82 failed: no screens of the verifying and restarting states. Fixed by b90d77f.
+
+### Decisions made
+- **Two E-86 bugs, found only by the E-87 window run, fixed inside E-87.** security_engineer re-reviewed them: SEC_CLEARED, 20 hostile signature probes, 0 exploited.
+  1. `parse_doc` refused every signature the `minisign` tool makes. Its trusted comment is `timestamp:<n>\tfile:<name>\thashed`, and TAB was not an allowed byte. TAB is now allowed, with a test using a signature shaped like the tool's. **This matters for E-88:** a release signed with the CLI would otherwise never be offered.
+  2. `app_update_start` panicked before any download: "Cannot drop a runtime in a context where blocking is not allowed". The blocking HTTP client was built on a tokio worker. It now runs on `spawn_blocking`, and a panic resets the job to failed. E-86's end-to-end test called `install()` on a plain thread, so it could not see this. **The E-86 build installed on Windows has this bug**: its Update button would have done nothing.
+- The update-test build gains `REIN_DESKTOP_UPDATE_HOLD_MS` (at most 10 s; compiled out of release builds). It holds the verifying and restarting states so the harness can capture them.
+
+### Blueprint divergence (if any)
+- **What's new** opens a dialog (title plus structured text), not the side-panel reader of status.md §7. critic_arch rates it P2 and defensible, since updates.md §4 only says "the reader". Record it, or register a move to the panel.
+- **A hidden window raises attention, not a system notification**: `request_user_attention` (status.md §6 channel 2), once per version, never after Later, never when `[updates] app = false`. Channel 3 stays with E-79.
+- **Running-version notes**: `apply_doc` keeps the notes when the verified document's version equals the running one, so What's new has text after a restart. `newest` stays empty.
+- updates.rs tests moved to `updates_tests.rs`, a move only, to stay under 1000 lines.
+
+### Next action needed
+- Review E-86 and E-87 and rule on the What's new placement.
+- **Operator**: create the rein-app update key and store its secret in the repository, then say go, so E-88 can start. Sign with the `minisign` CLI or anything else: both now parse.
+- **Operator**: the notification sightings E-79 still waits on.
+- E-81, which also blocks E-103 and E-104, waits on rein's E-433 merge commit. Name it when rein's Architect has it.
+- E-6 waits on the first tag.
+
+### Open risks
+- The Linux/macOS form of the card (the command with Copy) has unit tests but no window screen: the test build is always in place.
+- E-86 Lows carried over: the host policy ignores the port; U+061C is not in the direction-mark filter; the signature's trusted comment is not checked (unused); a same-user race between verify and start (no privilege boundary).
+- A throwaway `/tmp/rein-aup.djtEUE` dir from the first probe run is left. The safe-exec gate blocked `rm -rf` on it. Its tmux server is stopped; the dir is harmless.
+---
